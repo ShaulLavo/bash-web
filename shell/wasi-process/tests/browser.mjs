@@ -6,6 +6,7 @@ import { resolve, join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { chromium } from "@playwright/test";
+import { describeError, verifyPageDiagnostics } from "./diagnostics.mjs";
 
 const root = resolve(import.meta.dir, "../../..");
 const source = resolve(root, "shell/wasi-process/tests");
@@ -16,6 +17,7 @@ let server;
 let browser;
 let context;
 let cleaning;
+const diagnostics = [];
 async function cleanup() {
   cleaning ??= closeResources();
   return cleaning;
@@ -30,10 +32,13 @@ async function closeResources() {
   try {
     await browser?.close();
   } finally {
-    server?.stop(true);
-    if (scratch) await removeScratch(scratch);
+    await stopServerAndScratch();
   }
   if (contextError) throw contextError;
+}
+async function stopServerAndScratch() {
+  server?.stop(true);
+  if (scratch) await removeScratch(scratch);
 }
 for (const name of ["SIGINT", "SIGTERM"]) {
   process.once(name, () => void cleanup().finally(() => process.exit(1)));
@@ -89,15 +94,17 @@ try {
   browser = await chromium.launch({ headless: true });
   context = await browser.newContext();
   const page = await context.newPage();
-  const diagnostics = [];
   page.on("console", (message) => diagnostics.push(`${message.type()}: ${message.text()}`));
-  page.on("pageerror", (error) => diagnostics.push(`pageerror: ${error.stack}`));
+  page.on("pageerror", (error) => diagnostics.push(`pageerror: ${describeError(error)}`));
   await page.goto(`http://127.0.0.1:${server.port}/`);
   await page.waitForFunction(() => typeof globalThis.execute === "function");
   let deadline;
   try {
     const result = await Promise.race([
-      page.evaluate(() => globalThis.execute()),
+      page.evaluate((options) => globalThis.execute(options), {
+        mode: process.env.WASI_PROCESS_MODE,
+        injectBroker: process.env.WASI_PROCESS_INJECT_BROKER,
+      }),
       new Promise((_, reject) => {
         deadline = setTimeout(
           () => reject(new Error("WASI consumer did not finish in 60 seconds")),
@@ -105,6 +112,7 @@ try {
         );
       }),
     ]);
+    await injectPageDiagnostic(page, process.env.WASI_PROCESS_INJECT_PAGE);
     const identity = {};
     for (const name of ["process_fixture.wasm", "launch_probe.wasm"]) {
       const bytes = await readFile(join(dirname(fixture), name));
@@ -122,6 +130,7 @@ try {
   }
 } finally {
   await cleanup();
+  verifyPageDiagnostics(diagnostics);
 }
 console.log("wasi-process browser cleanup complete");
 
@@ -129,4 +138,18 @@ async function removeScratch(path) {
   await rm(path, { recursive: true, force: true });
   assert.equal(existsSync(path), false, `scratch survived cleanup: ${path}`);
   console.log(`removed browser scratch and profile: ${path}`);
+}
+
+async function injectPageDiagnostic(page, kind) {
+  if (!kind) return;
+  await page.evaluate(emitPageDiagnostic, kind);
+}
+
+async function emitPageDiagnostic(kind) {
+  if (kind === "console") console.error("injected unexpected console error");
+  if (kind === "pageerror")
+    setTimeout(() => {
+      throw new Error("injected unexpected page error");
+    }, 0);
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }

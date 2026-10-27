@@ -34,6 +34,10 @@ mod fixture {
         fn raw_spawn(ptr: *const u8, length: usize) -> i32;
         #[link_name = "interrupted"]
         fn interrupted() -> i32;
+        #[link_name = "wait"]
+        fn raw_wait(pid: u32, output: *mut u8) -> i32;
+        #[link_name = "wait_job"]
+        fn raw_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
     }
 
     pub fn main() {
@@ -45,7 +49,68 @@ mod fixture {
             Some("closed") => closed(),
             Some("leader") => leader(),
             Some("exit") => std::process::exit(arguments[2].parse().unwrap()),
+            Some("review-cancel") => review_cancel(false),
+            Some("review-drop-pending") => review_cancel(true),
+            Some("review-drop-child") => review_drop_child(),
+            Some("review-drop-access") => review_drop_access(),
+            Some("review-noop") => println!("REVIEW_OK"),
             _ => panic!("unknown fixture mode"),
+        }
+    }
+
+    fn review_cancel(drop_child: bool) {
+        let mut child = spawn(&request("spin")).unwrap();
+        await_entry(child.pid());
+        assert_eq!(unsafe { signal(2, 2) }, 0);
+        assert_eq!(unsafe { signal(2, 3) }, 0);
+        if drop_child {
+            drop(child);
+        } else {
+            assert_eq!(child.cancel().unwrap(), Outcome::Signaled(9));
+        }
+        assert_eq!(unsafe { interrupted() }, 2, "parent SIGINT was consumed");
+        assert_eq!(unsafe { signal(2, 0) }, 0);
+        println!("REVIEW_OK");
+    }
+
+    fn review_drop_child() {
+        assert_eq!(unsafe { fd_kind(2) }, -8);
+        let child = spawn(&request("spin")).unwrap();
+        await_entry(child.pid());
+        let pid = child.pid();
+        let job = u32::try_from(unsafe { job_of(pid) }).unwrap();
+        // The test worker kills the real child, then injects an error return.
+        drop(child);
+        collect(|out| unsafe { raw_wait(pid, out) }, 2, pid);
+        collect(|out| unsafe { raw_wait_job(job, 1, out) }, 4, job);
+        println!("REVIEW_OK");
+    }
+
+    fn review_drop_access() {
+        assert_eq!(unsafe { fd_kind(2) }, -8);
+        assert_eq!(unsafe { signal(2, 2) }, 0);
+        assert_eq!(unsafe { signal(2, 3) }, 0);
+        assert_eq!(
+            resolve_executable("fixture", Some("/bin"), "/"),
+            Err(Error::Interrupted(2))
+        );
+        assert_eq!(unsafe { signal(2, 0) }, 0);
+        println!("REVIEW_OK");
+    }
+
+    fn collect(call: impl Fn(*mut u8) -> i32, kind: u32, id: u32) {
+        let mut record = [0u8; 8];
+        let mut subscription = [0u8; 16];
+        subscription[..4].copy_from_slice(&kind.to_le_bytes());
+        subscription[4..8].copy_from_slice(&id.to_le_bytes());
+        let mut output = [0u8; 16];
+        loop {
+            let result = call(record.as_mut_ptr());
+            if result == 0 {
+                return;
+            }
+            assert_eq!(result, -6);
+            assert!(unsafe { poll(subscription.as_ptr(), 1, -1, output.as_mut_ptr()) } >= 0);
         }
     }
 

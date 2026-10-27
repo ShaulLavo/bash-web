@@ -3,7 +3,9 @@
 `shell-wasi-process` provides the Rust process API for a WASI guest on its caller's
 Waffle runtime. Ordinary source-byte utility integration is gated by admission.
 It creates no runtime, host process, thread, socket or output relay.
-Its imports match Waffle `d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00`.
+Its process imports match Waffle `c312af63`, adopted through Shell main
+`7deb0fdcf8c8cdac20bf8e55393c475ea4cc5f54`. The process modules are unchanged
+from the qualified `d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00` contract.
 
 ## Launch data
 
@@ -55,8 +57,13 @@ with SIGKILL, waits for teardown, then returns `Error::Interrupted(signal)`.
 The bridge does not install signal handlers or change signal dispositions.
 Default-action signals remain Waffle's responsibility. `cancel` kills the job and
 collects it; repeated cancellation or waits return the cached outcome.
+Direct cancellation and Drop leave handled signals pending in the caller. P's
+poll returns immediately while such a signal is pending, so cancellation can
+rescan until the child cleanup fence is ready. Only `wait` consumes a handled
+signal to report `Error::Interrupted`.
 Dropping an unfinished `Child` also cancels and collects it. Explicit cancellation
-lets callers observe cleanup errors; Drop reports a cleanup failure on stderr.
+lets callers observe cleanup errors. Drop attempts to report a cleanup failure
+on stderr and ignores diagnostic write errors, including closed stderr.
 Rust Drop cannot run after fatal guest unwinds or process exit. At this pinned
 provider, killing the caller's job does not kill the independent job this API
 creates. Killing an owned job also does not include descendants that deliberately
@@ -138,3 +145,10 @@ These commands require the repository's installed dependencies, SDK34 and a
 Playwright Chromium installation. Substantial runs use the machine's job queue.
 The browser runner closes its runtime, browser and localhost server and removes
 its temporary bundle and profile directory on success, failure or interruption.
+`WASI_PROCESS_MODE=review-cancel`, `review-drop-pending`, `review-drop-child` or
+`review-drop-access` selects focused review controls. The Drop fault controls
+close stderr and inject a diagnostic write failure after a real host cleanup
+operation. They require the test worker and do not alter product imports.
+`node --test shell/wasi-process/tests/diagnostics.test.mjs` checks the strict
+diagnostic classifier. The browser runner rejects every unexpected broker,
+console or page diagnostic and requires the exact expected negative-test set.

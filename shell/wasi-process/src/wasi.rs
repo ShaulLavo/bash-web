@@ -1,4 +1,5 @@
 use super::{DescriptorBinding, Error, Outcome, Request, decode_host_result, validate_path};
+use std::io::Write;
 
 #[link(wasm_import_module = "shell_terminal")]
 unsafe extern "C" {
@@ -157,15 +158,13 @@ impl Child {
         if self.complete {
             return self.outcome.ok_or(Error::InvalidRecord);
         }
-        let result = match self.job {
-            Some(job) => unsafe { proc_kill_job(job, 9) },
-            None => unsafe { proc_kill(self.pid, 9) },
+        let (operation, result) = match self.job {
+            Some(job) => ("kill_job", unsafe { proc_kill_job(job, 9) }),
+            None => ("kill", unsafe { proc_kill(self.pid, 9) }),
         };
-        decode_host_result("kill", result)?;
+        decode_host_result(operation, result)?;
         loop {
-            // poll does not consume pending signals. Drain handled deliveries so a
-            // canceled wait can park until the actual cleanup fence, without spinning.
-            let _ = take_signal()?;
+            // Keep caller signals pending even when they make poll return immediately.
             if let Some(outcome) = self.try_wait()? {
                 return Ok(outcome);
             }
@@ -185,7 +184,11 @@ impl Drop for Child {
             return;
         }
         if let Err(error) = self.cancel() {
-            eprintln!("wasi-process: child {} cleanup failed: {error}", self.pid);
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "wasi-process: child {} cleanup failed: {error}",
+                self.pid
+            );
         }
     }
 }
@@ -264,7 +267,10 @@ impl Drop for Access {
     fn drop(&mut self) {
         let result = unsafe { proc_access_cancel(self.0) };
         if let Err(error) = decode_host_result("access_cancel", result) {
-            eprintln!("wasi-process: executable query cleanup failed: {error}");
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "wasi-process: executable query cleanup failed: {error}"
+            );
         }
     }
 }

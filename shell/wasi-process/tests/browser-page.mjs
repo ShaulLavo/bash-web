@@ -5,6 +5,7 @@ import { createWorkerPipeCodec } from "waffle/proc/worker-pipes";
 import { BrowserProcessBroker } from "waffle/browser/process-broker";
 import { DescriptorTable } from "waffle/core/descriptors";
 import { installUtility } from "../../../src/utilities/install.ts";
+import { createBrokerDiagnostics } from "./diagnostics.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -102,17 +103,20 @@ async function checkPublicAdmission(runtime, parent, service, supervisor, notice
   }
 }
 
-export async function execute() {
+export async function execute({ mode = "driver", injectBroker } = {}) {
   const output = [];
   let loads = 0;
   let launches = 0;
-  const errors = [];
+  const diagnostics = createBrokerDiagnostics();
+  const errors = diagnostics.messages;
+  const onError = diagnostics.onError;
+  if (injectBroker && injectBroker !== "dispose") onError(injectedError(injectBroker));
   const runtime = createRuntime({
     filesystem: { workerURL: "/fs-worker.js", mode: "memory" },
     processHost: (options) =>
       new BrowserProcessBroker({
         ...options,
-        onError: (error) => errors.push(String(error.stack ?? error)),
+        onError,
       }),
   });
   try {
@@ -207,11 +211,13 @@ export async function execute() {
     output.length = 0;
     const pid = parent.spawn(root, {
       executable: "/bin/fixture",
-      argv: ["fixture", "driver"],
+      argv: ["fixture", mode],
       env: {},
       cwd: "/",
       job: 0,
-      fds: [0, 1, 2, 3, 9, 1_000_000].map((fd) => ({ child: fd, parent: fd })),
+      fds: [0, 1, 2, 3, 9, 1_000_000]
+        .filter((fd) => fd !== 2 || !mode.startsWith("review-drop-"))
+        .map((fd) => ({ child: fd, parent: fd })),
     });
     descriptors.dispose();
     for (const message of notices.splice(0)) await service.runtimeMessage(message, root);
@@ -232,16 +238,20 @@ export async function execute() {
       .filter((entry) => entry.type === "stderr")
       .map((entry) => entry.text)
       .join("");
-    for (const marker of [
-      "LOOKUP_OK",
-      "FD3_OK",
-      "HIGH_FD_OK",
-      "INSPECT_OK",
-      "CLOSED_STDIO_OK",
-      "DESCENDANT_OK",
-      "CLEANUP_OK",
-      "CONSUMER_OK",
-    ]) {
+    const markers =
+      mode === "driver"
+        ? [
+            "LOOKUP_OK",
+            "FD3_OK",
+            "HIGH_FD_OK",
+            "INSPECT_OK",
+            "CLOSED_STDIO_OK",
+            "DESCENDANT_OK",
+            "CLEANUP_OK",
+            "CONSUMER_OK",
+          ]
+        : ["REVIEW_OK"];
+    for (const marker of markers) {
       assert(stdout.includes(marker), `missing ${marker}: ${stdout}`);
     }
     assert(stderr === "", `unexpected stderr: ${stderr}`);
@@ -258,5 +268,17 @@ export async function execute() {
   } finally {
     await runtime.dispose();
     assert(runtime.disposed, "runtime not disposed");
+    if (injectBroker === "dispose") onError(null);
+    diagnostics.verify(
+      mode === "driver"
+        ? ["raw-admission", "missing-executable", "missing-entry"]
+        : ["raw-admission"],
+    );
   }
+}
+
+function injectedError(kind) {
+  if (kind === "null") return null;
+  if (kind === "undefined") return undefined;
+  return new Error("injected unexpected broker error");
 }
