@@ -20,7 +20,16 @@ export const findFiles = [
   ["invalid-roots", "./a.txt\0\0./sub/deep\0"],
 ];
 
-export const findCases: { name: string; script: string; records: "lines" | "nul" | "bytes" }[] = [
+export type FindRecordKind = "lines" | "nul" | "bytes";
+export type FindRecordPrefix = "status-line";
+export type FindCase = {
+  name: string;
+  script: string;
+  records: FindRecordKind;
+  prefix?: FindRecordPrefix;
+};
+
+export const findCases: FindCase[] = [
   {
     name: "case insensitive name",
     script: "find . -type f -iname '*.TXT' -print0",
@@ -79,6 +88,7 @@ export const findCases: { name: string; script: string; records: "lines" | "nul"
     script:
       "find sub -type f -fprint0 listing; printf 'status:%s\\n' \"$?\"; while IFS= read -r -d '' line; do printf '%s\\0' \"$line\"; done < listing",
     records: "nul",
+    prefix: "status-line",
   },
   { name: "missing starting path fails", script: "find missing -print", records: "bytes" },
   {
@@ -155,8 +165,57 @@ export async function seedFindTree(runtime: Runtime) {
   await runtime.filesystem.mkdirp("/bin");
 }
 
-export function findOutput(bytes: Uint8Array, records: "lines" | "nul" | "bytes") {
-  const value = new TextDecoder().decode(bytes);
-  if (records === "bytes") return value;
-  return value.split(records === "lines" ? "\n" : "\0").sort();
+type NormalizedFindRecords = {
+  prefix: Uint8Array;
+  records: Uint8Array[];
+  rawPayload?: Uint8Array;
+};
+
+function splitRecords(bytes: Uint8Array, delimiter: number) {
+  const records: Uint8Array[] = [];
+  let start = 0;
+  for (let index = 0; index < bytes.length; index++) {
+    if (bytes[index] !== delimiter) continue;
+    records.push(bytes.slice(start, index));
+    start = index + 1;
+  }
+  records.push(bytes.slice(start));
+  return records;
+}
+
+function compareBytes(left: Uint8Array, right: Uint8Array) {
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index++) {
+    const difference = left[index]! - right[index]!;
+    if (difference !== 0) return difference;
+  }
+  return left.length - right.length;
+}
+
+export function findOutput(
+  bytes: Uint8Array,
+  records: FindRecordKind,
+  prefix?: FindRecordPrefix,
+): Uint8Array | NormalizedFindRecords {
+  if (records === "bytes") return Uint8Array.from(bytes);
+  if (records === "lines") {
+    const chunks = splitRecords(bytes, 10);
+    const unordered = chunks.toSorted(compareBytes);
+    return { prefix: new Uint8Array(), records: unordered };
+  }
+  let status = new Uint8Array();
+  let payload = bytes;
+  if (prefix === "status-line") {
+    const newline = bytes.indexOf(10);
+    if (newline < 0) return { prefix: status, records: [], rawPayload: Uint8Array.from(bytes) };
+    status = bytes.slice(0, newline + 1);
+    payload = bytes.slice(newline + 1);
+  }
+  if (payload.length === 0) return { prefix: status, records: [] };
+  if (payload[payload.length - 1] !== 0)
+    return { prefix: status, records: [], rawPayload: Uint8Array.from(payload) };
+  const completePayload = payload.slice(0, -1);
+  const recordsPayload =
+    completePayload.length === 0 ? [new Uint8Array()] : splitRecords(completePayload, 0);
+  return { prefix: status, records: recordsPayload.toSorted(compareBytes) };
 }

@@ -129,8 +129,8 @@ for (const example of findCases) {
     const actual = await state.run(`cd /tree; { ${example.script}; } > /result`);
     assert.equal(actual.status, expected.status, actual.stderr.toString());
     assert.deepEqual(
-      findOutput(actual.stdout, example.records),
-      findOutput(expected.stdout, example.records),
+      findOutput(actual.stdout, example.records, example.prefix),
+      findOutput(expected.stdout, example.records, example.prefix),
     );
     assert.equal(actual.stderr.length > 0, expected.stderr.length > 0);
   });
