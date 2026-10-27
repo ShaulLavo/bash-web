@@ -16,7 +16,14 @@ const replacement = `  // Full precision plus the racy-index window: coarse or e
 const sources = [
   ["index.js", "e4b1c6d807e8d7a8889385061f9d7b06e9f147c4da3f8393f98eb99f470e100e"],
   ["index.cjs", "55f1a87544a75ba5970322ec7e3dcaa6f64b0d0e9f3d1d27f609b9463a63fdb8"],
+  ["managers/index.js", "780a4b5ea20e2df44e5dfe5aafc694ecba01b71eb62c73275daaba22465b20fb"],
+  ["managers/index.cjs", "2a282925897c59d23742b31f743735f877d00c6991348c265a9fc0c8c6c9229f"],
+  ["models/index.js", "861f4111e5fcf21d57f77e4197669302fceae4f701deeb88065057d795376514"],
 ];
+const mergeLabel = "ourName: abbreviateRef(ours),";
+const headLabel = 'ourName: "HEAD",';
+const decodedAbort = "const content = new TextDecoder().decode(entry.content);";
+const binaryAbort = "const content = entry.content;";
 const browserBuffer = "import { Buffer } from 'buffer';\n";
 
 /** One bounded upstream correctness patch, applied before bundling or running Git. */
@@ -29,18 +36,25 @@ export function patchGitSource(root = resolve(import.meta.dirname, "..")) {
     const path = resolve(directory, file);
     const source = readFileSync(path, "utf8");
     const unpatched = source.includes(replacement) ? source.replace(replacement, original) : source;
+    const withoutLabel = unpatched
+      .replace(headLabel, mergeLabel)
+      .replace(binaryAbort, decodedAbort);
     const pristine =
-      file === "index.js" && unpatched.startsWith(browserBuffer)
-        ? unpatched.slice(browserBuffer.length)
-        : unpatched;
+      file.endsWith(".js") && withoutLabel.startsWith(browserBuffer)
+        ? withoutLabel.slice(browserBuffer.length)
+        : withoutLabel;
     assert.equal(
       createHash("sha256").update(pristine).digest("hex"),
       expected,
       `unrecognized Git source: ${file}`,
     );
-    assert.equal(pristine.split(original).length, 2);
+    assert.equal(pristine.split(original).length, file.startsWith("models/") ? 1 : 2);
     const patched =
-      (file === "index.js" ? browserBuffer : "") + pristine.replace(original, replacement);
+      (file.endsWith(".js") ? browserBuffer : "") +
+      pristine
+        .replace(original, replacement)
+        .replace(mergeLabel, headLabel)
+        .replace(decodedAbort, binaryAbort);
     return { path, source, patched };
   });
   for (const { path, source, patched } of changes)

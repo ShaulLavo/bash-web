@@ -1,6 +1,7 @@
 import * as git from "isomorphic-git";
 import type { GitFilesystem } from "../../src/utilities/git-types";
 import type { GitLocalState } from "../../scripts/record-git-local";
+import { conflictStatus } from "../../src/utilities/git-index";
 
 export async function gitSnapshot(
   fs: GitFilesystem,
@@ -41,7 +42,7 @@ export async function gitSnapshot(
         },
       ]),
     ),
-    status: porcelain(rows),
+    status: porcelain(rows, await conflictStatus({ fs, dir })),
     stash: await stash(fs, dir),
   };
 }

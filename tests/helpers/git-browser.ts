@@ -46,13 +46,50 @@ const api = {
     return gitSnapshot(gitFilesystem(owner().filesystem), dir, expected);
   },
   async release() {
-    await installation?.dispose();
+    if (!installation) throw new Error("Git is not installed");
+    const current = installation;
+    const entered = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const invocation = {
+      argv: ["--version"],
+      cwd: "/",
+      stdout: async () => {
+        entered.resolve();
+        await gate.promise;
+      },
+      stderr() {},
+    };
+    const accepted = current.run(invocation);
+    await entered.promise;
+    const disposal = current.dispose();
+    let joined = false;
+    void disposal.then(() => {
+      joined = true;
+    });
+    let admissionRejected = false;
+    try {
+      await current.run(invocation);
+    } catch {
+      admissionRejected = true;
+    }
+    const pendingOutputJoined = !joined;
+    const disposalShared = current.dispose() === disposal;
+    gate.resolve();
+    const acceptedStatus = await accepted;
+    await disposal;
+    installation = await installGit(owner());
+    await installation.dispose();
     const disposed = owner().disposed;
     await owner().filesystem.writeFile("/caller-still-live", "yes");
     return {
       runtimeDisposed: disposed,
       admissions,
       marker: (await owner().filesystem.readFile("/bin/git")) !== undefined,
+      admissionRejected,
+      pendingOutputJoined,
+      disposalShared,
+      acceptedStatus,
+      reinstall: true,
     };
   },
   async cleanup() {

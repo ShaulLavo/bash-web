@@ -5,30 +5,9 @@ import { dirname, join } from "node:path";
 import * as git from "isomorphic-git";
 import fixture from "../scripts/owned-fixtures/git-local.json" with { type: "json" };
 import { runGit } from "../src/utilities/git-command";
-import type { GitFilesystem } from "../src/utilities/git-types";
+import { nativeGitFilesystem as filesystem } from "./helpers/git-native";
 import { gitSnapshot } from "./helpers/git-snapshot";
 import { captureGit } from "./helpers/git-output";
-
-const filesystem: GitFilesystem = {
-  promises: {
-    async readFile(path, encoding) {
-      const bytes = await fs.readFile(path);
-      const format = typeof encoding === "string" ? encoding : encoding?.encoding;
-      return format ? bytes.toString("utf8") : bytes;
-    },
-    writeFile: fs.writeFile,
-    unlink: fs.unlink,
-    readdir: fs.readdir,
-    async mkdir(path) {
-      await fs.mkdir(path);
-    },
-    rmdir: fs.rmdir,
-    stat: fs.stat,
-    lstat: fs.lstat,
-    readlink: fs.readlink,
-    symlink: fs.symlink,
-  },
-};
 
 async function repository(context: TestContext) {
   const root = await fs.mkdtemp("/work/tmp/bash-web-git-");
@@ -40,12 +19,15 @@ async function repository(context: TestContext) {
       env: fixture.provenance.environment,
     });
   };
-  return { root, command };
+  const ok = async (...argv: string[]) => {
+    const result = await command(argv);
+    assert.equal(result.status, 0, result.stderr);
+    return result;
+  };
+  return { root, command, ok };
 }
 
-for (const example of process.env.GIT_LOCAL_FULL_FIXTURE
-  ? fixture.cases
-  : fixture.cases.slice(0, 2)) {
+for (const example of fixture.cases) {
   test(`native filesystem replay: ${example.id}`, async (context) => {
     const { root, command } = await repository(context);
     for (const [index, step] of example.steps.entries()) {
@@ -88,12 +70,7 @@ function normalize(value: string) {
 }
 
 test("tracked stash preserves staged and unstaged content and rejects dirty apply", async (context) => {
-  const { root, command } = await repository(context);
-  const ok = async (...argv: string[]) => {
-    const result = await command(argv);
-    assert.equal(result.status, 0, result.stderr);
-    return result;
-  };
+  const { root, command, ok } = await repository(context);
   await ok("init");
   await fs.writeFile(`${root}/story`, "base\n");
   await ok("add", "story");
@@ -114,12 +91,12 @@ test("tracked stash preserves staged and unstaged content and rejects dirty appl
   assert.equal((await ok("stash", "list")).stdout, "");
 });
 
-test("unsupported remote and stash options preserve repository files", async (context) => {
+test("unsupported remote and stash flags preserve repository files", async (context) => {
   const { root, command } = await repository(context);
   await command(["init"]);
   const before = await fs.readFile(`${root}/.git/HEAD`, "utf8");
   assert.equal((await command(["clone", "https://example.invalid/repo"])).status, 129);
-  assert.equal((await command(["stash", "push", "-u"])).status, 129);
+  assert.equal((await command(["stash", "push", "--all"])).status, 129);
   assert.equal(await fs.readFile(`${root}/.git/HEAD`, "utf8"), before);
 });
 
@@ -146,4 +123,74 @@ test("add force stages an explicitly ignored file", async (context) => {
   const result = await command(["add", "-f", "secret"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match((await command(["status", "--porcelain"])).stdout, /^A  secret\n/m);
+});
+
+test("untracked-only stash preserves nested bytes, entries and colliding caller files", async (context) => {
+  const { root, command, ok } = await repository(context);
+  await ok("init");
+  await ok("commit", "--allow-empty", "-m", "base");
+  await fs.mkdir(`${root}/nested`);
+  const bytes = new Uint8Array([0, 255, 128, 1]);
+  await fs.writeFile(`${root}/nested/loose`, bytes);
+  await ok("stash", "push", "-u", "-m", "first");
+  assert.equal((await ok("status")).stdout, "");
+  const oid = await git.resolveRef({ fs: filesystem, dir: root, ref: "refs/stash" });
+  assert.equal((await git.readCommit({ fs: filesystem, dir: root, oid })).commit.parent.length, 3);
+  await fs.writeFile(`${root}/nested/loose`, "caller owns this");
+  assert.equal((await command(["stash", "pop", "--index"])).status, 1);
+  assert.equal(await fs.readFile(`${root}/nested/loose`, "utf8"), "caller owns this");
+  assert.equal((await ok("stash", "list", "--format=%gs")).stdout, "On main: first\n");
+  await fs.unlink(`${root}/nested/loose`);
+  await ok("stash", "apply", "--index");
+  assert.deepEqual(new Uint8Array(await fs.readFile(`${root}/nested/loose`)), bytes);
+  await fs.unlink(`${root}/nested/loose`);
+  await fs.writeFile(`${root}/another`, "second");
+  await ok("stash", "push", "-u", "-m", "second");
+  await ok("stash", "drop", "stash@{1}");
+  assert.equal((await ok("stash", "list", "--format=%gs")).stdout, "On main: second\n");
+  await ok("stash", "pop");
+  assert.equal(await fs.readFile(`${root}/another`, "utf8"), "second");
+  assert.equal((await ok("stash", "list")).stdout, "");
+});
+
+test("stash restores staged deletion and leaves unrelated untracked files alone", async (context) => {
+  const { root, ok } = await repository(context);
+  await ok("init");
+  await fs.writeFile(`${root}/gone`, "base");
+  await ok("add", ".");
+  await ok("commit", "-m", "base");
+  await fs.unlink(`${root}/gone`);
+  await ok("add", "-u");
+  await fs.writeFile(`${root}/loose`, "keep");
+  await ok("stash", "push", "-m", "delete");
+  assert.equal(await fs.readFile(`${root}/gone`, "utf8"), "base");
+  assert.equal(await fs.readFile(`${root}/loose`, "utf8"), "keep");
+  await ok("stash", "pop", "--index");
+  assert.equal((await ok("status")).stdout, "D  gone\n?? loose\n");
+});
+
+test("merge abort keeps binary bytes and unrelated unstaged edits", async (context) => {
+  const { root, command, ok } = await repository(context);
+  await ok("init");
+  const binary = new Uint8Array([0, 255, 128]);
+  await fs.writeFile(`${root}/binary`, binary);
+  await fs.writeFile(`${root}/story`, "base\n");
+  await fs.writeFile(`${root}/other`, "base\n");
+  await ok("add", ".");
+  await ok("commit", "-m", "base");
+  await ok("checkout", "-b", "side");
+  await fs.writeFile(`${root}/story`, "side\n");
+  await ok("add", ".");
+  await ok("commit", "-m", "side");
+  await ok("checkout", "main");
+  await fs.writeFile(`${root}/story`, "main\n");
+  await ok("add", ".");
+  await ok("commit", "-m", "main");
+  assert.equal((await command(["merge", "side"])).status, 1);
+  await fs.writeFile(`${root}/story`, "base\n");
+  assert.equal((await ok("status")).stdout, "UU story\n");
+  await fs.writeFile(`${root}/other`, "caller edit\n");
+  await ok("merge", "--abort");
+  assert.deepEqual(new Uint8Array(await fs.readFile(`${root}/binary`)), binary);
+  assert.equal(await fs.readFile(`${root}/other`, "utf8"), "caller edit\n");
 });

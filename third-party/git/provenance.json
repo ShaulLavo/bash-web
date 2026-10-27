@@ -8,12 +8,17 @@
     "integrity": "sha512-AfyS9v44yZJA8g5hfsHVy54onuMyn97b4qJJCJiPh8KcJAIo/11hiKaANwQO4lu0Z3MKFGIe/9Kuf3sTRj4FBg==",
     "pristineSha256": {
       "index.js": "e4b1c6d807e8d7a8889385061f9d7b06e9f147c4da3f8393f98eb99f470e100e",
-      "index.cjs": "55f1a87544a75ba5970322ec7e3dcaa6f64b0d0e9f3d1d27f609b9463a63fdb8"
+      "index.cjs": "55f1a87544a75ba5970322ec7e3dcaa6f64b0d0e9f3d1d27f609b9463a63fdb8",
+      "managers/index.js": "780a4b5ea20e2df44e5dfe5aafc694ecba01b71eb62c73275daaba22465b20fb",
+      "managers/index.cjs": "2a282925897c59d23742b31f743735f877d00c6991348c265a9fc0c8c6c9229f",
+      "models/index.js": "861f4111e5fcf21d57f77e4197669302fceae4f701deeb88065057d795376514"
     },
     "patch": "scripts/patch-git-source.ts",
     "changes": [
-      "Compare nanosecond timestamps and rehash the racy-index window",
-      "Import browser Buffer inside the ESM module without a global assignment"
+      "Compare nanosecond timestamps and rehash the racy-index window in core and exported index manager",
+      "Import browser Buffer inside the ESM core, managers and filesystem model without a global assignment",
+      "Use HEAD as the local merge conflict marker label",
+      "Keep original bytes when abortMerge restores binary files, instead of decoding them as UTF-8"
     ],
     "licenseSha256": "b916888fb16893c3a1df138543f994b96bb6892d74b6777c3a080d9cd2520c48"
   },

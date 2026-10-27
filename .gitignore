@@ -1,11 +1,10 @@
-node_modules/
+node_modules
 dist/*
 !dist/THIRD_PARTY_NOTICES.txt
-!dist/git-command.d.ts
-.build/
+.build
 shell/target/
 .scratch/
-.sources/
+.sources
 test-results/
 playwright-report/
 public/brush/

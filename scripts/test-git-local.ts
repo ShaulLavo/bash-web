@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { patchGitSource } from "./patch-git-source.ts";
 patchGitSource();
 const output = `.build/git-local-${randomUUID()}`;
-if (process.argv.includes("--full-fixture")) process.env.GIT_LOCAL_FULL_FIXTURE = "1";
 try {
   await mkdir(output, { recursive: true });
   await build({

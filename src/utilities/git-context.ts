@@ -1,5 +1,6 @@
 import * as git from "isomorphic-git";
 import type { GitFilesystem, GitInvocation } from "./git-types";
+import { conflictStatus } from "./git-index";
 
 export class GitFailure extends Error {
   constructor(
@@ -147,6 +148,7 @@ export async function identity(context: GitContext, kind: "AUTHOR" | "COMMITTER"
 }
 
 export async function clean(context: GitContext) {
+  if ((await conflictStatus(context)).size) throw new GitFailure("unresolved merge conflicts", 1);
   const rows = await git.statusMatrix(context);
   if (
     rows.some(
@@ -163,10 +165,18 @@ function statusLine([path, head, work, stage]: git.StatusRow): string {
   return index === " " && working === " " ? "" : `${index}${working} ${quote(path)}\n`;
 }
 
-export function porcelain(rows: git.StatusRow[]) {
+export function porcelain(
+  rows: git.StatusRow[],
+  conflicts: ReadonlyMap<string, string> = new Map(),
+) {
   const tracked = rows.filter(([, head, , stage]) => head !== 0 || stage !== 0);
   const untracked = rows.filter(([, head, , stage]) => head === 0 && stage === 0);
-  return tracked.concat(untracked).map(statusLine).join("");
+  return tracked
+    .concat(untracked)
+    .map((row) =>
+      conflicts.has(row[0]) ? `${conflicts.get(row[0])} ${quote(row[0])}\n` : statusLine(row),
+    )
+    .join("");
 }
 
 function quote(path: string): string {

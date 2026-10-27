@@ -24,10 +24,11 @@ test("Git source patch rejects changed upstream bytes before mutation", async (c
 
 async function digest() {
   return Promise.all(
-    ["index.js", "index.cjs"].map(async (file) =>
-      createHash("sha256")
-        .update(await readFile(`node_modules/isomorphic-git/${file}`))
-        .digest("hex"),
+    ["index.js", "index.cjs", "managers/index.js", "managers/index.cjs", "models/index.js"].map(
+      async (file) =>
+        createHash("sha256")
+          .update(await readFile(`node_modules/isomorphic-git/${file}`))
+          .digest("hex"),
     ),
   );
 }

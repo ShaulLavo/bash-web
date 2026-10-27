@@ -85,7 +85,7 @@ try {
     false,
     "install loads no Git backend",
   );
-  for (const example of fixture.cases.slice(0, 2)) await replay(page, example);
+  for (const example of fixture.cases) await replay(page, example);
   await trackedStash(page);
   assert.deepEqual(errors, []);
   assert.equal(
@@ -94,16 +94,26 @@ try {
     "first use shares one loaded backend",
   );
   const released = await page.evaluate(() => window.gitLocalTest.release());
-  assert.deepEqual(released, { runtimeDisposed: false, admissions: 0, marker: false });
+  assert.deepEqual(released, {
+    runtimeDisposed: false,
+    admissions: 0,
+    marker: false,
+    admissionRejected: true,
+    pendingOutputJoined: true,
+    disposalShared: true,
+    acceptedStatus: 0,
+    reinstall: true,
+  });
   console.log(
     JSON.stringify({
       browser: await browser.version(),
       fixture: "4d37209ff07add549a8c5d7620785c06a5132bf5",
-      cases: 2,
-      steps: fixture.cases.slice(0, 2).reduce((sum, value) => sum + value.steps.length, 0),
+      cases: fixture.cases.length,
+      steps: fixture.cases.reduce((sum, value) => sum + value.steps.length, 0),
       lazyBackendLoads: 1,
       processAdmissions: 0,
       runtimeBorrowed: true,
+      lifecycle: released,
       shellPATH: "blocked by P WASM-only program registration",
       trackedStash: "staged and unstaged bytes restored by pop --index",
       assets,

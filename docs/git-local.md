@@ -36,11 +36,11 @@ Arguments exclude the executable name. Streams receive bytes and may return prom
 | `diff` | Index/worktree or `--cached`/`--staged`; unified UTF-8 text diff, binary notice, `--name-only`, `--no-prefix`, `--quiet`, `--exit-code` |
 | `branch` | List/current, create, delete `-d`/`-D`; no patterns |
 | `checkout` | Existing local revision, `-b`; refuses tracked edits that could be lost |
-| `merge` | Clean fast-forward and independent divergent merges, `--ff-only`, `--no-ff`, `-m` |
-| `stash` | Tracked loose-object push/list/apply/pop/drop/clear, `-m`, `--index` on apply/pop, `%gs` list format |
+| `merge` | Clean fast-forward and divergent merges, text conflict markers and index stages, `--abort`, resolution commits, `--ff-only`, `--no-ff`, `-m` |
+| `stash` | Push/list/apply/pop/drop/clear, `-u`/`--include-untracked`, `-m`, `--index` on apply/pop, `%gs` list format |
 | `config` | Repository-local `user.name` and `user.email` only |
 
-Waffle's high-level filesystem API exposes regular files and directories, without executable mode control. This adapter rejects symlinks. Remotes, network relay, submodules, hooks, editors, filters, arbitrary config and Git aliases are outside this slice. Unsupported commands/options return an error. Conflicting merges leave the repository unchanged and return 1; conflict-marker editing, `merge --abort` and resolution commits are not implemented. Stash excludes `-u`, packed objects and merging into a dirty worktree; dirty apply/pop is rejected before upstream's overwrite operation. Upstream stash object layout is not claimed to match native Git's index restoration convention outside these tests.
+Waffle's high-level filesystem API exposes regular files and directories, without executable mode control. This adapter rejects symlinks. Remotes, network relay, submodules, hooks, editors, filters, arbitrary config and Git aliases are outside this slice. Unsupported commands/options return an error. Conflicting text merges return 1 and leave real conflict stages and markers for `add` and `commit`, or `merge --abort`. Checkout and stash push reject an unfinished merge. Stash saves native-shaped worktree, index, and optional untracked commits. Apply and pop require the saved original HEAD and a clean tracked worktree; applying across different commits is not supported. Untracked collisions fail before saved files are restored. Ignored files are excluded from `-u`. Executable bits, symlinks, rename detection, complex file/directory conflicts, and recursive multi-base merges are not supported.
 
 ## Shell registration blocker
 
@@ -48,8 +48,8 @@ The pinned Waffle 0.0.90 program registry accepts only WASM source or compiled c
 
 ## Verification and source
 
-`npm run test:git:local` replays all 47 steps in the committed index/worktree and branch/merge native-Git scenarios, plus tracked-stash and refusal checks. `npm run test:git:browser` repeats those scenarios and tracked stash in Chromium on the actual Waffle filesystem and checks lazy loading, zero process admission and caller lifetime. Neither backend nor browser replay invokes native Git.
+`npm run test:git:local` replays all four committed native-Git scenarios and 96 steps, plus binary preservation, stash deletion, collision, and refusal checks. `npm run test:git:browser` repeats all 96 steps and tracked stash in Chromium on the actual Waffle filesystem. It checks first-use loading, zero process admission, command retirement, pending-output joins, reinstallation, and caller lifetime. Neither backend nor browser replay invokes native Git.
 
-`npm run audit:git:fixture` runs all four recorded scenarios and currently fails the conflict-recovery and untracked-stash cases. These failures are explicit acceptance gaps, not skipped tests. The fixture source and exact oracle environment are owned by `scripts/record-git-local.ts`; `node scripts/record-git-local.ts --check` audits its native recording without changing owner HOME/global config.
+`npm run audit:git:fixture` runs the same complete local replay. No scenarios are excluded. The fixture source and exact oracle environment are owned by `scripts/record-git-local.ts`; `node scripts/record-git-local.ts --check` audits its native recording without changing owner HOME/global config.
 
-`scripts/patch-git-source.ts` verifies the pristine ESM/CJS hashes, adds a module-local browser Buffer import, and fixes upstream `compareStats` to compare subsecond timestamps and rehash files in the racy-index window. The patch is idempotent and refuses changed upstream source. It prevents same-sized edits within a second from appearing clean. The package license files remain in the dependency; `npm run notices:git` emits the complete bundled dependency notices.
+`scripts/patch-git-source.ts` verifies the pristine ESM/CJS hashes, adds module-local browser Buffer imports for the core and exported filesystem/index helpers, and fixes upstream `compareStats` to compare subsecond timestamps and rehash files in the racy-index window. The patch also uses `HEAD` in local conflict markers and preserves binary bytes in upstream `abortMerge`. It is idempotent and refuses changed upstream source. It prevents same-sized edits within a second from appearing clean. The package license files remain in the dependency; `npm run notices:git` emits the complete bundled dependency notices.

@@ -11,9 +11,11 @@ import {
   porcelain,
   type GitContext,
 } from "./git-context";
-import { gitBranch, gitCheckout, gitCommit, gitLog, gitMerge } from "./git-history";
+import { gitBranch, gitCheckout, gitCommit, gitLog } from "./git-history";
 import { gitDiff } from "./git-diff";
+import { gitMerge } from "./git-merge";
 import { gitStash } from "./git-stash";
+import { conflictStatus } from "./git-index";
 
 export async function runGit(fs: GitFilesystem, invocation: GitInvocation): Promise<number> {
   try {
@@ -131,7 +133,13 @@ async function gitStatus(context: GitContext, args: readonly string[]) {
     throw new GitFailure("only --untracked-files=all is supported", 129);
   const specs = parsed.paths.map((path) => pathspec(context, path));
   const rows = await git.statusMatrix(context);
-  await output(context, porcelain(rows.filter(([path]) => selected(path, specs))));
+  await output(
+    context,
+    porcelain(
+      rows.filter(([path]) => selected(path, specs)),
+      await conflictStatus(context),
+    ),
+  );
 }
 
 async function gitConfig(context: GitContext, args: readonly string[]) {

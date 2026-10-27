@@ -1,9 +1,12 @@
+import { clearMerge } from "./git-merge";
 import * as git from "isomorphic-git";
 import {
   arity,
   clean,
   GitFailure,
   identity,
+  exists,
+  text,
   options,
   output,
   type GitContext,
@@ -18,6 +21,13 @@ export async function gitCommit(context: GitContext, args: readonly string[]) {
       "commit requires a nonempty -m message; editors and hooks are unsupported",
       129,
     );
+  const mergeHead = `${context.dir}/.git/MERGE_HEAD`;
+  const parent = (await exists(context.fs, mergeHead))
+    ? [
+        await git.resolveRef({ ...context, ref: "HEAD" }),
+        (await text(context.fs, mergeHead)).trim(),
+      ]
+    : undefined;
   const author = await identity(context, "AUTHOR");
   const committer = await identity(context, "COMMITTER");
   try {
@@ -26,8 +36,10 @@ export async function gitCommit(context: GitContext, args: readonly string[]) {
       message,
       author,
       committer,
-      disallowEmpty: !parsed.flags.has("--allow-empty"),
+      disallowEmpty: parent === undefined && !parsed.flags.has("--allow-empty"),
+      parent,
     });
+    if (parent) await clearMerge(context);
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "EmptyCommitError")
       throw new GitFailure("nothing to commit", 1);
@@ -112,6 +124,8 @@ async function requireMerged(context: GitContext, ref: string) {
 
 export async function gitCheckout(context: GitContext, args: readonly string[]) {
   const parsed = options(args, [], ["-b"]);
+  if (await exists(context.fs, `${context.dir}/.git/MERGE_HEAD`))
+    throw new GitFailure("finish or abort the current merge first", 1);
   arity(parsed.paths, parsed.named.has("-b") ? 0 : 1, 1);
   const ref = parsed.named.get("-b") ?? parsed.paths[0];
   await clean(context);
@@ -125,42 +139,5 @@ async function requireCheckoutRef(context: GitContext, ref: string) {
     await git.resolveRef({ ...context, ref });
   } catch {
     throw new GitFailure(`pathspec '${ref}' did not match a local revision`, 1);
-  }
-}
-
-export async function gitMerge(context: GitContext, args: readonly string[]) {
-  const parsed = options(args, ["--ff-only", "--no-ff"], ["-m", "--message"]);
-  arity(parsed.paths, 1);
-  if (parsed.flags.has("--ff-only") && parsed.flags.has("--no-ff"))
-    throw new GitFailure("incompatible merge flags", 129);
-  await clean(context);
-  const theirs = parsed.paths[0];
-  const ref = await git.currentBranch(context);
-  if (!ref) throw new GitFailure("merging in detached HEAD is unsupported", 129);
-  const author = await identity(context, "AUTHOR");
-  const committer = await identity(context, "COMMITTER");
-  const merge = {
-    ...context,
-    theirs,
-    author,
-    committer,
-    fastForward: !parsed.flags.has("--no-ff"),
-    fastForwardOnly: parsed.flags.has("--ff-only"),
-    message: parsed.named.get("-m") ?? parsed.named.get("--message"),
-  };
-  try {
-    await git.merge({ ...merge, dryRun: true });
-    await git.checkout({ ...context, ref: theirs, dryRun: true, noUpdateHead: true });
-    await git.merge(merge);
-    await git.checkout({ ...context, ref });
-  } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "MergeConflictError"
-    )
-      throw new GitFailure("merge conflicts; this local slice leaves the repository unchanged", 1);
-    throw error;
   }
 }
