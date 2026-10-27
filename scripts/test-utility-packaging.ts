@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { build } from "esbuild";
@@ -19,6 +20,7 @@ const utilities = [
   "ls",
   "mkdir",
   "rg",
+  "python",
   "sed",
   "seq",
   "sort",
@@ -262,13 +264,28 @@ test("env packages the exact print-only upstream source and root license", () =>
   assert.deepEqual(receipt.packages, { uu_env: { version: "0.13.0", path: "src/uu/env" } });
   assert.equal(receipt.sharedPackage.dependencyAlias, "uucore_files");
   const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
-  assert.ok(manifest.includes(`uu_env = { git = "${receipt.repository}", rev = "${revision}" }`));
-  const lock = readFileSync(resolve(root, "shell/Cargo.lock"), "utf8");
+  assert.ok(manifest.includes('uu_env = { path = "../../third-party/uutils-env" }'));
+  const localManifest = readFileSync(resolve(root, receipt.localPackage, "Cargo.toml"), "utf8");
   assert.ok(
-    lock.includes(
-      `name = "uu_env"\nversion = "0.13.0"\nsource = "git+${receipt.repository}?rev=${revision}#${revision}"`,
+    localManifest.includes(
+      `uucore = { git = "${receipt.repository}", rev = "${revision}", features = ["signals"] }`,
     ),
   );
+  const provenance = JSON.parse(
+    readFileSync(resolve(root, receipt.localPackage, "provenance.json"), "utf8"),
+  );
+  assert.equal(provenance.revision, revision);
+  for (const [path, digest] of Object.entries(provenance.files)) {
+    assert.equal(
+      createHash("sha256")
+        .update(readFileSync(resolve(root, receipt.localPackage, path)))
+        .digest("hex"),
+      digest,
+      path,
+    );
+  }
+  const lock = readFileSync(resolve(root, "shell/Cargo.lock"), "utf8");
+  assert.ok(lock.includes(`name = "uu_env"\nversion = "0.13.0"\ndependencies = [`));
   const entry = readFileSync(resolve(root, "shell/utilities/src/bin/env.rs"), "utf8");
   assert.match(entry, /extern crate uucore_files as uucore/);
   assert.match(entry, /uucore::bin!\(uu_env\)/);
@@ -301,6 +318,16 @@ for (const name of ["cut", "tr"]) {
     assert.ok(notices.includes(`## uutils coreutils ${revision} / LICENSE`));
   });
 }
+
+test("Python packages a lazy payload separately from its raw WASI interpreter", async () => {
+  const text = await bundle("src/utilities/python.ts");
+  assert.match(text, /dist\/python-stdlib\.json/);
+  assert.match(text, /cross-build\/wasm32-wasip1\/python\.wasm/);
+  assert.doesNotMatch(text, /createRuntime|PYTHONHOME|PYTHONPATH/);
+  const installer = readFileSync(resolve(root, "src/utilities/python.ts"), "utf8");
+  assert.match(installer, /execution: "wasi"/);
+  assert.match(installer, /argv0: PYTHON_ARGV0/);
+});
 
 test("xargs retains the upstream license and bounded source receipt", () => {
   const receipt = JSON.parse(

@@ -60,6 +60,7 @@ export interface UtilityProgram {
   readonly path: string;
   readonly defaultUrl: URL;
   readonly execution?: "cooperative" | "wasi";
+  readonly argv0?: string;
 }
 
 const installed = new WeakMap<Runtime, Set<string>>();
@@ -238,7 +239,9 @@ export async function installUtility(
     const workerUrl = resolveUrl(
       options.workerUrl ?? new URL("../../dist/shell-worker.js", import.meta.url),
     );
-    releases.push(runtime.registerAdapter(adapter, guestLauncher(runtime, workerUrl)));
+    releases.push(
+      runtime.registerAdapter(adapter, guestLauncher(runtime, workerUrl, program.argv0)),
+    );
     releases.push(runtime.registerProgram(path, utilityDefinition(adapter, program, options)));
   } catch (error) {
     try {
