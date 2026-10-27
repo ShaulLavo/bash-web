@@ -1,5 +1,5 @@
 [workspace]
-members = ["parser", "engine", "utilities", "compat-fixtures", "sed", "wc", "cut"]
+members = ["parser", "engine", "utilities", "compat-fixtures", "sed", "wc", "cut", "xargs"]
 resolver = "3"
 
 [workspace.package]

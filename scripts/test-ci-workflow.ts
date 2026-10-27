@@ -221,7 +221,7 @@ test("quality package recipes preserve complete current selections", () => {
   );
   assert.equal(
     scripts["test:guest-build"],
-    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-python-build.ts scripts/test-python-ci.ts",
+    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-xargs-source.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts scripts/test-python-build.ts scripts/test-python-ci.ts",
   );
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(

@@ -18,6 +18,8 @@ The terminal's historical notice names an older Ghostty revision. The actual inc
 
 The `wc` guest uses `uu_wc` and `uucore` from `uutils/coreutils` at `07763857f6b9a547742a994b58aef0ccd036198b` (MIT, Copyright uutils developers). The upstream license is retained in `shell/wc/LICENSE.uutils-coreutils`. The notices script includes that license in generated distributions, and the utility artifact receipt covers the separately linked guest. Its `bytecount` 0.6.9 dependency is retained under `shell/wc/vendor/bytecount` with one local build guard: the existing WASM SIMD module and call sites now require the `simd128` target feature. The crate's MIT and Apache 2.0 licenses remain in that directory and in the generated notices.
 
+The `xargs` guest reuses the MIT-licensed module `src/xargs/mod.rs` from `uutils/findutils` revision `505421d4e03586efeb7b9c55adf057599e192e0a`, Copyright 2021 Collabora, Ltd. Its source receipt, retained license, and small echo-only contract patch are in `third-party/uutils-xargs/`. The notices generator includes the license from that crate. No find/locate implementation is included.
+
 The fixed compatibility oracle at `docs/evidence/own-shell-oracle.json` contains
 upstream test scripts, not production interpreter code. The corpus source paths,
 revisions and license checksums are pinned under `shellScoreboard.corpora` in

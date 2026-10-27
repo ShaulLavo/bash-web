@@ -1,22 +1,7 @@
 #![cfg(not(target_os = "wasi"))]
 
-use std::{
-    io::Write,
-    process::{Command, Output, Stdio},
-};
-
-fn head(args: &[&str], input: &[u8]) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_head"))
-        .args(args)
-        .env("LC_ALL", "C")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(input).unwrap();
-    child.wait_with_output().unwrap()
-}
+#[path = "process.rs"]
+mod process;
 
 #[test]
 fn upstream_head_counts_lines_bytes_and_binary_data() {
@@ -33,7 +18,7 @@ fn upstream_head_counts_lines_bytes_and_binary_data() {
         (vec!["-z", "-n1"], &b"one\0two\0"[..], &b"one\0"[..]),
         (vec!["-c", "1KB"], &b"abc"[..], &b"abc"[..]),
     ] {
-        let output = head(&args, input);
+        let output = process::run(env!("CARGO_BIN_EXE_head"), &args, input, false);
         assert!(output.status.success(), "{args:?}: {output:?}");
         assert_eq!(output.stdout, expected, "{args:?}");
         assert!(output.stderr.is_empty(), "{args:?}: {output:?}");
@@ -48,7 +33,7 @@ fn upstream_head_reports_real_argument_errors() {
         vec!["-c", "1J"],
         vec!["--not-an-option"],
     ] {
-        let output = head(&args, b"");
+        let output = process::run(env!("CARGO_BIN_EXE_head"), &args, b"", false);
         assert_eq!(output.status.code(), Some(1), "{args:?}");
         assert!(output.stdout.is_empty());
         assert!(!output.stderr.is_empty());
@@ -57,10 +42,10 @@ fn upstream_head_reports_real_argument_errors() {
 
 #[test]
 fn upstream_head_exposes_help_and_version() {
-    let help = head(&["--help"], b"");
+    let help = process::run(env!("CARGO_BIN_EXE_head"), &["--help"], b"", false);
     assert!(help.status.success());
     assert!(String::from_utf8_lossy(&help.stdout).contains("--lines"));
-    let version = head(&["--version"], b"");
+    let version = process::run(env!("CARGO_BIN_EXE_head"), &["--version"], b"", false);
     assert!(version.status.success());
     assert!(String::from_utf8_lossy(&version.stdout).contains("0.12.0"));
 }
