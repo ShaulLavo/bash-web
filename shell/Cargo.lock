@@ -1637,6 +1637,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-xargs"
+version = "0.0.1"
+dependencies = [
+ "upstream-xargs",
+]
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1823,6 +1830,14 @@ dependencies = [
  "tempfile",
  "terminal_size",
  "unicode-width",
+ "uucore 0.12.0",
+]
+
+[[package]]
+name = "upstream-xargs"
+version = "0.11.0"
+dependencies = [
+ "clap",
  "uucore 0.12.0",
 ]
 
