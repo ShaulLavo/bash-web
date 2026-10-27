@@ -61,21 +61,40 @@ for (const entry of [
   });
 }
 
-for (const [source, status] of [["", 0], ["false", 1], ["exit 37", 37]]) {
-  test(`WASI -c preserves status ${status} for ${JSON.stringify(source)}`, { timeout: 15000 }, async (context) => {
-    assert.deepEqual(await invoke(context, ["sh", "-c", source, "zero", "one"]), {
-      status,
-      stdout: "",
-      stderr: "",
-    });
-  });
+for (const [source, status] of [
+  ["", 0],
+  ["false", 1],
+  ["exit 37", 37],
+]) {
+  test(
+    `WASI -c preserves status ${status} for ${JSON.stringify(source)}`,
+    { timeout: 15000 },
+    async (context) => {
+      assert.deepEqual(await invoke(context, ["sh", "-c", source, "zero", "one"]), {
+        status,
+        stdout: "",
+        stderr: "",
+      });
+    },
+  );
 }
 
-for (const args of [["sh", "-c"], ["sh", "script.sh"], ["sh", "-x", "echo wrong"]]) {
-  test(`WASI rejects unsupported startup ${JSON.stringify(args)}`, { timeout: 15000 }, async (context) => {
-    const result = await invoke(context, args);
-    assert.equal(result.status, 2);
-    assert.equal(result.stdout, "");
-    assert.match(result.stderr, /usage: shell-runtime \[-i \| -c SCRIPT \[NAME \[ARG\.\.\.\]\]\]/);
-  });
+for (const args of [
+  ["sh", "-c"],
+  ["sh", "script.sh"],
+  ["sh", "-x", "echo wrong"],
+]) {
+  test(
+    `WASI rejects unsupported startup ${JSON.stringify(args)}`,
+    { timeout: 15000 },
+    async (context) => {
+      const result = await invoke(context, args);
+      assert.equal(result.status, 2);
+      assert.equal(result.stdout, "");
+      assert.match(
+        result.stderr,
+        /usage: shell-runtime \[-i \| -c SCRIPT \[NAME \[ARG\.\.\.\]\]\]/,
+      );
+    },
+  );
 }

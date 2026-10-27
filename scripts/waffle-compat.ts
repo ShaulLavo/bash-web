@@ -165,6 +165,7 @@ export async function runRoot(
   code: string,
   output: (fd: number, bytes: Uint8Array) => void,
   onStop: (stop: () => void) => void,
+  // Keep the frozen Bash oracle's invocation name unless a startup test supplies argv.
   args: string[] = ["bash", "-c", code],
 ): Promise<number> {
   const filesystem = runtime.filesystem.fork();
