@@ -6,9 +6,20 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, sep } from "node:path";
 import { build } from "esbuild";
-import { chromium, firefox } from "playwright";
+import { chromium, firefox, type Page } from "playwright";
 import cases from "../tests/helpers/grep-usage-cases.json" with { type: "json" };
 import receipt from "../shell/utilities/grep.source.json" with { type: "json" };
+
+function observeWorkerStops(page: Page) {
+  const stopped: Promise<void>[] = [];
+  page.on("worker", (worker) => {
+    stopped.push(new Promise<void>((resolve) => worker.once("close", () => resolve())));
+  });
+  return async () => {
+    await Promise.all(stopped);
+    assert.equal(page.workers().length, 0, "all shell, grep and filesystem workers must exit");
+  };
+}
 
 // This is a separate, explicit grep control set. It neither reads nor updates
 // the shell compatibility floor or any frozen oracle.
@@ -78,6 +89,7 @@ try {
     const browser = await browserType.launch({ headless: true });
     try {
       const page = await browser.newPage();
+      const workersStopped = observeWorkerStops(page);
       await page.goto(`http://127.0.0.1:${address.port}/grep-usage.html`);
       await page.waitForFunction(() => typeof window.grepUsage === "function");
       const actual = await page.evaluate(
@@ -92,7 +104,7 @@ try {
       );
       assert.equal(actual.missing, 127);
       assert.equal(actual.ownerAlive, "alive");
-      assert.equal(page.workers().length, 0, "all shell, grep and filesystem workers must exit");
+      await workersStopped();
       console.log(
         `${browserType.name()}: ${cases.length} Waffle usage controls, lazy load, borrowed runtime and worker cleanup passed`,
       );
