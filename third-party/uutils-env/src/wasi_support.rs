@@ -1,4 +1,4 @@
-// Local WASI restrictions for upstream env. See ../wasi.patch and provenance.json.
+// Local WASI execution and restrictions for upstream env. See ../wasi.patch and provenance.json.
 use uucore::error::{UResult, USimpleError};
 
 pub fn validate_options(matches: &clap::ArgMatches) -> UResult<()> {
@@ -14,12 +14,84 @@ pub fn validate_options(matches: &clap::ArgMatches) -> UResult<()> {
     Ok(())
 }
 
-pub fn validate_execution(opts: &super::Options<'_>) -> UResult<()> {
-    if opts.program.is_empty() {
+#[link(wasm_import_module = "runtime_proc")]
+unsafe extern "C" {
+    fn cwd(output: *mut u8, capacity: usize) -> i32;
+}
+
+pub fn initialize_cwd() -> UResult<()> {
+    let mut bytes = vec![0; shell_wasi_process::MAX_REQUEST_BYTES];
+    let length = shell_wasi_process::decode_host_result("cwd", unsafe {
+        cwd(bytes.as_mut_ptr(), bytes.len())
+    })
+    .map_err(process_error)?;
+    let path = bytes
+        .get(..length as usize)
+        .ok_or_else(|| USimpleError::new(125, "invalid process cwd length"))?;
+    let path = std::str::from_utf8(path)
+        .map_err(|_| USimpleError::new(125, "non-UTF-8 process cwd is unsupported"))?;
+    std::env::set_current_dir(path)
+        .map_err(|error| USimpleError::new(125, format!("cannot initialize cwd: {error}")))?;
+    Ok(())
+}
+
+fn text(value: &std::ffi::OsStr) -> UResult<String> {
+    value
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| USimpleError::new(125, "non-UTF-8 process strings are unsupported"))
+}
+
+pub fn run_program(
+    program: &std::ffi::OsStr,
+    argv0: &std::ffi::OsStr,
+    args: &[&std::ffi::OsStr],
+) -> UResult<()> {
+    use shell_wasi_process::{Request, inherited_shell_descriptors, resolve_executable, run};
+    let program = text(program)?;
+    if program.is_empty() {
+        return Err(USimpleError::new(127, "'': No such file or directory"));
+    }
+    let cwd = std::env::current_dir()
+        .map_err(|error| USimpleError::new(125, format!("cannot read cwd: {error}")))?;
+    let cwd = text(cwd.as_os_str())?;
+    let env = std::env::vars_os()
+        .map(|(key, value)| Ok((text(&key)?, text(&value)?)))
+        .collect::<UResult<std::collections::BTreeMap<_, _>>>()?;
+    let executable = resolve_executable(&program, env.get("PATH").map(String::as_str), &cwd)
+        .map_err(process_error)?;
+    let mut argv = vec![text(argv0)?];
+    for arg in args {
+        argv.push(text(arg)?);
+    }
+    let request = Request {
+        executable,
+        argv,
+        env,
+        cwd,
+        fds: inherited_shell_descriptors().map_err(process_error)?,
+    };
+    let outcome = run(&request).map_err(process_error)?;
+    let status = outcome.shell_status();
+    if status == 0 {
         return Ok(());
     }
-    Err(USimpleError::new(
-        125,
-        "program execution is unsupported on this runtime",
-    ))
+    Err(status.into())
+}
+
+fn process_error(error: shell_wasi_process::Error) -> Box<dyn uucore::error::UError> {
+    use shell_wasi_process::Error;
+    let status = match error {
+        Error::Host {
+            operation: "access_take" | "spawn",
+            errno: 44,
+        } => 127,
+        Error::Host {
+            operation: "access_take" | "spawn",
+            ..
+        } => 126,
+        Error::Interrupted(signal) => 128 + i32::from(signal),
+        _ => 125,
+    };
+    USimpleError::new(status, error.to_string())
 }

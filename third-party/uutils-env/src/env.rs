@@ -36,7 +36,7 @@ use std::env;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(target_os = "wasi")))]
 use std::io;
 use std::io::Write as _;
 use std::io::stderr;
@@ -46,7 +46,9 @@ use std::mem::zeroed;
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
+#[cfg(not(target_os = "wasi"))]
+use uucore::error::{ExitCode, strip_errno};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use uucore::signals::{
@@ -570,6 +572,7 @@ struct ParsedArguments {
 impl EnvAppData {
     #[cold]
     #[inline(never)]
+    #[cfg(not(target_os = "wasi"))]
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!(
             "{}",
@@ -796,7 +799,9 @@ impl EnvAppData {
         )?;
 
         #[cfg(target_os = "wasi")]
-        wasi_support::validate_execution(&opts)?;
+        if !opts.program.is_empty() {
+            wasi_support::initialize_cwd()?;
+        }
 
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
@@ -849,7 +854,7 @@ impl EnvAppData {
 
         let arg0 = match opts.argv0 {
             None => prog.clone(),
-            Some(argv0) if cfg!(unix) => {
+            Some(argv0) if cfg!(any(unix, target_os = "wasi")) => {
                 let arg0 = Cow::Borrowed(argv0);
                 if do_debug_printing {
                     let _ = writeln!(stderr(), "argv0:     {}", arg0.quote());
@@ -875,6 +880,9 @@ impl EnvAppData {
                 let _ = writeln!(error, "{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
+
+        #[cfg(target_os = "wasi")]
+        return wasi_support::run_program(&prog, &arg0, args);
 
         #[cfg(unix)]
         {
@@ -919,7 +927,7 @@ impl EnvAppData {
             }
         }
 
-        #[cfg(not(unix))]
+        #[cfg(all(not(unix), not(target_os = "wasi")))]
         {
             // Fallback to Command::status for non-Unix systems
             let mut cmd = std::process::Command::new(&*prog);

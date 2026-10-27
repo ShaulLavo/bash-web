@@ -41,10 +41,10 @@ async function checkPublicAdmission(runtime, parent, service, supervisor, notice
     { workerUrl },
   );
   assert(sourceLoads === 0, "raw source eagerly loaded");
-  const launch = async (executable, env) => {
+  const launch = async (executable, env, argv = ["custom argv0", ""]) => {
     const pid = parent.spawn(parent.pid, {
       executable,
-      argv: ["custom argv0", ""],
+      argv,
       env,
       cwd: "/workspace",
       job: 0,
@@ -58,16 +58,11 @@ async function checkPublicAdmission(runtime, parent, service, supervisor, notice
     return result;
   };
   try {
-    const rejected = await launch(raw.executable, {});
+    const admitted = await launch(raw.executable, {}, ["fixture", "review-noop"]);
     assert(
-      rejected.kind === "start-failed" && rejected.error === "ENOEXEC" && rejected.code === 8,
-      `raw runtime_proc guest unexpectedly admitted: ${JSON.stringify(rejected)}`,
+      admitted.kind === "exited" && admitted.code === 0,
+      `raw process source failed: ${JSON.stringify(admitted)}`,
     );
-    const diagnostic = output
-      .map((entry) => entry.text)
-      .concat(errors)
-      .find((error) => error.includes("reserved import namespace runtime_proc"));
-    assert(diagnostic, `missing raw admission exception: ${JSON.stringify({ output, errors })}`);
     const probes = [];
     for (const env of [{}, { ONLY: "exact", PWD: "/different" }]) {
       const before = output.length;
@@ -97,7 +92,7 @@ async function checkPublicAdmission(runtime, parent, service, supervisor, notice
       );
       probes.push({ supplied: { env, cwd: "/workspace" }, observed });
     }
-    return { rejected, sourceLoads, diagnostic, probes };
+    return { admitted, sourceLoads, probes };
   } finally {
     await Promise.all([raw.dispose(), probe.dispose()]);
   }
@@ -282,11 +277,7 @@ export async function execute({ mode = "driver", injectBroker } = {}) {
     const proof = fence.proof();
     assert(!proof || proof.pollsBeforeRelease <= 1, `DELAYED_FENCE_SPIN: ${JSON.stringify(proof)}`);
     if (injectBroker === "dispose") onError(null);
-    diagnostics.verify(
-      mode === "driver"
-        ? ["raw-admission", "missing-executable", "missing-entry"]
-        : ["raw-admission"],
-    );
+    diagnostics.verify(mode === "driver" ? ["missing-executable", "missing-entry"] : []);
   }
 }
 
@@ -304,7 +295,10 @@ function createDelayedFence(enabled) {
   });
   const driver = enabled
     ? releaseRequestedFence(control, begun, () => {
-        assert(Atomics.load(control, 1) === 1, "cleanup polled more than once before release");
+        assert(
+          Atomics.load(control, 1) === 1,
+          "cleanup wait entered more than once before release",
+        );
         released = true;
         release();
       })

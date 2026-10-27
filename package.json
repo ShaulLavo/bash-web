@@ -125,6 +125,7 @@
     "test:ls": "node --test scripts/test-own-shell-ls.ts",
     "test:find": "node --test scripts/test-find-source.ts scripts/test-own-shell-find.ts",
     "test:find:browser": "node --test scripts/test-own-shell-find-browser.ts",
+    "test:env:command": "node scripts/build-env-command-tests.ts && npm run build:node-harness && node --test scripts/test-env-command.ts",
     "build:env:tests": "node scripts/build-env-tests.ts",
     "test:env:browser": "playwright test --config=playwright.env.config.ts",
     "build:node-harness": "node scripts/build-node-harness.ts",
@@ -180,11 +181,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c312af63a554602906b462a2b49c7d5e14a97c5b",
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#d3050e73914b7ed4cd72010f72047cce383e2f29",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "git+https://github.com/ShaulLavo/waffle.git#c312af63a554602906b462a2b49c7d5e14a97c5b"
+    "waffle": "git+https://github.com/ShaulLavo/waffle.git#d3050e73914b7ed4cd72010f72047cce383e2f29"
   },
   "overrides": {
     "esbuild": "0.28.2"

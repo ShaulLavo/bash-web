@@ -36,17 +36,29 @@ test("env preserves lazy loading and leaves the caller runtime usable after unin
   await expect.poll(() => page.workers().length).toBe(0);
 });
 
+for (const [script, status, stdout] of [
+  ["env -i env -i 'A=two words' EMPTY=", 0, "A=two words\nEMPTY=\n"],
+  ["env -i A=old env -u A B=new /usr/bin/env", 0, "B=new\n"],
+  ["env -i -C /tmp -a custom env -i A=changed; printf '%s' \"$A\"", 0, "A=changed\nold"],
+  ["env missing-command", 127, ""],
+  ["env /bin/env -0 command", 125, ""],
+] satisfies [string, number, string][]) {
+  test(`env browser command: ${script}`, async ({ page }) => {
+    await page.goto("/env-tests.html");
+    await page.waitForFunction(() => Boolean(window.envTests));
+    const result = await page.evaluate((script) => window.envTests.check(script), script);
+    expect(result.status).toBe(status);
+    expect(result.stdout).toBe(stdout);
+    await expect.poll(() => page.workers().length).toBe(0);
+  });
+}
+
 for (const mode of [
-  "",
   "-0",
   "--ignore-signal=INT",
   "--default-signal",
   "--block-signal=PIPE",
   "--list-signal-handling",
-  "-i",
-  "-C /tmp",
-  "-a custom",
-  "-S",
 ]) {
   test(`env rejects unsupported mode ${mode} before consuming shared input`, async ({ page }) => {
     await page.goto("/env-tests.html");

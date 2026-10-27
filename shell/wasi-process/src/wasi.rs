@@ -62,7 +62,7 @@ pub fn inherited_stdio() -> Result<Vec<DescriptorBinding>, Error> {
 }
 
 /// Run a child and wait for its whole owned job's descriptor/filesystem safety fence.
-/// Use spawn instead when the caller must retain cleanup ownership after a gated wait.
+/// Waffle owns fatal-caller cleanup even when guest destructors cannot run.
 pub fn run(request: &Request) -> Result<Outcome, Error> {
     spawn(request)?.wait()
 }
@@ -93,9 +93,9 @@ pub fn spawn(request: &Request) -> Result<Child, Error> {
 }
 
 /// One child and an independent job. Drop attempts cleanup on a best-effort basis.
-/// Signal-preserving blocking cleanup is gated when the host cannot park.
+/// Blocking waits use Waffle's signal-preserving physical-retirement fence.
 /// Use `cancel` explicitly when the caller needs to observe cleanup errors.
-/// Fatal caller termination does not run Drop or cancel this independent job on P.
+/// Waffle owns cancellation and collection when a caller terminates fatally.
 #[derive(Debug)]
 #[must_use = "a spawned child must be waited for or canceled"]
 pub struct Child {
@@ -114,7 +114,7 @@ impl Child {
             return Ok(self.outcome);
         }
         if self.outcome.is_none() {
-            self.outcome = wait_record("wait", |out| unsafe { imports::wait(self.pid, out) })?;
+            self.outcome = wait_child(self.pid)?;
         }
         let Some(outcome) = self.outcome else {
             return Ok(None);
@@ -129,27 +129,28 @@ impl Child {
         self.complete = true;
         Ok(Some(outcome))
     }
-    /// A handled signal cancels the owned job with SIGKILL. Returns Interrupted
-    /// after collection, or CleanupWaitUnsupported if another delivery prevents
-    /// parking. This crate never changes the caller's signal dispositions.
+    /// A handled signal cancels the owned job with SIGKILL and returns Interrupted
+    /// after physical retirement. Other pending handled signals remain untouched.
     pub fn wait(&mut self) -> Result<Outcome, Error> {
         if self.complete {
             return self.outcome.ok_or(Error::InvalidRecord);
         }
         loop {
             if let Some(signal) = take_signal()? {
-                return self.cancel_after_signal(signal);
+                self.cancel()?;
+                return Err(Error::Interrupted(signal));
             }
-            if let Some(outcome) = self.try_wait()? {
-                return Ok(outcome);
+            if self.outcome.is_none() {
+                self.outcome = wait_child(self.pid)?;
+            }
+            if self.outcome.is_some() {
+                return self.collect_job();
             }
             self.park()?;
         }
     }
-    /// SIGKILL the owned job, including descendants, then collect all resources.
-    /// Repeated calls return the cached outcome and cannot signal a recycled identity.
-    /// If the host cannot park without consuming caller signals, returns
-    /// CleanupWaitUnsupported with this Child still owning unfinished cleanup.
+    /// SIGKILL the owned job, then wait for descriptor, filesystem and worker cleanup.
+    /// Repeated calls return the cached outcome without signaling recycled identities.
     pub fn cancel(&mut self) -> Result<Outcome, Error> {
         if self.complete {
             return self.outcome.ok_or(Error::InvalidRecord);
@@ -159,23 +160,15 @@ impl Child {
             None => ("kill", unsafe { imports::kill(self.pid, 9) }),
         };
         decode_host_result(operation, result)?;
-        loop {
-            if let Some(outcome) = self.try_wait()? {
-                return Ok(outcome);
-            }
-            if !self.park()? {
-                return Err(Error::CleanupWaitUnsupported { interrupted: None });
-            }
-        }
+        self.collect_job()
     }
-    fn cancel_after_signal(&mut self, signal: u8) -> Result<Outcome, Error> {
-        self.cancel().map_err(|error| match error {
-            Error::CleanupWaitUnsupported { .. } => Error::CleanupWaitUnsupported {
-                interrupted: Some(signal),
-            },
-            other => other,
-        })?;
-        Err(Error::Interrupted(signal))
+    fn collect_job(&mut self) -> Result<Outcome, Error> {
+        let job = self.job.ok_or(Error::InvalidRecord)?;
+        let outcome = wait_record("wait_job", |out| unsafe { imports::wait_job(job, 2, out) })?
+            .ok_or(Error::InvalidRecord)?;
+        self.outcome = Some(self.outcome.unwrap_or(outcome));
+        self.complete = true;
+        self.outcome.ok_or(Error::InvalidRecord)
     }
     fn park(&self) -> Result<bool, Error> {
         match (self.outcome, self.job) {
@@ -197,6 +190,10 @@ impl Drop for Child {
             );
         }
     }
+}
+
+fn wait_child(pid: u32) -> Result<Option<Outcome>, Error> {
+    wait_record("wait", |out| unsafe { imports::wait(pid, out) })
 }
 
 fn wait_record(

@@ -13,6 +13,24 @@ import {
 const source = await readWasiSource("env");
 const guest = await WebAssembly.compile(source);
 
+function rejectProcessImport(entry: WebAssembly.ModuleImportDescriptor) {
+  return () => {
+    throw new Error(`print-only env called ${entry.module}.${entry.name}`);
+  };
+}
+
+function printOnlyNamespaces(module: WebAssembly.Module): WebAssembly.Imports {
+  const namespaces: WebAssembly.Imports = {};
+  for (const entry of WebAssembly.Module.imports(module)) {
+    if (entry.module === "wasi_snapshot_preview1") continue;
+    if (entry.kind !== "function")
+      throw new Error(`unexpected print-only import ${entry.module}.${entry.name}`);
+    const namespace = (namespaces[entry.module] ??= {});
+    namespace[entry.name] = rejectProcessImport(entry);
+  }
+  return namespaces;
+}
+
 // These are literal source-contract expectations, not observations from a host oracle.
 function printEnv(args: string[], env: Record<string, string> = {}) {
   const stdout: Buffer[] = [];
@@ -21,6 +39,7 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
     args: ["env"].concat(args),
     env,
     fs: new api.MemFS(),
+    namespaces: printOnlyNamespaces(guest),
     preopens: { "/": "/" },
     sleep() {
       throw new Error("print-only env must not block");
@@ -37,6 +56,18 @@ function printEnv(args: string[], env: Record<string, string> = {}) {
     wasi.descriptors.dispose();
   }
 }
+
+test("env print-only namespaces trap every process import", () => {
+  const namespaces = printOnlyNamespaces(guest);
+  for (const entry of WebAssembly.Module.imports(guest)) {
+    if (entry.module === "wasi_snapshot_preview1") continue;
+    const imported = namespaces[entry.module]?.[entry.name];
+    assert.ok(typeof imported === "function");
+    assert.throws(() => imported(), {
+      message: `print-only env called ${entry.module}.${entry.name}`,
+    });
+  }
+});
 
 const cases: { name: string; args: string[]; env: Record<string, string>; stdout: string }[] = [
   { name: "empty environment", args: [], env: {}, stdout: "" },
@@ -152,19 +183,8 @@ test("env input debug output does not alter printed bytes", () => {
   assert.ok(actual.stderr.length > 0);
 });
 
-test("env unsupported command modes reject before process imports or input", () => {
-  assert.ok(
-    WebAssembly.Module.imports(guest).every((entry) => entry.module === "wasi_snapshot_preview1"),
-  );
+test("env signal modes reject before process imports or input", () => {
   for (const args of [
-    ["-i", "env"],
-    ["env"],
-    ["-C", "/", "env"],
-    ["-a", "custom", "env"],
-    ["-S", "A=one env"],
-    ["-u", "PWD", "env"],
-    ["PWD=/different", "env"],
-    ["-C", "/tmp", "env"],
     ["--ignore-signal=INT", "env"],
     ["--default-signal", "env"],
     ["--block-signal=PIPE", "env"],

@@ -40,11 +40,6 @@ mod fixture {
         fn raw_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
     }
 
-    #[link(wasm_import_module = "fixture_control")]
-    unsafe extern "C" {
-        fn release_fence();
-    }
-
     pub fn main() {
         let arguments: Vec<_> = std::env::args().collect();
         match arguments.get(1).map(String::as_str) {
@@ -80,15 +75,15 @@ mod fixture {
         };
         assert_eq!(
             result,
-            Err(Error::CleanupWaitUnsupported {
-                interrupted: if wait_signal { Some(2) } else { None },
-            })
+            if wait_signal {
+                Err(Error::Interrupted(2))
+            } else {
+                Ok(Outcome::Signaled(9))
+            }
         );
-        assert_eq!(child.try_wait(), Ok(None), "held fence was collected early");
         assert_eq!(unsafe { interrupted() }, if wait_signal { 3 } else { 2 });
         assert_eq!(unsafe { signal(2, 0) }, 0);
         assert_eq!(unsafe { signal(3, 0) }, 0);
-        unsafe { release_fence() };
         assert_eq!(child.wait(), Ok(Outcome::Signaled(9)));
         println!("REVIEW_OK");
     }
@@ -102,10 +97,8 @@ mod fixture {
         drop(child);
         assert_eq!(unsafe { interrupted() }, 2);
         assert_eq!(unsafe { signal(2, 0) }, 0);
-        unsafe { release_fence() };
-        // This test owner retained the identities before Drop. Product callers
-        // cannot rely on Drop to collect a job when the host cannot park.
-        collect_child(pid, job);
+        assert_eq!(unsafe { raw_wait(pid, [0u8; 8].as_mut_ptr()) }, -12);
+        assert_eq!(unsafe { raw_wait_job(job, 1, [0u8; 8].as_mut_ptr()) }, -12);
         println!("REVIEW_OK");
     }
 
@@ -118,10 +111,7 @@ mod fixture {
         if drop_child {
             drop(child);
         } else {
-            assert!(matches!(
-                child.cancel(),
-                Ok(Outcome::Signaled(9)) | Err(Error::CleanupWaitUnsupported { interrupted: None })
-            ));
+            assert_eq!(child.cancel(), Ok(Outcome::Signaled(9)));
             assert_eq!(unsafe { interrupted() }, 2, "parent SIGINT was consumed");
             assert_eq!(unsafe { signal(2, 0) }, 0);
             assert_eq!(child.wait(), Ok(Outcome::Signaled(9)));
@@ -130,7 +120,7 @@ mod fixture {
         }
         assert_eq!(unsafe { interrupted() }, 2, "parent SIGINT was consumed");
         assert_eq!(unsafe { signal(2, 0) }, 0);
-        collect_child(pid, job);
+        assert_eq!(unsafe { raw_wait_job(job, 1, [0u8; 8].as_mut_ptr()) }, -12);
         println!("REVIEW_OK");
     }
 

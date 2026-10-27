@@ -133,6 +133,8 @@ jobs:
           npm run build:shell
           npm run build:test-guest
           npm run prepare:wasi-tests
+          node scripts/build-env-command-tests.ts
+          node --test scripts/test-env-command.ts
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
       - uses: actions/cache@v4

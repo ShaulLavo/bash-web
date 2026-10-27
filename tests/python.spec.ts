@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page, type Worker as BrowserWorker } from "@playwright/test";
 import { pythonArgv0, pythonCases, pythonVersion } from "./helpers/python-cases.ts";
 import type {} from "../scripts/measure-python.ts";
 
@@ -29,6 +29,21 @@ function isPythonAsset(url: string) {
   );
 }
 
+async function processWorkersSettled(page: Page, baseline: readonly BrowserWorker[]) {
+  await expect
+    .poll(async () => {
+      const workers = await page.evaluate(() => window.pythonAcceptance.workers());
+      return {
+        processes: workers.processes,
+        unexplained: page.workers().length - baseline.length - workers.pool.length,
+      };
+    })
+    .toEqual({ processes: [], unexplained: 0 });
+  const observed = await page.evaluate(() => window.pythonAcceptance.workers());
+  expect(observed.retired.length).toBeGreaterThan(0);
+  for (const worker of baseline) expect(page.workers()).toContain(worker);
+}
+
 test("real CPython on Waffle loads once, runs scripts, disposes and leaves its borrowed runtime usable", async ({
   page,
 }, testInfo) => {
@@ -49,14 +64,14 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
     expect(requests).toEqual([]);
     expect(workerScripts).toEqual(["/fs-worker.js"]);
     expect(page.workers()).toHaveLength(1);
-    const baselineWorkers = page.workers().length;
+    const baselineWorkers = page.workers();
     const cold = await page.evaluate(() =>
       window.pythonAcceptance.run({ args: ["--version"], stdin: "" }),
     );
     expect(cold.status, cold.stderr).toBe(0);
     expect(cold.stdout).toBe(pythonVersion);
     expect(cold.stderr).toBe("");
-    await expect.poll(() => page.workers().length).toBe(baselineWorkers);
+    await processWorkersSettled(page, baselineWorkers);
     const loaded = requests.slice();
     expect(loaded.filter((path) => path === "/python.wasm")).toHaveLength(1);
     expect(loaded.filter((path) => path === "/python-stdlib.json")).toHaveLength(1);
@@ -121,7 +136,7 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
       repeated.push(result.milliseconds);
     }
     expect(requests).toEqual(loaded);
-    await expect.poll(() => page.workers().length).toBe(baselineWorkers);
+    await processWorkersSettled(page, baselineWorkers);
     const measurement = await page.evaluate(() => window.pythonAcceptance.measurement());
     const wasm = await readFile(new URL("../dist/python.wasm", import.meta.url));
     const manifestBytes = await readFile(new URL("../dist/python-stdlib.json", import.meta.url));

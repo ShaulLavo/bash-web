@@ -3,21 +3,6 @@ use shell_wasi_process::{
 };
 use std::collections::BTreeMap;
 
-#[test]
-fn unfinished_cleanup_is_distinct_from_completed_interruption() {
-    let gate = Error::CleanupWaitUnsupported {
-        interrupted: Some(2),
-    };
-    assert_ne!(gate, Error::Interrupted(2));
-    assert!(
-        gate.to_string()
-            .contains("wait was interrupted by signal 2")
-    );
-    let direct = Error::CleanupWaitUnsupported { interrupted: None };
-    assert!(direct.to_string().contains("cannot wait for cleanup"));
-    assert!(!direct.to_string().contains("wait was interrupted"));
-}
-
 fn request() -> Request {
     Request {
         executable: "/bin/tool".into(),
@@ -44,6 +29,7 @@ fn launch_preserves_custom_argv0_empty_arguments_env_cwd_and_sparse_bindings() {
     assert_eq!(json["cwd"], "/workspace/sub");
     assert_eq!(json["executable"], "/bin/tool");
     assert_eq!(json["job"], 0);
+    assert_eq!(json["jobLifetime"], "caller-fatal");
     assert_eq!(
         json["fds"],
         serde_json::json!([{ "child": 0, "parent": 0 }, { "child": 1, "parent": 9 }, { "child": 1000000, "parent": 1000000 }])
