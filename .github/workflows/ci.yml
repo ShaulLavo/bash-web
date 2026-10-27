@@ -196,11 +196,13 @@ jobs:
       - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
         with:
           version: v49.0.3
+      - id: python-inputs
+        run: node scripts/python-ci.ts
       - uses: actions/cache@v4
         id: python-assets
         with:
           path: .build/python-assets
-          key: python-${{ runner.os }}-${{ runner.arch }}-sdk34-python3.14.8-${{ hashFiles('scripts/build-python.ts', 'scripts/python-source.ts', 'scripts/wasi-build.ts', 'scripts/verify-wasi-guests.ts', 'patches/cpython-wasi-cwd.patch', 'third-party/cpython/**', 'package-lock.json') }}
+          key: python-${{ runner.os }}-${{ runner.arch }}-${{ steps.python-inputs.outputs.key }}
       - name: Build and qualify Python once
         if: steps.python-assets.outputs.cache-hit != 'true'
         run: npm run build:python -- --output .build/python-assets

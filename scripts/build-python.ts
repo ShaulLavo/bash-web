@@ -28,7 +28,7 @@ import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const buildPrefix = "cross-build/wasm32-wasip1";
-const waffleRevision = "d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00";
+const waffleRevision = "c312af63a554602906b462a2b49c7d5e14a97c5b";
 
 export function pythonBuildRecipe(
   sdk: string,
@@ -200,7 +200,6 @@ export function stagePythonArtifact(source: string, output: string, sdk?: string
   verifyWasiGuest(resolve(source, "python.wasm"), sdk);
   const receipt = object(JSON.parse(readFileSync(resolve(source, "python-build.json"), "utf8")));
   assert.equal(receipt.cpython, pythonSource.revision);
-  assert.equal(receipt.waffle, waffleRevision);
   assert.deepEqual(receipt.sourcePatch, pythonSource.patch, "Python startup patch provenance");
   const assets = object(receipt.assets);
   assert.deepEqual(Object.keys(assets).sort(), [
@@ -480,14 +479,11 @@ async function runPythonBuild(output: string, work: string) {
   stagePythonPayload(initialLib, host, output);
   pythonNotices(source, output);
   const nativeOracle = qualifyNativePython(source, work);
-  await qualifyPythonArtifact(output, work, nativeOracle);
+  const receipt = await qualifyPythonArtifact(output, work, nativeOracle);
+  writeFileSync(resolve(output, "python-build.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 }
 
-export async function qualifyPythonArtifact(
-  output: string,
-  work: string,
-  nativeOracle: unknown = null,
-) {
+async function qualifyPythonArtifact(output: string, work: string, nativeOracle: unknown = null) {
   const config = wasiBuildConfiguration(root);
   const recipe = pythonBuildRecipe(config.sdk, config.sysroot);
   verifyWasiGuest(resolve(output, "python.wasm"), config.sdk);
@@ -537,15 +533,47 @@ export async function qualifyPythonArtifact(
       ),
     },
   };
-  writeFileSync(resolve(output, "python-build.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   validatePythonPayload(output);
   console.log(`Qualified CPython artifact: ${output}`);
+  return receipt;
+}
+
+export async function qualifyExistingPythonArtifact(options: {
+  artifact: string;
+  work: string;
+  evidence: string;
+  nativeOracle?: unknown;
+}) {
+  const original = readFileSync(resolve(options.artifact, "python-build.json"));
+  const producer = object(JSON.parse(original.toString()));
+  assert.equal(producer.cpython, pythonSource.revision);
+  assert.deepEqual(producer.sourcePatch, pythonSource.patch);
+  for (const [name, hash] of Object.entries(object(producer.assets)))
+    assert.equal(sha256(readFileSync(resolve(options.artifact, name))), hash, name);
+  const qualification = await qualifyPythonArtifact(
+    options.artifact,
+    options.work,
+    options.nativeOracle ?? producer.nativeOracle,
+  );
+  const evidence = {
+    producerReceiptSha256: sha256(original),
+    producer,
+    runtime: qualification.waffle,
+    assets: qualification.assets,
+    audit: qualification.audit,
+    qualification: qualification.qualification,
+    qualificationTools: qualification.qualificationTools,
+    transfer: qualification.transfer,
+  };
+  writeFileSync(options.evidence, `${JSON.stringify(evidence, null, 2)}\n`, { flag: "wx" });
+  assert.deepEqual(readFileSync(resolve(options.artifact, "python-build.json")), original);
 }
 
 function cli() {
   const args = process.argv.slice(2);
   let output = resolve(root, "dist");
   let stage: string | undefined;
+  let qualify: string | undefined;
   let work = resolve(root, ".build/python");
   while (args.length) {
     const option = args.shift();
@@ -553,10 +581,16 @@ function cli() {
     assert.ok(value, `Missing value for ${option}`);
     if (option === "--output") output = resolve(value);
     else if (option === "--stage") stage = resolve(value);
+    else if (option === "--qualify") qualify = resolve(value);
     else if (option === "--work") work = resolve(value);
     else throw new Error(`Unknown option: ${option}`);
   }
+  assert.ok(!(stage && qualify), "Choose either --stage or --qualify");
   if (stage) return stagePythonArtifact(stage, output);
+  if (qualify)
+    return withPythonWorkspace(work, (scratch) =>
+      qualifyExistingPythonArtifact({ artifact: qualify, work: scratch, evidence: output }),
+    );
   return buildPython(output, work);
 }
 

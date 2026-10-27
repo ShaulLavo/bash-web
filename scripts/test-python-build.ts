@@ -5,7 +5,7 @@ import test from "node:test";
 import type { TestContext } from "node:test";
 import {
   pythonBuildRecipe,
-  qualifyPythonArtifact,
+  qualifyExistingPythonArtifact,
   qualifyNativePython,
   withPythonWorkspace,
   stagePythonArtifact,
@@ -237,7 +237,7 @@ test("owned compiler scratch is removed after failure while caller data survives
 });
 
 if (process.env.BASH_WEB_PYTHON_ARTIFACT) {
-  test("qualified artifact runs real usage cases on Wasmtime and Waffle P", async () => {
+  test("qualified artifact runs on Wasmtime and the prepared Waffle without rewriting producer evidence", async () => {
     const output = resolve(process.env.BASH_WEB_PYTHON_ARTIFACT ?? "");
     const receipt: unknown = JSON.parse(readFileSync(resolve(output, "python-build.json"), "utf8"));
     assert.ok(receipt && typeof receipt === "object" && "nativeOracle" in receipt);
@@ -246,7 +246,12 @@ if (process.env.BASH_WEB_PYTHON_ARTIFACT) {
       async (work) => {
         const source = process.env.BASH_WEB_PYTHON_SOURCE;
         const oracle = source ? qualifyNativePython(resolve(source), work) : receipt.nativeOracle;
-        await qualifyPythonArtifact(output, work, oracle);
+        await qualifyExistingPythonArtifact({
+          artifact: output,
+          work,
+          evidence: resolve(work, "runtime-qualification.json"),
+          nativeOracle: oracle,
+        });
       },
     );
   });

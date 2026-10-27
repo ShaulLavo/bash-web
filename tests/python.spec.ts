@@ -33,8 +33,11 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
   page,
 }, testInfo) => {
   const requests: string[] = [];
+  const workerScripts: string[] = [];
   page.on("request", (request) => {
     if (isPythonAsset(request.url())) requests.push(new URL(request.url()).pathname);
+    const path = new URL(request.url()).pathname;
+    if (path === "/fs-worker.js" || path === "/shell-worker.js") workerScripts.push(path);
   });
   await page.goto("/python-tests.html");
   await page.waitForFunction(() => Boolean(window.pythonAcceptance));
@@ -44,9 +47,8 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
     expect(installed.admissions).toEqual([]);
     expect(installed.after.compiles).toEqual([]);
     expect(requests).toEqual([]);
-    expect(page.workers().map((worker) => new URL(worker.url()).pathname)).toEqual([
-      "/fs-worker.js",
-    ]);
+    expect(workerScripts).toEqual(["/fs-worker.js"]);
+    expect(page.workers()).toHaveLength(1);
     const baselineWorkers = page.workers().length;
     const cold = await page.evaluate(() =>
       window.pythonAcceptance.run({ args: ["--version"], stdin: "" }),

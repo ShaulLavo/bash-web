@@ -221,7 +221,7 @@ test("quality package recipes preserve complete current selections", () => {
   );
   assert.equal(
     scripts["test:guest-build"],
-    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-python-build.ts",
+    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-python-build.ts scripts/test-python-ci.ts",
   );
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(
@@ -242,16 +242,11 @@ test("Python browser coverage consumes one cached producer and remains blocking"
   const cache = entries.find((step) => step.id === "python-assets");
   assert.ok(cache);
   const key = String(object(cache.with).key);
-  for (const input of [
-    "scripts/python-source.ts",
-    "scripts/build-python.ts",
-    "scripts/wasi-build.ts",
-    "scripts/verify-wasi-guests.ts",
-    "patches/cpython-wasi-cwd.patch",
-    "third-party/cpython/**",
-    "package-lock.json",
-  ])
-    assert.ok(key.includes(input), input);
+  assert.match(key, /steps\.python-inputs\.outputs\.key/);
+  const inputs = entries.findIndex((step) => step.id === "python-inputs");
+  const cached = entries.findIndex((step) => step.id === "python-assets");
+  assert.ok(inputs >= 0 && inputs < cached);
+  assert.equal(entries[inputs].run, "node scripts/python-ci.ts");
   const compile = entries.filter(
     (step) => step.run === "npm run build:python -- --output .build/python-assets",
   );
