@@ -140,6 +140,12 @@ function successfulStep(job, name) {
   );
   return step;
 }
+function assertJobIdentity(job, run) {
+  assert.equal(job.run_id, run.id, "wrong producer run");
+  assert.equal(job.run_attempt, run.run_attempt, "old producer attempt");
+  assert.equal(job.head_sha, run.head_sha, "wrong producer source");
+  positive(job.id);
+}
 export function assertUploader({
   run,
   job,
@@ -378,7 +384,7 @@ export function mainEvidence({ root, oracle, client }) {
     const sealers = jobs.filter((job) => job.name === contracts.raw.job);
     if (sealers.length !== 1) return;
     const sealer = sealers[0];
-    positive(sealer.id);
+    assertJobIdentity(sealer, run);
     if (sealer.status !== "completed" || sealer.conclusion !== "skipped") return;
     const rawName = `${contracts.raw.prefix}-${run.head_sha}-${run.id}-${run.run_attempt}`;
     const rawArtifacts = artifacts.filter((artifact) => artifact.name === rawName);
@@ -390,7 +396,7 @@ export function mainEvidence({ root, oracle, client }) {
       scoreboards[0].conclusion !== "failure"
     )
       return;
-    positive(scoreboards[0].id);
+    assertJobIdentity(scoreboards[0], run);
     const prepares = jobs.filter((job) => job.name === "prepare");
     if (
       prepares.length !== 1 ||
@@ -398,7 +404,7 @@ export function mainEvidence({ root, oracle, client }) {
       prepares[0].conclusion !== "success"
     )
       return;
-    positive(prepares[0].id);
+    assertJobIdentity(prepares[0], run);
     const observations = jobs.filter((job) => job.name === contracts.observation.job);
     if (
       observations.length !== 1 ||

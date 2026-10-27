@@ -836,6 +836,9 @@ test("observation payload tampering fails closed", async () => {
     ["score digest mismatch", (input) => (input.artifact.digest = `sha256:${"0".repeat(64)}`)],
     ["missing upload log", (input) => (input.logOverride = "")],
     ["expired", (input) => (input.artifact.expired = true)],
+    ["wrong sealer run", (input) => (input.jobs[3].run_id = 11)],
+    ["wrong scoreboard attempt", (input) => (input.jobs[1].run_attempt = 2)],
+    ["wrong prepare source", (input) => (input.jobs[0].head_sha = sha(2))],
   ];
   for (const [name, patch] of cases) {
     await withRepo(async ({ root, put, commit }) => {
