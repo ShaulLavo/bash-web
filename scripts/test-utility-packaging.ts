@@ -28,6 +28,7 @@ const utilities = [
   "rm",
   "cp",
   "mv",
+  "xargs",
 ] as const;
 
 const sortUniqTransitiveNotices = [
