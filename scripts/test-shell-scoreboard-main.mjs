@@ -698,6 +698,20 @@ async function withObservationRepo(body) {
     await body({ root, sourceSha });
   });
 }
+function resolveNonEquivalentFixture(sourceSha, found) {
+  return resolveFloor({
+    oracle,
+    sourceSha,
+    collect: async (value) => (value === sourceSha ? found : empty()),
+    parent: () => bootstrap.sourceSha,
+    equivalent: () => ({
+      equivalent: false,
+      beforeInputsSha256: digest("before"),
+      sourceInputsSha256: digest("source"),
+    }),
+    anchor: async () => floor(bootstrap.sourceSha, ["a"]),
+  });
+}
 test("API admission preserves all completed attempts while the workflow is running, including the known timeout", async () => {
   await withRepo(async ({ root, put, commit }) => {
     put(authority.workflowPath, provenance().workflow);
@@ -721,18 +735,7 @@ test("API admission preserves all completed attempts while the workflow is runni
       found.evidence.map((item) => item.attempt),
       [1, 2],
     );
-    const result = await resolveFloor({
-      oracle,
-      sourceSha,
-      collect: async (value) => (value === sourceSha ? found : empty()),
-      parent: () => bootstrap.sourceSha,
-      equivalent: () => ({
-        equivalent: false,
-        beforeInputsSha256: digest("before"),
-        sourceInputsSha256: digest("source"),
-      }),
-      anchor: async () => floor(bootstrap.sourceSha, ["a"]),
-    });
+    const result = await resolveNonEquivalentFixture(sourceSha, found);
     assert.deepEqual(result.floorIds, ["a", "x", "y"]);
     assert.equal(
       client.requests.some((path) => path.includes("/artifacts/106/zip")),
@@ -779,18 +782,7 @@ test("completed failed main attempts can admit a complete observation without se
     assert.equal(found.evidence[0].gate.conclusion, "failure");
     assert.equal(found.evidence[0].inputSha256, digest(input.input));
     assert.equal(found.evidence[0].payloadSha256, digest(input.score));
-    const result = await resolveFloor({
-      oracle,
-      sourceSha,
-      collect: async (value) => (value === sourceSha ? found : empty()),
-      parent: () => bootstrap.sourceSha,
-      equivalent: () => ({
-        equivalent: false,
-        beforeInputsSha256: digest("before"),
-        sourceInputsSha256: digest("source"),
-      }),
-      anchor: async () => floor(bootstrap.sourceSha, ["a"]),
-    });
+    const result = await resolveNonEquivalentFixture(sourceSha, found);
     assert.deepEqual(result.floorIds, ["a", "x"]);
     assert.equal(
       client.requests.some((path) => path.includes("own-shell-raw")),
@@ -809,6 +801,8 @@ test("observation admission stays closed for incomplete or wrongly gated attempt
     ["successful scoreboard", (input) => (input.jobs[1].conclusion = "success")],
     ["cancelled scoreboard", (input) => (input.jobs[1].conclusion = "cancelled")],
     ["failed sealer", (input) => (input.jobs[3].conclusion = "failure")],
+    ["failed prepare", (input) => (input.jobs[0].conclusion = "failure")],
+    ["running prepare", (input) => (input.jobs[0].status = "in_progress")],
   ];
   for (const [name, patch] of patches) {
     await withObservationRepo(async ({ root, sourceSha }) => {
@@ -824,32 +818,80 @@ test("observation admission stays closed for incomplete or wrongly gated attempt
   }
 });
 
+test("a skipped sealer with a raw artifact is rejected instead of borrowing it", async () => {
+  await withObservationRepo(async ({ root, sourceSha }) => {
+    const input = hostedObservation({ root, sourceSha });
+    input.artifacts.push({
+      id: 202,
+      name: `own-shell-raw-${sourceSha}-${input.run.id}-${input.run.run_attempt}`,
+      workflow_run: {
+        id: input.run.id,
+        head_sha: sourceSha,
+        head_repository_id: authority.repositoryId,
+      },
+      expired: false,
+      digest: `sha256:${"d".repeat(64)}`,
+      created_at: "2026-10-24T17:00:04Z",
+    });
+    input.logsByJobId[14] = "";
+    const evidence = mainEvidence({ root, oracle, client: hostedClient(sourceSha, [input]) });
+    await assert.rejects(evidence.collect(sourceSha), /cancelled\/failed raw producer/);
+  });
+});
+
 test("observation payload tampering fails closed", async () => {
   const cases = [
-    ["wrong attempt", (input) => (input.input.run.attempt = 2)],
-    ["wrong inputs", (input) => (input.input.inputsSha256 = "0".repeat(64))],
-    ["wrong source", (input) => (input.input.sourceSha = sha(2))],
-    ["wrong selection", (input) => (input.input.selected.kind = "pull-request")],
-    ["wrong predecessor", (input) => (input.input.selected.beforeSha = sha(2))],
-    ["capture outside bind", (input) => (input.input.capturedAt = "2026-10-24T17:01:00Z")],
-    ["missing score case", (input) => input.score.cases.pop()],
-    ["missing score member", (input) => (input.omitScore = true)],
-    ["score digest mismatch", (input) => (input.artifact.digest = `sha256:${"0".repeat(64)}`)],
-    ["missing upload log", (input) => (input.logOverride = "")],
-    ["expired", (input) => (input.artifact.expired = true)],
-    ["wrong sealer run", (input) => (input.jobs[3].run_id = 11)],
-    ["wrong scoreboard attempt", (input) => (input.jobs[1].run_attempt = 2)],
-    ["wrong prepare source", (input) => (input.jobs[0].head_sha = sha(2))],
+    ["wrong attempt", (input) => (input.input.run.attempt = 2), /observation attempt mismatch/],
+    [
+      "wrong inputs",
+      (input) => (input.input.inputsSha256 = "0".repeat(64)),
+      /observation inputs mismatch/,
+    ],
+    ["wrong source", (input) => (input.input.sourceSha = sha(2)), /observation source mismatch/],
+    [
+      "wrong selection",
+      (input) => (input.input.selected.kind = "pull-request"),
+      /observation source binding mismatch/,
+    ],
+    [
+      "wrong predecessor",
+      (input) => (input.input.selected.beforeSha = sha(2)),
+      /merge-base|Not a valid commit name/,
+    ],
+    [
+      "capture outside bind",
+      (input) => (input.input.capturedAt = "2026-10-24T17:01:00Z"),
+      /observation capture outside bind step/,
+    ],
+    [
+      "missing score case",
+      (input) => input.score.cases.pop(),
+      /stored counts differ|result case count changed/,
+    ],
+    ["missing score member", (input) => (input.omitScore = true), /missing\/oversized JSON member/],
+    [
+      "score digest mismatch",
+      (input) => (input.artifact.digest = `sha256:${"0".repeat(64)}`),
+      /uploader digest differs/,
+    ],
+    ["missing upload log", (input) => (input.logOverride = ""), /job logs do not bind/],
+    ["expired", (input) => (input.artifact.expired = true), /expired-source-artifact/],
+    ["wrong sealer run", (input) => (input.jobs[3].run_id = 11), /wrong producer run/],
+    [
+      "wrong scoreboard attempt",
+      (input) => (input.jobs[1].run_attempt = 2),
+      /old producer attempt/,
+    ],
+    ["wrong prepare source", (input) => (input.jobs[0].head_sha = sha(2)), /wrong producer source/],
   ];
-  for (const [name, patch] of cases) {
+  for (const [name, patch, error] of cases) {
     await withObservationRepo(async ({ root, sourceSha }) => {
       const input = hostedObservation({ root, sourceSha });
       patch(input);
       if (name !== "score digest mismatch" && name !== "expired") input.refresh();
       const evidence = mainEvidence({ root, oracle, client: hostedClient(sourceSha, [input]) });
-      if (name === "expired")
-        await assert.rejects(evidence.collect(sourceSha), /expired-source-artifact/);
-      else await assert.rejects(evidence.collect(sourceSha));
+      if (name === "expired") await assert.rejects(evidence.collect(sourceSha), error);
+      else await assert.rejects(evidence.collect(sourceSha), error);
     });
   }
 });
@@ -867,27 +909,42 @@ test("observation uploader shape is unique and explicitly optional-file", async 
     };
     assert.doesNotThrow(() => assertUploader(uploader));
     assert.throws(() => assertUploader({ ...uploader, job: { ...uploader.job, name: "other" } }));
-    for (const workflow of [
-      input.workflow.replace("      - id: current-upload\n", ""),
-      input.workflow.replace(
-        "      - id: current-upload\n",
-        "      - id: current-upload\n      - id: duplicate-upload\n        uses: actions/upload-artifact@v4\n        with:\n          name: own-shell-current-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}\n          if-no-files-found: ignore\n",
-      ),
-      input.workflow.replace(
-        "          if-no-files-found: ignore\n",
-        "          if-no-files-found: error\n",
-      ),
-    ])
-      assert.throws(() => assertUploader({ ...uploader, workflow }));
-    const raw = provenance();
-    assert.throws(() =>
-      assertUploader({
-        ...raw,
-        workflow: raw.workflow.replace(
-          "name: own-shell-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}\n          path:",
-          "name: own-shell-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}\n          if-no-files-found: ignore\n          path:",
+    const duplicateUploader = [
+      "      - id: duplicate-upload",
+      "        uses: actions/upload-artifact@v4",
+      "        with:",
+      "          name: own-shell-current-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}",
+      "          if-no-files-found: ignore",
+      "  own-shell-compatibility:",
+    ].join("\n");
+    const invalidWorkflows = [
+      [input.workflow.replace("      - id: current-upload\n", ""), /wrong reviewed upload step ID/],
+      [
+        input.workflow.replace("  own-shell-compatibility:\n", () => `${duplicateUploader}\n`),
+        /unique uploader expression/,
+      ],
+      [
+        input.workflow.replace(
+          "          if-no-files-found: ignore\n",
+          "          if-no-files-found: error\n",
         ),
-      }),
+        /observation uploader must tolerate missing files/,
+      ],
+    ];
+    for (const [workflow, error] of invalidWorkflows)
+      assert.throws(() => assertUploader({ ...uploader, workflow }), error);
+    const raw = provenance();
+    const rawUpload =
+      "name: own-shell-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}\n" +
+      "          path: ${{ runner.temp }}/scoreboard-raw/raw.json\n" +
+      "          retention-days: 90\n          if-no-files-found: error";
+    assert.throws(
+      () =>
+        assertUploader({
+          ...raw,
+          workflow: raw.workflow.replace(rawUpload, rawUpload.replace("error", "ignore")),
+        }),
+      /uploader must require a file/,
     );
   });
 });
