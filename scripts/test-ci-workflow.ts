@@ -221,7 +221,7 @@ test("quality package recipes preserve complete current selections", () => {
   );
   assert.equal(
     scripts["test:guest-build"],
-    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-xargs-source.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
+    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-xargs-source.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts scripts/test-python-build.ts scripts/test-python-ci.ts",
   );
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(
@@ -229,6 +229,34 @@ test("quality package recipes preserve complete current selections", () => {
     /node scripts\/scoreboard-tests\.mjs/,
   );
   assert.doesNotMatch(expanded(String(scripts["test:shell:scoreboard"])), /scripts\/test-/);
+});
+
+test("Python browser coverage consumes one cached producer and remains blocking", () => {
+  const workflowJobs = jobs();
+  const producer = object(workflowJobs.python);
+  const browser = object(workflowJobs.browser);
+  assert.ok(Array.isArray(browser.needs) && browser.needs.includes("python"));
+  const steps = producer.steps;
+  assert.ok(Array.isArray(steps));
+  const entries = steps.map(object);
+  const cache = entries.find((step) => step.id === "python-assets");
+  assert.ok(cache);
+  const key = String(object(cache.with).key);
+  assert.match(key, /steps\.python-inputs\.outputs\.key/);
+  const inputs = entries.findIndex((step) => step.id === "python-inputs");
+  const cached = entries.findIndex((step) => step.id === "python-assets");
+  assert.ok(inputs >= 0 && inputs < cached);
+  assert.equal(entries[inputs].run, "node scripts/python-ci.ts");
+  const compile = entries.filter(
+    (step) => step.run === "npm run build:python -- --output .build/python-assets",
+  );
+  assert.equal(compile.length, 1);
+  assert.equal(compile[0].if, "steps.python-assets.outputs.cache-hit != 'true'");
+  assert.match(commands(producer), /--stage \.build\/python-assets/);
+  assert.doesNotMatch(commands(browser), /build:python -- --output/);
+  const prepare = commands(browser);
+  assert.ok(prepare.indexOf("prepare:python:browser") < prepare.indexOf("npm run test:browser"));
+  assert.match(prepare, /build:python -- --stage \.build\/python-assets --output dist/);
 });
 
 test("compatibility keeps frozen identity, diagnostics, echo and target baseline wiring", () => {
