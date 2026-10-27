@@ -1,3 +1,4 @@
+import { installCut } from "../src/utilities/cut";
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import type { ProgramDefinition, Runtime } from "waffle";
@@ -329,5 +330,29 @@ for (const [name, install] of [
 ] as const) {
   test(`${name} loads only its own ordinary WASI source and disposes independently`, async (context) => {
     await assertWasiInstallation(context, name, install);
+  });
+}
+
+for (const [name, install] of [["cut", installCut]] as const) {
+  test(`${name} registers ordinary lazy source and disposes only itself`, async (context) => {
+    const state = fixture(context);
+    const other = await installCat(state.runtime, { module: await WebAssembly.compile(wasm) });
+    const installation = await install(state.runtime);
+    const program = state.programs.get(`/bin/${name}`);
+    assert.ok(program && typeof program.source === "function");
+    assert.equal(program.module, undefined);
+    assert.equal(program.cooperative, undefined);
+    assert.equal(state.fetched.length, 0);
+    await assert.rejects(install(state.runtime), UtilityConflictError);
+    assert.deepEqual(await program.source(), wasm);
+    assert.ok(state.fetched[0].endsWith(`/dist/${name}.wasm`));
+    await installation.dispose();
+    await installation.dispose();
+    assert.equal(state.programs.has(`/bin/${name}`), false);
+    assert.equal(state.files.has(`/bin/${name}`), false);
+    assert.equal(state.programs.has(other.executable), true);
+    const again = await install(state.runtime, { source: wasm });
+    await again.dispose();
+    await other.dispose();
   });
 }

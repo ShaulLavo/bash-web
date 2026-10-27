@@ -1,3 +1,4 @@
+export { installCut } from "../src/utilities/cut";
 export { createRuntime } from "waffle";
 export { Wasi } from "waffle/core/wasi";
 export { MemFS } from "waffle/fs/memory";
