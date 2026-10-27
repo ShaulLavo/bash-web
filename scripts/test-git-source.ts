@@ -2,17 +2,18 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { test } from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { patchGitSource } from "./patch-git-source.ts";
 
 test("Git source patch is idempotent on the installed backend", async () => {
-  patchGitSource();
   const before = await digest();
   patchGitSource();
   assert.deepEqual(await digest(), before);
 });
 
 test("Git source patch rejects changed upstream bytes before mutation", async (context) => {
-  const root = await mkdtemp("/work/tmp/bash-web-git-source-");
+  const root = await mkdtemp(join(tmpdir(), "bash-web-git-source-"));
   context.after(() => rm(root, { recursive: true, force: true }));
   const directory = `${root}/node_modules/isomorphic-git`;
   await mkdir(directory, { recursive: true });

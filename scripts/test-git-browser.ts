@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { build } from "esbuild";
 import { chromium } from "@playwright/test";
 import fixture from "./owned-fixtures/git-local.json" with { type: "json" };
-import { patchGitSource } from "./patch-git-source.ts";
 import {
   mixedConflictExpected,
   indexOnlyStashExpected,
 } from "../tests/helpers/git-review-cases.ts";
-import { buildGit } from "./build-git.ts";
 
 const directory = resolve(`.build/git-browser-${randomUUID()}`);
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
@@ -35,9 +33,8 @@ const server = createServer(async (request, response) => {
 });
 
 try {
-  patchGitSource();
-  await buildGit();
   await mkdir(directory, { recursive: true });
+  await copyFile("dist/git-command.js", resolve(directory, "git-command.js"));
   const bundle = await build({
     entryPoints: {
       "git-tests": "tests/helpers/git-browser.ts",
@@ -51,6 +48,15 @@ try {
     target: "esnext",
     chunkNames: "[name]-[hash]",
     metafile: true,
+    plugins: [{
+      name: "prepared-git",
+      setup(builder) {
+        builder.onResolve({ filter: /\/dist\/git-command\.js$/ }, () => ({
+          path: "./git-command.js",
+          external: true,
+        }));
+      },
+    }],
   });
   const assets = await Promise.all(
     Object.entries(bundle.metafile.outputs).map(async ([path, output]) => ({
@@ -61,6 +67,12 @@ try {
         .digest("hex"),
     })),
   );
+  const backend = await readFile(resolve(directory, "git-command.js"));
+  assets.push({
+    file: "git-command.js",
+    bytes: backend.length,
+    sha256: createHash("sha256").update(backend).digest("hex"),
+  });
   await writeFile(
     resolve(directory, "index.html"),
     '<!doctype html><script type="module" src="/git-tests.js"></script>',
@@ -85,7 +97,7 @@ try {
     disposed: false,
   });
   assert.equal(
-    requests.some((url) => url.includes("git-command-")),
+    requests.some((url) => new URL(url).pathname === "/git-command.js"),
     false,
     "install loads no Git backend",
   );
@@ -102,7 +114,7 @@ try {
   });
   assert.deepEqual(errors, []);
   assert.equal(
-    requests.filter((url) => url.includes("git-command-")).length,
+    requests.filter((url) => new URL(url).pathname === "/git-command.js").length,
     1,
     "first use shares one loaded backend",
   );

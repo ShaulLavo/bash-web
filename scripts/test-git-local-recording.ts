@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { test } from "node:test";
 import fixture from "./owned-fixtures/git-local.json" with { type: "json" };
 import {
@@ -67,7 +68,7 @@ test("fixture shape, inputs and evidence digests are intact", () => {
 });
 
 test("native Git replays every static file, ref, history, output and exit-status expectation", () => {
-  const scratch = mkdtempSync("/work/tmp/bash-web-git-controls-");
+  const scratch = mkdtempSync(join(tmpdir(), "bash-web-git-controls-"));
   try {
     const observed = recordGitLocal(scratch);
     validateGitLocalRecording(observed);
@@ -233,7 +234,7 @@ test("normalization changes only diff index object identities", () => {
 });
 
 test("recording failure removes its owned repository and preserves unrelated files", () => {
-  const scratch = mkdtempSync("/work/tmp/bash-web-git-failure-");
+  const scratch = mkdtempSync(join(tmpdir(), "bash-web-git-failure-"));
   const input = gitLocalInputs[0];
   assert.ok(input);
   writeFileSync(join(scratch, "unrelated.txt"), "preserve\n");

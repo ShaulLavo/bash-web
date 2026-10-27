@@ -1,24 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { build } from "esbuild";
 import { Buffer } from "buffer/index.js";
-import { patchGitSource } from "./patch-git-source.ts";
-
-patchGitSource();
-const bundle = await build({
-  entryPoints: ["src/utilities/git-command.ts"],
-  outdir: ".build/git-notices",
-  write: false,
-  metafile: true,
-  bundle: true,
-  splitting: true,
-  format: "esm",
-  platform: "browser",
-  external: ["waffle", "waffle/*"],
-});
+const inputs: unknown = JSON.parse(await readFile(".build/git-inputs.json", "utf8"));
+assert.ok(Array.isArray(inputs), "Build Git before generating its notices");
 const packages = new Set<string>();
-for (const input of Object.keys(bundle.metafile.inputs)) {
+for (const input of inputs) {
+  assert.equal(typeof input, "string");
   const marker = input.lastIndexOf("node_modules/");
   if (marker < 0) continue;
   const segments = input.slice(marker + 13).split("/");

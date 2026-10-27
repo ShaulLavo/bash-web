@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import { test } from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runGit } from "../dist/git-command.js";
 import fixture from "./owned-fixtures/git-local.json" with { type: "json" };
 import { nativeGit } from "./record-git-local.ts";
@@ -54,7 +56,7 @@ function check(
   expected: unknown,
 ) {
   test(`${engine}: ${name}`, async (context) => {
-    const root = await fs.mkdtemp("/work/tmp/bash-web-git-review-");
+    const root = await fs.mkdtemp(join(tmpdir(), "bash-web-git-review-"));
     context.after(() => fs.rm(root, { recursive: true, force: true }));
     const actual = await scenario(repository(root, engine));
     console.log(JSON.stringify({ engine, name, actual }));

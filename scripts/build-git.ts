@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { patchGitSource } from "./patch-git-source.ts";
@@ -7,7 +7,7 @@ import { patchGitSource } from "./patch-git-source.ts";
 /** Ship the patched dependency inside the lazy JS asset, including in npm tarballs. */
 export async function buildGit() {
   patchGitSource();
-  await build({
+  const bundle = await build({
     entryPoints: ["src/utilities/git-command.ts"],
     outfile: "dist/git-command.js",
     bundle: true,
@@ -15,7 +15,10 @@ export async function buildGit() {
     platform: "browser",
     format: "esm",
     target: "es2024",
+    metafile: true,
   });
+  await mkdir(".build", { recursive: true });
+  await writeFile(".build/git-inputs.json", JSON.stringify(Object.keys(bundle.metafile.inputs)));
   await writeFile(
     "dist/git-command.d.ts",
     'export { runGit } from "../src/utilities/git-command";\n',

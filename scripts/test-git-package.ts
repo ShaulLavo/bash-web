@@ -3,6 +3,8 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { nativeGitFilesystem } from "../tests/helpers/git-native.ts";
 import { captureGit } from "../tests/helpers/git-output.ts";
@@ -10,12 +12,12 @@ import { captureGit } from "../tests/helpers/git-output.ts";
 const execute = promisify(execFile);
 
 test("npm tarball runs the patched local backend without dependency modules", async (context) => {
-  const root = await mkdtemp("/work/tmp/bash-web-git-package-");
+  const root = await mkdtemp(join(tmpdir(), "bash-web-git-package-"));
   context.after(() => rm(root, { recursive: true, force: true }));
-  await execute("npm", ["pack", "--pack-destination", root], { cwd: process.cwd() });
-  const archives = (await readdir(root)).filter((file) => file.endsWith(".tgz"));
+  const prepared = resolve(".build/git-package");
+  const archives = (await readdir(prepared)).filter((file) => file.endsWith(".tgz"));
   assert.equal(archives.length, 1);
-  await execute("tar", ["-xzf", `${root}/${archives[0]}`, "-C", root]);
+  await execute("tar", ["-xzf", resolve(prepared, archives[0]), "-C", root]);
   await assert.rejects(readFile(`${root}/package/node_modules/isomorphic-git/package.json`), {
     code: "ENOENT",
   });

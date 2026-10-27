@@ -33,9 +33,9 @@ jobs:
           key: packages-${{ runner.os }}-${{ runner.arch }}-node26.12.1-${{ steps.inputs.outputs.dependencies }}
       - if: steps.packages.outputs.cache-hit != 'true' || steps.downloads.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
-      - run: npm run sources:browser && npm run build:git && npm run build:worker && npm run build:node-harness
+      - run: npm run sources:browser && npm run pack:git:tests && npm run build:node-harness
       - name: Pack shared JavaScript inputs
-        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node dist/git-command.js dist/git-command.d.ts dist/shell-worker.js dist/fs-worker.js
+        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node .build/git-package dist/git-command.js dist/git-command.d.ts dist/git.NOTICES.txt dist/shell-worker.js dist/fs-worker.js
       - uses: actions/upload-artifact@v4
         with:
           name: javascript-${{ github.sha }}
@@ -79,6 +79,8 @@ jobs:
       - run: ulimit -c 0; npm run quality:js
       - run: npm run test:ci
       - run: npm run test:guest-build
+      - run: node --test scripts/test-find-source.ts
+      - run: node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts scripts/test-git-review.ts
       - run: npm run typecheck:guest-build
       - run: npm run typecheck:ci
   native:
@@ -490,6 +492,9 @@ jobs:
         env:
           BASH_WEB_PYTHON_SHELL_WASM: public/programs/shell-engine.wasm
       - run: npm run test:find:browser
+      - run: npm run test:grep:usage
+      - run: npm run build:env:tests && npm run test:env:browser
+      - run: npm run test:git:browser
       - run: npm run test:runtime:terminal
       - run: npm run test:installed-sed
       - run: npm run test:browser
