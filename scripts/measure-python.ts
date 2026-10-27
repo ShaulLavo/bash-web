@@ -261,7 +261,7 @@ async function close() {
   await fixture?.close();
 }
 
-export const pythonAcceptance = {
+const pythonAcceptance = {
   open,
   run,
   runScript,
