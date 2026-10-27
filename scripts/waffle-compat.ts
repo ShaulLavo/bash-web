@@ -165,6 +165,7 @@ export async function runRoot(
   code: string,
   output: (fd: number, bytes: Uint8Array) => void,
   onStop: (stop: () => void) => void,
+  args: string[] = ["bash", "-c", code],
 ): Promise<number> {
   const filesystem = runtime.filesystem.fork();
   const { port: _port, ...identity } = filesystem;
@@ -228,7 +229,7 @@ export async function runRoot(
     };
     const request: RuntimeWorkerRequest = {
       module,
-      args: ["shell-engine", "-c", code],
+      args,
       // The baseline's standalone CLI entry defaulted PATH to /usr/bin:/bin; the
       // runtime entry inherits only its environment, so the instrument supplies it.
       env: { PATH: "/usr/bin:/bin", ...options.env, PWD: options.tmp },

@@ -791,6 +791,21 @@ impl Session {
     pub fn state(&self) -> SharedState {
         self.state.clone()
     }
+    /// Set the invocation name and literal positional parameters before execution.
+    /// Positional storage is admitted before either value changes.
+    pub fn set_arguments(&self, name: String, args: Vec<String>) -> Result<(), StartError> {
+        if self.core.foreground.borrow().is_some() {
+            return Err(StartError::Invalid(
+                "foreground job is already running".into(),
+            ));
+        }
+        let mut state = self.state.borrow_mut();
+        state
+            .replace_positional(args)
+            .map_err(|_| StartError::Invalid("shell argument storage limit exceeded".into()))?;
+        state.shell_name = name;
+        Ok(())
+    }
     pub fn exit_requested(&self) -> bool {
         self.core.exit_requested.get()
     }
@@ -4940,6 +4955,42 @@ mod residual_review_tests {
             assert_eq!(self.host.inner.retained_count(), 0);
             assert_eq!(self.executor.drive(256).pending, 0);
         }
+    }
+
+    #[test]
+    fn invocation_arguments_are_literal_and_failed_admission_preserves_them() {
+        let harness = Harness::new();
+        let session = harness.session();
+        session
+            .set_arguments(
+                "zero name".into(),
+                vec!["".into(), "a b".into(), "$x*".into()],
+            )
+            .unwrap();
+        assert_eq!(
+            harness.run("printf '<%s>\\n' \"$0\" \"$#\" \"$1\" \"$@\""),
+            0
+        );
+        assert_eq!(
+            harness.output.bytes(),
+            b"<zero name>\n<3>\n<>\n<>\n<a b>\n<$x*>\n"
+        );
+        let before = session.core.execution_storage.observation().0;
+        let pressure = session
+            .core
+            .execution_storage
+            .admit(session.core.limits.execution_bytes - before - 1)
+            .unwrap();
+        let error = session
+            .set_arguments("changed".into(), vec!["x".repeat(64)])
+            .unwrap_err();
+        assert_eq!(error.status(), 2);
+        assert_eq!(error.to_string(), "shell argument storage limit exceeded");
+        assert_eq!(session.state.borrow().shell_name, "zero name");
+        assert_eq!(session.state.borrow().positional(), &["", "a b", "$x*"]);
+        drop(pressure);
+        assert_eq!(session.core.execution_storage.observation().0, before);
+        harness.shutdown();
     }
 
     #[test]
