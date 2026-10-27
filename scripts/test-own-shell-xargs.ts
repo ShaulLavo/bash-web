@@ -1,34 +1,22 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { test, type TestContext } from "node:test";
-import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
-import { runRoot } from "./waffle-compat.ts";
-import type * as Api from "./waffle-node-api.ts";
+import {
+  api,
+  directory,
+  nodeDirectory,
+  prepareWaffleDirectories,
+  readGuest,
+  runRoot,
+  shell,
+  waffleFixture,
+} from "./own-shell-waffle-fixture.ts";
 
-const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const api: typeof Api = await import(new URL("api.mjs", nodeDirectory).href);
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const shell = await WebAssembly.compile(await readFile(resolve(directory, "shell-runtime.wasm")));
-const xargs = new Uint8Array(await readFile(resolve(directory, "xargs.wasm")));
+const xargs = await readGuest("xargs.wasm");
 
 async function fixture(context: TestContext) {
-  let stop = () => {};
+  const { runtime, setStop } = await waffleFixture(context);
   let loads = 0;
-  installNodeWorkers();
-  const runtime = api.createRuntime({
-    filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), mode: "memory" },
-  });
-  context.after(async () => {
-    stop();
-    try {
-      await runtime.dispose();
-    } finally {
-      await stopNodeWorkers();
-      assert.equal(liveNodeWorkers(), 0);
-    }
-  });
-  for (const path of ["/tmp/spec", "/bin"]) await runtime.filesystem.mkdirp(path);
+  await prepareWaffleDirectories(runtime, ["/tmp/spec", "/bin"]);
   const installation = await api.installXargs(runtime, {
     workerUrl: new URL("shell.mjs", nodeDirectory),
     source() {
@@ -53,9 +41,7 @@ async function fixture(context: TestContext) {
       options,
       script,
       (fd, bytes) => (fd === 2 ? stderr : stdout).push(Buffer.from(bytes)),
-      (terminate) => {
-        stop = terminate;
-      },
+      setStop,
     );
     return {
       status,

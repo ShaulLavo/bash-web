@@ -1,39 +1,27 @@
 import assert from "node:assert/strict";
 import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { test, type TestContext } from "node:test";
-import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
-import { runRoot } from "./waffle-compat.ts";
-import type * as Api from "./waffle-node-api.ts";
+import {
+  api,
+  directory,
+  nodeDirectory,
+  prepareWaffleDirectories,
+  readGuest,
+  runRoot,
+  shell,
+  waffleFixture,
+} from "./own-shell-waffle-fixture.ts";
 
 const names = ["sort", "uniq"] as const;
-const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const api: typeof Api = await import(new URL("api.mjs", nodeDirectory).href);
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const shell = await WebAssembly.compile(await readFile(resolve(directory, "shell-runtime.wasm")));
 const binaries = {
-  sort: new Uint8Array(await readFile(resolve(directory, "sort.wasm"))),
-  uniq: new Uint8Array(await readFile(resolve(directory, "uniq.wasm"))),
+  sort: await readGuest("sort.wasm"),
+  uniq: await readGuest("uniq.wasm"),
 };
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", LC_ALL: "C", TMPDIR: "/tmp" };
 
 async function fixture(context: TestContext) {
-  let stop = () => {};
-  installNodeWorkers();
-  const runtime = api.createRuntime({
-    filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), mode: "memory" },
-  });
-  context.after(async () => {
-    stop();
-    try {
-      await runtime.dispose();
-    } finally {
-      await stopNodeWorkers();
-      assert.equal(liveNodeWorkers(), 0);
-    }
-  });
-  for (const path of ["/tmp/spec", "/bin", "/home/user"]) await runtime.filesystem.mkdirp(path);
+  const { runtime, setStop } = await waffleFixture(context);
+  await prepareWaffleDirectories(runtime, ["/tmp/spec", "/bin", "/home/user"]);
   const loads = { sort: 0, uniq: 0 };
   const installations = new Map<string, Awaited<ReturnType<typeof api.installSort>>>();
   for (const name of names) {
@@ -58,9 +46,7 @@ async function fixture(context: TestContext) {
       const output = fd === 2 ? stderr : stdout;
       output.push(Buffer.from(bytes));
     };
-    const status = await runRoot(runtime, api, shell, options, script, collect, (terminate) => {
-      stop = terminate;
-    });
+    const status = await runRoot(runtime, api, shell, options, script, collect, setStop);
     return { status, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) };
   }
   return { execute, loads, installations, runtime };

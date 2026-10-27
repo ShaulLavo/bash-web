@@ -1,22 +1,20 @@
 #![cfg(not(target_os = "wasi"))]
 
-use std::{
-    io::Write,
-    process::{Command, Output, Stdio},
-};
+#[path = "../../utilities/tests/process.rs"]
+mod process;
 
-fn xargs(args: &[&str], input: &[u8]) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_xargs"))
-        .args(args)
-        .env_clear()
-        .env("LC_ALL", "C")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(input).unwrap();
-    child.wait_with_output().unwrap()
+fn xargs(args: &[&str], input: &[u8]) -> std::process::Output {
+    process::run(env!("CARGO_BIN_EXE_xargs"), args, input, true)
+}
+
+fn assert_rejected(args: &[&str], input: &[u8], expected_stderr: Option<&str>) {
+    let result = xargs(args, input);
+    assert_eq!(result.status.code(), Some(1), "{args:?}: {result:?}");
+    assert!(result.stdout.is_empty());
+    assert!(!result.stderr.is_empty());
+    if let Some(expected) = expected_stderr {
+        assert!(String::from_utf8_lossy(&result.stderr).contains(expected));
+    }
 }
 
 #[test]
@@ -56,10 +54,7 @@ fn rejects_command_modes_before_opening_input() {
         vec!["--", "/bin/echo"],
         vec!["-n1", "sh", "-c", "exit 99"],
     ] {
-        let result = xargs(&args, b"");
-        assert_eq!(result.status.code(), Some(1), "{args:?}: {result:?}");
-        assert!(result.stdout.is_empty());
-        assert!(String::from_utf8_lossy(&result.stderr).contains("runtime_proc.spawn/wait"));
+        assert_rejected(&args, b"", Some("runtime_proc.spawn/wait"));
     }
 }
 
@@ -72,14 +67,9 @@ fn rejects_invalid_input_and_unsupported_modes() {
         vec!["--replace"],
         vec!["--bad"],
     ] {
-        let result = xargs(&args, b"");
-        assert_eq!(result.status.code(), Some(1), "{args:?}: {result:?}");
-        assert!(result.stdout.is_empty());
-        assert!(!result.stderr.is_empty());
+        assert_rejected(&args, b"", None);
     }
-    let result = xargs(&[], b"'unterminated");
-    assert_eq!(result.status.code(), Some(1));
-    assert!(!result.stderr.is_empty());
+    assert_rejected(&[], b"'unterminated", None);
 }
 
 #[test]
