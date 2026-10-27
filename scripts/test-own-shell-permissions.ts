@@ -272,10 +272,26 @@ test("descriptor reopen checks the inode's current access, not the source rights
 
 test("grep descriptor operands enforce the inode's current permissions", () =>
   withRuntime(async (runtime, fs) => {
-    await waffle.installGrep(runtime, {
-      workerUrl: new URL("../.build/node/shell.mjs", import.meta.url),
-      module: async () => WebAssembly.compile(await readFile(resolve(guest, "../grep.wasm"))),
-    });
+    await waffle.installPrograms(
+      runtime,
+      [
+        {
+          name: "grep",
+          programs: [
+            {
+              path: "/usr/bin/grep",
+              aliases: ["/bin/grep"],
+              source: async () => new Uint8Array(await readFile(resolve(guest, "../grep.wasm"))),
+            },
+          ],
+        },
+      ],
+      {
+        launcher: waffle.genericProgramLauncher(
+          new URL("../.build/node/preview1.mjs", import.meta.url),
+        ),
+      },
+    );
     await file(runtime, fs, "/permissions/grep-denied", 0o200);
     const deniedRead = await shell(
       runtime,

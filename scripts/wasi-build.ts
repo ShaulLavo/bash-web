@@ -5,10 +5,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
-import { stageUtilityArtifacts, utilityNames } from "./utility-artifacts.ts";
-
-import { verifyXargsSource } from "./xargs-source.ts";
-import { verifySedSource } from "./sed-source.ts";
 
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);
@@ -123,41 +119,15 @@ export function shellTargetDirectory(root: string, env: Environment = process.en
   return resolve(root, env.CARGO_TARGET_DIR ?? ".build/shell");
 }
 
-const workspaceGuests: readonly string[] = ["shell-engine", "shell-runtime"].concat(utilityNames, [
+const workspaceGuests: readonly string[] = [
+  "shell-engine",
+  "shell-runtime",
   "argv-py",
   "printenv-py",
-]);
+];
 
 export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const target = shellTargetDirectory(repositoryRoot);
-  const artifacts = process.env.BASH_WEB_UTILITY_ARTIFACTS;
-  const utilityPackage = args.includes("shell-utilities");
-  const sedPackage = args.includes("shell-sed");
-  const xargsPackage = args.includes("shell-xargs");
-  const clearPackage = args.includes("shell-clear");
-  if (xargsPackage || args.includes("--workspace")) verifyXargsSource(repositoryRoot);
-  if (sedPackage || args.includes("--workspace")) verifySedSource(repositoryRoot);
-  if (artifacts) {
-    stageUtilityArtifacts(
-      repositoryRoot,
-      resolve(repositoryRoot, artifacts),
-      resolve(target, wasiTarget, "release"),
-    );
-    if (utilityPackage || sedPackage || xargsPackage || clearPackage) return;
-  }
-  const cargoArgs =
-    artifacts && args.includes("--workspace")
-      ? args.concat([
-          "--exclude",
-          "shell-utilities",
-          "--exclude",
-          "shell-sed",
-          "--exclude",
-          "shell-xargs",
-          "--exclude",
-          "shell-clear",
-        ])
-      : args;
   execFileSync(
     "cargo",
     [
@@ -169,7 +139,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
       "--manifest-path",
       "shell/Cargo.toml",
       "-j2",
-    ].concat(cargoArgs),
+    ].concat(args),
     {
       cwd: repositoryRoot,
       env: wasiBuildEnvironment(repositoryRoot, target),
@@ -177,14 +147,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
     },
   );
   const binIndex = args.indexOf("--bin");
-  // The core shell, each separately linked utility, and the compatibility fixtures
-  // all pass the same patched-libc verifier.
-  const binaries =
-    binIndex >= 0
-      ? [args[binIndex + 1]]
-      : utilityPackage
-        ? utilityNames.filter((name) => name !== "sed" && name !== "xargs" && name !== "clear")
-        : workspaceGuests;
+  const binaries = binIndex >= 0 ? [args[binIndex + 1]] : workspaceGuests;
   for (const binary of binaries) {
     verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
   }

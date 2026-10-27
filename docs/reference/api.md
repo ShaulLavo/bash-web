@@ -1,6 +1,6 @@
 # API reference
 
-The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/bridge.ts`, and `src/utilities/`. The package is private and not published. Import it from a checkout. For tasks, see [Embed a shell in a page](../guides/embed-in-a-page.md).
+The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/bridge.ts`, and the optional `src/utilities/python.ts`. The package is private and not published. Import it from a checkout. For tasks, see [Embed a shell in a page](../guides/embed-in-a-page.md).
 
 ## Entry points
 
@@ -10,16 +10,7 @@ The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/br
 | --------- | ---- |
 | `bash-web` | `src/index.ts` |
 | `bash-web/shell` | `src/shell.ts` |
-| `bash-web/utilities/cat` | `src/utilities/cat.ts` |
-| `bash-web/utilities/find` | `src/utilities/find.ts` |
-| `bash-web/utilities/grep` | `src/utilities/grep.ts` |
-| `bash-web/utilities/head` | `src/utilities/head.ts` |
-| `bash-web/utilities/mkdir` | `src/utilities/mkdir.ts` |
-| `bash-web/utilities/seq` | `src/utilities/seq.ts` |
-| `bash-web/utilities/sort` | `src/utilities/sort.ts` |
-| `bash-web/utilities/uniq` | `src/utilities/uniq.ts` |
-| `bash-web/utilities/tail` | `src/utilities/tail.ts` |
-| `bash-web/utilities/wc` | `src/utilities/wc.ts` |
+| `bash-web/utilities/python` | `src/utilities/python.ts` |
 
 `bash-web` re-exports: `createShell`; the types `RuntimeExit`, `RuntimeProcess`, `Shell`, `ShellOptions`; `installShellCommands`, `UtilityConflictError` and the types `ShellCommandOptions`, `ShellCommandsInstallation`; `SharedBridge`, `control`, `INPUT_CAPACITY`, `OUTPUT_CAPACITY`; `TerminalNewlines`; `runtimeSnapshot`; and the types `StartupObserver`, `StartupStage`, `StartupSnapshot`. `bash-web/shell` exports `createShell` and its types. The core entries import no utility.
 
@@ -96,7 +87,7 @@ function installShellCommands(
 ): Promise<ShellCommandsInstallation>;
 ```
 
-Registers the shell guest at `/bin/sh` and `/bin/bash`, so other programs on the same runtime can run `sh -c SCRIPT` or find `bash` on `PATH`. Bun's package scripts and `Bun.$` use this. Each path gets an executable marker under the same rules as [utility entries](#utility-entries): an existing foreign entry throws `UtilityConflictError` and is left alone, and a failed install rolls back the paths it already created. The guest loads on first spawn and shares its compiled module with `createShell`.
+Registers the shell guest at `/bin/sh` and `/bin/bash`, so other programs on the same runtime can run `sh -c SCRIPT` or find `bash` on `PATH`. Bun's package scripts and `Bun.$` use this. Each path gets an executable marker under the shell registration rules: an existing foreign entry throws `UtilityConflictError` and is left alone, and a failed install rolls back the paths it already created. The guest loads on first spawn and shares its compiled module with `createShell`.
 
 | Option | Type | Default | Meaning |
 | ------ | ---- | ------- | ------- |
@@ -190,39 +181,3 @@ The runtime stages are `filesystem-worker-created`, `filesystem-connect-requeste
 Observers are never awaited, and a throw or rejection is ignored. An absent stage means unobserved, not pending. A runtime that was created before `createShell` does not replay its earlier stages.
 
 `StartupSnapshot` is `{ generation, stages, pending, last }`. The demo host exposes it as `window.bashWeb.snapshot().startup`.
-
-## Utility entries
-
-Each `bash-web/utilities/<name>` entry exports one install function, shown here for `cat`:
-
-```ts
-function installCat(runtime: Runtime, options?: UtilityOptions): Promise<UtilityInstallation>;
-```
-
-`installGrep`, `installMkdir`, `installSeq`, and `installTail` use the same options. `installEnv`, `installFind`, `installHead`, `installSort`, `installUniq`, and `installWc` use `WasiUtilityOptions` below. Each registers `/bin/<name>`.
-
-```ts
-type UtilityOptions = { workerUrl?: string | URL } & (
-  | { wasmUrl?: string | URL; module?: never }
-  | { module: WebAssembly.Module | (() => WebAssembly.Module | Promise<WebAssembly.Module>); wasmUrl?: never }
-);
-
-type UtilitySource = Uint8Array | (() => Uint8Array | Promise<Uint8Array>);
-type WasiUtilityOptions = { workerUrl?: string | URL } & (
-  | { wasmUrl?: string | URL; source?: never }
-  | { source: UtilitySource; wasmUrl?: never }
-);
-
-interface UtilityInstallation {
-  readonly executable: string; // "/bin/<name>"
-  dispose(): Promise<void>;
-}
-
-class UtilityConflictError extends Error {
-  readonly path: string;
-}
-```
-
-Default `wasmUrl`: `dist/<name>.wasm` next to the package. Default `workerUrl`: `dist/shell-worker.js`. Cooperative entries export `UtilityInstallation`, `UtilityModule`, and `UtilityOptions`. The `env`, `find`, `head`, `sort`, `uniq`, and `wc` entries export `UtilityInstallation`, `UtilitySource`, and `WasiUtilityOptions`. Ordinary WASI guests take raw source bytes so Waffle can add interrupt checks. `UtilityConflictError` carries the conflicting `path`, and its message reads `Cannot install utility at <path>: <reason>`.
-
-`install*` throws `Runtime is disposed` for a disposed runtime. It loads nothing until the first spawn.

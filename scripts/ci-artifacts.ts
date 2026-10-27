@@ -13,15 +13,13 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ciInputs } from "./ci-inputs.ts";
 import { wasiTestFiles } from "./prepare-wasi-tests.ts";
-import { stageUtilityArtifacts, utilityNames } from "./utility-artifacts.ts";
 
-const guests = ["shell-engine", "shell-runtime", "argv-py", "printenv-py"].concat(utilityNames);
+const guests = ["shell-engine", "shell-runtime", "argv-py", "printenv-py"];
 const programs = guests.map((name) => `${name}.wasm`).concat(["test-guest.wasm", "test-spin.wasm"]);
 const cliFiles = ["shell-engine", "shell-cli", "cli-sha256.txt", "cli-source.txt"];
 export const nativeArtifactFiles = cliFiles.concat(
   programs,
-  utilityNames.map((name) => `utility-artifacts/${name}.wasm`),
-  ["utility-artifacts/source-sha256.txt", "inputs", "THIRD_PARTY_NOTICES.txt"],
+  ["inputs", "THIRD_PARTY_NOTICES.txt"],
   wasiTestFiles.map((name) => `wasi-tests/${name}`),
 );
 
@@ -82,11 +80,6 @@ export function packCiArtifacts(root: string, directory: string) {
     );
   for (const name of ["test-guest", "test-spin"])
     copy(resolve(root, `public/programs/${name}.wasm`), resolve(directory, `${name}.wasm`));
-  for (const name of utilityNames.map((name) => `${name}.wasm`).concat(["source-sha256.txt"]))
-    copy(
-      resolve(root, ".build/utility-artifacts", name),
-      resolve(directory, "utility-artifacts", name),
-    );
   copy(
     resolve(root, "dist/THIRD_PARTY_NOTICES.txt"),
     resolve(directory, "THIRD_PARTY_NOTICES.txt"),
@@ -110,16 +103,6 @@ export function stageCiNotices(root: string, directory: string) {
 
 export function stageCiArtifacts(root: string, directory: string) {
   verifyCiArtifacts(root, directory);
-  stageUtilityArtifacts(
-    root,
-    resolve(directory, "utility-artifacts"),
-    resolve(root, ".build/shell/wasm32-wasip1/release"),
-  );
-  for (const name of utilityNames.map((name) => `${name}.wasm`).concat(["source-sha256.txt"]))
-    copy(
-      resolve(directory, "utility-artifacts", name),
-      resolve(root, ".build/utility-artifacts", name),
-    );
   for (const name of cliFiles) {
     const destination = resolve(
       root,
@@ -138,10 +121,6 @@ export function stageCiArtifacts(root: string, directory: string) {
     resolve(root, "public/programs/shell-engine.wasm"),
   );
   copyNotices(root, directory);
-  for (const name of utilityNames) {
-    copy(resolve(directory, `${name}.wasm`), resolve(root, `public/programs/${name}.wasm`));
-    copy(resolve(directory, `${name}.wasm`), resolve(root, `dist/${name}.wasm`));
-  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -6,7 +6,6 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { availableParallelism } from "node:os";
 import { basename, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
-import { buildWc } from "./build-wc.ts";
 import { buildWasiShell } from "./wasi-build.ts";
 import { pythonHelpers } from "./bash-compat-helpers.mjs";
 import {
@@ -515,8 +514,7 @@ async function prepareCorpus() {
 
 function prepareEngines() {
   if (process.env.BASH_COMPAT_SKIP_BUILD === "1") return;
-  buildWc();
-  buildWasiShell(["--workspace", "--exclude", "shell-wc"]);
+  buildWasiShell(["--workspace"]);
 }
 
 async function loadOilsCases(corpus) {

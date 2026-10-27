@@ -1,4 +1,4 @@
-import type { GitInvocation } from "../../src/utilities/git-types";
+import type { GitInvocation } from "waffle-git";
 
 export async function captureGit(
   run: (invocation: GitInvocation) => Promise<number>,

@@ -1,13 +1,21 @@
 import type { Runtime } from "waffle";
-import { installUtility, type UtilityInstallation, type WasiUtilityOptions } from "./install";
+import {
+  installUtility,
+  type UtilityInstallation,
+  type WasiUtilityOptions,
+} from "../runtime/shell-install";
 import { createPythonPayload, PYTHON_ARGV0, type PythonPayloadSource } from "./python-payload";
 export type {
   PythonPayloadFile,
   PythonPayloadManifest,
   PythonPayloadSource,
 } from "./python-payload";
-export type { UtilityInstallation, UtilitySource, WasiUtilityOptions } from "./install";
-export { UtilityConflictError } from "./install";
+export type {
+  UtilityInstallation,
+  UtilitySource,
+  WasiUtilityOptions,
+} from "../runtime/shell-install";
+export { UtilityConflictError } from "../runtime/shell-install";
 
 export type PythonOptions = WasiUtilityOptions &
   (

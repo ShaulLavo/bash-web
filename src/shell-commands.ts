@@ -2,8 +2,8 @@
 // programs on the same Waffle Runtime (for example Bun's package scripts) can run `sh -c`.
 import type { Runtime } from "waffle";
 import { registerShell } from "./runtime/shell-host";
-import { installUtility, type UtilityInstallation } from "./utilities/install";
-export { UtilityConflictError } from "./utilities/install";
+import { installUtility, type UtilityInstallation } from "./runtime/shell-install";
+export { UtilityConflictError } from "./runtime/shell-install";
 
 export interface ShellCommandOptions {
   /** Must match the URLs any createShell call on this Runtime uses. */
