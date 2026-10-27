@@ -10,9 +10,13 @@ const families = [
   /^test-bash-compat.*\.(?:mjs|ts)$/,
   /^test-compat-selection\.(?:mjs|ts)$/,
 ];
+function isScoreboardEntrypoint(name) {
+  if (/-browser\.(?:mjs|ts)$/.test(name)) return false;
+  return families.some((family) => family.test(name));
+}
 export function discoverScoreboardTests(directory) {
   const entries = readdirSync(directory, { withFileTypes: true });
-  const selected = entries.filter((entry) => families.some((family) => family.test(entry.name)));
+  const selected = entries.filter((entry) => isScoreboardEntrypoint(entry.name));
   assert.ok(
     selected.every((entry) => entry.isFile()),
     "scoreboard entrypoints must be regular files",

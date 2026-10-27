@@ -128,18 +128,17 @@ test("each utility entry references only its own program", async () => {
 test("find packages the pinned upstream entry and source receipt", () => {
   const revision = "505421d4e03586efeb7b9c55adf057599e192e0a";
   const manifest = readFileSync(resolve(root, "shell/utilities/Cargo.toml"), "utf8");
-  assert.match(
-    manifest,
-    new RegExp(
-      `findutils = \\{ git = "https://github.com/uutils/findutils", rev = "${revision}" \\}`,
-    ),
-  );
+  assert.ok(manifest.includes('findutils = { path = "../../third-party/uutils-find" }'));
+  const upstream = readFileSync(resolve(root, "third-party/uutils-find/Cargo.toml"), "utf8");
+  assert.match(upstream, /name = "findutils"\nversion = "0\.11\.0"/);
   const entry = readFileSync(resolve(root, "shell/utilities/src/bin/find.rs"), "utf8");
   assert.match(entry, /findutils::find::find_main/);
   const receipt = JSON.parse(
     readFileSync(resolve(root, "shell/utilities/find.source.json"), "utf8"),
   );
   assert.equal(receipt.revision, revision);
+  assert.equal(receipt.vendor, "third-party/uutils-find");
+  assert.equal(receipt.patch.path, "third-party/uutils-find/wasi.patch");
   assert.equal(receipt.entry, "findutils::find::find_main");
   const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
   assert.match(notices, /## findutils 0\.11\.0 \/ LICENSE/);

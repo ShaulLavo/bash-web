@@ -10,7 +10,7 @@ publish.workspace = true
 shell-engine = { path = "../engine" }
 futures.workspace = true
 regex = { version = "1.12.2", default-features = false, features = ["std", "perf", "unicode"] }
-findutils = { git = "https://github.com/uutils/findutils", rev = "505421d4e03586efeb7b9c55adf057599e192e0a" }
+findutils = { path = "../../third-party/uutils-find" }
 uu_env = { path = "../../third-party/uutils-env" }
 uu_ls = { git = "https://github.com/uutils/coreutils", rev = "07763857f6b9a547742a994b58aef0ccd036198b" }
 uu_head = "=0.12.0"
