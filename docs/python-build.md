@@ -1,6 +1,6 @@
 # Build the Python assets
 
-Run `node scripts/build-python.ts --output dist` with Node 26, Python 3.11 or newer, a native C compiler, make, wasi-sdk 34.0, and Wasmtime on `PATH`. Set `WASI_SDK_PATH` to the SDK directory. The build uses CPython's official `Platforms/WASI` stages and the existing Waffle patched-libc helper. It does not build the shell or other utilities.
+Run `node scripts/build-python.ts --output dist` with Node 26, Python 3.13 or newer, a native C compiler, make, wasi-sdk 34.0, and Wasmtime on `PATH`. Set `WASI_SDK_PATH` to the SDK directory. The build limits the official helper to two make jobs with Python's `-X cpu_count=2` option. The build uses CPython's official `Platforms/WASI` stages and the existing Waffle patched-libc helper. It does not build the shell or other utilities.
 
 The source is CPython 3.15.2, commit `5e58eaad7c58df58dfa8ea549c87996e01dd1077`. The official source archive SHA-256 is `8b5536d280142ecf6cdfe15d12a21ba1c65e300bbf7b28a8d0cdb849575797de`. The build keeps the upstream sources unchanged, selects the patched sysroot through supported compiler flags, and sets an exact 256 MiB memory maximum. Threads, subprocesses, sockets, and native extension loading are outside this slice.
 
@@ -11,3 +11,5 @@ The interpreter's argv0 must be `/cross-build/wasm32-wasip1/python.wasm`. The ma
 `python-build.json` records source, toolchain, imports, exports, memory, and asset identities. `python.NOTICES.txt` retains the upstream license, incorporated-software notices, and bundled-wheel notices. The full stdlib keeps its embedded notices and test data.
 
 To reuse an already built artifact, run `node scripts/build-python.ts --stage /absolute/artifact --output dist`. Staging validates the artifact before copying and does not compile. Run `node --test scripts/test-python-build.ts` for the build-tool checks. Browser acceptance is a separate consumer of this one artifact.
+
+Build scratch lives in a fresh owned subdirectory of `.build/python/`, or the parent passed with `--work`. The command removes that scratch on success and failure. The patched libc remains in the existing validated cache. The optional `BASH_WEB_PYTHON_ARTIFACT=/absolute/artifact node --test scripts/test-python-build.ts` qualification runs version, stdlib and generated sysconfig imports, stdin, script file I/O, stderr, and exit status on Wasmtime and Waffle's core WASI adapter. Set `BASH_WEB_PYTHON_SOURCE` to a retained upstream build tree to include its native CPython oracle. These checks do not replace browser acceptance.
