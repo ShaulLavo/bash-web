@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 import { stageUtilityArtifacts, utilityNames } from "./utility-artifacts.ts";
 
+import { verifyXargsSource } from "./xargs-source.ts";
 import { verifySedSource } from "./sed-source.ts";
 
 type Environment = NodeJS.ProcessEnv;
@@ -132,6 +133,8 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const artifacts = process.env.BASH_WEB_UTILITY_ARTIFACTS;
   const utilityPackage = args.includes("shell-utilities");
   const sedPackage = args.includes("shell-sed");
+  const xargsPackage = args.includes("shell-xargs");
+  if (xargsPackage || args.includes("--workspace")) verifyXargsSource(repositoryRoot);
   if (sedPackage || args.includes("--workspace")) verifySedSource(repositoryRoot);
   if (artifacts) {
     stageUtilityArtifacts(
@@ -139,11 +142,18 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
       resolve(repositoryRoot, artifacts),
       resolve(target, wasiTarget, "release"),
     );
-    if (utilityPackage || sedPackage) return;
+    if (utilityPackage || sedPackage || xargsPackage) return;
   }
   const cargoArgs =
     artifacts && args.includes("--workspace")
-      ? args.concat(["--exclude", "shell-utilities", "--exclude", "shell-sed"])
+      ? args.concat([
+          "--exclude",
+          "shell-utilities",
+          "--exclude",
+          "shell-sed",
+          "--exclude",
+          "shell-xargs",
+        ])
       : args;
   execFileSync(
     "cargo",
@@ -170,7 +180,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
     binIndex >= 0
       ? [args[binIndex + 1]]
       : utilityPackage
-        ? utilityNames.filter((name) => name !== "sed")
+        ? utilityNames.filter((name) => name !== "sed" && name !== "xargs")
         : workspaceGuests;
   for (const binary of binaries) {
     verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
