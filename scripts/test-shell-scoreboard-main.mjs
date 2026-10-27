@@ -786,15 +786,24 @@ test("completed failed main attempts can admit a complete observation without se
     const predecessor = { kind: "predecessor-sentinel", sourceSha: bootstrap.sourceSha };
     const result = await resolveNonEquivalentFixture(sourceSha, found, [predecessor]);
     assert.deepEqual(result.floorIds, ["a", "x"]);
-    assert.deepEqual(result.evidence.filter((item) => item.kind === predecessor.kind), [predecessor]);
-    assert.deepEqual(result.evidence.filter((item) => item.kind === "observation"), found.evidence);
-    assert.deepEqual(result.evidence.find((item) => item.kind === "scored-edge"), {
-      kind: "scored-edge",
-      beforeInputsSha256: digest("before"),
-      sourceInputsSha256: digest("source"),
-      sourceSha,
-      beforeSha: bootstrap.sourceSha,
-    });
+    assert.deepEqual(
+      result.evidence.filter((item) => item.kind === predecessor.kind),
+      [predecessor],
+    );
+    assert.deepEqual(
+      result.evidence.filter((item) => item.kind === "observation"),
+      found.evidence,
+    );
+    assert.deepEqual(
+      result.evidence.find((item) => item.kind === "scored-edge"),
+      {
+        kind: "scored-edge",
+        beforeInputsSha256: digest("before"),
+        sourceInputsSha256: digest("source"),
+        sourceSha,
+        beforeSha: bootstrap.sourceSha,
+      },
+    );
     assert.equal(
       client.requests.some((path) => path.includes("own-shell-raw")),
       false,
@@ -814,7 +823,10 @@ test("a valid raw score takes precedence over a coexisting current archive", asy
     const client = hostedClient(sourceSha, [input]);
     const found = await mainEvidence({ root, oracle, client }).collect(sourceSha);
     assert.deepEqual(found.scores, [raw.payload.score]);
-    assert.deepEqual(found.evidence.map((item) => item.kind), ["raw"]);
+    assert.deepEqual(
+      found.evidence.map((item) => item.kind),
+      ["raw"],
+    );
     assert.ok(client.requests.includes(`/actions/artifacts/${raw.artifact.id}/zip`));
     assert.ok(client.requests.includes(`/actions/jobs/${raw.job.id}/logs`));
     assert.ok(!client.requests.includes(`/actions/artifacts/${input.artifact.id}/zip`));
