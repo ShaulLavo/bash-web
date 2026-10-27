@@ -59,12 +59,21 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
     expect(loaded.filter((path) => path === "/python.wasm")).toHaveLength(1);
     expect(loaded.filter((path) => path === "/python-stdlib.json")).toHaveLength(1);
     expect(new Set(loaded).size).toBe(loaded.length);
+    const cwdDiagnostic = await page.evaluate(() =>
+      window.pythonAcceptance.run({
+        args: [
+          "-c",
+          'import os; print(os.getcwd()); print(os.environ["PWD"]); os.chdir(os.environ["PWD"]); print(os.getcwd())',
+        ],
+        stdin: "",
+      }),
+    );
     const warm: { name: string; milliseconds: number }[] = [];
     for (const example of pythonCases) {
       const result = await page.evaluate((value) => window.pythonAcceptance.run(value), example);
-      expect(result.status, `${example.name}: ${result.stderr}`).toBe(example.status);
-      expect(result.stdout, example.name).toBe(example.stdout);
-      expect(result.stderr, example.name).toBe(example.stderr);
+      expect.soft(result.status, `${example.name}: ${result.stderr}`).toBe(example.status);
+      expect.soft(result.stdout, example.name).toBe(example.stdout);
+      expect.soft(result.stderr, example.name).toBe(example.stderr);
       warm.push({ name: example.name, milliseconds: result.milliseconds });
     }
     const discovery = await page.evaluate(() =>
@@ -119,6 +128,7 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
             bytes: payload.reduce((sum, resource) => sum + resource.decodedBytes, 0),
           },
           coldFirstUseMilliseconds: cold.milliseconds,
+          cwdDiagnostic,
           warmCaseMilliseconds: warm,
           warmVersionMilliseconds: repeated,
           scope:
