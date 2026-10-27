@@ -56,18 +56,36 @@ assert.equal(envSource.revision, fileOperations.revision);
 assert.deepEqual(envSource.license, fileOperations.license);
 assert.deepEqual(envSource.sharedPackage, fileOperations.sharedPackage);
 for (const [name, pkg] of Object.entries(envSource.packages)) {
-  const resolved = metadata.packages.find(
-    (entry) => entry.name === name && entry.source === upstream.source,
-  );
-  assert.ok(resolved, `Pinned env source is missing from Cargo metadata: ${name}`);
+  const resolved = metadata.packages.find((entry) => entry.name === name && entry.source === null);
+  assert.ok(resolved, `Patched env source is missing from Cargo metadata: ${name}`);
   assert.equal(resolved.version, pkg.version);
-  assert.equal(dirname(resolved.manifest_path), resolve(upstreamRoot, pkg.path));
+  assert.equal(dirname(resolved.manifest_path), resolve(root, envSource.localPackage));
 }
+const envDirectory = resolve(root, envSource.localPackage);
+const envProvenance = JSON.parse(await readFile(resolve(envDirectory, "provenance.json"), "utf8"));
+assert.equal(envProvenance.repository, envSource.repository);
+assert.equal(envProvenance.revision, envSource.revision);
+for (const [path, digest] of Object.entries(envProvenance.files)) {
+  assert.equal(
+    createHash("sha256")
+      .update(await readFile(resolve(envDirectory, path)))
+      .digest("hex"),
+    digest,
+    `Patched env source digest: ${path}`,
+  );
+}
+output += `## uutils env source\n\n${envSource.repository} at ${envSource.revision}. Local WASI changes are recorded in ${envSource.localPackage}/wasi.patch.\n\n`;
 await include(`uutils coreutils ${fileOperations.revision}`, upstreamRoot);
 for (const pkg of metadata.packages.sort((a, b) => a.name.localeCompare(b.name))) {
   if (included.has(pkg.manifest_path) || pkg.name === "shell-parser") continue;
   included.add(pkg.manifest_path);
   await include(`${pkg.name} ${pkg.version}`, dirname(pkg.manifest_path));
+}
+// Python is an optional, separately built payload. When distributed, require and
+// include the full build-collected notices (including licenses inside bundled wheels).
+if ((await readdir(resolve(root, "dist"))).includes("python.wasm")) {
+  const pythonNotices = await readFile(resolve(root, "dist/python.NOTICES.txt"), "utf8");
+  output += `## CPython 3.15.2 and full standard-library payload\n\n${pythonNotices}\n\n`;
 }
 const parserLicense = await readFile(resolve(root, pins.shellParser.directory, "LICENSE"), "utf8");
 output += `## Bashkit parser ${pins.shellParser.revision} / LICENSE\n\n${parserLicense}\n\n`;
