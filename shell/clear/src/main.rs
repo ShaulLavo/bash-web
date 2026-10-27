@@ -18,7 +18,9 @@ fn sequence(
     }
     let terminal = terminal.ok_or("TERM is not set; use -T xterm-256color")?;
     match terminal.to_str() {
-        Some("xterm" | "xterm-256color" | "xterm-ghostty") if keep_scrollback => Ok(b"\x1b[H\x1b[2J"),
+        Some("xterm" | "xterm-256color" | "xterm-ghostty") if keep_scrollback => {
+            Ok(b"\x1b[H\x1b[2J")
+        }
         Some("xterm" | "xterm-256color" | "xterm-ghostty") => Ok(b"\x1b[H\x1b[2J\x1b[3J"),
         _ => Err("unsupported terminal; expected xterm, xterm-256color, or xterm-ghostty"),
     }
@@ -55,18 +57,36 @@ mod tests {
     #[test]
     fn profiles_and_scrollback() {
         for term in ["xterm", "xterm-256color", "xterm-ghostty"] {
-            assert_eq!(output(&[], Some(term)), Ok(b"\x1b[H\x1b[2J\x1b[3J".as_slice()));
+            assert_eq!(
+                output(&[], Some(term)),
+                Ok(b"\x1b[H\x1b[2J\x1b[3J".as_slice())
+            );
             assert_eq!(output(&["-x"], Some(term)), Ok(b"\x1b[H\x1b[2J".as_slice()));
         }
-        assert_eq!(output(&["-T", "xterm", "-x"], None), Ok(b"\x1b[H\x1b[2J".as_slice()));
+        assert_eq!(
+            output(&["-T", "xterm", "-x"], None),
+            Ok(b"\x1b[H\x1b[2J".as_slice())
+        );
     }
 
     #[test]
     fn invalid_input_is_rejected_before_output() {
-        for args in [vec!["-x", "-bad"], vec!["file"], vec!["-T"], vec!["--", "file"], vec!["-V"]] {
+        for args in [
+            vec!["-x", "-bad"],
+            vec!["file"],
+            vec!["-T"],
+            vec!["--", "file"],
+            vec!["-V"],
+        ] {
             assert!(output(&args, Some("xterm")).is_err());
         }
-        for term in [None, Some(""), Some("dumb"), Some("vt100"), Some("xterm-custom")] {
+        for term in [
+            None,
+            Some(""),
+            Some("dumb"),
+            Some("vt100"),
+            Some("xterm-custom"),
+        ] {
             assert!(output(&[], term).is_err());
         }
     }

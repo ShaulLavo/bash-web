@@ -10,6 +10,7 @@ import { loadSortUniqObservations } from "./sort-uniq-observations.ts";
 const root = resolve(import.meta.dirname, "..");
 const utilities = [
   "env",
+  "clear",
   "cat",
   "cut",
   "tr",
@@ -345,4 +346,13 @@ test("xargs retains the upstream license and bounded source receipt", () => {
         .trim(),
     ),
   );
+});
+
+test("clear ships original source and its MIT notice", () => {
+  const manifest = readFileSync(resolve(root, "shell/clear/Cargo.toml"), "utf8");
+  assert.doesNotMatch(manifest, /\[dependencies\]/);
+  const license = readFileSync(resolve(root, "shell/clear/LICENSE"), "utf8");
+  assert.equal(license, readFileSync(resolve(root, "LICENSE"), "utf8"));
+  const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
+  assert.ok(notices.includes(`## shell-clear 0.0.1 / LICENSE\n\n${license}`));
 });

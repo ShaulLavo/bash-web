@@ -84,6 +84,7 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   await mkdir(resolve(scratch, "dist"));
   const programs = [
     "env",
+    "clear",
     "cat",
     "cut",
     "tr",
