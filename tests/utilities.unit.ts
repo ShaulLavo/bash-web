@@ -496,3 +496,18 @@ test("a foreign /bin/bash fails the shell install and rolls back /bin/sh", async
   assert.equal(state.files.has("/bin/sh"), false);
   assert.equal(state.programs.has("/bin/sh"), false);
 });
+
+test("shell commands with a shared basename or a utility's name stay distinct", async (context) => {
+  const state = await shellCommandsFixture(context);
+  await installCat(state.runtime);
+  const installation = await installShellCommands(state.runtime, {
+    executables: ["/bin/sh", "/usr/bin/sh", "/opt/tools/cat"],
+  });
+  assert.deepEqual(installation.executables, ["/bin/sh", "/usr/bin/sh", "/opt/tools/cat"]);
+  await installation.dispose();
+  assert.ok(state.programs.has("/bin/cat"), "the cat utility keeps its registration");
+  assert.deepEqual(Array.from(state.programs.keys()).toSorted(), [
+    "/bin/cat",
+    "/programs/shell-engine.wasm",
+  ]);
+});

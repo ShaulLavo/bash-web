@@ -30,8 +30,9 @@ export async function installShellCommands(
   const installed: UtilityInstallation[] = [];
   try {
     for (const path of executables) {
-      const name = path.slice(path.lastIndexOf("/") + 1);
-      const program = { name, path, defaultUrl: new URL(registration.wasmUrl) };
+      // Keyed by the full path: /bin/sh and /usr/bin/sh, or a shell at /opt/cat beside the
+      // cat utility, are distinct registrations.
+      const program = { name: `shell:${path}`, path, defaultUrl: new URL(registration.wasmUrl) };
       installed.push(
         await installUtility(runtime, program, { workerUrl: registration.workerUrl, module }),
       );
