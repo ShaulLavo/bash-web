@@ -22,7 +22,7 @@ test("find source receipt covers the license, manifest, every source file and pa
     .sort();
   assert.deepEqual(actual, Object.keys(receipt.files).sort());
   for (const [path, digest] of Object.entries(receipt.files)) {
-    const bytes = await readFile(resolve(receipt.vendor, path));
+    const bytes: Uint8Array = await readFile(resolve(receipt.vendor, path));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), digest, path);
   }
   assert.ok(

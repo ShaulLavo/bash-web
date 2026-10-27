@@ -130,3 +130,10 @@ for (const example of findCases) {
     assert.equal(actual.stderr.length > 0, expected.stderr.length > 0);
   });
 }
+
+test("find traversal guest has no child-process imports", async () => {
+  const module = await WebAssembly.compile(find);
+  assert.ok(
+    WebAssembly.Module.imports(module).every((entry) => entry.module === "wasi_snapshot_preview1"),
+  );
+});

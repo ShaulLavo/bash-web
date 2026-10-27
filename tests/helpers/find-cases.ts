@@ -76,6 +76,11 @@ export const findCases: { name: string; script: string; records: "lines" | "nul"
     records: "nul",
   },
   { name: "missing starting path fails", script: "find missing -print", records: "bytes" },
+  {
+    name: "starting paths input read error fails",
+    script: "find -files0-from sub -print",
+    records: "bytes",
+  },
   { name: "invalid expression fails", script: "find sub -name", records: "bytes" },
   {
     name: "empty starting path record fails but keeps later roots",

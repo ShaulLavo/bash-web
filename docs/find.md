@@ -34,6 +34,7 @@ Execution remains gated on the exact Waffle 0.0.90 host and Shell adapter. The r
 
 - Enumeration of every inherited descriptor, including sparse descriptor numbers. `runtime_proc.fd_kind(fd)` only answers for a known number.
 - A working-directory startup capability independent of the environment. The Shell launcher currently injects `PWD`, and an arbitrary WASI child does not initialize libc cwd from that variable. Thus `-execdir` cannot promise both its containing-directory cwd and an unchanged environment.
+- Child cleanup after the utility receives a fatal signal. The consumer owns an independent child job; P's `kill_job` signals only the specified job, and Rust cleanup does not run after fatal WASM termination.
 
 The required descriptor operation must enumerate inheritable bindings, exclude private preopens, and define end/error results without retaining descriptors or launching services. Cwd must be applied before the child's entry point, separately from environment values. Until those contracts are available, no `-exec*` or `-ok*` mode is claimed, and no host-process fallback is added.
 

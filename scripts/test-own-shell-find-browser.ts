@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
@@ -11,6 +11,13 @@ import { findOracle } from "./find-oracle.ts";
 
 const output = resolve(".build/find-browser");
 const release = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
+
+function closeServer(server: Server) {
+  if (!server.listening) return Promise.resolve();
+  return new Promise<void>((done, reject) =>
+    server.close((error) => (error ? reject(error) : done())),
+  );
+}
 
 test(
   "find traversal and predicates match GNU in a real Waffle browser",
@@ -48,11 +55,11 @@ test(
       }
     });
     context.after(async () => {
-      await browser?.close();
-      await new Promise<void>((done, reject) =>
-        server.close((error) => (error ? reject(error) : done())),
-      );
-      await rm(output, { recursive: true, force: true });
+      try {
+        await browser?.close();
+      } finally {
+        await Promise.all([closeServer(server), rm(output, { recursive: true, force: true })]);
+      }
     });
     await mkdir(output, { recursive: true });
     await build({
@@ -68,7 +75,7 @@ test(
     assert.ok(address && typeof address !== "string");
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
-    const closedWorkers: Promise<void>[] = [];
+    const closedWorkers: Promise<unknown>[] = [];
     page.on("worker", (worker) => closedWorkers.push(worker.waitForEvent("close")));
     await page.goto(`http://127.0.0.1:${address.port}`);
     const oracle = await findOracle(context);
