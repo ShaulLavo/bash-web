@@ -218,7 +218,7 @@ function measurement() {
     memory: {
       highWaterBytes: null,
       reason:
-        "Pinned Waffle exposes no per-guest linear-memory high-water measurement. Browser heap and process RSS are not guest memory. The 256 MiB declared limit is a cap only.",
+        "This run does not collect a completed per-guest linear-memory high-water measurement. Live shell diagnostics are boundary samples, and browser heap/process RSS are not guest memory. The 256 MiB declared limit is a cap only.",
     },
   };
 }
