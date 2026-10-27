@@ -2,7 +2,9 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
+import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { chromium } from "@playwright/test";
 
 const root = resolve(import.meta.dir, "../../..");
@@ -15,31 +17,36 @@ let browser;
 let context;
 let cleaning;
 async function cleanup() {
-  cleaning ??= (async () => {
-    try {
-      await context?.close();
-    } finally {
-      try {
-        await browser?.close();
-      } finally {
-        server?.stop(true);
-        if (scratch) await removeScratch(scratch);
-      }
-    }
-  })();
+  cleaning ??= closeResources();
   return cleaning;
+}
+async function closeResources() {
+  let contextError;
+  try {
+    await context?.close();
+  } catch (error) {
+    contextError = error;
+  }
+  try {
+    await browser?.close();
+  } finally {
+    server?.stop(true);
+    if (scratch) await removeScratch(scratch);
+  }
+  if (contextError) throw contextError;
 }
 for (const name of ["SIGINT", "SIGTERM"]) {
   process.once(name, () => void cleanup().finally(() => process.exit(1)));
 }
 try {
-  scratch = await mkdtemp("/work/tmp/wp-");
+  scratch = await mkdtemp(join(tmpdir(), "wp-"));
   process.env.TMPDIR = scratch;
   const build = await Bun.build({
     entrypoints: [
       join(source, "browser-page.mjs"),
       join(source, "browser-worker.mjs"),
       resolve(root, "node_modules/waffle/browser/fs-worker.ts"),
+      resolve(root, "src/runtime/worker.ts"),
     ],
     outdir: scratch,
     naming: "[name].js",
@@ -56,7 +63,9 @@ try {
     ["/page.js", await readFile(join(scratch, "browser-page.js"))],
     ["/worker.js", await readFile(join(scratch, "browser-worker.js"))],
     ["/fs-worker.js", await readFile(join(scratch, "fs-worker.js"))],
+    ["/shell-worker.js", await readFile(join(scratch, "worker.js"))],
     ["/fixture.wasm", await readFile(fixture)],
+    ["/launch-probe.wasm", await readFile(join(dirname(fixture), "launch_probe.wasm"))],
   ]);
   server = Bun.serve({
     hostname: "127.0.0.1",
@@ -96,7 +105,15 @@ try {
         );
       }),
     ]);
-    console.log(JSON.stringify(result, null, 2));
+    const identity = {};
+    for (const name of ["process_fixture.wasm", "launch_probe.wasm"]) {
+      const bytes = await readFile(join(dirname(fixture), name));
+      identity[name] = {
+        bytes: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      };
+    }
+    console.log(JSON.stringify({ ...result, artifacts: identity }, null, 2));
   } catch (error) {
     console.error(diagnostics.join("\n"));
     throw error;

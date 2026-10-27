@@ -1,7 +1,8 @@
 # WASI utility processes
 
-`shell-wasi-process` lets a utility execute another WASI program on its caller's
-Waffle runtime. It creates no runtime, host process, thread, socket or output relay.
+`shell-wasi-process` provides the Rust process API for a WASI guest on its caller's
+Waffle runtime. Ordinary source-byte utility integration is gated by admission.
+It creates no runtime, host process, thread, socket or output relay.
 Its imports match Waffle `d0c5f8a1a9a6723c2f9fccf5df8544b8aad84a00`.
 
 ## Launch data
@@ -17,8 +18,13 @@ its own binding before returning. The bridge never closes the parent's binding.
 Duplicate child targets are invalid. Sparse descriptors and remapping are supported.
 `inherited_stdio()` returns bindings for open descriptors 0, 1 and 2 only.
 
-Waffle has no guest import to enumerate inherited descriptors. Utilities that need
-all-descriptor inheritance must receive an explicit complete list from their caller.
+Waffle's `runtime_proc` has no import to enumerate inherited descriptors. The Shell
+worker separately supplies `shell_terminal.inherited_fd(index: i32) -> i32` to its
+own guests. `inherited_shell_descriptors()` uses that existing import and its `-1`
+end marker to return the complete launch bindings. It excludes private preopens
+and supports sparse large descriptors without scanning their numeric range.
+Callers must use it only with the Shell worker. A generic Waffle worker does not
+provide that namespace. Other callers must supply an explicit complete list.
 The stdio helper does not establish that contract. The bridge never scans a guessed
 fd range or assumes that fd 3 is the root preopen.
 
@@ -77,12 +83,52 @@ live cancellation and Drop cleanup. It does not certify the gated modes above.
 
 ## Admission and verification
 
-Guests importing `runtime_proc` use Waffle's trusted cooperative module path.
-Register a lazy compiled-module loader with `cooperative: true`. The third-party
-source-byte interrupt rewriter deliberately rejects the reserved `runtime_proc`
-namespace. Utility installers must select their existing cooperative installation
-path and retain interrupt checkpoints. The bridge checks interrupts in blocking
-waits and lookups; the enclosing program remains responsible for its own CPU loops.
+The public ordinary-program path is `Runtime.registerProgram(path, { adapter,
+source })`. Shell's `installUtility(..., { execution: "wasi" }, { source })` uses
+that path and the delivered `guestLauncher` and worker. Waffle P rewrites these
+bytes for interruption before compiling them. Pre-existing `runtime_proc` imports
+fail with `Cannot instrument WebAssembly: reserved import namespace runtime_proc`.
+The browser test submits the actual Rust fixture bytes through the production
+installer and observes `{ kind: "start-failed", code: 8, error: "ENOEXEC" }`.
+Host outcomes use Linux errno numbers. P's `proc/start-errno.ts` and
+`proc/abi.ts:481` encode this as WASI errno 45 for the Rust `StartFailed(45)` outcome.
+
+P also publicly supports trusted cooperative modules with `Runtime.registerProgram`
+and `{ adapter, module, cooperative: true }`. The preserved ABI fixture uses that
+path with explicit interruption checkpoints. This proves the imports and wire
+contract against real browser workers. It does not prove ordinary raw-WASI utility
+execution. Switching env, find or xargs to compiled modules would bypass the
+ordinary admission requirement and is not implemented or recommended here.
+
+The same browser run installs a launch probe through the production installer and
+worker. The probe uses `shell_terminal.inherited_fd` without pre-existing
+`runtime_proc` imports and runs through source admission. It reports libc cwd `/` for requested
+cwd `/workspace`, and observes injected `PWD=/workspace` for both an empty
+environment and a supplied `PWD=/different`. This separates the launcher limits
+from admission and from the cooperative ABI fixture.
+The probe also checks complete inherited bindings at 0, 1, 2, 3, 9 and 1,000,000
+through the committed Rust helper on the delivered worker.
+
+## Needs from other tracks
+
+- Ordinary source admission for a guest importing the existing `runtime_proc`
+  signatures. The rejection is at Waffle P `interrupt/rewriter-internal.ts:518`,
+  reached from `runtime.ts:405-407`. No additional process operation or guessed
+  namespace is needed. Admission policy and instrumentation belong to the host.
+- Independent cwd bootstrap that preserves the supplied environment. P's
+  `browser/worker.ts::RuntimeWorkerRequest` has no cwd field. Shell's
+  `src/runtime/worker-launcher.ts::guestLauncher` overlays `PWD` instead.
+- Fatal-owner child-job cleanup. `spawn(json_ptr, json_len) -> i32` with `job: 0`
+  creates an independent job. `kill_job(job: i32, signal: i32) -> i32` targets
+  members of that job only, at P `proc/supervisor.ts:701` and
+  `proc/worker-client.ts:600`. Fatal guest termination cannot run Rust Drop.
+  A host lifecycle owner must link and collect owned jobs before utility consumers
+  can claim automatic cancellation. Joining the caller's job would include the
+  waiting caller itself and cannot replace this ownership contract.
+
+These gates leave the committed codec, explicit descriptor bindings, status
+mapping, and live-owner wait/cancel API usable for qualified callers. Env, find
+and xargs execution remain unmodified until their complete requirements are met.
 
 Run `cargo test --locked --manifest-path shell/Cargo.toml -p shell-wasi-process`
 for codec tests. Build the WASI fixture with

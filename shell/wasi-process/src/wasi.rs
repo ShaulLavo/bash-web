@@ -1,5 +1,27 @@
 use super::{DescriptorBinding, Error, Outcome, Request, decode_host_result, validate_path};
 
+#[link(wasm_import_module = "shell_terminal")]
+unsafe extern "C" {
+    #[link_name = "inherited_fd"]
+    fn shell_inherited_fd(index: u32) -> i32;
+}
+
+/// Enumerate the delivered Shell worker's actual launch bindings, excluding private
+/// preopens. Requires `shell_terminal.inherited_fd`; generic Waffle workers do not
+/// provide that namespace. This enumerates bindings, never a guessed fd range.
+pub fn inherited_shell_descriptors() -> Result<Vec<DescriptorBinding>, Error> {
+    let mut bindings = Vec::new();
+    for index in 0..=0x7fff_ffff {
+        let fd = unsafe { shell_inherited_fd(index) };
+        if fd == -1 {
+            return Ok(bindings);
+        }
+        let fd = u32::try_from(fd).map_err(|_| Error::InvalidRecord)?;
+        bindings.push(DescriptorBinding::inherit(fd));
+    }
+    Err(Error::InvalidRecord)
+}
+
 #[link(wasm_import_module = "runtime_proc")]
 unsafe extern "C" {
     #[link_name = "spawn"]
@@ -78,7 +100,9 @@ pub fn spawn(request: &Request) -> Result<Child, Error> {
 
 /// One child and an independent job. Dropping it kills and collects unfinished work.
 /// Use `cancel` explicitly when the caller needs to observe cleanup errors.
+/// Fatal caller termination does not run Drop or cancel this independent job on P.
 #[derive(Debug)]
+#[must_use = "a spawned child must be waited for or canceled"]
 pub struct Child {
     pid: u32,
     job: Option<u32>,

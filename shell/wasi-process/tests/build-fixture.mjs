@@ -21,6 +21,8 @@ execFileSync(
     "shell-wasi-process",
     "--example",
     "process_fixture",
+    "--example",
+    "launch_probe",
     "-j2",
   ],
   {
@@ -30,6 +32,7 @@ execFileSync(
   },
 );
 verifyWasiGuest(resolve(target, "wasm32-wasip1/release/examples/process_fixture.wasm"));
+verifyWasiGuest(resolve(target, "wasm32-wasip1/release/examples/launch_probe.wasm"));
 
 const fixture = resolve(target, "wasm32-wasip1/release/examples/process_fixture.wasm");
 const module = new WebAssembly.Module(readFileSync(fixture));

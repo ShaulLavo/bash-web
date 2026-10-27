@@ -1,5 +1,10 @@
 //! Process execution for WASI utilities on the caller's existing Waffle runtime.
 //! Native builds expose only request codecs and status types, never host execution.
+//!
+//! Waffle P rejects these imports on ordinary source-byte admission. The tested
+//! cooperative ABI fixture does not qualify env/find/xargs utility installation.
+//! Independent cwd/environment and fatal-owner cleanup also require host support.
+//! See `docs/wasi-process.md` for the exact integration gates.
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -8,7 +13,9 @@ use std::io::{self, Write};
 #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
 mod wasi;
 #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
-pub use wasi::{Child, inherited_stdio, resolve_executable, run, spawn};
+pub use wasi::{
+    Child, inherited_shell_descriptors, inherited_stdio, resolve_executable, run, spawn,
+};
 
 /// Maximum encoded spawn JSON. Requests above this bound fail before spawning.
 pub const MAX_REQUEST_BYTES: usize = 1024 * 1024;
