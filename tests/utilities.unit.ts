@@ -5,6 +5,7 @@ import { test, type TestContext } from "node:test";
 import type { ProgramDefinition, Runtime } from "waffle";
 import { installCat, UtilityConflictError } from "../src/utilities/cat";
 import { installEnv } from "../src/utilities/env";
+import { installUtility } from "../src/utilities/install";
 import { installGrep } from "../src/utilities/grep";
 import { installHead } from "../src/utilities/head";
 import { installWhich } from "../src/utilities/which";
@@ -24,7 +25,7 @@ function fixture(context: TestContext) {
   const fetched: string[] = [];
   const previousFetch = globalThis.fetch;
   let failFetch = false;
-  let registrationFailure: Error | undefined;
+  let registrationFailure: { error: Error; path?: string } | undefined;
   globalThis.fetch = async (input: RequestInfo | URL) => {
     fetched.push(String(input));
     if (failFetch) return new Response(null, { status: 503 });
@@ -42,8 +43,8 @@ function fixture(context: TestContext) {
     },
     registerProgram(path: string, program: Program) {
       assert.ok(files.has(path), "the executable entry exists before registration");
-      if (registrationFailure) {
-        const error = registrationFailure;
+      if (registrationFailure && (!registrationFailure.path || registrationFailure.path === path)) {
+        const { error } = registrationFailure;
         registrationFailure = undefined;
         throw error;
       }
@@ -74,8 +75,8 @@ function fixture(context: TestContext) {
   return {
     runtime: runtime as unknown as Runtime,
     filesystem: runtime.filesystem,
-    failNextRegistration(error: Error) {
-      registrationFailure = error;
+    failNextRegistration(error: Error, path?: string) {
+      registrationFailure = { error, path };
     },
     files,
     adapters,
@@ -300,6 +301,153 @@ test("ordinary WASI source bytes bypass fetch and compilation at install", async
 
 type WasiInstaller = (runtime: Runtime) => ReturnType<typeof installSort>;
 
+test("env aliases share the same lazy source, including failures and concurrent loads", async (context) => {
+  const state = fixture(context);
+  const installation = await installEnv(state.runtime, { wasmUrl: "https://cdn.test/env.wasm" });
+  assert.equal(installation.executable, "/bin/env");
+  assert.deepEqual(Array.from(state.adapters), ["bash-web:utility:env"]);
+  const canonical = state.programs.get("/bin/env");
+  const alias = state.programs.get("/usr/bin/env");
+  assert.equal(alias, canonical);
+  assert.ok(alias && typeof alias.source === "function");
+  const loadAlias = alias.source;
+  assert.deepEqual(state.fetched, []);
+  state.failNextFetch(true);
+  await assert.rejects(async () => loadAlias(), /fetch failed.*503/);
+  state.failNextFetch(false);
+  assert.ok(canonical && typeof canonical.source === "function");
+  const [first, second] = await Promise.all([canonical.source(), alias.source()]);
+  assert.equal(first, second);
+  assert.deepEqual(state.fetched, ["https://cdn.test/env.wasm", "https://cdn.test/env.wasm"]);
+  await installation.dispose();
+  assert.equal(state.files.size + state.programs.size + state.adapters.size, 0);
+});
+
+for (const kind of ["file", "dir", "symlink"]) {
+  test(`env preserves a foreign ${kind} at its alias and rolls back its canonical marker`, async (context) => {
+    const state = fixture(context);
+    const foreign = new TextEncoder().encode("foreign env");
+    state.files.set("/usr/bin/env", foreign);
+    const lookup = state.filesystem.lookup;
+    state.filesystem.lookup = async (path) => (path === "/usr/bin/env" ? { kind } : lookup(path));
+    await assert.rejects(installEnv(state.runtime), (error) => {
+      assert.ok(error instanceof UtilityConflictError);
+      assert.equal(error.path, "/usr/bin/env");
+      return true;
+    });
+    assert.equal(state.files.get("/usr/bin/env"), foreign);
+    assert.equal(state.files.has("/bin/env"), false);
+    assert.equal(state.programs.size + state.adapters.size, 0);
+  });
+}
+
+test("env disposal leaves pre-existing markers and replaced alias files untouched", async (context) => {
+  const state = fixture(context);
+  const existing = new TextEncoder().encode("bash-web utility: env\n");
+  state.files.set("/bin/env", existing);
+  const installation = await installEnv(state.runtime);
+  const replacement = new TextEncoder().encode("user env");
+  state.files.set("/usr/bin/env", replacement);
+  await Promise.all([installation.dispose(), installation.dispose()]);
+  assert.equal(state.files.get("/bin/env"), existing);
+  assert.equal(state.files.get("/usr/bin/env"), replacement);
+  assert.equal(state.programs.size + state.adapters.size, 0);
+});
+
+for (const kind of ["dir", "symlink"]) {
+  test(`env disposal preserves an alias replaced by a ${kind}`, async (context) => {
+    const state = fixture(context);
+    const installation = await installEnv(state.runtime);
+    const lookup = state.filesystem.lookup;
+    state.filesystem.lookup = async (path) => (path === "/usr/bin/env" ? { kind } : lookup(path));
+    await installation.dispose();
+    assert.equal(state.files.has("/bin/env"), false);
+    assert.equal(state.files.has("/usr/bin/env"), true);
+    assert.equal(state.programs.size + state.adapters.size, 0);
+  });
+}
+
+test("env rolls back both registrations and owned markers when alias registration fails", async (context) => {
+  const state = fixture(context);
+  const failure = new Error("alias registration failed");
+  state.failNextRegistration(failure, "/usr/bin/env");
+  await assert.rejects(installEnv(state.runtime), (error) => error === failure);
+  assert.equal(state.files.size + state.programs.size + state.adapters.size, 0);
+  const fresh = await installEnv(state.runtime);
+  await fresh.dispose();
+  assert.equal(state.files.size + state.programs.size + state.adapters.size, 0);
+});
+
+test("env rollback never releases a foreign alias registration or its marker", async (context) => {
+  const state = fixture(context);
+  const marker = new TextEncoder().encode("bash-web utility: env\n");
+  const foreign: Program = { adapter: "foreign", source: wasm };
+  state.files.set("/usr/bin/env", marker);
+  state.programs.set("/usr/bin/env", foreign);
+  await assert.rejects(installEnv(state.runtime), /Program already registered/);
+  assert.equal(state.files.has("/bin/env"), false);
+  assert.equal(state.files.get("/usr/bin/env"), marker);
+  assert.equal(state.programs.get("/usr/bin/env"), foreign);
+  assert.equal(state.programs.size, 1);
+  assert.equal(state.adapters.size, 0);
+});
+
+test("env rolls back a canonical marker after an alias write failure", async (context) => {
+  const state = fixture(context);
+  const write = state.filesystem.writeFile;
+  state.filesystem.writeFile = async (path, bytes, mode) => {
+    if (path === "/usr/bin/env") throw new Error("alias write failed");
+    await write(path, bytes, mode);
+  };
+  await assert.rejects(installEnv(state.runtime), /alias write failed/);
+  assert.equal(state.files.size + state.programs.size + state.adapters.size, 0);
+});
+
+test("env rolls back both markers after an alias drain failure", async (context) => {
+  const state = fixture(context);
+  let drains = 0;
+  state.filesystem.drain = async () => {
+    if (++drains === 2) throw new Error("alias drain failed");
+  };
+  await assert.rejects(installEnv(state.runtime), /alias drain failed/);
+  assert.equal(state.files.size + state.programs.size + state.adapters.size, 0);
+});
+
+test("env reserves both paths through concurrent installation and asynchronous rollback", async (context) => {
+  const state = fixture(context);
+  const entered = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const failure = new Error("alias registration failed");
+  state.failNextRegistration(failure, "/usr/bin/env");
+  let drains = 0;
+  state.filesystem.drain = async () => {
+    if (++drains !== 3) return;
+    entered.resolve();
+    await resume.promise;
+  };
+  const first = installEnv(state.runtime);
+  const rejected = assert.rejects(first, (error) => error === failure);
+  await assert.rejects(installEnv(state.runtime), UtilityConflictError);
+  await entered.promise;
+  try {
+    await assert.rejects(
+      installUtility(state.runtime, {
+        name: "other",
+        path: "/usr/bin/env",
+        defaultUrl: new URL("https://cdn.test/other.wasm"),
+        execution: "wasi",
+      }),
+      UtilityConflictError,
+    );
+  } finally {
+    resume.resolve();
+    await rejected;
+  }
+  const fresh = await installEnv(state.runtime);
+  await fresh.dispose();
+  assert.equal(state.files.size + state.programs.size + state.adapters.size, 0);
+});
+
 async function assertWasiInstallation(
   context: TestContext,
   name: string,
@@ -308,7 +456,8 @@ async function assertWasiInstallation(
   const state = fixture(context);
   const installation = await install(state.runtime);
   assert.equal(installation.executable, `/bin/${name}`);
-  assert.deepEqual(Array.from(state.programs.keys()), [`/bin/${name}`]);
+  const paths = name === "env" ? ["/bin/env", "/usr/bin/env"] : [`/bin/${name}`];
+  assert.deepEqual(Array.from(state.programs.keys()), paths);
   assert.equal(state.fetched.length, 0);
   const program = state.programs.get(installation.executable);
   assert.ok(program && typeof program.source === "function");

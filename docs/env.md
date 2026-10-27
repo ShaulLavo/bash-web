@@ -1,6 +1,6 @@
 # Print-only env
 
-`env` is a separate upstream uutils WASI program. Import `installEnv` from `bash-web/utilities/env` and install it on the caller-owned Waffle runtime. Installation writes `/bin/env` and registers a lazy raw-byte loader for `dist/env.wasm`. It does not fetch, compile, or start a worker. `WasiUtilityOptions` accepts `wasmUrl`, `workerUrl`, or `source` bytes. Stop active processes before disposing the installation.
+`env` is a separate upstream uutils WASI program. Import `installEnv` from `bash-web/utilities/env` and install it on the caller-owned Waffle runtime. Installation writes and registers both `/bin/env` and `/usr/bin/env` with the same lazy raw-byte loader for `dist/env.wasm` and the same adapter. `UtilityInstallation.executable` remains `/bin/env`. Installation does not fetch, compile, or start a worker. `WasiUtilityOptions` accepts `wasmUrl`, `workerUrl`, or `source` bytes. Stop active processes before disposing the installation. Disposal releases both registrations and removes only unchanged markers created by that installation. A conflict at either path rolls back the installation without removing foreign entries.
 
 ## Supported forms
 
@@ -13,6 +13,8 @@ For example, `env -i -S 'A=one B="two words"'` prints `A=one\nB=two words\n`. `-
 ## Unsupported forms reject before input
 
 Every program operand returns status 125 before environment edits, target execution or input consumption. This includes ordinary commands, `-C DIR COMMAND`, `-a ARGV0 COMMAND`, and `-S` strings that produce a program. This is an unsupported-mode error, not a qualified GNU 126/127 lookup result.
+
+The `/usr/bin/env` alias alone does **not** enable `#!/usr/bin/env node`. Generic shebang interpreter resolution belongs to Waffle, and this env guest still rejects the `node` command operand with status 125. Command execution needs a separate env implementation change and the host capabilities below.
 
 Signal options `--ignore-signal`, `--default-signal`, `--block-signal`, and `--list-signal-handling` also return 125. Upstream accepted them without effect on WASI. A small recorded source patch now rejects them, including options produced by `-S`. There is no signal emulation or native host fallback.
 

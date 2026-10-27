@@ -37,8 +37,8 @@ export interface UtilityInstallation {
   /** The canonical executable path the shell reaches through PATH. */
   readonly executable: string;
   /**
-   * Release this program's registrations, then remove its executable entry when this
-   * installation created it and it is unchanged. Call once its processes have stopped;
+   * Release this program's registrations, then remove its executable entries when this
+   * installation created them and they are unchanged. Call once its processes have stopped;
    * Runtime.dispose releases everything without this.
    */
   dispose(): Promise<void>;
@@ -58,6 +58,7 @@ export class UtilityConflictError extends Error {
 export interface UtilityProgram {
   readonly name: string;
   readonly path: string;
+  readonly aliases?: readonly string[];
   readonly defaultUrl: URL;
   readonly execution?: "cooperative" | "wasi";
   readonly argv0?: string;
@@ -144,6 +145,7 @@ function cooperativeDefinition(
 
 async function removeOwnedMarker(runtime: Runtime, path: string, marker: Uint8Array) {
   if (runtime.disposed) return;
+  if ((await runtime.filesystem.lookup(path))?.kind !== "file") return;
   if (sameBytes(await runtime.filesystem.readFile(path), marker))
     await runtime.filesystem.remove(path);
   await runtime.filesystem.drain();
@@ -151,9 +153,9 @@ async function removeOwnedMarker(runtime: Runtime, path: string, marker: Uint8Ar
 
 async function rollbackUtility(
   runtime: Runtime,
-  path: string,
+  paths: readonly string[],
   marker: Uint8Array,
-  created: boolean,
+  created: readonly string[],
   release: () => void,
   error: unknown,
 ): Promise<never> {
@@ -163,34 +165,64 @@ async function rollbackUtility(
   } catch (cleanup) {
     errors.push(cleanup);
   }
-  if (created) {
+  if (created.length) {
     await runtime.filesystem.drain().catch((cleanup: unknown) => errors.push(cleanup));
-    await removeOwnedMarker(runtime, path, marker).catch((cleanup: unknown) =>
-      errors.push(cleanup),
-    );
+    for (const path of created.toReversed())
+      await removeOwnedMarker(runtime, path, marker).catch((cleanup: unknown) =>
+        errors.push(cleanup),
+      );
   }
-  if (errors.length > 1) throw new AggregateError(errors, `Utility rollback failed: ${path}`);
+  if (errors.length > 1) throw new AggregateError(errors, `Utility rollback failed: ${paths[0]}`);
   throw error;
 }
 
 async function disposeUtility(
   runtime: Runtime,
-  path: string,
+  paths: readonly string[],
   marker: Uint8Array,
-  created: boolean,
+  created: readonly string[],
   release: () => void,
   owned: Set<string>,
 ): Promise<void> {
   try {
     release();
-    if (created) await removeOwnedMarker(runtime, path, marker);
+    const results = await Promise.allSettled(
+      created.map((path) => removeOwnedMarker(runtime, path, marker)),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (errors.length) throw new AggregateError(errors, `Utility disposal failed: ${paths[0]}`);
   } finally {
-    owned.delete(path);
+    releasePaths(owned, paths);
   }
+}
+
+function releasePaths(owned: Set<string>, paths: readonly string[]): void {
+  for (const path of paths) owned.delete(path);
 }
 
 function parentDirectory(path: string): string {
   return path.slice(0, path.lastIndexOf("/")) || "/";
+}
+
+async function provisionMarker(
+  runtime: Runtime,
+  path: string,
+  marker: Uint8Array,
+  created: string[],
+): Promise<void> {
+  // Existing matching markers may be registered, but never become ours to remove.
+  const entry = await runtime.filesystem.lookup(path);
+  if (entry) {
+    if (entry.kind !== "file" || !sameBytes(await runtime.filesystem.readFile(path), marker))
+      throw new UtilityConflictError(path, "another entry already exists");
+    return;
+  }
+  await runtime.filesystem.mkdirp(parentDirectory(path));
+  await runtime.filesystem.writeFile(path, marker, { exclusive: true });
+  created.push(path);
+  await runtime.filesystem.drain();
 }
 
 export function installUtility(
@@ -210,31 +242,24 @@ export async function installUtility(
 ): Promise<UtilityInstallation> {
   if (runtime.disposed) throw new Error("Runtime is disposed");
   const { name, path } = program;
-  let paths = installed.get(runtime);
-  if (!paths) installed.set(runtime, (paths = new Set()));
-  if (paths.has(path)) throw new UtilityConflictError(path, "already installed on this Runtime");
-  paths.add(path);
-  const owned = paths;
+  const paths = [path].concat(program.aliases ?? []);
+  let reservations = installed.get(runtime);
+  if (!reservations) installed.set(runtime, (reservations = new Set()));
+  const owned = reservations;
+  for (const candidate of paths) {
+    if (owned.has(candidate))
+      throw new UtilityConflictError(candidate, "already installed on this Runtime");
+  }
+  for (const candidate of paths) owned.add(candidate);
   const marker = encoder.encode(`bash-web utility: ${name}\n`);
   const releases: Array<() => void> = [];
-  let created = false;
+  const created: string[] = [];
   const release = () => {
     for (const unregister of releases.toReversed()) unregister();
     releases.length = 0;
   };
   try {
-    // The executable entry is the caller-visible half of installation. An existing
-    // entry is accepted only when it is this utility's own unchanged marker.
-    const entry = await runtime.filesystem.lookup(path);
-    if (entry) {
-      if (entry.kind !== "file" || !sameBytes(await runtime.filesystem.readFile(path), marker))
-        throw new UtilityConflictError(path, "another entry already exists");
-    } else {
-      await runtime.filesystem.mkdirp(parentDirectory(path));
-      await runtime.filesystem.writeFile(path, marker, { exclusive: true });
-      created = true;
-      await runtime.filesystem.drain();
-    }
+    for (const candidate of paths) await provisionMarker(runtime, candidate, marker, created);
     const adapter = `bash-web:utility:${name}`;
     const workerUrl = resolveUrl(
       options.workerUrl ?? new URL("../../dist/shell-worker.js", import.meta.url),
@@ -242,19 +267,20 @@ export async function installUtility(
     releases.push(
       runtime.registerAdapter(adapter, guestLauncher(runtime, workerUrl, program.argv0)),
     );
-    releases.push(runtime.registerProgram(path, utilityDefinition(adapter, program, options)));
+    const definition = utilityDefinition(adapter, program, options);
+    for (const candidate of paths) releases.push(runtime.registerProgram(candidate, definition));
   } catch (error) {
     try {
-      return await rollbackUtility(runtime, path, marker, created, release, error);
+      return await rollbackUtility(runtime, paths, marker, created, release, error);
     } finally {
-      owned.delete(path);
+      releasePaths(owned, paths);
     }
   }
   let disposal: Promise<void> | undefined;
   return {
     executable: path,
     dispose() {
-      disposal ??= disposeUtility(runtime, path, marker, created, release, owned);
+      disposal ??= disposeUtility(runtime, paths, marker, created, release, owned);
       return disposal;
     },
   };
