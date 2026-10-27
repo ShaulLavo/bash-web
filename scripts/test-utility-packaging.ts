@@ -18,6 +18,7 @@ const utilities = [
   "ls",
   "mkdir",
   "rg",
+  "python",
   "sed",
   "seq",
   "sort",
@@ -294,4 +295,14 @@ test("cut packages the accepted upstream wrapper, ordinary admission and notices
   const notices = readFileSync(resolve(root, "dist/THIRD_PARTY_NOTICES.txt"), "utf8");
   assert.match(notices, /## uu_cut 0\.13\.0 \/ LICENSE/);
   assert.ok(notices.includes(`## uutils coreutils ${revision} / LICENSE`));
+});
+
+test("Python packages a lazy payload separately from its raw WASI interpreter", async () => {
+  const text = await bundle("src/utilities/python.ts");
+  assert.match(text, /dist\/python-stdlib\.json/);
+  assert.match(text, /cross-build\/wasm32-wasip1\/python\.wasm/);
+  assert.doesNotMatch(text, /createRuntime|PYTHONHOME|PYTHONPATH/);
+  const installer = readFileSync(resolve(root, "src/utilities/python.ts"), "utf8");
+  assert.match(installer, /execution: "wasi"/);
+  assert.match(installer, /argv0: PYTHON_ARGV0/);
 });

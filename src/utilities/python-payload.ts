@@ -44,6 +44,8 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function parseFile(value: unknown): PythonPayloadFile {
   if (!record(value)) throw new TypeError("Invalid Python payload file");
+  if (Object.keys(value).some((key) => !["path", "url", "bytes", "sha256"].includes(key)))
+    throw new TypeError("Python payload entries must describe regular files only");
   const { path, url, bytes, sha256 } = value;
   if (typeof path !== "string" || !path.startsWith("/") || /[\\\0]/.test(path))
     throw new TypeError("Invalid Python payload path");
@@ -144,10 +146,12 @@ class PythonPayload {
   private active: Promise<Uint8Array> | undefined;
   private disposal: Promise<void> | undefined;
 
-  constructor(
-    private readonly runtime: PayloadRuntime,
-    private readonly options: PayloadOptions,
-  ) {
+  private readonly runtime: PayloadRuntime;
+  private readonly options: PayloadOptions;
+
+  constructor(runtime: PayloadRuntime, options: PayloadOptions) {
+    this.runtime = runtime;
+    this.options = options;
     this.url = new URL(
       options.payloadUrl ?? new URL("../../dist/python-stdlib.json", import.meta.url),
       globalThis.document?.baseURI ?? import.meta.url,
