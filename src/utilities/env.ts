@@ -3,7 +3,7 @@ import { installUtility, type UtilityInstallation, type WasiUtilityOptions } fro
 export type { UtilityInstallation, UtilitySource, WasiUtilityOptions } from "./install";
 export { UtilityConflictError } from "./install";
 
-/** Provision and register `/bin/env`, its own WASM program, on the caller's Runtime. */
+/** Register `/bin/env` and `/usr/bin/env` with one lazy guest on the caller's Runtime. */
 export function installEnv(
   runtime: Runtime,
   options?: WasiUtilityOptions,
@@ -11,7 +11,7 @@ export function installEnv(
   const defaultUrl = new URL("../../dist/env.wasm", import.meta.url);
   return installUtility(
     runtime,
-    { name: "env", path: "/bin/env", defaultUrl, execution: "wasi" },
+    { name: "env", path: "/bin/env", aliases: ["/usr/bin/env"], defaultUrl, execution: "wasi" },
     options,
   );
 }
