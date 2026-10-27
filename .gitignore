@@ -1,6 +1,7 @@
 node_modules/
 dist/*
 !dist/THIRD_PARTY_NOTICES.txt
+!dist/git-command.d.ts
 .build/
 shell/target/
 .scratch/

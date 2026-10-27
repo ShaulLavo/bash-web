@@ -12,12 +12,12 @@ export async function installGit(runtime: Runtime): Promise<GitInstallation> {
   installed.add(runtime);
   let closed = false;
   let tail: Promise<unknown> = Promise.resolve();
-  let backend: Promise<typeof import("./git-command")> | undefined;
+  let backend: Promise<typeof import("../../dist/git-command.js")> | undefined;
   let filesystem: Promise<typeof import("./git-filesystem")> | undefined;
   let disposal: Promise<void> | undefined;
   const execute = async (invocation: GitInvocation) => {
     if (runtime.disposed) throw new Error("Runtime is disposed");
-    backend ??= import("./git-command");
+    backend ??= import("../../dist/git-command.js");
     filesystem ??= import("./git-filesystem");
     const [command, adapter] = await Promise.all([backend, filesystem]);
     return command.runGit(adapter.gitFilesystem(runtime.filesystem), invocation);

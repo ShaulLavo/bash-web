@@ -8,6 +8,7 @@ import { build } from "esbuild";
 import { chromium } from "@playwright/test";
 import fixture from "./owned-fixtures/git-local.json" with { type: "json" };
 import { patchGitSource } from "./patch-git-source.ts";
+import { buildGit } from "./build-git.ts";
 
 const directory = resolve(`.build/git-browser-${randomUUID()}`);
 let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
@@ -31,6 +32,7 @@ const server = createServer(async (request, response) => {
 
 try {
   patchGitSource();
+  await buildGit();
   await mkdir(directory, { recursive: true });
   const bundle = await build({
     entryPoints: {

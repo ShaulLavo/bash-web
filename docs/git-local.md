@@ -1,6 +1,6 @@
 # Local Git API
 
-`bash-web/utilities/git` runs local repository commands through isomorphic-git 1.44.5 on the embedding page's Waffle filesystem. It creates no runtime, process service, worker or executable marker. The Git core and text-diff library load on the first command. Install the package normally so its verified upstream source patch runs before bundling.
+`bash-web/utilities/git` runs local repository commands through isomorphic-git 1.44.5 on the embedding page's Waffle filesystem. It creates no runtime, process service, worker or executable marker. The Git core and text-diff library load on the first command from `dist/git-command.js`. Package preparation builds that self-contained asset with the verified upstream patch, so tarball consumers also receive the corrected backend.
 
 ```ts
 import { installGit } from "bash-web/utilities/git";

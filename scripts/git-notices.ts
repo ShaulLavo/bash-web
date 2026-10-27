@@ -7,7 +7,7 @@ import { patchGitSource } from "./patch-git-source.ts";
 
 patchGitSource();
 const bundle = await build({
-  entryPoints: ["src/utilities/git.ts"],
+  entryPoints: ["src/utilities/git-command.ts"],
   outdir: ".build/git-notices",
   write: false,
   metafile: true,
