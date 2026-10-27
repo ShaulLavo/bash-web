@@ -39,5 +39,7 @@ export interface GitFilesystem {
     rmdir(path: string): Promise<void>;
     stat(path: string): Promise<GitStat>;
     lstat(path: string): Promise<GitStat>;
+    readlink(path: string): Promise<string>;
+    symlink(target: string, path: string): Promise<void>;
   };
 }

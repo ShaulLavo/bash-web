@@ -8,6 +8,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [Embed a shell in a page](guides/embed-in-a-page.md): Run a script or an interactive shell in the browser
 - [Install utilities](guides/install-utilities.md): Add `cat`, [cut](cut.md), [find](find.md), `grep`, [head](head.md), `mkdir`, `seq`, [sort](sort.md), `tail`, [uniq](uniq.md), [file operations](file-operations.md), [print-only env](env.md), [which](which.md)
 - [Troubleshooting](troubleshooting.md): Fix `command not found`, isolation errors, missing assets
+- [Local Git API](git-local.md): Run local repository operations on the caller's filesystem; shell registration is blocked at the pinned runtime
 
 ## Understand
 

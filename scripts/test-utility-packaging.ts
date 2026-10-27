@@ -94,7 +94,9 @@ async function bundle(entry: string): Promise<string> {
 test("package exports one core entry and one entry per utility", () => {
   const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
   const expected = Object.fromEntries(
-    utilities.map((name) => [`./utilities/${name}`, `./src/utilities/${name}.ts`]),
+    utilities
+      .map((name) => [`./utilities/${name}`, `./src/utilities/${name}.ts`])
+      .concat([["./utilities/git", "./src/utilities/git.ts"]]),
   );
   assert.deepEqual(
     Object.fromEntries(
