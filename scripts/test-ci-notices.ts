@@ -60,11 +60,16 @@ function browserInputs(consumer: string) {
     ["node_modules/waffle", "Waffle"],
     ["node_modules/@fregat/hotkeys", "Hotkeys"],
     ["node_modules/remix", "Remix"],
+    ["node_modules/waffle-coreutils", "Coreutils"],
+    ["node_modules/waffle-findutils", "Findutils"],
+    ["node_modules/waffle-grep", "Grep"],
+    ["node_modules/waffle-sed", "Sed"],
+    ["node_modules/waffle-ripgrep", "Ripgrep"],
   ]) {
     put(consumer, `${directory}/LICENSE`, `${label} license ©\n`);
     put(consumer, `${directory}/licenses/extra.txt`, `${label} extra notice\n`);
   }
-  put(consumer, "public/programs/rg.NOTICES.txt", "Ripgrep license notice\n");
+  put(consumer, "node_modules/waffle-ripgrep/dist/rg.NOTICES.txt", "Ripgrep license notice\n");
   put(consumer, "scripts/placeholder", "");
   copyFileSync(
     resolve(root, "scripts/browser-notices.mjs"),
@@ -92,9 +97,19 @@ test("handed-off shell bytes produce identical browser notices including every a
     assert.equal(readFileSync(resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt"), "utf8"), shell);
     const actual = aggregate(consumer);
     assert.deepEqual(actual, aggregate(standalone));
-    for (const label of ["Ghostty terminal", "Waffle runtime", "Hotkeys", "Remix component"])
+    for (const label of [
+      "Ghostty terminal",
+      "Waffle runtime",
+      "Hotkeys",
+      "Remix component",
+      "Coreutils",
+      "Findutils",
+      "Grep",
+      "Sed",
+      "Ripgrep",
+    ])
       assert.ok(actual.includes(`## ${label} / LICENSE\n`));
-    assert.equal(actual.toString().match(/\/ licenses\/extra.txt/g)?.length, 4);
+    assert.equal(actual.toString().match(/\/ licenses\/extra.txt/g)?.length, 9);
   });
 });
 

@@ -4,13 +4,7 @@
   "entry": [
     "src/{runtime,browser}/*.test.ts",
     "tests/*.unit.ts",
-    "tests/sed-installed-app.ts",
-    "tests/clear-browser.ts",
-    "tests/helpers/file-utilities-browser.ts",
-    "tests/helpers/git-browser.ts",
-    "tests/helpers/grep-usage-browser.ts",
-    "tests/helpers/env-browser.ts",
-    "tests/helpers/env-command.ts",
+    "tests/helpers/git-consumer.ts",
     "scripts/bash-compat-worker.mjs",
     // Filename-discovered scoreboard tests are independent executable roots.
     "scripts/test-{shell-scoreboard*,own-shell-*,bash-compat*,compat-selection}.{mjs,ts}",
@@ -26,5 +20,5 @@
   // The duplicate-check driver spawns the pinned jscpd executable by path.
   "ignoreDependencies": ["ghostty-webgpu", "@fregat/hotkeys", "jscpd"],
   // WASI qualification and CPython's native build require these system tools.
-  "ignoreBinaries": ["wasmtime", "cc"],
+  "ignoreBinaries": ["wasmtime"],
 }

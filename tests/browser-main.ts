@@ -1,28 +1,14 @@
-import { installTr } from "../src/utilities/tr";
-import { installCut } from "../src/utilities/cut";
-// Acceptance/demo composition. Bun's public async installer and worker exports exist.
-// Bun cases stay disabled pending a verified Bun package, shared Waffle commit, and
-// matching receipted guest. Then compose createBunRuntimeLease with that installer
-// and workerUrl from "bun-wasm/worker?worker&url". No old guest is substituted.
+// Acceptance/demo composition. Everyday programs come from Waffle's base package.
+import { installBase } from "waffle-base";
 import { createRuntime, type Runtime, type SharedFilesystemOptions } from "waffle";
 import { withVfsImplementation } from "../node_modules/waffle/fs/vfs-internal.ts";
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
-import { registerTestPrograms } from "./helpers/test-programs";
-import { installCat } from "../src/utilities/cat";
-import { installFind } from "../src/utilities/find";
-import { installGrep } from "../src/utilities/grep";
-import { installHead } from "../src/utilities/head";
-import { installMkdir } from "../src/utilities/mkdir";
-import { installRg } from "../src/utilities/rg";
-import { rgFiles } from "./helpers/rg-fixtures";
-import { installLs } from "../src/utilities/ls";
-import { installSeq } from "../src/utilities/seq";
-import { installSort } from "../src/utilities/sort";
-import { installUniq } from "../src/utilities/uniq";
-import { installWc } from "../src/utilities/wc";
-import { installTail } from "../src/utilities/tail";
+import { genericProgramLauncher } from "../src/runtime/program-launcher";
 import { installShellCommands } from "../src/shell-commands";
+import { registerTestPrograms } from "./helpers/test-programs";
+import { rgFiles } from "../node_modules/waffle-ripgrep/tests/helpers/rg-fixtures.ts";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
+import programWorkerUrl from "../node_modules/waffle/browser/preview1-worker.ts?worker&url";
 
 declare global {
   interface Window {
@@ -42,7 +28,6 @@ async function readSortUniqOutput(runtime: Runtime) {
 }
 
 async function prepareRg(runtime: ReturnType<typeof createRuntime>): Promise<void> {
-  await installRg(runtime);
   const directory = "/home/guest/rg-fixture";
   const encoder = new TextEncoder();
   for (const [name, text] of Object.entries(rgFiles)) {
@@ -96,29 +81,12 @@ mountBrowser({
     )
       throw new Error("OPFS conformance selector did not reach the runtime");
     const registration = new AbortController();
-    // External commands are add-ons: this composition selects these utilities. Each one's
-    // program is fetched only when the shell first starts it.
+    // Base registers every everyday family lazily on the caller's one runtime.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
       query.get("test") === "1" && query.get("rg") === "1" ? prepareRg(runtime) : undefined,
       installShellCommands(runtime),
-      Promise.all(
-        [
-          installCat,
-          installCut,
-          installTr,
-          installFind,
-          installGrep,
-          installHead,
-          installLs,
-          installMkdir,
-          installSeq,
-          installSort,
-          installTail,
-          installUniq,
-          installWc,
-        ].map((install) => install(runtime)),
-      ),
+      installBase(runtime, { launcher: genericProgramLauncher(programWorkerUrl) }),
     ]).then(() => {});
     let disposing: Promise<void> | undefined;
     return {

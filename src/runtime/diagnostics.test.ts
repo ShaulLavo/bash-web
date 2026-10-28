@@ -1,7 +1,7 @@
 // Original telemetry lifecycle regressions. Diagnostics borrow pipe state without owning it.
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import type { Runtime } from "waffle";
+import type { ProcessService, Runtime } from "waffle";
 import { DescriptorTable } from "waffle/core/descriptors";
 import { claimOutcome } from "waffle/proc/outcome";
 import { PipeController } from "waffle/proc/pipes";
@@ -10,10 +10,17 @@ import {
   confirmWorkerProcessJob,
   createWorkerProcessTransport,
   WorkerProcessClient,
+  workerProcessDirectoryId,
   workerProcessState,
   type WorkerProcessTransport,
 } from "waffle/proc/worker-client";
-import { observeGuest, observeProcessMessage, observeRoot, runtimeSnapshot } from "./diagnostics";
+import {
+  observeGuest,
+  observeProcessMessage,
+  observeProcessService,
+  observeRoot,
+  runtimeSnapshot,
+} from "./diagnostics";
 
 function completedChild(context: TestContext) {
   const runtime = {} as Runtime;
@@ -58,7 +65,15 @@ function completedChild(context: TestContext) {
     retireGuest();
     descriptors.dispose();
   });
-  return { runtime, transport, observedTransport, client, child, childTransport: children[0]! };
+  return {
+    runtime,
+    transport,
+    observedTransport,
+    client,
+    child,
+    childTransport: children[0]!,
+    retireGuest,
+  };
 }
 
 test("snapshot ignores a process collected between enumeration and reading its state", (context) => {
@@ -88,6 +103,38 @@ test("snapshot ignores a collected job during state decoding", (context) => {
   const root = runtimeSnapshot(runtime).roots[0]!;
   assert.equal(root.retainedSlots, 1);
   assert.equal(root.workers, 0);
+});
+
+test("worker memory merges by root and directory without losing unknown or retained rows", (context) => {
+  const { runtime, transport, client, child, retireGuest } = completedChild(context);
+  const directory = workerProcessDirectoryId(transport);
+  const retained = child + 100;
+  const zero = child + 101;
+  const identity = { parentPid: client.pid, rootPid: client.pid, job: 0, directory };
+  let rows = [
+    { pid: child, ...identity, bytes: null },
+    { pid: retained, ...identity, bytes: 4096 },
+    { pid: zero, ...identity, bytes: 0 },
+    { pid: child + 102, ...identity, rootPid: client.pid + 1, bytes: 8192 },
+    { pid: child + 103, ...identity, directory: "another-root", bytes: 8192 },
+  ];
+  observeProcessService(runtime, { workerMemory: () => rows } as unknown as ProcessService);
+  const root = runtimeSnapshot(runtime).roots[0]!;
+  assert.equal(root.workers, 3);
+  assert.deepEqual(root.guests, [
+    { pid: child, memoryBytes: null, source: "adapter+waffle" },
+    { pid: retained, memoryBytes: 4096, source: "waffle" },
+    { pid: zero, memoryBytes: 0, source: "waffle" },
+  ]);
+  retireGuest();
+  assert.deepEqual(runtimeSnapshot(runtime).roots[0]!.guests[0], {
+    pid: child,
+    memoryBytes: null,
+    source: "waffle",
+  });
+  // Waffle removes its rows only after physical cleanup; adapter retirement does not do it.
+  rows = [];
+  assert.deepEqual(runtimeSnapshot(runtime).roots[0]!.guests, []);
 });
 
 test("a delayed pipe observation ignores its collected sender", (context) => {

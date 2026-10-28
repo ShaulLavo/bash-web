@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { build } from "esbuild";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
+import { familyWasmPath } from "./family-assets.ts";
 import type * as Api from "./waffle-node-api.ts";
 import type { Runtime } from "waffle";
 import type { FilesystemClient } from "waffle/fs/client";
@@ -272,10 +273,26 @@ test("descriptor reopen checks the inode's current access, not the source rights
 
 test("grep descriptor operands enforce the inode's current permissions", () =>
   withRuntime(async (runtime, fs) => {
-    await waffle.installGrep(runtime, {
-      workerUrl: new URL("../.build/node/shell.mjs", import.meta.url),
-      module: async () => WebAssembly.compile(await readFile(resolve(guest, "../grep.wasm"))),
-    });
+    await waffle.installPrograms(
+      runtime,
+      [
+        {
+          name: "grep",
+          programs: [
+            {
+              path: "/usr/bin/grep",
+              aliases: ["/bin/grep"],
+              source: async () => new Uint8Array(await readFile(familyWasmPath("grep"))),
+            },
+          ],
+        },
+      ],
+      {
+        launcher: waffle.genericProgramLauncher(
+          new URL("../.build/node/preview1.mjs", import.meta.url),
+        ),
+      },
+    );
     await file(runtime, fs, "/permissions/grep-denied", 0o200);
     const deniedRead = await shell(
       runtime,

@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import type { Runtime } from "waffle";
+import { familyWasmPath } from "./family-assets.ts";
 import type { RuntimeWorkerMessage, RuntimeWorkerRequest } from "waffle/browser/worker";
+import type { ProgramPackage } from "waffle/programs";
 import { installNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import type * as Api from "./waffle-node-api.ts";
 
@@ -10,8 +12,12 @@ export interface WaffleCaseOptions {
   readonly env: Readonly<Record<string, string>>;
   /** Directory holding the frozen oracle's argv.py/printenv.py fixture guests. */
   readonly fixtureDirectory: string;
-  /** Separately built utility programs. Omitted for the unchanged-main control. */
+  /** Optional archived utility directory; published package assets are used by default. */
   readonly utilityDirectory?: string;
+  /** Explicit core-only selection; does not change where published assets come from. */
+  readonly installPrograms?: boolean;
+  /** Explicit caller program set; undefined retains every published base program. */
+  readonly programs?: readonly string[];
 }
 export interface WaffleCaseResult {
   stdout: Buffer;
@@ -23,18 +29,6 @@ export interface WaffleCaseResult {
 
 const OUTPUT_LIMIT_BYTES = 4 * 1024 * 1024;
 const nodeDirectory = new URL("../.build/node/", import.meta.url);
-const utilities = [
-  "cat",
-  "find",
-  "grep",
-  "head",
-  "mkdir",
-  "seq",
-  "sort",
-  "tail",
-  "uniq",
-  "wc",
-] as const;
 const fixtures = [
   ["argv.py", "argv-py.wasm"],
   ["printenv.py", "printenv-py.wasm"],
@@ -53,6 +47,39 @@ function compiled(path: string): Promise<WebAssembly.Module> {
   if (!module)
     modules.set(path, (module = readFile(path).then((bytes) => WebAssembly.compile(bytes))));
   return module;
+}
+
+export function selectBasePackages(
+  packages: readonly ProgramPackage[],
+  names?: readonly string[],
+): ProgramPackage[] {
+  if (!names) return packages.slice();
+  const selected = new Set(names);
+  return packages.map((family) => ({
+    ...family,
+    programs: family.programs.filter((program) =>
+      selected.has(program.path.slice(program.path.lastIndexOf("/") + 1)),
+    ),
+  }));
+}
+
+function localBasePackages(
+  directory: string | undefined,
+  waffle: typeof Api,
+  names?: readonly string[],
+): ProgramPackage[] {
+  return selectBasePackages(waffle.basePackages, names).map((family) => ({
+    ...family,
+    programs: family.programs.map((program) => {
+      const name = program.path.slice(program.path.lastIndexOf("/") + 1);
+      const path = directory ? `${directory}/${name}.wasm` : familyWasmPath(name);
+      return {
+        path: program.path,
+        aliases: program.aliases,
+        source: async () => new Uint8Array(await readFile(path)),
+      };
+    }),
+  }));
 }
 
 async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: typeof Api) {
@@ -82,34 +109,10 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
       cooperative: true,
     });
   }
-  if (options.utilityDirectory === undefined) return;
-  const directory = options.utilityDirectory;
-  const utilityWorkerUrl = new URL("shell.mjs", nodeDirectory);
-  const installers = {
-    cat: waffle.installCat,
-    find: waffle.installFind,
-    grep: waffle.installGrep,
-    head: waffle.installHead,
-    mkdir: waffle.installMkdir,
-    seq: waffle.installSeq,
-    sort: waffle.installSort,
-    tail: waffle.installTail,
-    uniq: waffle.installUniq,
-    wc: waffle.installWc,
-  };
-  for (const name of utilities) {
-    if (name === "find" || name === "head" || name === "sort" || name === "uniq" || name === "wc") {
-      await installers[name](runtime, {
-        workerUrl: utilityWorkerUrl,
-        source: async () => new Uint8Array(await readFile(`${directory}/${name}.wasm`)),
-      });
-      continue;
-    }
-    await installers[name](runtime, {
-      workerUrl: utilityWorkerUrl,
-      module: () => compiled(`${directory}/${name}.wasm`),
-    });
-  }
+  if (options.installPrograms === false) return;
+  const packages = localBasePackages(options.utilityDirectory, waffle, options.programs);
+  const launcher = waffle.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory));
+  await waffle.installPrograms(runtime, packages, { launcher });
 }
 
 export async function createWaffleRunner(options: WaffleCaseOptions) {

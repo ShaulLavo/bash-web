@@ -156,24 +156,19 @@ test("the actual aggregate shell command rejects each non-success result in ever
 test("each moved current-main gate has one owner", () => {
   const workflowJobs = jobs();
   const expected: Record<string, readonly string[]> = {
-    prepare: ["sources:browser", "pack:git:tests", "build:node-harness"],
+    prepare: ["sources:browser", "build:worker", "build:node-harness"],
     layers: ["test:check-layers", "check:layers", "typecheck:layers"],
     quality: ["quality:js", "test:ci", "test:guest-build", "typecheck:guest-build", "typecheck:ci"],
     native: [
       "check:rust",
       "build:shell",
       "build:test-guest",
-      "build:rg",
       "prepare:wasi-tests",
       "check:capabilities",
     ],
-    wasi: ["test:shell:wasi", "test:rg:wasi"],
+    wasi: ["test:shell:wasi"],
     browser: [
       "build:browser:assets:ci",
-      "test:find:browser",
-      "test:grep:usage",
-      "build:env:tests",
-      "test:env:browser",
       "test:git:browser",
       "test:runtime:terminal",
       "test:browser",
@@ -226,11 +221,11 @@ test("quality package recipes preserve complete current selections", () => {
   assert.equal(scripts["typecheck:browser"], scripts.typecheck);
   assert.equal(
     scripts["quality:js"],
-    "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates",
+    "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && node --test scripts/test-family-routes.ts",
   );
   assert.equal(
     scripts["test:guest-build"],
-    "node --test scripts/test-rg-source.ts scripts/test-utility-artifacts.ts scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-sed-source.ts scripts/test-xargs-source.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts scripts/test-python-build.ts scripts/test-python-ci.ts",
+    "node --test scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
   );
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(
@@ -240,32 +235,17 @@ test("quality package recipes preserve complete current selections", () => {
   assert.doesNotMatch(expanded(String(scripts["test:shell:scoreboard"])), /scripts\/test-/);
 });
 
-test("Python browser coverage consumes one cached producer and remains blocking", () => {
+test("Python browser coverage consumes published family assets and remains blocking", () => {
   const workflowJobs = jobs();
-  const producer = object(workflowJobs.python);
+  assert.equal(workflowJobs.python, undefined);
   const browser = object(workflowJobs.browser);
-  assert.ok(Array.isArray(browser.needs) && browser.needs.includes("python"));
-  const steps = producer.steps;
-  assert.ok(Array.isArray(steps));
-  const entries = steps.map(object);
-  const cache = entries.find((step) => step.id === "python-assets");
-  assert.ok(cache);
-  const key = String(object(cache.with).key);
-  assert.match(key, /steps\.python-inputs\.outputs\.key/);
-  const inputs = entries.findIndex((step) => step.id === "python-inputs");
-  const cached = entries.findIndex((step) => step.id === "python-assets");
-  assert.ok(inputs >= 0 && inputs < cached);
-  assert.equal(entries[inputs].run, "node scripts/python-ci.ts");
-  const compile = entries.filter(
-    (step) => step.run === "npm run build:python -- --output .build/python-assets",
-  );
-  assert.equal(compile.length, 1);
-  assert.equal(compile[0].if, "steps.python-assets.outputs.cache-hit != 'true'");
-  assert.match(commands(producer), /--stage \.build\/python-assets/);
-  assert.doesNotMatch(commands(browser), /build:python -- --output/);
+  assert.ok(Array.isArray(browser.needs) && !browser.needs.includes("python"));
   const prepare = commands(browser);
   assert.ok(prepare.indexOf("prepare:python:browser") < prepare.indexOf("npm run test:browser"));
-  assert.match(prepare, /build:python -- --stage \.build\/python-assets --output dist/);
+  assert.doesNotMatch(prepare, /build:python|download-artifact.*python/);
+  const preparation = readFileSync(new URL("./test-own-shell-python.ts", import.meta.url), "utf8");
+  assert.match(preparation, /node_modules\/@waffle\/python\/assets/);
+  assert.match(preparation, /waffle\/browser\/preview1-worker/);
 });
 
 test("compatibility keeps frozen identity, diagnostics, echo and target baseline wiring", () => {
@@ -351,7 +331,7 @@ test("compatibility reuses the shared node build while standalone commands still
   );
   assert.equal(
     expanded("npm run compat:shell"),
-    "node scripts/build-node-harness.ts && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell BASH_COMPAT_UTILITY_DIR=${CARGO_TARGET_DIR:-.build/shell}/wasm32-wasip1/release node scripts/bash-compat.mjs",
+    "node scripts/build-node-harness.ts && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
   );
   for (const name of ["test:shell:scoreboard", "compat:shell"])
     assert.equal(
@@ -491,33 +471,14 @@ test("read tokens stay out of the replay environment and layer graphs are artifa
   assert.equal(object(upload.with)["retention-days"], 90);
 });
 
-test("browser stages ripgrep at its public-entry URL before bundling", () => {
+test("browser consumes family package assets without Bash ripgrep staging", () => {
   const browser = commands(jobs().browser);
-  const staging = "cp public/programs/rg.wasm dist/rg.wasm";
-  assert.ok(browser.includes(staging), "downloaded ripgrep must also reach the Vite input URL");
-  assert.ok(browser.indexOf(staging) < browser.indexOf("npm run build:browser:assets:ci"));
+  assert.doesNotMatch(browser, /public\/programs\/rg|build:rg/);
+  assert.match(browser, /npm run build:browser:assets:ci/);
 });
 
-test("browser gates the find driver once after prepared assets", () => {
+test("Git consumer coverage has one blocking owner and prepared family assets", () => {
   const browser = commands(jobs().browser);
-  const find = "npm run test:find:browser";
-  assert.equal(browser.match(new RegExp(`${find}\\b`, "g"))?.length, 1);
-  assert.ok(browser.indexOf("npx playwright install") < browser.indexOf(find));
-  assert.ok(browser.indexOf("npm run build:browser:assets:ci") < browser.indexOf(find));
-  assert.ok(browser.indexOf(find) < browser.indexOf("npm run test:browser"));
-  assert.doesNotMatch(commands(jobs()["own-shell-scoreboard"]), /npm run test:find:browser/);
-});
-
-test("program regression entrypoints have one blocking owner and prepared inputs", () => {
-  const workflowJobs = jobs();
-  const browser = commands(workflowJobs.browser);
-  for (const command of ["test:grep:usage", "build:env:tests", "test:env:browser"]) {
-    assert.ok(browser.indexOf("npx playwright install") < browser.indexOf(`npm run ${command}`));
-    assert.ok(
-      browser.indexOf("npm run build:browser:assets:ci") < browser.indexOf(`npm run ${command}`),
-    );
-    assert.ok(browser.indexOf(`npm run ${command}`) < browser.indexOf("npm run test:browser"));
-  }
   assert.ok(
     browser.indexOf("npx playwright install") < browser.indexOf("npm run test:git:browser"),
   );
@@ -525,60 +486,23 @@ test("program regression entrypoints have one blocking owner and prepared inputs
     browser.indexOf("npm run test:git:browser") <
       browser.indexOf("npm run build:browser:assets:ci"),
   );
-  assert.ok(
-    browser.indexOf("npm run build:env:tests") < browser.indexOf("npm run test:env:browser"),
-  );
-  const all = Object.values(workflowJobs).map(commands).join("\n");
-  const quality = commands(workflowJobs.quality);
-  const selected =
-    "node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts scripts/test-git-review.ts";
-  assert.equal(all.split(selected).length, 2);
-  assert.ok(quality.includes(selected));
-  assert.equal(all.split("node --test scripts/test-find-source.ts").length, 2);
-  assert.ok(quality.includes("node --test scripts/test-find-source.ts"));
   assert.doesNotMatch(
-    all,
-    /npm run test:git:local\b|node scripts\/test-git-local\.ts|npm run test:find\s/,
+    browser,
+    /test:find:browser|test:grep:usage|test:env:browser|test:installed-sed/,
   );
-  assert.match(browser, /npm run build:env:tests && npm run test:env:browser/);
 });
 
-test("npm prepare is the only Git/worker build and consumers use its artifacts", () => {
-  const workflowJobs = jobs();
+test("npm prepare is the only worker build and Git consumes the family backend", () => {
   const lifecycle = String(recipes().prepare);
-  assert.equal(lifecycle, "npm run build:git && npm run build:worker && npm run notices:git");
-  const owners = Object.entries(workflowJobs).flatMap(([owner, job]) => {
-    const actual = expanded(commands(job)).replace(
-      "node scripts/pack-git-tests.ts",
-      expanded(lifecycle),
-    );
-    return Array.from(
-      actual.matchAll(/node scripts\/(build-git\.ts|build-worker\.mjs)/g),
-      (match) => ({ owner, file: match[1] }),
-    );
-  });
-  assert.deepEqual(owners, [
-    { owner: "prepare", file: "build-git.ts" },
-    { owner: "prepare", file: "build-worker.mjs" },
-  ]);
-  const read = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
-  assert.match(
-    read("./pack-git-tests.ts"),
-    /spawnSync\("npm", \["pack", "--pack-destination", "\.build\/git-package"\]/,
+  assert.equal(lifecycle, "npm run build:worker");
+  const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
+    Array.from(expanded(commands(job)).matchAll(/node scripts\/build-worker\.mjs/g), () => owner),
   );
-  const packageTest = read("./test-git-package.ts");
-  assert.match(packageTest, /resolve\("\.build\/git-package"\)/);
-  assert.doesNotMatch(packageTest, /execute\("npm"/);
-  const driver = read("./test-git-browser.ts");
+  assert.deepEqual(owners, ["prepare"]);
+  const driver = readFileSync(new URL("./test-git-browser.ts", import.meta.url), "utf8");
   assert.doesNotMatch(driver, /buildGit|patchGitSource/);
-  assert.match(driver, /copyFile\("dist\/git-command\.js"/);
+  assert.match(driver, /waffle-git\/dist\/git-command\.js/);
   assert.match(driver, /external: true/);
-  assert.doesNotMatch(read("./git-notices.ts"), /from "esbuild"|patchGitSource/);
-  assert.match(
-    commands(workflowJobs.prepare),
-    /tar -czf .* \.build\/git-package .*dist\/git\.NOTICES\.txt/,
-  );
-  assert.doesNotMatch(read("./pack-git-tests.ts"), /ignore-scripts|--prebuilt/);
 });
 
 test("scoreboard and observation run independently using one shared node build", () => {
@@ -604,8 +528,8 @@ test("scoreboard and observation run independently using one shared node build",
   );
   assert.deepEqual(buildOwners, ["prepare"]);
   const prepare = commands(workflowJobs.prepare);
-  assert.ok(prepare.indexOf("npm run pack:git:tests") < prepare.indexOf("tar -czf"));
-  assert.match(prepare, /tar -czf .* dist\/git-command\.js dist\/git-command\.d\.ts /);
+  assert.ok(prepare.indexOf("npm run build:worker") < prepare.indexOf("tar -czf"));
+  assert.match(prepare, /tar -czf .* dist\/shell-worker\.js dist\/fs-worker\.js/);
   assert.ok(prepare.indexOf("npm run build:node-harness") < prepare.indexOf("tar -czf"));
   assert.match(prepare, /tar -czf .* \.build\/node /);
   assert.equal(

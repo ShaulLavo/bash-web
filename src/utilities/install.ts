@@ -4,11 +4,9 @@
 import type { ProgramDefinition, Runtime } from "waffle";
 import { guestLauncher } from "../runtime/worker-launcher";
 
-export type UtilityModule =
-  | WebAssembly.Module
-  | (() => WebAssembly.Module | Promise<WebAssembly.Module>);
+type UtilityModule = WebAssembly.Module | (() => WebAssembly.Module | Promise<WebAssembly.Module>);
 
-export type UtilitySource = Uint8Array | (() => Uint8Array | Promise<Uint8Array>);
+type UtilitySource = Uint8Array | (() => Uint8Array | Promise<Uint8Array>);
 
 export type WasiUtilityOptions = {
   readonly workerUrl?: string | URL;

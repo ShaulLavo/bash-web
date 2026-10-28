@@ -60,7 +60,13 @@ export function cases() {
   return result;
 }
 type Case = ReturnType<typeof cases>[number];
-type Options = FuzzOptions & { replays: string[] };
+type Options = FuzzOptions & { replays: string[]; oracle: string; oracleInvocation: string };
+function oracleWrapper(scratch: string, oracle: string): string {
+  const wrapper = resolve(scratch, "oracle");
+  const script = `#!/usr/bin/bash\nexec -a /usr/bin/bash ${quote(oracle)} "$@"\n`;
+  writeFileSync(wrapper, script, { mode: 0o700 });
+  return wrapper;
+}
 export function fingerprint() {
   const hash = createHash("sha256");
   for (const name of [
@@ -91,10 +97,12 @@ async function main() {
       shell: { type: "string" },
       replay: { type: "string" },
       record: { type: "string" },
+      oracle: { type: "string" },
       output: { type: "string" },
     },
   });
   const waffle = values.waffle;
+  const oracle = values.oracle ?? "/usr/bin/bash";
   const options: Options = {
     seed: 1,
     count: 0,
@@ -102,10 +110,13 @@ async function main() {
     replays: values.replay ? [resolve(values.replay)] : [],
     shell: values.shell,
     record: values.record,
+    oracle,
+    oracleInvocation: oracle,
     output: values.output,
   };
   const scratch = mkdtempSync(resolve(process.env.TMPDIR ?? "/work/tmp", "echo-"));
   options.cwd = scratch;
+  if (values.oracle !== undefined) options.oracleInvocation = oracleWrapper(scratch, oracle);
   const interrupt = () => {
     options.interrupted = true;
   };
@@ -129,7 +140,7 @@ async function measure(options: Options, waffle: boolean) {
     : undefined;
   if (!recorded)
     assert.match(
-      execFileSync("/usr/bin/bash", ["--version"], { encoding: "utf8" }),
+      execFileSync(options.oracle, ["--version"], { encoding: "utf8" }),
       /version 5\.3\.15\(1\)-release/,
     );
   const selected = cases();
@@ -138,9 +149,10 @@ async function measure(options: Options, waffle: boolean) {
   if (!waffle)
     assert.notEqual(
       realpathSync(shell),
-      realpathSync("/usr/bin/bash"),
+      realpathSync(options.oracle),
       "candidate must not be Bash itself",
     );
+  // A qualified scratch oracle keeps the original invocation name in diagnostics.
   const result = waffle
     ? await measureWaffle(options, shell, recorded)
     : await execute(selected, options, shell, recorded);
@@ -174,7 +186,6 @@ async function measureWaffle(
   const runner = await createWaffleRunner({
     modulePath,
     fixtureDirectory: directory,
-    utilityDirectory: directory,
     tmp: "/tmp/echo",
     env: { PATH: "/usr/bin:/bin", HOME: "/tmp/echo", TMP: "/tmp/echo", LC_ALL: "C", LANG: "C" },
   });
@@ -185,7 +196,7 @@ async function measureWaffle(
     if (options.interrupted) throw new Error("interrupted");
     const bash = recorded
       ? decode(recorded[index].bash)
-      : await run("/usr/bin/bash", item.script, options);
+      : await run(options.oracleInvocation, item.script, options);
     assert.ok(healthy(bash), item.id);
     const actual = await runner(item.script);
     const candidate = {

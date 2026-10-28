@@ -472,8 +472,10 @@ test("wc bounds memory on sustained input and stops on Ctrl+C", async ({ page },
   for (let sample = 0; sample < 8; sample++) {
     const guests = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].guests);
     expect(guests).toHaveLength(1);
-    expect(guests[0].memoryBytes).toBeGreaterThan(0);
-    memory.push(guests[0].memoryBytes);
+    const memoryBytes = guests[0].memoryBytes;
+    if (memoryBytes === null) throw new Error("Generic worker memory sample is unavailable");
+    expect(memoryBytes).toBeGreaterThan(0);
+    memory.push(memoryBytes);
     await page.waitForTimeout(25);
   }
   expect(Math.max(...memory)).toBeLessThanOrEqual(32 * 1024 * 1024);

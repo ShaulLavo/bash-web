@@ -10,7 +10,6 @@ const run = await createWaffleRunner({
   tmp: "/descriptors",
   env: { PATH: "/bin", HOME: "/", TMP: "/descriptors", LC_ALL: "C", LANG: "C" },
   fixtureDirectory: directory,
-  utilityDirectory: directory,
 });
 
 async function output(script: string, expected: string) {

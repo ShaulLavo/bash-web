@@ -92,8 +92,8 @@
     "upstreamPath": "libc-bottom-half/sources/preopens.c",
     "sdk": "wasi-sdk 34.0",
     "patchOwner": "waffle",
-    "patchPath": ".build/waffle-inputs/d1036edf756b1e6f3d9b999f9f470595e573b3d2/packages/waffle/patches/wasi-libc/preopen-scan.patch",
-    "builder": ".build/waffle-inputs/d1036edf756b1e6f3d9b999f9f470595e573b3d2/packages/waffle/scripts/build-wasi-libc.sh",
+    "patchPath": ".build/waffle-inputs/066c17936f6db39a92ec5ced0201e9f01106eea7/packages/waffle/patches/wasi-libc/preopen-scan.patch",
+    "builder": ".build/waffle-inputs/066c17936f6db39a92ec5ced0201e9f01106eea7/packages/waffle/scripts/build-wasi-libc.sh",
     "changes": "After prestat BADF, query fdstat: continue past an open non-preopen, stop at a genuinely absent fd, preserve fatal handling of other errors. Every local WASI guest uses the owned patched sysroot at final link; Rust self-contained libc is disabled.",
     "documentation": "docs/wasi-libc.md"
   },

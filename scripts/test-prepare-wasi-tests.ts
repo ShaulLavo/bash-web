@@ -13,7 +13,7 @@ test("CI compiles every current WASI target exactly once", () => {
     [
       "-p shell-parser --lib --test api --test conditional --test command_print",
       "-p shell-engine --lib --test streaming --test terminal_display --test words --test capabilities",
-      "-p shell-utilities --test streaming",
+      "-p shell-compat-fixtures --test streaming",
     ],
   );
   assert.equal(wasiTestFiles.length, 10);
