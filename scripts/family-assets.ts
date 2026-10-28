@@ -7,6 +7,7 @@ const families = {
     "env",
     "clear",
     "cat",
+    "echo",
     "cut",
     "tr",
     "head",
@@ -29,7 +30,7 @@ const families = {
   sed: ["sed"],
 } as const;
 
-const cooperativeFamilies = new Set(["cat", "grep", "mkdir", "seq", "tail"]);
+const cooperativeFamilies = new Set(["cat", "echo", "grep", "mkdir", "seq", "tail"]);
 
 const owners = new Map<string, string>();
 for (const [family, names] of Object.entries(families)) {
