@@ -14,21 +14,21 @@ const bunLock = await readFile(resolve(root, "bun.lock"), "utf8");
 
 test("browser entry uses one required immutable Waffle peer and matching development install", () => {
   const peer = pkg.peerDependencies.waffle;
-  assert.match(peer, /^git\+https:\/\/github\.com\/ShaulLavo\/waffle\.git#[0-9a-f]{40}$/);
+  assert.equal(
+    peer,
+    `https://github.com/ShaulLavo/waffle/releases/download/waffle-v${sources.waffle.version}/waffle-${sources.waffle.version}.tgz`,
+  );
   assert.equal(pkg.devDependencies.waffle, peer);
   assert.equal(sources.waffle.specifier, peer);
-  assert.equal(sources.waffle.revision, peer.split("#")[1]);
+  assert.match(sources.waffle.revision, /^[0-9a-f]{40}$/);
+  assert.match(sources.waffle.archiveSha256, /^[0-9a-f]{64}$/);
   assert.notEqual(pkg.peerDependenciesMeta?.waffle?.optional, true);
   assert.equal(lock.packages[""].peerDependencies.waffle, peer);
   assert.equal(lock.packages[""].devDependencies.waffle, peer);
-  // npm records the same immutable Git identity using its canonical SSH transport.
-  // Preserve that honest lockfile instead of forcing its text to match Bun's pin.
   const resolved = lock.packages["node_modules/waffle"].resolved;
-  assert.match(
-    resolved,
-    /^git\+(?:https:\/\/github\.com\/|ssh:\/\/git@github\.com\/)ShaulLavo\/waffle\.git#[0-9a-f]{40}$/,
-  );
-  assert.equal(resolved.split("#")[1], sources.waffle.revision);
+  assert.equal(resolved, peer);
+  assert.match(lock.packages["node_modules/waffle"].integrity, /^sha512-/);
+  assert.ok(bunLock.includes(lock.packages["node_modules/waffle"].integrity));
   assert.equal(lock.packages["node_modules/waffle"].version, sources.waffle.version);
   assert.ok(pkg.trustedDependencies.includes("waffle"));
   assert.ok(bunLock.includes(peer));

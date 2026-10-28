@@ -4,12 +4,12 @@
 import type { GuestLauncher, ProcessService, Runtime } from "waffle";
 import type { WorkerLaunchOptions } from "waffle/browser/process-broker";
 import type { RuntimeWorkerRequest } from "waffle/browser/worker";
-import type { TerminalContext } from "waffle/browser/runtime-terminals";
 import type { FilesystemIdentity } from "waffle/fs";
 import type { ProcessContext, ProcessHandle } from "waffle/proc/types";
 import { workerProcessDirectoryId, type WorkerProcessTransport } from "waffle/proc/worker-client";
 import { observeGuest } from "./diagnostics";
 import type { ShellWorkerRequest } from "./worker";
+import type { TerminalMetadata } from "./terminal-producer";
 import {
   attachTerminal,
   createTerminalAdmission,
@@ -18,11 +18,8 @@ import {
   type TerminalAdmission,
 } from "./terminal-admission";
 
-export interface ShellWorkerData {
+export interface ShellWorkerData extends Partial<TerminalMetadata> {
   filesystem: FilesystemIdentity;
-  /** Waffle session membership and its single shared input cursor, inherited by executors. */
-  terminalContext?: TerminalContext;
-  terminalInput?: SharedArrayBuffer;
   shellTerminal?: SharedArrayBuffer;
   terminalAdmission?: TerminalAdmission;
 }
