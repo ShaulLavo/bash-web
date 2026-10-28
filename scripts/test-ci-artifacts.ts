@@ -7,6 +7,10 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  linkSync,
+  lstatSync,
+  readlinkSync,
+  symlinkSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -214,3 +218,113 @@ for (const name of [
     });
   });
 }
+
+function treeSnapshot(directory: string): unknown[] {
+  return readdirSync(directory)
+    .sort()
+    .flatMap<unknown>((name) => {
+      const path = resolve(directory, name);
+      const info = lstatSync(path, { bigint: true });
+      const identity = `${info.dev}:${info.ino}`;
+      if (info.isSymbolicLink()) return [{ name, identity, link: readlinkSync(path) }];
+      if (info.isDirectory()) return [{ name, identity, children: treeSnapshot(path) }];
+      return [{ name, identity, bytes: readFileSync(path).toString("hex") }];
+    });
+}
+
+function rejectsWithoutChanges(directory: string, consumer: string, mode: "browser" | "native") {
+  const identity = shellIdentity(directory);
+  const before = treeSnapshot(dirname(directory));
+  let rejection: unknown;
+  try {
+    stageShellArtifacts(consumer, directory, identity, mode);
+  } catch (error) {
+    rejection = error;
+  }
+  assert.deepEqual(
+    treeSnapshot(dirname(directory)),
+    before,
+    "Rejected staging changed fixture bytes or entries",
+  );
+  assert.ok(rejection instanceof Error, "Expected destination preflight rejection");
+}
+
+test("shell destination alias to accepted env rejects without any changes", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "public/programs"), { recursive: true });
+    symlinkSync(
+      resolve(directory, "env.wasm"),
+      resolve(consumer, "public/programs/shell-engine.wasm"),
+    );
+    rejectsWithoutChanges(directory, consumer, "browser");
+  });
+});
+
+test("redirected destination parent rejects without any changes", () => {
+  fixture((directory, consumer) => {
+    const outside = resolve(dirname(directory), "outside");
+    mkdirSync(outside);
+    writeFileSync(resolve(outside, "sentinel"), "caller outside data");
+    symlinkSync(outside, resolve(consumer, "public"));
+    rejectsWithoutChanges(directory, consumer, "browser");
+  });
+});
+
+test("native notice destination alias rejects before copying either guest", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "dist"));
+    const caller = resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt");
+    writeFileSync(caller, "native caller notices");
+    symlinkSync(caller, resolve(consumer, "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"));
+    rejectsWithoutChanges(directory, consumer, "native");
+  });
+});
+
+for (const name of [
+  "env.wasm",
+  "cli-source.txt",
+  "inputs",
+  "SHA256SUMS",
+  "utility-artifacts/source-sha256.txt",
+]) {
+  test(`destination hardlink to accepted ${name} rejects before any write`, () => {
+    fixture((directory, consumer) => {
+      mkdirSync(resolve(consumer, "public/programs"), { recursive: true });
+      linkSync(resolve(directory, name), resolve(consumer, "public/programs/shell-engine.wasm"));
+      rejectsWithoutChanges(directory, consumer, "browser");
+    });
+  });
+}
+
+test("native caller notice hardlink is protected before guest writes", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "dist"));
+    const caller = resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt");
+    writeFileSync(caller, "native caller notices");
+    linkSync(caller, resolve(consumer, "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"));
+    rejectsWithoutChanges(directory, consumer, "native");
+  });
+});
+
+test("different destinations sharing an inode reject before writes", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "public/programs"), { recursive: true });
+    mkdirSync(resolve(consumer, "dist"));
+    const shell = resolve(consumer, "public/programs/shell-engine.wasm");
+    writeFileSync(shell, "old output");
+    linkSync(shell, resolve(consumer, "dist/env.wasm"));
+    rejectsWithoutChanges(directory, consumer, "browser");
+  });
+});
+
+test("atomic replacement preserves unrelated hardlinks to an old output", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "dist"));
+    const caller = resolve(consumer, "caller-data");
+    writeFileSync(caller, "caller data");
+    linkSync(caller, resolve(consumer, "dist/env.wasm"));
+    stageShellArtifacts(consumer, directory, shellIdentity(directory), "browser");
+    assert.equal(readFileSync(caller, "utf8"), "caller data");
+    assert.deepEqual(readFileSync(resolve(consumer, "dist/env.wasm")), Buffer.from(wasm));
+  });
+});

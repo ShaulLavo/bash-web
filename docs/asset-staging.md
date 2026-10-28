@@ -2,7 +2,7 @@
 
 A source install does not contain guest binaries. Use an owner-accepted Bash producer set for the exact shell source selected by the consumer. Do not substitute a different env implementation. No Bash release URL is implied by a CI artifact or local promotion.
 
-The `stage-shell` command reuses the normal native producer's unchanged `cli-source.txt`, `inputs`, and `SHA256SUMS` receipts. Supply their accepted source, native input digest, and checksum-receipt SHA-256 independently. It verifies those anchors and both guest and notice hashes before writing. It does not run Cargo or build a runtime, worker, or guest.
+The `stage-shell` command reuses the normal native producer's unchanged `cli-source.txt`, `inputs`, and `SHA256SUMS` receipts. Supply their accepted source, native input digest, and checksum-receipt SHA-256 independently. It verifies those anchors and both guest and notice hashes, then preflights every output before writing. Destination symlinks, parent-directory escapes, and path or inode overlaps with accepted inputs, receipts, other outputs or native caller notices are rejected. Output files are replaced atomically from the validated bytes, preserving unrelated hardlinks to an old output. It does not run Cargo or build a runtime, worker, or guest.
 
 ```sh
 node scripts/ci-artifacts.ts stage-shell ACCEPTED_DIRECTORY CONSUMER_ROOT SOURCE_SHA NATIVE_INPUT_SHA CHECKSUM_RECEIPT_SHA browser
