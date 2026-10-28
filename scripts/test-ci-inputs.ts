@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { dependencyInputs, nativeInputs } from "./ci-inputs.ts";
 
-const waffle = "git+https://github.com/ShaulLavo/waffle.git#abc";
+const waffle =
+  "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.91/waffle-0.0.91.tgz";
 const entry = (path: string, id = "abc") => `100644 blob ${id}\t${path}`;
 
 test("native inputs exclude browser, prose and root package version changes", () => {
@@ -54,7 +55,15 @@ for (const path of [
 }
 
 test("the shared libc dependency invalidates native checks", () => {
-  assert.notEqual(nativeInputs([], waffle), nativeInputs([], waffle + "def"));
+  assert.notEqual(
+    nativeInputs([], waffle),
+    nativeInputs([], waffle.replaceAll("0.0.91", "0.0.90")),
+  );
+});
+
+test("native inputs reject mutable or mismatched release identities", () => {
+  assert.throws(() => nativeInputs([], "git+https://github.com/ShaulLavo/waffle.git#main"));
+  assert.throws(() => nativeInputs([], waffle.replace("waffle-0.0.91.tgz", "waffle-0.0.90.tgz")));
 });
 
 test("dependency cache ignores only root package patch bumps", () => {

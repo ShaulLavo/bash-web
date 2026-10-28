@@ -29,7 +29,9 @@ export function nativeInputs(
 ) {
   if (
     typeof waffle !== "string" ||
-    !waffle.startsWith("git+https://github.com/ShaulLavo/waffle.git#")
+    !/^https:\/\/github\.com\/ShaulLavo\/waffle\/releases\/download\/waffle-v(\d+\.\d+\.\d+)\/waffle-\1\.tgz$/.test(
+      waffle,
+    )
   )
     throw new Error("Expected the pinned Waffle build dependency");
   return JSON.stringify([

@@ -25,10 +25,12 @@ import {
 import type { PythonPayloadFile, PythonPayloadManifest } from "./python-source.ts";
 import { wasiBuildConfiguration, wasiSysrootCommand } from "./wasi-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { waffleRelease } from "./waffle-release-inputs.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const buildPrefix = "cross-build/wasm32-wasip1";
-const waffleRevision = "c312af63a554602906b462a2b49c7d5e14a97c5b";
+const waffle = waffleRelease(root);
+const waffleRevision = waffle.revision;
 
 export function pythonBuildRecipe(
   sdk: string,
@@ -227,14 +229,11 @@ export function stagePythonArtifact(source: string, output: string, sdk?: string
 
 async function auditWaffle(work: string, output: string) {
   const pkg = object(JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")));
-  assert.equal(
-    object(pkg.devDependencies).waffle,
-    `git+https://github.com/ShaulLavo/waffle.git#${waffleRevision}`,
-  );
+  assert.equal(object(pkg.devDependencies).waffle, waffle.specifier);
   assert.equal(
     object(JSON.parse(readFileSync(resolve(root, "node_modules/waffle/package.json"), "utf8")))
       .version,
-    "0.0.90",
+    waffle.version,
   );
   const api = resolve(work, "waffle-api.mjs");
   await build({
