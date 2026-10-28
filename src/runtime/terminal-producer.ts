@@ -162,6 +162,7 @@ function acquireTerminalProducer(
     return result;
   };
   return {
+    terminal: authority,
     get editor() {
       return state.group;
     },

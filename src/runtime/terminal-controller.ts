@@ -158,38 +158,41 @@ export function createTerminalController(
   const createGroup = (process: State): Group => {
     const group = must(producer.createGroup("raw"));
     const record: Group = { group, members: new Map(), jobs: new Map(), active: true };
-    if (process.jobForeground && process.jobOwner === root.pid) {
+    if (process.jobForeground && process.jobOwner === root.pid)
       record.rootMember = must(producer.admitExisting(group, root.pid)).member;
-      foreground = record;
-    }
     return record;
   };
-  const prepareDescendant: NonNullable<RuntimeRootOptions["prepareDescendant"]> = (descendant) => {
-    const transport = runtime.disposed ? undefined : service?.transportFor(descendant.pid);
-    if (!transport) throw new Error("Terminal descendant has no admitted transport");
-    const process = workerProcessState(transport);
-    let record = groups.get(descendant.job);
-    if (!record && process.jobForeground && process.jobOwner === root.pid && foreground?.active)
-      record = foreground;
-    const created = !record;
-    if (!record) record = createGroup(process);
-    groups.set(descendant.job, record);
-    record.jobs.set(descendant.job, process.jobPending);
-    const admitted = must(producer.admitExisting(record.group, descendant.pid));
-    record.members.set(descendant.pid, admitted.member);
-    members.set(descendant.pid, record);
-    states.set(descendant.pid, process);
-    if (!created) return undefined;
-    record.restore = selected;
-    const paused = Atomics.load(bridge.state, control.cancel) === 2;
-    if (process.jobForeground && paused) deferred = record;
-    if (!process.jobForeground || paused) {
-      must(producer.startBackground(record.group));
-      return undefined;
-    }
-    must(producer.select(record.group));
-    selected = record;
-    return undefined;
+  const prepareDescendant: NonNullable<RuntimeRootOptions["prepareDescendant"]> = {
+    terminal: producer.terminal,
+    run(descendant, turn) {
+      const transport = runtime.disposed ? undefined : service?.transportFor(descendant.pid);
+      if (!transport) throw new Error("Terminal descendant has no admitted transport");
+      const process = workerProcessState(transport);
+      let record = groups.get(descendant.job);
+      if (!record && process.jobForeground && process.jobOwner === root.pid && foreground?.active)
+        record = foreground;
+      const created = !record;
+      if (!record) record = createGroup(process);
+      const admitted = must(producer.admitExisting(record.group, descendant.pid));
+      const paused = Atomics.load(bridge.state, control.cancel) === 2;
+      if (created) {
+        record.restore = selected;
+        if (process.jobForeground && paused) deferred = record;
+        if (!process.jobForeground || paused) must(producer.startBackground(record.group));
+        else must(producer.select(record.group));
+      }
+      turn.publish(() => {
+        groups.set(descendant.job, record!);
+        record!.jobs.set(descendant.job, process.jobPending);
+        record!.members.set(descendant.pid, admitted.member);
+        members.set(descendant.pid, record!);
+        states.set(descendant.pid, process);
+        if (created && process.jobForeground && process.jobOwner === root.pid)
+          foreground = record;
+        if (created && process.jobForeground && !paused) selected = record;
+      });
+      return { kind: "ok", value: undefined };
+    },
   };
   let service: ProcessService | undefined;
   const empty = (record: Group) =>
