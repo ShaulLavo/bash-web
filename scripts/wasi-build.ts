@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { prepareWaffleBuildInputs } from "./waffle-release-inputs.ts";
 
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);
@@ -17,8 +18,7 @@ export function wasiBuildConfiguration(root: string, env: Environment = process.
   if (!version.split("\n").includes("34.0") || !version.includes("wasi-libc: 2e6fb9d8ee0c\n")) {
     throw new Error("WASI_SDK_PATH must name wasi-sdk 34.0 with wasi-libc 2e6fb9d8ee0c");
   }
-  const builder = resolve(root, "node_modules/waffle/scripts/build-wasi-libc.sh");
-  const patch = resolve(root, "node_modules/waffle/patches/wasi-libc/preopen-scan.patch");
+  const { builder, patch } = prepareWaffleBuildInputs(root);
   const identity = createHash("sha256")
     .update(sdk)
     .update(version)
