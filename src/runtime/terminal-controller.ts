@@ -41,6 +41,17 @@ function pending(cell: State["jobPending"]): boolean {
     throw error;
   }
 }
+function tryDiscard(
+  producer: ReturnType<typeof createTerminalProducer>,
+  group: TerminalGroup,
+): boolean {
+  try {
+    return producer.discardInput(group);
+  } catch (error) {
+    if (error instanceof TerminalOperationError && error.code === "AGAIN") return false;
+    throw error;
+  }
+}
 
 export function createTerminalController(
   runtime: Runtime,
@@ -79,6 +90,7 @@ export function createTerminalController(
   let retry: ReturnType<typeof setTimeout> | undefined;
   const groups = new Map<number, Group>([[state.job, editor]]);
   const members = new Map<number, Group>();
+  const states = new Map<number, State>();
   const disconnect = bridge.connectInput({
     push(bytes) {
       const result = producer.pushKeyboard(bytes);
@@ -133,11 +145,13 @@ export function createTerminalController(
     const admitted = must(producer.admitExisting(record.group, descendant.pid));
     record.members.set(descendant.pid, admitted.member);
     members.set(descendant.pid, record);
+    states.set(descendant.pid, process);
     if (!created) return undefined;
     record.restore = selected;
-    if (!process.jobForeground || Atomics.load(bridge.state, control.cancel) === 2) {
+    const paused = Atomics.load(bridge.state, control.cancel) === 2;
+    if (process.jobForeground && paused) deferred = record;
+    if (!process.jobForeground || paused) {
       must(producer.startBackground(record.group));
-      if (process.jobForeground) deferred = record;
       return undefined;
     }
     must(producer.select(record.group));
@@ -149,7 +163,14 @@ export function createTerminalController(
     record.members.size === 0 && !Array.from(record.jobs.values()).some(pending);
   const resumeTarget = (record: Group): Group => {
     let target = record;
-    while (target !== editor && (!target.active || empty(target)))
+    const live = (pid: number) => {
+      const process = states.get(pid);
+      return !!process && !readOutcome(process.signals.outcome);
+    };
+    while (
+      target !== editor &&
+      (!target.active || !Array.from(target.members.keys()).every(live) || empty(target))
+    )
       target = target.restore ?? editor;
     return target;
   };
@@ -170,19 +191,23 @@ export function createTerminalController(
   };
   const discardInput = (): boolean => {
     const target = resumeTarget(selected);
-    try {
-      if (!producer.discardInput(target.group)) {
-        retryDiscard();
-        return false;
-      }
-    } catch (error) {
-      if (error instanceof TerminalOperationError && error.code === "AGAIN") {
-        retryDiscard();
-        return false;
-      }
-      throw error;
+    if (!tryDiscard(producer, target.group)) {
+      retryDiscard();
+      return false;
     }
-    selected = target;
+    if (target === editor) {
+      must(producer.restoreEditor());
+      editor.active = false;
+      editor = {
+        group: producer.editor,
+        members: new Map(),
+        jobs: new Map(),
+        rootMember: producer.rootMember,
+        active: true,
+      };
+      groups.set(state.job, editor);
+    }
+    selected = target.active ? target : editor;
     if (deferred?.active) {
       must(producer.select(deferred.group));
       selected = deferred;
@@ -238,7 +263,11 @@ export function createTerminalController(
     bind(processes: ProcessService) {
       service = processes;
     },
-    foregroundJobs: () => (selected.rootMember ? undefined : Array.from(selected.jobs.keys())),
+    foregroundJobs() {
+      const target = bridge.cancelled() && interruptTarget ? interruptTarget : selected;
+      if (target.rootMember) return;
+      return empty(target) ? [] : Array.from(target.jobs.keys());
+    },
     exited(pid: number) {
       if (disposed) return;
       if (pid === root.pid || readOutcome(state.signals.outcome)) {
@@ -249,6 +278,7 @@ export function createTerminalController(
       if (record) {
         const member = record.members.get(pid)!;
         members.delete(pid);
+        states.delete(pid);
         record.members.delete(pid);
         must(producer.removeMember(member));
       }
@@ -263,6 +293,7 @@ export function createTerminalController(
       disconnect();
       groups.clear();
       members.clear();
+      states.clear();
     },
     retired() {
       ownedDestinations.delete(directory);

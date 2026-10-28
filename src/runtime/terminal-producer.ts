@@ -169,8 +169,8 @@ function acquireTerminalProducer(
         must(controls.setMode({ expected: snapshot.selection, mode: "raw" }));
         discard = { ...discard, kind: "raw" };
       }
+      if (discard.kind === "raw" && !drain(stream, () => input.available())) return false;
       if (discard.kind === "raw") {
-        if (!drain(stream, () => input.available())) return false;
         lease = must(authority.transfer({ from: lease, to: restore }));
         discard = { ...discard, kind: "restored" };
       }

@@ -27,20 +27,27 @@ export function createShellTerminals(
   if (!request.runtimeProcess || !output)
     throw new TypeError("Terminal input has no owned shell output destination");
   const input = attachTerminalInput(data.terminalInput);
-  const endpoints = { 1: createBridgeTerminal(output, 1, checkActive, admission), 2: createBridgeTerminal(output, 2, checkActive, admission) };
+  const endpoints = {
+    1: createBridgeTerminal(output, 1, checkActive, admission),
+    2: createBridgeTerminal(output, 2, checkActive, admission),
+  };
   const base = createTerminalInputPolicy({
     input,
     tryWrite: (target, chunks) => endpoints[target].tryWrite!(chunks),
     outputReadiness: (target) => ({ writable: endpoints[target].readiness().writable }),
   });
-  const blocked = () => !!root?.cancelled();
+  const blocked = (turn: Parameters<typeof base.tryRead>[0]) => {
+    if (root && turn.mode === "raw" && Atomics.load(root.state, control.phase) === 1)
+      root.acknowledgeInputDiscard();
+    return !!root?.cancelled();
+  };
   const policy = root
     ? {
         ...base,
         tryRead: (turn: Parameters<typeof base.tryRead>[0], chunks: readonly Uint8Array[]) =>
-          blocked() ? -6 : base.tryRead(turn, chunks),
+          blocked(turn) ? -6 : base.tryRead(turn, chunks),
         inputReadiness: (turn: Parameters<typeof base.inputReadiness>[0]) =>
-          blocked() ? { readable: false, nbytes: 0 } : base.inputReadiness(turn),
+          blocked(turn) ? { readable: false, nbytes: 0 } : base.inputReadiness(turn),
       }
     : base;
   const attachment = attachTerminal({
@@ -54,6 +61,7 @@ export function createShellTerminals(
   const prepare = () => {
     if (root && Atomics.load(root.state, control.cancel) === 2) return;
     const phase = root ? Atomics.load(root.state, control.phase) : 2;
+    if (root?.cancelled() && phase !== 1) return;
     if (root && phase === 1) pendingMode = "raw";
     if (!pendingMode) return;
     const snapshot = controller.snapshot();
@@ -77,6 +85,9 @@ export function createShellTerminals(
       prepare();
     },
     dispose: () => attachment.dispose(),
-    columns() { const snapshot = controller.snapshot(); return snapshot.kind === "ok" ? snapshot.value.geometry.columns : 80; },
+    columns() {
+      const snapshot = controller.snapshot();
+      return snapshot.kind === "ok" ? snapshot.value.geometry.columns : 80;
+    },
   };
 }

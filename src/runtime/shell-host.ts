@@ -34,6 +34,11 @@ interface Registration {
   initialize(observer?: StartupObserver): Promise<void>;
 }
 const registrations = new WeakMap<Runtime, Registration>();
+function interruptTerminal(terminal: SharedBridge) {
+  if (terminal.cancelled()) return;
+  terminal.interrupt();
+  terminal.discardInput();
+}
 /** Internal adapter admission for embeddings/tests; does not launch a root or load assets. */
 export function registerShell(runtime: Runtime, options: ShellOptions): Registration {
   if (runtime.disposed) throw new Error("Runtime is disposed");
@@ -272,6 +277,19 @@ export async function startShell(
     rejectAbort(new Error("Runtime is disposed"));
     finish({ code: 137, error: "Runtime was disposed" }, false, 9);
   };
+  const signalFailure = (error: unknown) => finish({ code: 1, error: String(error) });
+  const interruptForeground = () => {
+    interruptTerminal(terminal);
+    const jobs = terminalController?.foregroundJobs();
+    if (!jobs) return false;
+    for (const job of jobs) void service!.killJob(job, 2).catch(signalFailure);
+    return true;
+  };
+  const sendSignal = (signal: 2 | 9) => {
+    if (finished || runtime.disposed) return;
+    if (signal === 2 && interruptForeground()) return;
+    void service!.kill(state.pid, signal).catch(signalFailure);
+  };
   try {
     options.signal?.addEventListener("abort", abort, { once: true });
     options.signal?.throwIfAborted();
@@ -398,26 +416,7 @@ export async function startShell(
       pid: state.pid,
       wasmBytes: loaded.size,
       done,
-      signal(signal) {
-        if (signal === 2 && !finished && !runtime.disposed) {
-          if (!terminal.cancelled()) {
-            terminal.interrupt();
-            terminal.discardInput();
-          }
-          const jobs = terminalController?.foregroundJobs();
-          if (jobs) {
-            for (const job of jobs)
-              void service!
-                .killJob(job, 2)
-                .catch((error) => finish({ code: 1, error: String(error) }));
-            return;
-          }
-        }
-        if (!finished && !runtime.disposed)
-          void service!
-            .kill(state.pid, signal)
-            .catch((error) => finish({ code: 1, error: String(error) }));
-      },
+      signal: sendSignal,
       async dispose() {
         if (!runtime.disposed) {
           // A facade owns only its descendants. The shared runtime and other shell
