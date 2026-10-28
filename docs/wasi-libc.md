@@ -27,7 +27,7 @@ means code written here to call that boundary, not a copied upstream implementat
 Upstream: [`WebAssembly/wasi-libc`, `libc-bottom-half/sources/preopens.c`](https://github.com/WebAssembly/wasi-libc/blob/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-bottom-half/sources/preopens.c),
 revision `2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13`, shipped by wasi-sdk **34.0**.
 The change lives only in Waffle's
-[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/c1cb67c300439af24335d0b2ec481bfb52f79a01/patches/wasi-libc/preopen-scan.patch).
+[`patches/wasi-libc/preopen-scan.patch`](https://github.com/ShaulLavo/waffle/blob/62d08fcb8091bc4d31220f8250b943ea858d6e15/packages/waffle/patches/wasi-libc/preopen-scan.patch).
 
 Unmodified libc stops on the first `fd_prestat_get` `BADF`. WASI truthfully
 returns `BADF` for an open inherited descriptor that is not a preopen, so an
@@ -39,9 +39,9 @@ and does not invent successful prestat metadata or a `NOTSUP` workaround.
 
 ## Waffle placement and builder
 
-Waffle is pinned to the commit in `peerDependencies.waffle` (`package.json`),
-currently `c1cb67c300439af24335d0b2ec481bfb52f79a01`, for both the required peer
-and the development dependency. Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/c1cb67c300439af24335d0b2ec481bfb52f79a01/docs/wasi-libc.md)
+Waffle's required peer and development dependency select the same release archive.
+`sources.lock.json` records its source commit and the builder/scanner hashes.
+Its [`docs/wasi-libc.md`](https://github.com/ShaulLavo/waffle/blob/62d08fcb8091bc4d31220f8250b943ea858d6e15/docs/wasi-libc.md)
 is the shared contract; bash-web does not fork it.
 
 Before guest instantiation, Waffle reserves every inherited target and places
@@ -51,7 +51,11 @@ and fd 10 with inherited fds 3–9; a sparse high binding does not push it highe
 Guest-visible inherited numbers and shared open descriptions are preserved.
 No shell adapter relocates preopens after instantiation.
 
-The installed `node_modules/waffle/scripts/build-wasi-libc.sh` verifies the SDK
+`scripts/waffle-release-inputs.ts` always stages the builder and patch from that
+exact source into `.build/waffle-inputs/<revision>/packages/waffle/`, verifying
+both hashes and the installed runtime's version and builder identity. It does
+not write into `node_modules` or fall back between archive layouts. The builder
+verifies the SDK
 revision and source archive checksum and applies the one shared patch. It needs
 wasi-sdk **34.0**, CMake **3.26+**, Ninja, curl, tar, patch, sha256sum, Linux
 setsid and GNU timeout; bash-web's cache serialization also needs flock. See
@@ -77,7 +81,7 @@ no-checkpoint CPU-loop behavior outside the explicit finite probe commands.
 
 ## Build and artifact verification
 
-`scripts/wasi-build.ts` is original build tooling. It invokes the installed
+`scripts/wasi-build.ts` is original build tooling. It invokes the verified staged
 Waffle builder and caches a sysroot under `.build/wasi-libc/<recipe-hash>/`.
 The identity includes the SDK path/version and Waffle's builder/patch bytes;
 a success receipt plus `libc.a` is required before reuse. An unverified output

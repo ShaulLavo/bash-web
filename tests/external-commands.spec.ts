@@ -515,3 +515,30 @@ test("sh and bash run the shell guest as ordinary programs on PATH", async ({ pa
   await ready(page);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
 });
+
+test("sh -c keeps its commands in the shell's own job, so Ctrl+C reaches them", async ({
+  page,
+}) => {
+  await open(page);
+  await command(
+    page,
+    `sh -c 'test-guest job; test-guest job; test-spin SH_CHILD_STARTED; echo BAD_AFTER_INTERRUPT'`,
+  );
+  await output(page, "SH_CHILD_STARTED");
+  const jobs = await page.evaluate(() =>
+    window.bashWeb
+      ?.readLines()
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("JOB:")),
+  );
+  expect(jobs).toHaveLength(2);
+  expect(jobs?.[0]).toBe(jobs?.[1]);
+  await page.keyboard.press("Control+c");
+  await ready(page);
+  await command(page, "echo SH_INTERRUPT:$?");
+  await output(page, "SH_INTERRUPT:130");
+  expect(
+    await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())),
+  ).not.toContain("BAD_AFTER_INTERRUPT");
+  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+});

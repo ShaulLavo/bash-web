@@ -99,6 +99,8 @@ mod guest {
                 state.cwd = cwd;
             }
         }
+        // Only an interactive shell gives each command its own job; `-c` and scripts keep theirs.
+        runtime.set_job_control(matches!(startup, Startup::Interactive));
         let fds = runtime.take_stdio().unwrap_or_else(|error| report(error));
         session
             .set_descriptors(fds)
