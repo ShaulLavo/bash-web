@@ -85,7 +85,7 @@
     "check:duplicates": "node scripts/check-duplicates.mjs",
     "check:rust": "node scripts/check-rust-quality.mjs",
     "test:quality-gates": "node --test scripts/test-quality-gates.mjs",
-    "test:family-routes": "bun test ./scripts/test-family-routes.ts",
+    "test:family-routes": "node scripts/build-node-harness.ts && node --test scripts/test-family-routes.ts",
     "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
