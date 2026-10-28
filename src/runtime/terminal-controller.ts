@@ -58,7 +58,11 @@ function liveState(state: State | undefined): boolean {
   try {
     return !readOutcome(state.signals.outcome);
   } catch (error) {
-    if (error instanceof ProcessError && error.errno === ProcessErrno.SRCH) return false;
+    if (
+      error instanceof ProcessError &&
+      (error.errno === ProcessErrno.SRCH || error.errno === ProcessErrno.CHILD)
+    )
+      return false;
     throw error;
   }
 }
@@ -83,7 +87,13 @@ export function createTerminalController(
         throw new Error("Shell terminal root stopped");
     },
   });
-  const tasks = createTerminalTasks(failed);
+  const tasks = createTerminalTasks((error) => {
+    if (runtime.disposed || !liveState(state)) {
+      tasks.stop();
+      return;
+    }
+    failed(error);
+  });
   const directory = workerProcessDirectoryId(root);
   let destinations = outputs.get(runtime);
   if (!destinations) outputs.set(runtime, (destinations = new Map()));

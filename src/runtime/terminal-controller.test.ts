@@ -18,6 +18,7 @@ import { ProcessIdentityAllocator } from "waffle/proc/identity";
 import { ExecutableRegistry } from "waffle/proc/registry";
 import { ProcessTable } from "waffle/proc/table";
 import { requestSignal } from "waffle/proc/signals";
+import { claimOutcome, readOutcome } from "waffle/proc/outcome";
 import type { ProcessContext } from "waffle/proc/types";
 import {
   createWorkerProcessTransport,
@@ -40,6 +41,7 @@ async function changed(cells: Int32Array, index: number) {
   }
 }
 type FixtureOptions = {
+  expectedFailures?: readonly unknown[];
   launch?(process: ProcessContext): void;
   before?: RootDescendantPreparation["run"];
   after?: RootDescendantPreparation["run"];
@@ -77,7 +79,8 @@ async function fixture(context: TestContext, options: FixtureOptions = {}) {
     capacity: 64,
   });
   const bridge = new SharedBridge();
-  const controller = createTerminalController({ disposed: false }, root, bridge, (error) =>
+  const runtime = { disposed: false };
+  const controller = createTerminalController(runtime, root, bridge, (error) =>
     failures.push(error),
   );
   controller.bind(broker);
@@ -157,7 +160,7 @@ async function fixture(context: TestContext, options: FixtureOptions = {}) {
     await controller.quiesce();
     attachment.dispose();
     descriptors.dispose();
-    assert.deepEqual(failures, []);
+    assert.deepEqual(failures, options.expectedFailures ?? []);
   });
   return {
     root,
@@ -172,6 +175,8 @@ async function fixture(context: TestContext, options: FixtureOptions = {}) {
     start,
     flush,
     launched,
+    failures,
+    runtime,
     beforeStop,
   };
 }
@@ -588,4 +593,75 @@ test("exit after committed editor retirement reconciles the removed member witho
   assert.equal(removals, 0, "a committed retired group already removed this membership");
   assert.equal(f.bridge.send(Uint8Array.of(65)), 1);
   assert.equal(root.resolve(0).tryRead!([new Uint8Array(1)]), 1);
+});
+
+function holdControl(context: TestContext, authority: RootDescendantPreparation["terminal"]) {
+  let reached!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = authority.control.bind(authority);
+  context.mock.method(authority, "control", async (...args: Parameters<typeof run>) => {
+    reached();
+    await blocked;
+    return run(...args);
+  });
+  return { started, release };
+}
+
+for (const operation of ["cleanup", "discard"] as const) {
+  test(`root outcome claimed during ${operation} keeps normal exit free of task failure`, async (context) => {
+    const f = await fixture(context);
+    const child = f.reserve();
+    await f.start(child);
+    const held = holdControl(context, f.authority);
+    if (operation === "cleanup") f.supervisor.exit(child.pid, 0);
+    else {
+      f.bridge.interrupt();
+      f.bridge.discardInput();
+    }
+    await held.started;
+    const winner = claimOutcome(workerProcessState(f.root).signals.outcome, {
+      kind: "exited",
+      code: 0,
+    });
+    held.release();
+    // The real control's not-entered rejection and the task catch are microtasks in this turn.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(winner.kind, "exited");
+    assert.equal(winner.code, 0);
+    assert.equal(readOutcome(workerProcessState(f.root).signals.outcome)?.code, 0);
+    assert.deepEqual(f.failures, [], "a claimed root exit is not a new signalFailure");
+    assert.equal(f.failures[0], undefined, "normal root error remains unset");
+  });
+}
+
+test("an unexpected task failure while the root is live still reaches the root failure boundary", async (context) => {
+  const failure = new Error("Unexpected live control failure");
+  const f = await fixture(context, { expectedFailures: [failure] });
+  context.mock.method(f.authority, "control", async () => {
+    throw failure;
+  });
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
+  assert.deepEqual(f.failures, [failure]);
+});
+
+test("runtime disposal before task completion is shutdown rather than a new root failure", async (context) => {
+  const f = await fixture(context);
+  const held = holdControl(context, f.authority);
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await held.started;
+  f.runtime.disposed = true;
+  held.release();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
+  assert.deepEqual(f.failures, []);
 });
