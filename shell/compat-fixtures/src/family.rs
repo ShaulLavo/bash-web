@@ -71,15 +71,16 @@ impl Parts {
         }
     }
     fn grep(self) -> waffle_grep::Invocation {
+        let invocation = self.core();
         waffle_grep::Invocation {
-            args: self.args,
-            env: self.env,
-            cwd: self.cwd,
-            fds: self.fds,
+            args: invocation.args,
+            env: invocation.env,
+            cwd: invocation.cwd,
+            fds: invocation.fds,
             context: waffle_grep::Context {
-                cancel: self.cancel,
-                filesystem: self.filesystem,
-                line_bytes: self.line_bytes,
+                cancel: invocation.context.cancel,
+                filesystem: invocation.context.filesystem,
+                line_bytes: invocation.context.line_bytes,
             },
         }
     }
