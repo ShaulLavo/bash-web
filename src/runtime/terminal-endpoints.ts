@@ -57,7 +57,7 @@ export function createShellTerminals(
     policy,
   });
   const controller = terminalControls(attachment.resolve(0))!;
-  let pendingMode: TerminalMode | undefined = root ? "raw" : "cooked";
+  let pendingMode: TerminalMode | undefined = "raw";
   const prepare = () => {
     if (root && Atomics.load(root.state, control.cancel) === 2) return;
     const phase = root ? Atomics.load(root.state, control.phase) : 2;

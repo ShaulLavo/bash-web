@@ -124,7 +124,11 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
       retired: cleanup,
     });
     accepted = true;
-    handle = service.launchWorker(context, { ...options, cleanup });
+    handle = service.launchWorker(context, {
+      ...options,
+      request: { ...options.request, shellOutput: shellTerminalOutput(runtime, transport) },
+      cleanup,
+    });
     return handle;
   } catch (error) {
     // No local worker ownership exists. An accepted broker controller and retained
@@ -153,9 +157,6 @@ export function guestLauncher(
           : { ...context.request.env, PWD: context.request.cwd },
         interruptible: context.interruptible,
         memoryUsage: new SharedArrayBuffer(8),
-        shellOutput: service.transportFor(context.pid)
-          ? shellTerminalOutput(runtime, service.transportFor(context.pid)!)
-          : undefined,
       },
       wake() {},
     });

@@ -37,6 +37,7 @@ import { createShell } from "../shell";
 import { runtimeSnapshot } from "./diagnostics";
 import { registerShell } from "./shell-host";
 import { createStartupDiagnostics } from "./startup-diagnostics";
+import { launchTerminalWorker } from "./worker-launcher";
 
 function quiesceFilesystem(identity: FilesystemIdentity): Promise<void> {
   revokeFilesystem(identity);
@@ -708,7 +709,7 @@ test("shell facades borrow one page runtime and dispose only their own process t
   assert.equal(host.terminated, 2);
 });
 
-test("facade disposal joins its adapter child cleanup behind a held fence, not another shell", async (context) => {
+test("direct terminal child gets owned output and cleanup stays behind its fence", async (context) => {
   const host = fixture(context);
   let releaseFence!: () => void;
   const fence = new Promise<void>((resolve) => {
@@ -744,6 +745,9 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
     };
     const pid = client.spawn(shell.process.pid, request);
     child.data = { filesystem: createFilesystemIdentity(undefined, 1024 * 1024) };
+    const metadata = rootTransport.data;
+    assert.ok(metadata && typeof metadata === "object" && "terminalContext" in metadata && "terminalInput" in metadata);
+    child.data = { ...child.data as object, terminalContext: metadata.terminalContext, terminalInput: metadata.terminalInput };
     let terminateChild!: () => Promise<void>;
     let stopped = false;
     const childService = {
@@ -752,6 +756,7 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
       },
       registerController() {},
       launchWorker(_context: ProcessContext, options: WorkerLaunchOptions<ShellWorkerRequest>) {
+        assert.equal(options.request.shellOutput, rootRequest.terminal);
         terminateChild = async () => {
           await fence;
           stopped = true;
@@ -760,17 +765,14 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
         return { terminate: terminateChild };
       },
     } as unknown as ProcessService;
-    await host.adapters.get("bash-web:preview1")!(
+    launchTerminalWorker<ShellWorkerRequest>(host.runtime, childService,
       {
-        ...({
           pid,
           module: rootRequest.module,
           interruptible: false,
           request,
-        } as unknown as ProcessContext),
-        identity: createProcessIdentity({ pid, parentPid: shell.process.pid }),
-      },
-      childService,
+      } as unknown as ProcessContext,
+      { workerUrl: host.options.workerUrl, request: { module: rootRequest.module, args: request.argv, env: request.env } },
     );
     const kill = host.service.killJob.bind(host.service);
     host.service.killJob = async (job, signal, reserved) => {

@@ -156,7 +156,7 @@ export function createTerminalController(
   watch();
 
   const createGroup = (process: State): Group => {
-    const group = must(producer.createGroup("cooked"));
+    const group = must(producer.createGroup("raw"));
     const record: Group = { group, members: new Map(), jobs: new Map(), active: true };
     if (process.jobForeground && process.jobOwner === root.pid) {
       record.rootMember = must(producer.admitExisting(group, root.pid)).member;
