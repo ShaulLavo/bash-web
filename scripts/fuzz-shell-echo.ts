@@ -60,7 +60,7 @@ export function cases() {
   return result;
 }
 type Case = ReturnType<typeof cases>[number];
-type Options = FuzzOptions & { replays: string[] };
+type Options = FuzzOptions & { replays: string[]; oracle: string };
 export function fingerprint() {
   const hash = createHash("sha256");
   for (const name of [
@@ -91,6 +91,7 @@ async function main() {
       shell: { type: "string" },
       replay: { type: "string" },
       record: { type: "string" },
+      oracle: { type: "string" },
       output: { type: "string" },
     },
   });
@@ -102,6 +103,7 @@ async function main() {
     replays: values.replay ? [resolve(values.replay)] : [],
     shell: values.shell,
     record: values.record,
+    oracle: values.oracle ?? "/usr/bin/bash",
     output: values.output,
   };
   const scratch = mkdtempSync(resolve(process.env.TMPDIR ?? "/work/tmp", "echo-"));
@@ -129,7 +131,7 @@ async function measure(options: Options, waffle: boolean) {
     : undefined;
   if (!recorded)
     assert.match(
-      execFileSync("/usr/bin/bash", ["--version"], { encoding: "utf8" }),
+      execFileSync(options.oracle, ["--version"], { encoding: "utf8" }),
       /version 5\.3\.15\(1\)-release/,
     );
   const selected = cases();
@@ -138,9 +140,10 @@ async function measure(options: Options, waffle: boolean) {
   if (!waffle)
     assert.notEqual(
       realpathSync(shell),
-      realpathSync("/usr/bin/bash"),
+      realpathSync(options.oracle),
       "candidate must not be Bash itself",
     );
+  // A qualified scratch oracle keeps the original invocation name in diagnostics.
   const result = waffle
     ? await measureWaffle(options, shell, recorded)
     : await execute(selected, options, shell, recorded);
@@ -184,7 +187,7 @@ async function measureWaffle(
     if (options.interrupted) throw new Error("interrupted");
     const bash = recorded
       ? decode(recorded[index].bash)
-      : await run("/usr/bin/bash", item.script, options);
+      : await run(options.oracle, item.script, { ...options, argv0: "/usr/bin/bash" });
     assert.ok(healthy(bash), item.id);
     const actual = await runner(item.script);
     const candidate = {

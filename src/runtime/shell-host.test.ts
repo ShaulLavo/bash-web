@@ -78,6 +78,10 @@ function fixture(
     }
   };
   const service = {
+    workerMemory() {
+      live();
+      return [];
+    },
     async ready() {
       live();
       return {

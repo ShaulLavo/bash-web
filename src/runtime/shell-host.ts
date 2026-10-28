@@ -14,7 +14,12 @@ import {
 import type { RuntimeWorkerMessage } from "waffle/browser/worker";
 import { SharedBridge, control } from "../bridge";
 import type { RuntimeExit, RuntimeProcess, ShellOptions } from "../shell";
-import { observeProcessMessage, observeRoot, observeSupervisor } from "./diagnostics";
+import {
+  observeProcessMessage,
+  observeProcessService,
+  observeRoot,
+  observeSupervisor,
+} from "./diagnostics";
 import { processDirectoryCapacity } from "./limits";
 import {
   attachTerminal,
@@ -279,6 +284,7 @@ export async function startShell(
     if (runtime.disposed) throw new Error("Runtime is disposed");
     markStartup(options.onStartupStage, "shell-processes-requested");
     service = await pending(() => runtime.processes());
+    observeProcessService(runtime, service);
     markStartup(options.onStartupStage, "shell-processes-resolved");
     markStartup(options.onStartupStage, "shell-root-adopt-requested");
     await service.adoptRuntimeRoot(transport, {

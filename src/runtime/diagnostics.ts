@@ -1,5 +1,5 @@
 // Original adapter telemetry. These are borrowed observations, not a second process service.
-import type { Runtime, RuntimeSupervisor } from "waffle";
+import type { ProcessService, Runtime, RuntimeSupervisor } from "waffle";
 import { ProcessErrno, ProcessError } from "waffle/proc/types";
 import {
   attachPipeController,
@@ -7,6 +7,7 @@ import {
   type PipeEndpointHandle,
 } from "waffle/proc/pipes";
 import {
+  workerProcessDirectoryId,
   workerProcessSlots,
   workerProcessState,
   type WorkerProcessMessage,
@@ -25,6 +26,7 @@ interface RootObservation {
 interface Observations {
   roots: Map<number, RootObservation>;
   guests: Map<number, { memory?: SharedArrayBuffer }>;
+  processes?: ProcessService;
   supervisor?: RuntimeSupervisor;
   droppedTerminalBytes: number;
 }
@@ -59,6 +61,9 @@ function forRuntime(runtime: Runtime): Observations {
 }
 export function observeSupervisor(runtime: Runtime, supervisor: RuntimeSupervisor): void {
   forRuntime(runtime).supervisor = supervisor;
+}
+export function observeProcessService(runtime: Runtime, service: ProcessService): void {
+  forRuntime(runtime).processes = service;
 }
 export function observeRoot(
   runtime: Runtime,
@@ -132,8 +137,35 @@ export function observeProcessMessage(runtime: Runtime, message: WorkerProcessMe
     }
   }
 }
-function memoryBytes(memory?: SharedArrayBuffer): number {
-  return memory ? Number(Atomics.load(new BigInt64Array(memory), 0)) : 0;
+function memoryBytes(memory: SharedArrayBuffer): number;
+function memoryBytes(memory?: SharedArrayBuffer): number | null;
+function memoryBytes(memory?: SharedArrayBuffer): number | null {
+  return memory ? Number(Atomics.load(new BigInt64Array(memory), 0)) : null;
+}
+function rootGuests(
+  observed: Observations,
+  root: RootObservation,
+  rootPid: number,
+  identities: ReadonlySet<number>,
+) {
+  const directory = workerProcessDirectoryId(root.transport);
+  const guests = new Map<
+    number,
+    { memoryBytes: number | null; source: "adapter" | "waffle" | "adapter+waffle" }
+  >();
+  for (const sample of observed.processes?.workerMemory() ?? []) {
+    if (sample.rootPid !== rootPid || sample.directory !== directory) continue;
+    guests.set(sample.pid, { memoryBytes: sample.bytes, source: "waffle" });
+  }
+  for (const [pid, info] of observed.guests) {
+    if (!identities.has(pid)) continue;
+    const published = guests.get(pid);
+    guests.set(pid, {
+      memoryBytes: info.memory ? memoryBytes(info.memory) : (published?.memoryBytes ?? null),
+      source: published ? "adapter+waffle" : "adapter",
+    });
+  }
+  return Array.from(guests, ([pid, guest]) => ({ pid, ...guest }));
 }
 /** Metadata-only snapshot for embeddings and tests. No filesystem or supervisor is created. */
 export function runtimeSnapshot(runtime: Runtime) {
@@ -152,14 +184,14 @@ export function runtimeSnapshot(runtime: Runtime) {
           const live = own.filter((record) => !record.result);
           // Keep an immediate snapshot exact; the autonomous sweep owns reclamation.
           for (const [id, pipe] of root.pipes) if (pipe.closed) root.pipes.delete(id);
+          const guests = rootGuests(observed, root, pid, identities);
           return {
             pid,
             worker: "Worker",
             directoryBytes: root.transport.directory.byteLength,
             memoryBytes: memoryBytes(root.memory),
             droppedTerminalBytes: root.droppedTerminalBytes,
-            workers: Array.from(observed.guests.keys()).filter((guest) => identities.has(guest))
-              .length,
+            workers: guests.length,
             processes: own.length,
             liveProcesses: live.length,
             liveJobs: new Set(live.map((record) => record.job)).size,
@@ -169,10 +201,7 @@ export function runtimeSnapshot(runtime: Runtime) {
             pipeCapacity: runtimePipeOptions.capacity,
             pipeMaxReaders: runtimePipeOptions.maxReaders,
             pipeMaxWriters: runtimePipeOptions.maxWriters,
-            guests: Array.from(observed.guests, ([guest, info]) => ({
-              pid: guest,
-              memoryBytes: memoryBytes(info.memory),
-            })).filter((guest) => identities.has(guest.pid)),
+            guests,
             records: own.map((record) => ({
               pid: record.pid,
               parentPid: record.parentPid,
