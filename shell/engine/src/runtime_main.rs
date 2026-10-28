@@ -83,7 +83,6 @@ mod guest {
             .unwrap_or_else(|errno| report(format!("signal setup errno {errno}")));
         let executor = Executor::new();
         let runtime = Runtime::new(abi, executor.clone());
-        runtime.set_job_control(matches!(startup, Startup::Interactive));
         let session = Rc::new(Session::new(
             executor.clone(),
             Rc::new(runtime.clone()),
@@ -100,6 +99,8 @@ mod guest {
                 state.cwd = cwd;
             }
         }
+        // Only an interactive shell gives each command its own job; `-c` and scripts keep theirs.
+        runtime.set_job_control(matches!(startup, Startup::Interactive));
         let fds = runtime.take_stdio().unwrap_or_else(|error| report(error));
         session
             .set_descriptors(fds)

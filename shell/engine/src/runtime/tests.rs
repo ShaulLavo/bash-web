@@ -112,6 +112,15 @@ impl Fake {
             output,
         })
     }
+    /// A held job, or one with a member that has not exited.
+    fn job_live(&self, job: u32) -> bool {
+        self.held_jobs.borrow().contains(&job)
+            || self
+                .children
+                .borrow()
+                .values()
+                .any(|child| child.job == job && child.status.get().is_none())
+    }
     fn retained_child(&self, pid: u32) -> Result<std::cell::Ref<'_, FakeChild>, i32> {
         let child =
             std::cell::Ref::filter_map(self.children.borrow(), |children| children.get(&pid))
@@ -244,14 +253,7 @@ impl Abi for Fake {
         // even before wait_job reaps it. Do not hide illegal sequential joins.
         if request.job > 0 {
             let job = request.job as u32;
-            if self.reaped_jobs.borrow().contains(&job)
-                || !(job == SHELL_JOB
-                    || self.held_jobs.borrow().contains(&job)
-                    || self
-                        .children
-                        .borrow()
-                        .values()
-                        .any(|child| child.job == job && child.status.get().is_none()))
+            if self.reaped_jobs.borrow().contains(&job) || !(job == SHELL_JOB || self.job_live(job))
             {
                 return Err(12);
             }
@@ -471,13 +473,7 @@ impl Abi for Fake {
         if let Some(&errno) = self.wait_job_errors.borrow().get(&job) {
             return Err(errno);
         }
-        if self.held_jobs.borrow().contains(&job)
-            || self
-                .children
-                .borrow()
-                .values()
-                .any(|child| child.job == job && child.status.get().is_none())
-        {
+        if self.job_live(job) {
             return Err(AGAIN);
         }
         let result = self
