@@ -23,13 +23,14 @@ function must<T>(result: TerminalResult<T>): T {
   return result.value;
 }
 
-function fixture(context: TestContext, capacity?: number) {
+function fixture(context: TestContext, capacity?: number, initialMode: "raw" | "cooked" = "raw") {
   const root = createWorkerProcessTransport({ capacity: 8 });
   const producer = createTerminalProducer({
     controller: root,
     geometry: { columns: 80, rows: 24 },
     checkActive() {},
     capacity,
+    initialMode,
   });
   context.after(() => producer.dispose());
   const attach = (process: WorkerProcessTransport, metadata: TerminalMetadata) => {
@@ -188,10 +189,8 @@ test("producer acquisition rejects a child controller without publishing termina
 });
 
 test("UI discard drains the shared cursor under a real raw lease without treating cancel as discard", (context) => {
-  const { producer, stream } = fixture(context);
+  const { producer, stream } = fixture(context, undefined, "cooked");
   const controls = terminalControls(stream)!;
-  const snapshot = must(controls.snapshot());
-  must(controls.setMode({ expected: snapshot.selection, mode: "cooked" }));
   assert.equal(producer.pushKeyboard(Uint8Array.of(65, 66, 10)).kind, "ok");
   const byte = new Uint8Array(1);
   assert.equal(stream.tryRead!([byte]), 1);
@@ -205,10 +204,8 @@ test("UI discard drains the shared cursor under a real raw lease without treatin
 });
 
 test("restoring an editor creates an actual raw group instead of restoring its saved cooked mode", (context) => {
-  const { producer, stream } = fixture(context);
+  const { producer, stream } = fixture(context, undefined, "cooked");
   const controls = terminalControls(stream)!;
-  const snapshot = must(controls.snapshot());
-  must(controls.setMode({ expected: snapshot.selection, mode: "cooked" }));
   must(producer.restoreEditor());
   assert.equal(must(controls.snapshot()).mode, "raw");
   producer.pushKeyboard(Uint8Array.of(68));

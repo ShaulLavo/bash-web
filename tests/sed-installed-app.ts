@@ -103,20 +103,27 @@ async function rejections() {
   }
   results.push({ name: "reject all in-place forms before writes", details: "4 forms" });
 }
+async function sendKeys(current: Shell, command: string) {
+  const bytes = encoder.encode(command);
+  let offset = 0;
+  while (offset < bytes.length) {
+    offset += current.terminal.send(bytes.subarray(offset));
+    if (offset < bytes.length) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
 async function interactive() {
   const current = await start();
-  const send = (command: string) =>
-    assert(current.terminal.send(encoder.encode(command)), "terminal input full");
+  const send = (command: string) => sendKeys(current, command);
   try {
     await until(() => text().includes("sed-prompt> "), "initial prompt");
     output = [];
-    send("sed -u 's/foo/ONE/'\n");
+    await send("sed -u 's/foo/ONE/'\n");
     await until(
       () => current.diagnostics().roots.some((root) => root.workers === 1),
       "streaming guest",
     );
     output = [];
-    send("foo\n");
+    await send("foo\n");
     await until(() => text().includes("ONE\n"), "output before EOF");
     assert(
       current.diagnostics().roots.some((root) => root.workers === 1),
@@ -126,7 +133,7 @@ async function interactive() {
     current.interrupt();
     await until(() => text().includes("sed-prompt> "), "read-wait interrupt recovery");
     output = [];
-    send("printf '__status:%s__\\n' \"$?\"\n");
+    await send("printf '__status:%s__\\n' \"$?\"\n");
     await until(() => text().includes("__status:130__"), "read-wait status");
     results.push({ name: "Ctrl-C read wait and shell reuse", details: text() });
 
@@ -135,7 +142,7 @@ async function interactive() {
       "while :; do printf 'x\\n'; done | sed -u ''",
     ]) {
       output = [];
-      send(`${command}\n`);
+      await send(`${command}\n`);
       await until(
         () => current.diagnostics().roots.some((root) => root.workers === 1),
         "interrupt target",
@@ -147,7 +154,7 @@ async function interactive() {
       drain = setInterval(text, 5);
       await until(() => text().includes("sed-prompt> "), "Ctrl-C prompt");
       output = [];
-      send("printf '__status:%s__\\n' \"$?\"\n");
+      await send("printf '__status:%s__\\n' \"$?\"\n");
       await until(() => text().includes("__status:130__"), "Ctrl-C status and recovery");
       await until(
         () =>

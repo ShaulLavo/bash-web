@@ -109,6 +109,17 @@ export function createTerminalController(
   const members = new Map<number, Group>();
   const states = new Map<number, State>();
   const exited = new Set<number>();
+  const resetEditor = () => {
+    editor.active = false;
+    editor = {
+      group: producer.editor,
+      members: new Map(),
+      jobs: new Map(),
+      rootMember: producer.rootMember,
+      active: true,
+    };
+    groups.set(state.job, editor);
+  };
   const disconnect = bridge.connectInput({
     push(bytes) {
       const result = producer.pushKeyboard(bytes);
@@ -227,15 +238,7 @@ export function createTerminalController(
       return false;
     }
     if (target === editor) {
-      editor.active = false;
-      editor = {
-        group: producer.editor,
-        members: new Map(),
-        jobs: new Map(),
-        rootMember: producer.rootMember,
-        active: true,
-      };
-      groups.set(state.job, editor);
+      resetEditor();
     }
     selected = target.active ? target : editor;
     if (deferred?.active) {
@@ -277,15 +280,7 @@ export function createTerminalController(
       return true;
     }
     if (!completed(producer.restoreEditor(), retryDiscard)) return false;
-    editor.active = false;
-    editor = {
-      group: producer.editor,
-      members: new Map(),
-      jobs: new Map(),
-      rootMember: producer.rootMember,
-      active: true,
-    };
-    groups.set(state.job, editor);
+    resetEditor();
     selected = editor;
     return true;
   };

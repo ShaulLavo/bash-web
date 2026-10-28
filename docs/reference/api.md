@@ -115,17 +115,18 @@ Constants: `INPUT_CAPACITY = 65536` bytes, `OUTPUT_CAPACITY = 262144` bytes. The
 | Member | Meaning |
 | ------ | ------- |
 | `state: Int32Array` | The control block. Index it with `control`. |
-| `input`, `output` | The two rings, as `Uint8Array`. |
-| `send(bytes): boolean` | Append to the input ring. Returns `false` and writes nothing when the ring cannot hold all of `bytes`. |
-| `receive(limit): Uint8Array` | Take up to `limit` input bytes. |
+| `input`, `output` | Standalone input storage and the output ring, as `Uint8Array`. A running shell routes input to its public Waffle `TerminalInput`. |
+| `send(bytes): number` | Accept a prefix of keyboard bytes. Retain and retry `bytes.subarray(accepted)`; zero means backpressure or an interrupt barrier. |
+| `receive(limit): Uint8Array` | Read standalone bridge input; running shell input is consumed only by its admitted terminal endpoints. |
 | `drain(limit = 32768): Uint8Array` | Take up to `limit` output bytes. |
 | `availableInput(): number` | Unread input bytes. |
 | `signal()` | Wake the other side. |
 | `interrupt()` | Set the cancel flag and wake. |
 | `cancelled()`, `closed()` | Read the cancel and closed flags. |
 | `close()` | Set the closed flag and wake. |
-| `discardInput(): boolean` | Drop queued input without touching output. `false` when the input lock is held. |
-| `resumeInput()` | Clear the cancel flag. |
+| `discardInput(): boolean` | Request queued-input discard without touching output. A running shell returns `false` until its public-lease drain and editor barrier complete. |
+| `resumeInput()` | Resume standalone input; an active shell retains its barrier until discard is acknowledged. |
+| `resize(columns, rows)` | Publish bridge dimensions and the Waffle terminal geometry. |
 | `write(bytes): number` | Blocking write for the shell worker only. Returns the bytes written. |
 | `tryRead(chunks)`, `tryWrite(chunks)` | Non-blocking endpoint calls for guest processes. They return a negative errno on contention or closure. |
 
