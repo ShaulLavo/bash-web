@@ -110,10 +110,10 @@
     "test:python:browser": "node scripts/test-own-shell-python.ts --browser"
   },
   "dependencies": {
-    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.5/waffle-python-0.0.5.tgz",
-    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.4/waffle-base-0.0.4.tgz",
-    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.5/waffle-git-0.0.5.tgz",
-    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.4/waffle-ripgrep-0.0.4.tgz"
+    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.6/waffle-python-0.0.6.tgz",
+    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.6/waffle-base-0.0.6.tgz",
+    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.6/waffle-git-0.0.6.tgz",
+    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.6/waffle-ripgrep-0.0.6.tgz"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
@@ -128,11 +128,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.96/waffle-0.0.96.tgz",
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.98/waffle-0.0.98.tgz",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.96/waffle-0.0.96.tgz"
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.98/waffle-0.0.98.tgz"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -142,7 +142,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.96": true
+    "waffle@0.0.98": true
   },
   "trustedDependencies": [
     "waffle",

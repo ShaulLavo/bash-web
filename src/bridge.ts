@@ -154,7 +154,14 @@ export class SharedBridge {
     const bytes = copyFromRing(this.output, read, Math.min(limit, available));
     Atomics.store(this.state, control.outputRead, read + bytes.length);
     if (bytes.length) {
-      for (const listener of this.drainListeners) listener();
+      // Listener mutation applies to the next actual drain, not this snapshot.
+      for (const listener of Array.from(this.drainListeners)) {
+        try {
+          listener();
+        } catch (error) {
+          console.error("Shared terminal output drain listener failed", error);
+        }
+      }
       this.signal();
     }
     return bytes;

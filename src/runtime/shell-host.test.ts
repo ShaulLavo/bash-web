@@ -58,7 +58,7 @@ function fixture(
     number,
     { transport: WorkerProcessTransport; options: RuntimeRootOptions }
   >();
-  const workers: Worker[] = [];
+  const workers: WeakRef<Worker>[] = [];
   const reaped: FilesystemIdentity[] = [];
   const requests: unknown[] = [];
   let requestPosted!: () => void;
@@ -227,7 +227,7 @@ function fixture(
       });
     }
     constructor() {
-      workers.push(this as unknown as Worker);
+      workers.push(new WeakRef(this as unknown as Worker));
       if (failConstructor) throw new Error("Worker construction refused");
     }
     terminate() {
@@ -686,7 +686,7 @@ test("foreign terminal output drops are surfaced in runtime diagnostics", async 
   const error = context.mock.method(console, "error", () => {});
   const shell = await createShell({ ...host.options, terminal });
   const bytes = new Uint8Array(OUTPUT_CAPACITY + 1).fill(19);
-  host.workers[0]!.onmessage?.(
+  host.workers[0]!.deref()!.onmessage?.(
     new MessageEvent("message", { data: { type: "stdout", data: bytes } }),
   );
   assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 1);
@@ -700,25 +700,55 @@ test("foreign terminal output drops are surfaced in runtime diagnostics", async 
   assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 1);
 });
 
-test("bounded root output resumes only after actual terminal drains", async (context) => {
-  const host = fixture(context);
+test("drain delivers bytes and wakes observers when a listener throws", (context) => {
+  const terminal = new SharedBridge();
+  const bytes = Uint8Array.of(65, 66);
+  terminal.tryWrite([bytes]);
+  const error = new Error("observer failed");
+  const errors = context.mock.method(console, "error", () => {});
+  const calls: string[] = [];
+  const wake = Atomics.load(terminal.state, control.wake);
+  const stopFirst = terminal.onOutputDrained(() => {
+    calls.push("first");
+    stopFirst();
+    terminal.onOutputDrained(() => {
+      throw error;
+    });
+    throw error;
+  });
+  terminal.onOutputDrained(() => calls.push("second"));
+  assert.deepEqual(terminal.drain(), bytes);
+  assert.deepEqual(calls, ["first", "second"]);
+  assert.equal(Atomics.load(terminal.state, control.wake), wake + 1);
+  assert.equal(errors.mock.callCount(), 1);
+  assert.equal(errors.mock.calls[0]!.arguments[1], error);
+  assert.deepEqual(terminal.drain(), new Uint8Array());
+});
+
+async function backpressuredRoot(host: ReturnType<typeof fixture>, bytes: Uint8Array) {
   const terminal = new SharedBridge();
   const shell = await createShell({ ...host.options, terminal });
   const root = host.roots.get(shell.process.pid)!;
-  const bytes = new Uint8Array(400000);
-  for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;
-  assert.equal(root.options.output, undefined);
   assert.equal(root.options.tryOutput!(1, bytes), OUTPUT_CAPACITY);
-  assert.equal(root.options.tryOutput!(1, Uint8Array.of(1)), 0);
-  assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 0);
-  const drained: number[] = [];
   let pending = bytes.subarray(OUTPUT_CAPACITY);
+  const drained: number[] = [];
   host.service.outputDrained = (pid) => {
     drained.push(pid);
     if (!pending.length) return;
     const accepted = root.options.tryOutput!(1, pending);
     pending = pending.subarray(accepted);
   };
+  return { terminal, shell, root, drained, pendingBytes: () => pending.length };
+}
+
+test("bounded root output resumes only after actual terminal drains", async (context) => {
+  const host = fixture(context);
+  const bytes = new Uint8Array(400000);
+  for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;
+  const { terminal, shell, root, drained, pendingBytes } = await backpressuredRoot(host, bytes);
+  assert.equal(root.options.output, undefined);
+  assert.equal(root.options.tryOutput!(1, Uint8Array.of(1)), 0);
+  assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 0);
   const received: Uint8Array[] = [];
   let total = 0;
   while (total < bytes.length) {
@@ -728,7 +758,7 @@ test("bounded root output resumes only after actual terminal drains", async (con
     total += chunk.length;
     assert.equal(drained.length, received.length);
   }
-  assert.equal(pending.length, 0);
+  assert.equal(pendingBytes(), 0);
   assert.deepEqual(Buffer.concat(received.map((chunk) => Buffer.from(chunk))), Buffer.from(bytes));
   assert.ok(drained.every((pid) => pid === shell.process.pid));
   root.options.tryOutput!(1, Uint8Array.of(99));
@@ -736,6 +766,26 @@ test("bounded root output resumes only after actual terminal drains", async (con
   const calls = drained.length;
   terminal.drain();
   assert.equal(drained.length, calls);
+  assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 0);
+});
+
+test("retained root output drains after physical stop until actual retirement", async (context) => {
+  const host = fixture(context);
+  const bytes = new Uint8Array(OUTPUT_CAPACITY + 17).fill(42);
+  const { terminal, shell, root, drained, pendingBytes } = await backpressuredRoot(host, bytes);
+  // Runtime 98 retains the root and its output while a descendant remains alive.
+  host.service.rootExit = async () => {};
+  await shell.dispose();
+  assert.equal(drained.length, 0);
+  assert.deepEqual(terminal.drain(OUTPUT_CAPACITY), bytes.subarray(0, OUTPUT_CAPACITY));
+  assert.deepEqual(drained, [shell.process.pid]);
+  assert.equal(pendingBytes(), 0);
+  assert.deepEqual(terminal.drain(), bytes.subarray(OUTPUT_CAPACITY));
+  assert.deepEqual(drained, [shell.process.pid, shell.process.pid]);
+  root.options.retired!();
+  root.options.tryOutput!(1, Uint8Array.of(7));
+  terminal.drain();
+  assert.deepEqual(drained, [shell.process.pid, shell.process.pid]);
   assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 0);
 });
 

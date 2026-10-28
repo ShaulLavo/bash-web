@@ -232,13 +232,15 @@ export async function startShell(
   };
   const physicallyStop = () =>
     (physicallyStopped ??= (async () => {
-      stopDrain();
       unobserveExit();
       await quiesceTerminal(admission);
       worker?.terminate();
       filesystem.port.close();
       observation.stopped();
-      if (!accepted || retired) observation.retired();
+      if (!accepted || retired) {
+        stopDrain();
+        observation.retired();
+      }
       release();
     })());
   const clean = () => {
@@ -307,6 +309,7 @@ export async function startShell(
       wake: () => terminal.signal(),
       retired() {
         retired = true;
+        stopDrain();
         observation.retired();
       },
     });
