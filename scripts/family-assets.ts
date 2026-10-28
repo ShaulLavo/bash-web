@@ -29,6 +29,8 @@ const families = {
   sed: ["sed"],
 } as const;
 
+const cooperativeFamilies = new Set(["cat", "grep", "mkdir", "seq", "tail"]);
+
 const owners = new Map<string, string>();
 for (const [family, names] of Object.entries(families)) {
   for (const name of names) owners.set(name, `waffle-${family}`);
@@ -38,4 +40,8 @@ export function familyWasmPath(name: string): string {
   const owner = owners.get(name);
   if (!owner) throw new Error(`Unknown family program: ${name}`);
   return resolve(dirname(require.resolve(owner)), "../dist", `${name}.wasm`);
+}
+
+export function familyWasiAdapter(name: string): string | undefined {
+  return cooperativeFamilies.has(name) ? "waffle_program_support::runtime::wasi" : undefined;
 }

@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyCiArtifacts } from "./ci-artifacts.ts";
-import { familyWasmPath } from "./family-assets.ts";
+import { familyWasmPath, familyWasiAdapter } from "./family-assets.ts";
 import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
@@ -101,8 +101,8 @@ const helpers = execFileSync(
   { encoding: "utf8" },
 );
 assert.equal(helpers, "['a', 'b c']\n/home/fixture\nNone\n");
-const size = (label: string, path: string) => {
-  verifyWasiGuest(path);
+const size = (label: string, path: string, filesystemAdapter?: string) => {
+  verifyWasiGuest(path, undefined, filesystemAdapter);
   const bytes = readFileSync(path);
   const brotli = brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
   const gzip = gzipSync(bytes, { level: 9 }).length;
@@ -127,4 +127,4 @@ for (const name of [
   "uniq",
   "wc",
 ])
-  size(`Utility add-on ${name}`, familyWasmPath(name));
+  size(`Utility add-on ${name}`, familyWasmPath(name), familyWasiAdapter(name));

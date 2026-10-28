@@ -22,7 +22,6 @@ export function createShellFixtureRunner({ utilities = true }: { utilities?: boo
   return createWaffleRunner({
     modulePath: resolve(directory, "shell-runtime.wasm"),
     fixtureDirectory: directory,
-    ...(utilities ? { utilityDirectory: directory } : {}),
     installPrograms: utilities,
     tmp: "/tmp/spec",
     env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" },

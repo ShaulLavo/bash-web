@@ -131,7 +131,6 @@ if (recordPath) {
   const run = await createWaffleRunner({
     modulePath: resolve(directory, "shell-runtime.wasm"),
     fixtureDirectory: directory,
-    utilityDirectory: directory,
     tmp: env.TMP,
     env,
   });

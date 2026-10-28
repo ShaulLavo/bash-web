@@ -30,7 +30,6 @@ async function prepareBrowser() {
     "python-stdlib.json",
     "shell-runtime.wasm",
     "shell-worker.js",
-    "program-worker.js",
     "fs-worker.js",
   ]) {
     assert.ok(
@@ -49,6 +48,7 @@ async function prepareBrowser() {
     format: "esm",
     target: "esnext",
   });
+  assert.ok(existsSync("dist/program-worker.js"), "Missing generated dist/program-worker.js");
   copyFileSync("scripts/serve.mjs", "dist/serve.mjs");
   writeFileSync(
     "dist/python-tests.html",
