@@ -1,4 +1,6 @@
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import type { Runtime } from "waffle";
 import type { RuntimeWorkerMessage, RuntimeWorkerRequest } from "waffle/browser/worker";
 import type { ProgramPackage } from "waffle/programs";
@@ -11,7 +13,7 @@ export interface WaffleCaseOptions {
   readonly env: Readonly<Record<string, string>>;
   /** Directory holding the frozen oracle's argv.py/printenv.py fixture guests. */
   readonly fixtureDirectory: string;
-  /** Separately built utility programs. Omitted for the unchanged-main control. */
+  /** Optional archived utility directory; published package assets are used by default. */
   readonly utilityDirectory?: string;
 }
 export interface WaffleCaseResult {
@@ -44,15 +46,18 @@ function compiled(path: string): Promise<WebAssembly.Module> {
   return module;
 }
 
-function localBasePackages(directory: string, waffle: typeof Api): ProgramPackage[] {
+function localBasePackages(directory: string | undefined, waffle: typeof Api): ProgramPackage[] {
   return waffle.basePackages.map((family) => ({
     ...family,
     programs: family.programs.map((program) => {
       const name = program.path.slice(program.path.lastIndexOf("/") + 1);
+      const wasm = program.wasm;
+      assert.ok(wasm, `Missing asset URL for ${name}`);
+      const path = directory ? `${directory}/${name}.wasm` : fileURLToPath(wasm);
       return {
         path: program.path,
         aliases: program.aliases,
-        source: async () => new Uint8Array(await readFile(`${directory}/${name}.wasm`)),
+        source: async () => new Uint8Array(await readFile(path)),
       };
     }),
   }));
@@ -85,7 +90,6 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
       cooperative: true,
     });
   }
-  if (options.utilityDirectory === undefined) return;
   const packages = localBasePackages(options.utilityDirectory, waffle);
   const launcher = waffle.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory));
   await waffle.installPrograms(runtime, packages, { launcher });

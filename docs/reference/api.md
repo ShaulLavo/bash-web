@@ -1,6 +1,6 @@
 # API reference
 
-The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, and `src/bridge.ts`. The package is private and not published. Import it from a checkout. For tasks, see [Embed a shell in a page](../guides/embed-in-a-page.md).
+The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, `src/bridge.ts`, and the optional Python/Git entries in `src/utilities/`. The package is private and not published. Import it from a checkout. For tasks, see [Embed a shell in a page](../guides/embed-in-a-page.md).
 
 ## Entry points
 
@@ -10,6 +10,8 @@ The TypeScript surface of bash-web, from `src/index.ts`, `src/shell.ts`, and `sr
 | --------- | ---- |
 | `bash-web` | `src/index.ts` |
 | `bash-web/shell` | `src/shell.ts` |
+| `bash-web/utilities/git` | `src/utilities/git.ts` |
+| `bash-web/utilities/python` | `src/utilities/python.ts` |
 
 `bash-web` re-exports: `createShell`; the types `RuntimeExit`, `RuntimeProcess`, `Shell`, `ShellOptions`; `installShellCommands`, `UtilityConflictError` and the types `ShellCommandOptions`, `ShellCommandsInstallation`; `SharedBridge`, `control`, `INPUT_CAPACITY`, `OUTPUT_CAPACITY`; `TerminalNewlines`; `runtimeSnapshot`; and the types `StartupObserver`, `StartupStage`, `StartupSnapshot`. `bash-web/shell` exports `createShell` and its types. The core entries import no utility.
 

@@ -1,14 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  copyFileSync,
-  cpSync,
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
@@ -22,7 +14,6 @@ import {
 async function prepareBrowser() {
   const { build } = await import("esbuild");
   mkdirSync("dist", { recursive: true });
-  cpSync("node_modules/@waffle/python/assets", "dist", { recursive: true });
   const shell = process.env.BASH_WEB_PYTHON_SHELL_WASM;
   if (shell) copyFileSync(shell, "dist/shell-runtime.wasm");
   for (const name of [
@@ -30,7 +21,6 @@ async function prepareBrowser() {
     "python-stdlib.json",
     "shell-runtime.wasm",
     "shell-worker.js",
-    "program-worker.js",
     "fs-worker.js",
   ]) {
     assert.ok(
@@ -39,11 +29,8 @@ async function prepareBrowser() {
     );
   }
   await build({
-    entryPoints: {
-      "python-tests": "scripts/measure-python.ts",
-      "program-worker": "waffle/browser/preview1-worker",
-    },
-    outdir: "dist",
+    entryPoints: ["scripts/measure-python.ts"],
+    outfile: "dist/python-tests.js",
     bundle: true,
     platform: "browser",
     format: "esm",

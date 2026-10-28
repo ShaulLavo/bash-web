@@ -19,7 +19,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./shell": "./src/shell.ts"
+    "./shell": "./src/shell.ts",
+    "./utilities/git": "./src/utilities/git.ts",
+    "./utilities/python": "./src/utilities/python.ts"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
@@ -69,7 +71,7 @@
     "test:installed-waffle": "node --test scripts/test-installed-waffle.mjs",
     "test:browser:package": "node --test scripts/test-browser-package.mjs",
     "build:worker": "node scripts/build-worker.mjs",
-    "prepare": "npm run build:worker",
+    "prepare": "npm run build:git && npm run build:worker && npm run notices:git",
     "test:git:browser": "node scripts/test-git-browser.ts",
     "build:test-guest": "node scripts/build-test-guest.mjs",
     "fuzz:shell-printf": "node scripts/fuzz-shell-printf.ts",
@@ -88,8 +90,8 @@
     "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
-    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
-    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/waffle-release-inputs.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-shell-wasi.ts scripts/wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts scripts/wasi-guest-path.ts scripts/test-wasi-guest-path.ts scripts/waffle-fixture-lifecycle.ts scripts/test-waffle-fixture-lifecycle.ts",
+    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts scripts/test-python-build.ts scripts/test-python-ci.ts",
+    "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/waffle-release-inputs.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-shell-wasi.ts scripts/wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts scripts/wasi-guest-path.ts scripts/test-wasi-guest-path.ts scripts/waffle-fixture-lifecycle.ts scripts/test-waffle-fixture-lifecycle.ts scripts/build-python.ts scripts/python-source.ts scripts/test-python-build.ts scripts/python-ci.ts scripts/test-python-ci.ts",
     "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
     "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
@@ -107,7 +109,23 @@
     "test:shell:completion:pending": "npm run build:node-harness && BASH_COMPLETION_PENDING=1 node --test scripts/test-own-shell-completion.ts",
     "test:shell:function-names:pending": "npm run build:node-harness && BASH_FUNCTION_NAMES_PENDING=1 node --test scripts/test-own-shell-function-names.ts",
     "prepare:python:browser": "node scripts/test-own-shell-python.ts --prepare-browser",
-    "test:python:browser": "node scripts/test-own-shell-python.ts --browser"
+    "test:python:browser": "node scripts/test-own-shell-python.ts --browser",
+    "build:git": "node scripts/build-git.ts",
+    "pack:git:tests": "node scripts/pack-git-tests.ts",
+    "notices:git": "node scripts/git-notices.ts",
+    "test:git:local": "npm run pack:git:tests && node scripts/test-git-local.ts && node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts scripts/test-git-review.ts",
+    "audit:git:fixture": "node scripts/test-git-local.ts",
+    "record:git:local": "node scripts/record-git-local.ts",
+    "build:python": "node scripts/build-python.ts",
+    "test:python:build": "node --test scripts/test-python-build.ts",
+    "test:python:unit": "node --test tests/python-payload.unit.ts"
+  },
+  "dependencies": {
+    "buffer": "6.0.3",
+    "diff": "8.0.2",
+    "isomorphic-git": "1.44.5",
+    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.1/waffle-base-0.0.1.tgz",
+    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.1/waffle-ripgrep-0.0.1.tgz"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
