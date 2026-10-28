@@ -4,6 +4,7 @@ import type {
   TerminalGroup,
   TerminalMember,
   TerminalResult,
+  TerminalGeometry,
 } from "waffle/browser/runtime-terminals";
 import { controlLoad } from "waffle/proc/control";
 import { readOutcome } from "waffle/proc/outcome";
@@ -105,6 +106,7 @@ export function createTerminalController(
   let interruptTarget: Group | undefined;
   let deferred: Group | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
+  let geometry: TerminalGeometry | undefined;
   const groups = new Map<number, Group>([[state.job, editor]]);
   const members = new Map<number, Group>();
   const states = new Map<number, State>();
@@ -123,13 +125,15 @@ export function createTerminalController(
   const disconnect = bridge.connectInput({
     push(bytes) {
       const result = producer.pushKeyboard(bytes);
+      if (result.kind === "error" && result.code === "AGAIN") retryDiscard();
       return result.kind === "ok" ? result.value : result.accepted;
     },
     available: producer.available,
     wake: producer.wake,
     close: producer.closeInput,
     resize: (columns, rows) => {
-      must(producer.resize({ columns, rows }));
+      geometry = { columns, rows };
+      resize();
     },
     interrupt() {
       interruptTarget = selected;
@@ -219,10 +223,16 @@ export function createTerminalController(
   const retryWork = () => {
     retry = undefined;
     if (disposed) return;
+    resize();
     bridge.discardInput();
     for (const pid of exited) cleanupOne(pid);
     for (const group of new Set(groups.values())) retire(group);
     bridge.signal();
+  };
+  const resize = () => {
+    if (!geometry) return;
+    if (!completed(producer.resize(geometry), retryDiscard)) return;
+    geometry = undefined;
   };
   const finishDiscard = () => {
     if (disposed) return;
