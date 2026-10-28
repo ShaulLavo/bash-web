@@ -746,8 +746,17 @@ test("direct terminal child gets owned output and cleanup stays behind its fence
     const pid = client.spawn(shell.process.pid, request);
     const childFilesystem = createFilesystemIdentity(undefined, 1024 * 1024);
     const metadata = rootTransport.data;
-    assert.ok(metadata && typeof metadata === "object" && "terminalContext" in metadata && "terminalInput" in metadata);
-    child.data = { filesystem: childFilesystem, terminalContext: metadata.terminalContext, terminalInput: metadata.terminalInput };
+    assert.ok(
+      metadata &&
+        typeof metadata === "object" &&
+        "terminalContext" in metadata &&
+        "terminalInput" in metadata,
+    );
+    child.data = {
+      filesystem: childFilesystem,
+      terminalContext: metadata.terminalContext,
+      terminalInput: metadata.terminalInput,
+    };
     let terminateChild!: () => Promise<void>;
     let stopped = false;
     const childService = {
