@@ -11,9 +11,9 @@ publish.workspace = true
 # native test bridge to Waffle's program families. Never packaged.
 [dependencies]
 shell-engine = { path = "../engine" }
-waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "1ae162a3453f0984d42197e371211b823e5fa3ed" }
-waffle-coreutils = { git = "https://github.com/ShaulLavo/waffle", rev = "1ae162a3453f0984d42197e371211b823e5fa3ed" }
-waffle-grep = { git = "https://github.com/ShaulLavo/waffle", rev = "1ae162a3453f0984d42197e371211b823e5fa3ed" }
+waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "4fa31792b6cfd1dcdc34404149572d571dfafd1b" }
+waffle-coreutils = { git = "https://github.com/ShaulLavo/waffle", rev = "4fa31792b6cfd1dcdc34404149572d571dfafd1b" }
+waffle-grep = { git = "https://github.com/ShaulLavo/waffle", rev = "4fa31792b6cfd1dcdc34404149572d571dfafd1b" }
 futures.workspace = true
 serde.workspace = true
 serde_json = "1"
