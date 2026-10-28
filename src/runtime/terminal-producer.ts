@@ -6,19 +6,19 @@ import {
   pushTerminalInput,
   attachTerminal,
   terminalControls,
+  TERMINAL_SESSION_LIMITS,
   type TerminalContext,
   type TerminalGeometry,
   type TerminalGroup,
   type TerminalLease,
   type TerminalMember,
-  type TerminalMemberPlan,
   type TerminalMode,
   type TerminalReason,
   type TerminalResult,
   type TerminalFailure,
-  type TerminalAuthority,
+  type TerminalControlReceipt,
+  type TerminalControlTurn,
 } from "waffle/browser/runtime-terminals";
-import type { Stream } from "waffle/core";
 import type { WorkerProcessTransport } from "waffle/proc/worker-client";
 
 export interface TerminalMetadata {
@@ -31,77 +31,25 @@ export class TerminalOperationError extends Error {
     super(`Terminal operation failed: ${code}`);
   }
 }
-function must<T>(result: TerminalResult<T>): T {
+export function terminalValue<T>(result: TerminalResult<T>): T {
   if (result.kind === "error") throw new TerminalOperationError(result.code);
   return result.value;
 }
-type Discard =
-  | { kind: "group"; group: TerminalGroup }
-  | {
-      kind: "member" | "selected" | "raw" | "restored";
-      group: TerminalGroup;
-      member: TerminalMember;
-    };
-type EditorState = {
-  group: TerminalGroup;
-  member: TerminalMember;
-  lease: TerminalLease;
-  next?: Discard;
-};
-function restoreEditor(
-  state: EditorState,
-  authority: TerminalAuthority,
-  pid: number,
-): TerminalResult<void> {
+export function terminalResult<T>(work: () => T): TerminalResult<T> {
   try {
-    if (!state.next)
-      state.next = { kind: "group", group: must(authority.createGroup({ initialMode: "raw" })) };
-    if (state.next.kind === "group")
-      state.next = {
-        ...state.next,
-        kind: "member",
-        member: must(authority.admitExisting({ group: state.next.group, pid })).member,
-      };
-    if (state.next.kind === "member") {
-      state.lease = must(authority.transfer({ from: state.lease, to: state.next.group }));
-      state.next = { ...state.next, kind: "selected" };
-    }
-    must(authority.removeMember(state.member));
-    must(authority.retireGroup({ group: state.group, reason: "completed" }));
-    state.group = state.next.group;
-    state.member = state.next.member;
-    state.next = undefined;
-    return { kind: "ok", value: undefined };
+    return { kind: "ok", value: work() };
   } catch (error) {
     if (error instanceof TerminalOperationError) return { kind: "error", code: error.code };
     throw error;
   }
 }
-function finishDiscard(
-  state: EditorState,
-  authority: TerminalAuthority,
-  discard: Exclude<Discard, { kind: "group" }>,
-  restore: TerminalGroup,
-): Exclude<Discard, { kind: "group" }> {
-  if (restore === state.group) {
-    const previous = { group: state.group, member: state.member };
-    state.group = discard.group;
-    state.member = discard.member;
-    return { ...previous, kind: "restored" };
-  }
-  state.lease = must(authority.transfer({ from: state.lease, to: restore }));
-  return { ...discard, kind: "restored" };
-}
-function drain(stream: Stream, available: () => number): boolean {
-  const bytes = new Uint8Array(4096);
-  while (available()) {
-    const count = stream.tryRead!([bytes]);
-    if (count === -6) return false;
-    if (count <= 0) throw new Error(`Terminal discard read failed: ${count}`);
-  }
-  return true;
-}
-
+type Editor = { group: TerminalGroup; member: TerminalMember };
+type Selection = NonNullable<
+  Extract<NonNullable<TerminalControlReceipt["state"]>, { kind: "open" }>["selection"]
+>;
+type Cache =
+  | { kind: "open"; editor: Editor; selection: Selection | null }
+  | { kind: "closed"; code: TerminalFailure };
 type ProducerOptions = {
   controller: WorkerProcessTransport;
   geometry: TerminalGeometry;
@@ -130,7 +78,7 @@ function acquireTerminalProducer(
   display: ReturnType<typeof createTerminalSession>,
   policy: ReturnType<typeof createTerminalInputPolicy>,
 ) {
-  const authority = must(
+  const authority = terminalValue(
     claimTerminalAuthority({
       identity: display.identity,
       process: options.controller,
@@ -138,13 +86,22 @@ function acquireTerminalProducer(
       policy,
     }),
   );
-  let editor = must(authority.createGroup({ initialMode: options.initialMode ?? "raw" }));
-  const root = must(authority.admitExisting({ group: editor, pid: options.controller.pid }));
-  const state: EditorState = {
-    group: editor,
-    member: root.member,
-    lease: must(authority.acquire({ group: editor, expected: null })),
+  const editor = terminalValue(
+    authority.createGroup({ initialMode: options.initialMode ?? "raw" }),
+  );
+  const root = terminalValue(
+    authority.admitExisting({ group: editor, pid: options.controller.pid }),
+  );
+  let cache: Cache = {
+    kind: "open",
+    editor: { group: editor, member: root.member },
+    selection: {
+      group: editor,
+      rootMember: root.member,
+      lease: terminalValue(authority.acquire({ group: editor, expected: null })),
+    },
   };
+  let lastReceipt: TerminalControlReceipt | undefined;
   const reader = attachTerminal({
     context: display.inherit(),
     process: options.controller,
@@ -152,80 +109,116 @@ function acquireTerminalProducer(
     policy,
   });
   const stream = reader.resolve(0);
-  let discard: Discard | undefined;
+  const current = () => {
+    if (cache.kind === "closed") throw new TerminalOperationError(cache.code);
+    return cache;
+  };
+  const reconcile = (receipt: TerminalControlReceipt, next = current().editor): void => {
+    const state = receipt.state;
+    if (!state) return;
+    lastReceipt = receipt;
+    if (state.kind === "closed") {
+      cache = { kind: "closed", code: state.code };
+      return;
+    }
+    if (receipt.group(next.group) !== "active" || receipt.member(next.member) !== "bound") {
+      cache = { kind: "closed", code: "STALE" };
+      return;
+    }
+    cache = { kind: "open", editor: next, selection: state.selection };
+  };
   const metadata = (terminalContext: TerminalContext): TerminalMetadata => ({
     terminalContext,
     terminalInput: input.buffer,
   });
-  const track = <T extends { readonly lease: TerminalLease | null }>(result: TerminalResult<T>) => {
-    if (result.kind === "ok" && result.value.lease) state.lease = result.value.lease;
-    return result;
-  };
   return {
+    authority,
     get editor() {
-      return state.group;
+      return current().editor.group;
     },
     get rootMember() {
-      return state.member;
+      return current().editor.member;
     },
     rootMetadata: metadata(display.inherit()),
-    notification: input.notification,
     available: () => input.available(),
+    canPush: (count: number) =>
+      Math.min(count, TERMINAL_SESSION_LIMITS.inputBytesPerTurn) <=
+      input.capacity - input.available(),
+    observe: () => input.observe(),
+    memberStatus: (member: TerminalMember) => lastReceipt?.member(member) ?? "unknown",
     wake: () => display.outputDrained(),
     metadata,
-    createGroup: (initialMode: TerminalMode) => authority.createGroup({ initialMode }),
-    planMember: (group: TerminalGroup, parent: TerminalMember) =>
-      authority.planMember({ group, parent }),
-    bindMember: (planned: TerminalMemberPlan, pid: number) =>
-      track(authority.bindMember({ planned, pid })),
-    admitExisting: (group: TerminalGroup, pid: number) =>
-      track(authority.admitExisting({ group, pid })),
-    removeMember: (member: TerminalMember) => track(authority.removeMember(member)),
-    cancelPlan: (planned: TerminalMemberPlan) => authority.cancelPlan(planned),
-    startBackground: (group: TerminalGroup) => authority.startBackground(group),
-    select(group: TerminalGroup): TerminalResult<void> {
-      const selected = authority.transfer({ from: state.lease, to: group });
-      if (selected.kind === "error") return selected;
-      state.lease = selected.value;
-      return { kind: "ok", value: undefined };
+    reconcile(receipt: TerminalControlReceipt): undefined {
+      if (cache.kind === "open") reconcile(receipt, cache.editor);
     },
-    restoreEditor(): TerminalResult<void> {
-      return restoreEditor(state, authority, options.controller.pid);
+    begin(turn: TerminalControlTurn) {
+      let next = current().editor;
+      let lease: TerminalLease | null = current().selection?.lease ?? null;
+      const track = <T extends { readonly lease: TerminalLease | null }>(
+        result: TerminalResult<T>,
+      ) => {
+        if (result.kind === "ok" && result.value.lease) lease = result.value.lease;
+        return result;
+      };
+      const select = (group: TerminalGroup): TerminalResult<void> => {
+        if (!lease) return { kind: "error", code: "STALE" };
+        const result = authority.transfer({ from: lease, to: group });
+        if (result.kind === "error") return result;
+        lease = result.value;
+        return { kind: "ok", value: undefined };
+      };
+      return {
+        get editor() {
+          return next.group;
+        },
+        get rootMember() {
+          return next.member;
+        },
+        createGroup: (mode: TerminalMode) => authority.createGroup({ initialMode: mode }),
+        planMember: authority.planMember.bind(authority),
+        bindMember: (planned: Parameters<typeof authority.bindMember>[0]) =>
+          track(authority.bindMember(planned)),
+        admitExisting: (group: TerminalGroup, pid: number) =>
+          track(authority.admitExisting({ group, pid })),
+        removeMember: (member: TerminalMember) => track(authority.removeMember(member)),
+        cancelPlan: authority.cancelPlan.bind(authority),
+        startBackground: authority.startBackground.bind(authority),
+        retireGroup: (group: TerminalGroup, reason: TerminalReason) =>
+          authority.retireGroup({ group, reason }),
+        select,
+        replaceEditor(group: TerminalGroup, member: TerminalMember) {
+          next = { group, member };
+        },
+        restoreEditor(): TerminalResult<void> {
+          return terminalResult(() => {
+            const group = terminalValue(authority.createGroup({ initialMode: "raw" }));
+            const member = terminalValue(
+              authority.admitExisting({ group, pid: options.controller.pid }),
+            ).member;
+            terminalValue(select(group));
+            terminalValue(authority.removeMember(next.member));
+            terminalValue(authority.retireGroup({ group: next.group, reason: "completed" }));
+            next = { group, member };
+          });
+        },
+        raw(): TerminalResult<void> {
+          return terminalResult(() => {
+            const controls = terminalControls(stream)!;
+            const snapshot = terminalValue(controls.snapshot());
+            terminalValue(controls.setMode({ expected: snapshot.selection, mode: "raw" }));
+          });
+        },
+        read(chunks: readonly Uint8Array[]) {
+          return stream.tryRead!(chunks);
+        },
+        publish(operation: (receipt: TerminalControlReceipt) => undefined = () => {}) {
+          turn.publish((receipt) => {
+            reconcile(receipt, next);
+            operation(receipt);
+          });
+        },
+      };
     },
-    discardInput(restore: TerminalGroup): boolean {
-      if (!discard)
-        discard = { kind: "group", group: must(authority.createGroup({ initialMode: "cooked" })) };
-      if (discard.kind === "group")
-        discard = {
-          ...discard,
-          kind: "member",
-          member: must(
-            authority.admitExisting({ group: discard.group, pid: options.controller.pid }),
-          ).member,
-        };
-      if (discard.kind === "member") {
-        state.lease = must(authority.transfer({ from: state.lease, to: discard.group }));
-        discard = { ...discard, kind: "selected" };
-      }
-      if (discard.kind === "selected") {
-        const controls = terminalControls(stream)!;
-        const snapshot = must(controls.snapshot());
-        must(controls.setMode({ expected: snapshot.selection, mode: "raw" }));
-        discard = { ...discard, kind: "raw" };
-      }
-      if (discard.kind === "raw" && !drain(stream, () => input.available())) return false;
-      if (discard.kind === "raw") {
-        discard = finishDiscard(state, authority, discard, restore);
-      }
-      must(authority.removeMember(discard.member));
-      must(authority.retireGroup({ group: discard.group, reason: "cancelled" }));
-      discard = undefined;
-      return true;
-    },
-    retireGroup: (group: TerminalGroup, reason: TerminalReason) =>
-      authority.retireGroup({ group, reason }),
-    /** The caller retains and retries bytes.subarray(result.accepted) on failure.
-     * This producer never copies an unaccepted tail into a second input queue. */
     pushKeyboard(bytes: Uint8Array) {
       options.checkActive();
       return pushTerminalInput(display, input, bytes);
@@ -253,3 +246,6 @@ function acquireTerminalProducer(
     },
   };
 }
+
+type TerminalProducer = ReturnType<typeof createTerminalProducer>;
+export type TerminalProducerTurn = ReturnType<TerminalProducer["begin"]>;

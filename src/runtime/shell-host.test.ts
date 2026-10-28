@@ -72,6 +72,10 @@ function fixture(
   let borrowedAfterDispose = 0;
   let ownerDisposals = 0;
   let terminated = 0;
+  let firstReleased!: () => void;
+  const firstRelease = new Promise<void>((resolve) => {
+    firstReleased = resolve;
+  });
   const live = () => {
     if (disposed) {
       borrowedAfterDispose++;
@@ -175,7 +179,7 @@ function fixture(
       live();
       consumers.add(consumer);
       return () => {
-        if (!disposed) consumers.delete(consumer);
+        if (!disposed && consumers.delete(consumer)) firstReleased();
       };
     },
     async processes() {
@@ -243,6 +247,7 @@ function fixture(
   };
   return {
     runtime,
+    firstRelease,
     options,
     service,
     consumers,
@@ -798,7 +803,7 @@ test("direct terminal child gets owned output and cleanup stays behind its fence
     void disposal.then(() => {
       settled = true;
     });
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await host.firstRelease;
     assert.equal(settled, false);
     assert.equal(stopped, false);
     assert.equal(host.terminated, 1);

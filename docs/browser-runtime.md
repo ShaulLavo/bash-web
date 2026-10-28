@@ -9,7 +9,7 @@ runtime to its shells, and disposes it when the page's consumers have stopped.
 
 For the steps, see [Embed a shell in a page](guides/embed-in-a-page.md). The API is in the [API reference](reference/api.md). This section states the contract that the adapter keeps.
 
-Use a browser-capable bundler for the TypeScript entry and its worker imports. The required `waffle` peer is pinned to the exact Git commit in `peerDependencies.waffle` in `package.json`, and the development dependency uses the same commit. There is no local runtime-tree alias or vendored runtime fallback. Run `npm run test:installed-waffle` after installation to verify the prepared Node exports. Browser-only CI installs without lifecycle scripts and checks the source export declarations separately.
+Use a browser-capable bundler for the TypeScript entry and its worker imports. The required `waffle` peer and development dependency select the same immutable release archive in `package.json`. There is no local runtime-tree alias or vendored runtime fallback. Run `npm run test:installed-waffle` after installation to verify the prepared Node exports. Browser-only CI installs without lifecycle scripts and checks the source export declarations separately.
 
 Supply `script` to execute a command instead of starting the persistent
 interactive editor. `cwd` and `env` set shell startup state. `wasmUrl` and
@@ -54,6 +54,22 @@ and files keep their own rights and byte streams. Immediate terminal reads retur
 on cancellation. Revoked or failed terminal endpoints report hangup and reject
 I/O. This byte adapter does not provide `/dev/tty`, terminal mode, or geometry
 operations to ordinary guests.
+
+### Terminal control and shutdown
+
+Shell root registration declares its existing terminal authority. Waffle waits
+for a control turn before invoking synchronous descendant preparation once.
+New local membership records publish only after kernel commit. Completion receipts
+supply authoritative handles and leases when preparation commits or rolls back.
+Kernel rollback owns provisional resources. Committed membership uses ordinary
+child-exit cleanup even when adapter entry fails.
+
+Foreground selection, input discard and restoration use that same authority.
+Discard consumes a bounded prefix per turn and releases the turn before waiting
+for an input observation. Quiescence stops new controller tasks, aborts and joins
+control and input waits, then disposes terminal state before physical worker stop.
+Aborting one root's wait does not cancel a shared input transport. The runtime and
+all page and worker helpers must come from the same compatible package artifact.
 
 ## Demo terminal activity
 

@@ -228,8 +228,9 @@ export async function startShell(
   const physicallyStop = () =>
     (physicallyStopped ??= (async () => {
       unobserveExit();
+      await terminalController?.quiesce();
       await quiesceTerminal(admission);
-      worker?.terminate();
+      await worker?.terminate();
       filesystem.port.close();
       observation.stopped();
       if (!accepted || retired) {
@@ -260,7 +261,7 @@ export async function startShell(
         : { kind: "signaled", code: signal },
     );
     const status = waitStatus(winner);
-    terminalController?.dispose();
+    terminalController?.stop();
     if (Atomics.load(terminal.state, control.phase) !== 4) {
       Atomics.store(terminal.state, control.status, status);
       Atomics.store(terminal.state, control.phase, result.error ? 4 : 3);
@@ -295,7 +296,7 @@ export async function startShell(
     options.signal?.throwIfAborted();
     // Accepted synchronously, before fetch, FS initialization, or lazy process admission.
     release = runtime.retainConsumer({ filesystem: identity, revoke, stop: physicallyStop });
-    terminalController = createTerminalController(runtime, transport, terminal);
+    terminalController = createTerminalController(runtime, transport, terminal, signalFailure);
     transport.data = { ...workerData, ...terminalController.metadata };
     markStartup(options.onStartupStage, "shell-registration-requested");
     await pending(() => registration.initialize(options.onStartupStage));
@@ -317,6 +318,7 @@ export async function startShell(
         writeTerminal(fd === 2 ? 2 : 1, bytes);
       },
       async quiesce() {
+        await terminalController?.quiesce();
         await quiesceTerminal(admission);
       },
       stop: physicallyStop,
