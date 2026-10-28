@@ -242,7 +242,7 @@ export function createTerminalController(
     producer.wake();
   };
   const discardInput = (): boolean => {
-    const target = resumeTarget(selected);
+    const target = bridge.cancelled() && interruptTarget ? editor : resumeTarget(selected);
     if (!tryDiscard(producer, target.group)) {
       retryDiscard();
       return false;
