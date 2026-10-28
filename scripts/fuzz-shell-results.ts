@@ -1,4 +1,4 @@
-export type RunOptions = { cwd?: string; timeoutMs: number; interrupted?: boolean; argv0?: string };
+export type RunOptions = { cwd?: string; timeoutMs: number; interrupted?: boolean };
 
 export type FuzzOptions = {
   seed: number;

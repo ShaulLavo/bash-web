@@ -816,7 +816,6 @@ export async function run(bin, script, options) {
   if (!options.cwd) throw new Error("process sandbox parent required");
   const sandbox = mkdtempSync(resolve(options.cwd, "process-"));
   const child = spawn(bin, ["-c", script], {
-    argv0: options.argv0,
     cwd: sandbox,
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],

@@ -60,7 +60,13 @@ export function cases() {
   return result;
 }
 type Case = ReturnType<typeof cases>[number];
-type Options = FuzzOptions & { replays: string[]; oracle: string };
+type Options = FuzzOptions & { replays: string[]; oracle: string; oracleInvocation: string };
+function oracleWrapper(scratch: string, oracle: string): string {
+  const wrapper = resolve(scratch, "oracle");
+  const script = `#!/usr/bin/bash\nexec -a /usr/bin/bash ${quote(oracle)} "$@"\n`;
+  writeFileSync(wrapper, script, { mode: 0o700 });
+  return wrapper;
+}
 export function fingerprint() {
   const hash = createHash("sha256");
   for (const name of [
@@ -96,6 +102,7 @@ async function main() {
     },
   });
   const waffle = values.waffle;
+  const oracle = values.oracle ?? "/usr/bin/bash";
   const options: Options = {
     seed: 1,
     count: 0,
@@ -103,11 +110,13 @@ async function main() {
     replays: values.replay ? [resolve(values.replay)] : [],
     shell: values.shell,
     record: values.record,
-    oracle: values.oracle ?? "/usr/bin/bash",
+    oracle,
+    oracleInvocation: oracle,
     output: values.output,
   };
   const scratch = mkdtempSync(resolve(process.env.TMPDIR ?? "/work/tmp", "echo-"));
   options.cwd = scratch;
+  if (values.oracle !== undefined) options.oracleInvocation = oracleWrapper(scratch, oracle);
   const interrupt = () => {
     options.interrupted = true;
   };
@@ -187,7 +196,7 @@ async function measureWaffle(
     if (options.interrupted) throw new Error("interrupted");
     const bash = recorded
       ? decode(recorded[index].bash)
-      : await run(options.oracle, item.script, { ...options, argv0: "/usr/bin/bash" });
+      : await run(options.oracleInvocation, item.script, options);
     assert.ok(healthy(bash), item.id);
     const actual = await runner(item.script);
     const candidate = {
