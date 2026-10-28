@@ -331,6 +331,8 @@ fn input_future_bytes<F>(_: &impl FnOnce(Endpoint, Endpoint, Cancel) -> F) -> us
 struct Child {
     group: GroupId,
     job: Option<u32>,
+    /// A member of the shell's own job: signalled by PID, never reaped as a job.
+    joined: bool,
     status: Cell<Option<Result<i32, i32>>>,
 }
 struct State {
@@ -345,6 +347,7 @@ struct State {
     input_slots: Rc<Cell<usize>>,
     inherited_transferred: Cell<bool>,
     inputs: RefCell<Vec<InputPump>>,
+    job_control: Cell<bool>,
 }
 #[derive(Clone)]
 pub struct Runtime(Rc<State>);
@@ -362,7 +365,14 @@ impl Runtime {
             input_slots: Rc::new(Cell::new(0)),
             inherited_transferred: Cell::new(false),
             inputs: RefCell::new(Vec::new()),
+            job_control: Cell::new(true),
         }))
+    }
+    /// Without job control (`sh -c`, scripts), foreground commands stay in the shell's
+    /// own job, as POSIX keeps them in its process group, so a signal to the caller's
+    /// job reaches them. Only a job-control shell gives each command a new job.
+    pub fn set_job_control(&self, enabled: bool) {
+        self.0.job_control.set(enabled);
     }
     /// Own one fd binding. Endpoint clones share it; the final clone closes it.
     pub fn endpoint(&self, fd: u32) -> Endpoint {
@@ -514,7 +524,7 @@ impl Runtime {
                     .max(usize::from(group.cleanup_failed))
             })
             .sum();
-        // Metadata failures still own a direct pid even without a runtime job ID.
+        // Joined children and metadata failures own a direct pid without a runtime job ID.
         jobs.saturating_add(
             self.0
                 .children
@@ -1049,18 +1059,28 @@ impl ProcessHost for Runtime {
                 input.reserve_user(request.group, self.retained_slots())?;
             }
         }
+        let joined = !background && !self.0.job_control.get();
+        let job = match (background, joined) {
+            (true, _) => -1,
+            (false, true) => self.0.abi.job_of(0).map_err(ProcessError::Runtime)? as i32,
+            (false, false) => 0,
+        };
         let spec = RuntimeSpawn {
             executable: request.executable,
             argv: request.argv,
             env: request.env,
             cwd: request.cwd,
-            job: if background { -1 } else { 0 },
+            job,
             fds,
         };
         let pid = self.0.abi.spawn(&spec).map_err(ProcessError::Runtime)?;
         // Spawn has synchronously retained inherited endpoints. Dropping request's
         // descriptor table now cannot close the child's open descriptions.
-        let runtime_job = match self.0.abi.job_of(pid) {
+        let runtime_job = match if joined {
+            Ok(None)
+        } else {
+            self.0.abi.job_of(pid).map(Some)
+        } {
             Ok(job) => job,
             Err(errno) => {
                 // Do not strand a reserved process when host metadata fails.
@@ -1070,6 +1090,7 @@ impl ProcessHost for Runtime {
                     Rc::new(Child {
                         group: request.group,
                         job: None,
+                        joined: false,
                         status: Cell::new(None),
                     }),
                 );
@@ -1077,13 +1098,15 @@ impl ProcessHost for Runtime {
                 return Err(ProcessError::Runtime(errno));
             }
         };
-        self.0
-            .groups
-            .borrow_mut()
-            .get_mut(&request.group)
-            .unwrap()
-            .runtime_jobs
-            .push(runtime_job);
+        if let Some(runtime_job) = runtime_job {
+            self.0
+                .groups
+                .borrow_mut()
+                .get_mut(&request.group)
+                .unwrap()
+                .runtime_jobs
+                .push(runtime_job);
+        }
         // Only a successful spawn starts writers. Failure before this point
         // drops unpolled futures and closes both pipe ends synchronously.
         // Cache the exported open description so later builtin/external reads
@@ -1116,7 +1139,8 @@ impl ProcessHost for Runtime {
             pid as u64,
             Rc::new(Child {
                 group: request.group,
-                job: Some(runtime_job),
+                job: runtime_job,
+                joined,
                 status: Cell::new(None),
             }),
         );
@@ -1188,10 +1212,23 @@ impl ProcessHost for Runtime {
             group.closing = true;
             group.runtime_jobs.clone()
         });
+        let joined: Vec<_> = self
+            .0
+            .children
+            .borrow()
+            .iter()
+            .filter(|(_, child)| child.group == group && child.joined)
+            .map(|(&pid, _)| pid as u32)
+            .collect();
         let mut error = None;
         for job in jobs.into_iter().flatten() {
             if let Err(errno) = self.0.abi.kill_job(job, signal) {
                 // One failed delivery must not strand later children/descendants.
+                error.get_or_insert(ProcessError::Runtime(errno));
+            }
+        }
+        for pid in joined {
+            if let Err(errno) = self.0.abi.kill(pid, signal) {
                 error.get_or_insert(ProcessError::Runtime(errno));
             }
         }

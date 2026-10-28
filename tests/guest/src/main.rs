@@ -531,6 +531,7 @@ fn run(args: &[String]) -> Result<i32> {
                 line(2, &format!("ERR:{index}"))?;
             }
         }
+        "job" => line(1, &format!("JOB:{}", checked(unsafe { proc_job_of(0) })?))?,
         "context" => {
             line(1, &format!("CWD:{}", cwd()))?;
             if let Some(key) = args.get(1) {
