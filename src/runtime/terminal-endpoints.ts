@@ -27,6 +27,7 @@ export function createShellTerminals(
   if (!request.runtimeProcess || !output)
     throw new TypeError("Terminal input has no owned shell output destination");
   const input = attachTerminalInput(data.terminalInput);
+  const display = new SharedBridge(output);
   // Waffle checks liveness outside policy callbacks. Admission still fences output;
   // throwing here after a member dies would close the shared terminal session.
   const endpoints = {
@@ -88,8 +89,7 @@ export function createShellTerminals(
     },
     dispose: () => attachment.dispose(),
     columns() {
-      const snapshot = controller.snapshot();
-      return snapshot.kind === "ok" ? snapshot.value.geometry.columns : 80;
+      return Math.max(2, Atomics.load(display.state, control.cols));
     },
   };
 }
