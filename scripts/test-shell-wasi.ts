@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyCiArtifacts } from "./ci-artifacts.ts";
+import { familyWasmPath } from "./family-assets.ts";
 import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
@@ -126,4 +127,4 @@ for (const name of [
   "uniq",
   "wc",
 ])
-  size(`Utility add-on ${name}`, resolve(release, `${name}.wasm`));
+  size(`Utility add-on ${name}`, familyWasmPath(name));

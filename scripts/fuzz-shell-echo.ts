@@ -174,7 +174,6 @@ async function measureWaffle(
   const runner = await createWaffleRunner({
     modulePath,
     fixtureDirectory: directory,
-    utilityDirectory: directory,
     tmp: "/tmp/echo",
     env: { PATH: "/usr/bin:/bin", HOME: "/tmp/echo", TMP: "/tmp/echo", LC_ALL: "C", LANG: "C" },
   });

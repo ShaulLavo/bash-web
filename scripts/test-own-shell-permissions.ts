@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { build } from "esbuild";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
+import { familyWasmPath } from "./family-assets.ts";
 import type * as Api from "./waffle-node-api.ts";
 import type { Runtime } from "waffle";
 import type { FilesystemClient } from "waffle/fs/client";
@@ -281,7 +282,7 @@ test("grep descriptor operands enforce the inode's current permissions", () =>
             {
               path: "/usr/bin/grep",
               aliases: ["/bin/grep"],
-              source: async () => new Uint8Array(await readFile(resolve(guest, "../grep.wasm"))),
+              source: async () => new Uint8Array(await readFile(familyWasmPath("grep"))),
             },
           ],
         },

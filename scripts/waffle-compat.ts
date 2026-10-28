@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import type { Runtime } from "waffle";
+import { familyWasmPath } from "./family-assets.ts";
 import type { RuntimeWorkerMessage, RuntimeWorkerRequest } from "waffle/browser/worker";
 import type { ProgramPackage } from "waffle/programs";
 import { installNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
@@ -15,6 +15,8 @@ export interface WaffleCaseOptions {
   readonly fixtureDirectory: string;
   /** Optional archived utility directory; published package assets are used by default. */
   readonly utilityDirectory?: string;
+  /** Explicit core-only selection; does not change where published assets come from. */
+  readonly installPrograms?: boolean;
 }
 export interface WaffleCaseResult {
   stdout: Buffer;
@@ -51,9 +53,7 @@ function localBasePackages(directory: string | undefined, waffle: typeof Api): P
     ...family,
     programs: family.programs.map((program) => {
       const name = program.path.slice(program.path.lastIndexOf("/") + 1);
-      const wasm = program.wasm;
-      assert.ok(wasm, `Missing asset URL for ${name}`);
-      const path = directory ? `${directory}/${name}.wasm` : fileURLToPath(wasm);
+      const path = directory ? `${directory}/${name}.wasm` : familyWasmPath(name);
       return {
         path: program.path,
         aliases: program.aliases,
@@ -90,6 +90,7 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
       cooperative: true,
     });
   }
+  if (options.installPrograms === false) return;
   const packages = localBasePackages(options.utilityDirectory, waffle);
   const launcher = waffle.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory));
   await waffle.installPrograms(runtime, packages, { launcher });
