@@ -7,10 +7,13 @@ license.workspace = true
 publish.workspace = true
 
 # Compatibility-harness guests only: argv.py and printenv.py from the frozen oracle's
-# helper directory, run as genuine programs on Waffle's process boundary. Never packaged.
+# helper directory, run as genuine programs on Waffle's process boundary, plus the
+# native test bridge to Waffle's program families. Never packaged.
 [dependencies]
 shell-engine = { path = "../engine" }
-shell-utilities = { path = "../utilities" }
+waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "4fa31792b6cfd1dcdc34404149572d571dfafd1b" }
+waffle-coreutils = { git = "https://github.com/ShaulLavo/waffle", rev = "4fa31792b6cfd1dcdc34404149572d571dfafd1b" }
+waffle-grep = { git = "https://github.com/ShaulLavo/waffle", rev = "4fa31792b6cfd1dcdc34404149572d571dfafd1b" }
 futures.workspace = true
 serde.workspace = true
 serde_json = "1"

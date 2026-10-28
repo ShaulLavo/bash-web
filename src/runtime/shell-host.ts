@@ -14,7 +14,12 @@ import {
 import type { RuntimeWorkerMessage } from "waffle/browser/worker";
 import { SharedBridge, control } from "../bridge";
 import type { RuntimeExit, RuntimeProcess, ShellOptions } from "../shell";
-import { observeProcessMessage, observeRoot, observeSupervisor } from "./diagnostics";
+import {
+  observeProcessMessage,
+  observeProcessService,
+  observeRoot,
+  observeSupervisor,
+} from "./diagnostics";
 import { processDirectoryCapacity } from "./limits";
 import {
   attachTerminal,
@@ -170,8 +175,12 @@ export async function startShell(
   transport.data = workerData;
   const memory = new SharedArrayBuffer(8);
   const observation = observeRoot(runtime, transport, memory);
-  const writeTerminal = (fd: 1 | 2, bytes: Uint8Array): number => {
+  const tryTerminal = (bytes: Uint8Array): number => {
     const accepted = terminal.tryWrite([bytes]);
+    return accepted < 0 ? 0 : accepted;
+  };
+  const writeTerminal = (fd: 1 | 2, bytes: Uint8Array): number => {
+    const accepted = tryTerminal(bytes);
     const retained = accepted < 0 ? 0 : Math.min(accepted, bytes.length);
     const dropped = bytes.length - retained;
     if (dropped) {
@@ -181,6 +190,10 @@ export async function startShell(
     return accepted;
   };
   let service: ProcessService | undefined;
+  const stopDrain = terminal.onOutputDrained(() => {
+    if (runtime.disposed || !service) return;
+    service.outputDrained(state.pid);
+  });
   let worker: Worker | undefined;
   let acknowledged = false;
   let finished = false;
@@ -233,6 +246,7 @@ export async function startShell(
       filesystem.port.close();
       observation.stopped();
       if (!accepted || retired) {
+        stopDrain();
         observation.retired();
         terminalController?.retired();
       }
@@ -307,15 +321,14 @@ export async function startShell(
     markStartup(options.onStartupStage, "shell-processes-requested");
     service = await pending(() => runtime.processes());
     terminalController.bind(service);
+    observeProcessService(runtime, service);
     markStartup(options.onStartupStage, "shell-processes-resolved");
     markStartup(options.onStartupStage, "shell-root-adopt-requested");
     await service.adoptRuntimeRoot(transport, {
       filesystem: identity,
       prepareDescendant: terminalController.prepareDescendant,
       acknowledged: () => acknowledged,
-      output: (fd, bytes) => {
-        writeTerminal(fd === 2 ? 2 : 1, bytes);
-      },
+      tryOutput: (_fd, bytes) => tryTerminal(bytes),
       async quiesce() {
         await quiesceTerminal(admission);
       },
@@ -323,6 +336,7 @@ export async function startShell(
       wake: () => terminal.signal(),
       retired() {
         retired = true;
+        stopDrain();
         observation.retired();
         terminalController?.retired();
       },

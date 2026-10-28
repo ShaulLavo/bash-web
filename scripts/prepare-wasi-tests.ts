@@ -11,7 +11,7 @@ export const wasiTestTargets = [
     package: "shell-engine",
     names: ["shell_engine", "streaming", "terminal_display", "words", "capabilities"],
   },
-  { package: "shell-utilities", names: ["streaming"] },
+  { package: "shell-compat-fixtures", names: ["streaming"] },
 ];
 
 export function wasiTestArguments(target: (typeof wasiTestTargets)[number]): string[] {

@@ -1,85 +1,36 @@
-# Install utilities
+# Install program families
 
-Give a shell `cat`, `cut`, `find`, `grep`, `head`, `mkdir`, `seq`, `sort`, `tail`, `uniq`, and `wc`. The shell core has no external commands. Without an installed program, a command lookup on `PATH` fails with status 127.
+Everyday external commands come from Waffle's `waffle-base` package: coreutils, findutils, grep, sed, and ripgrep. The shell core and its real builtins stay in bash-web. A command with no installed program on `PATH` fails with status 127.
 
-Each utility is its own WASM program with its own entry, so you install only what the page needs and pay only for those.
+Install base on the same caller-owned `Runtime` used for the shell, with Waffle's generic preview1 launcher:
 
-1. Build the browser assets (`npm run build:browser`). The build writes `dist/cat.wasm`, `dist/cut.wasm`, `dist/grep.wasm`, `dist/head.wasm`, `dist/mkdir.wasm`, `dist/seq.wasm`, `dist/sort.wasm`, `dist/tail.wasm`, `dist/uniq.wasm`, and `dist/wc.wasm`.
-2. Install each utility on the same `Runtime` that you pass to `createShell`:
+```ts
+import { installBase } from "waffle-base";
 
-   ```ts
-   import { createShell } from "bash-web";
-   import { installCat } from "bash-web/utilities/cat";
+const programs = await installBase(runtime, { launcher });
+try {
+  const shell = await createShell({ runtime, script: "printf hello | cat" });
+  try {
+    await shell.done;
+  } finally {
+    await shell.dispose();
+  }
+} finally {
+  await programs.dispose();
+}
+```
 
-   const cat = await installCat(runtime);
-   try {
-     const shell = await createShell({ runtime, script: "printf hello | cat" });
-     try {
-       await shell.done;
-     } finally {
-       await shell.dispose();
-     }
-   } finally {
-     await cat.dispose();
-   }
-   ```
+`launcher` is the application's `GuestLauncher` for Waffle's generic preview1 worker. It is not bash-web's shell worker or a second runtime. Base installation registers the programs but does not fetch, compile, or start them; each guest loads on first use. Families install at `/usr/bin/<name>` and declare their `/bin/<name>` aliases. The returned `path` lists the installed directories.
 
-   The other entries are `bash-web/utilities/cut` (`installCut`), `bash-web/utilities/find` (`installFind`), `bash-web/utilities/grep` (`installGrep`), `bash-web/utilities/head` (`installHead`), `bash-web/utilities/mkdir` (`installMkdir`), `bash-web/utilities/seq` (`installSeq`), `bash-web/utilities/sort` (`installSort`), `bash-web/utilities/tail` (`installTail`), `bash-web/utilities/uniq` (`installUniq`), and `bash-web/utilities/wc` (`installWc`).
+Base includes `cat`, `cut`, `env`, `find`, `grep`, `head`, `ls`, `mkdir`, `rg`, `sed`, `seq`, `sort`, `tail`, `uniq`, `wc`, `xargs`, and the other everyday coreutils. Each family package owns its behavior, assets, notices, and limitations.
 
-3. If your bundler moves assets, pass the new URLs. `wasmUrl` points at the utility's `.wasm` file. `workerUrl` points at `dist/shell-worker.js`. For cooperative utilities, instead of `wasmUrl`, you can pass `module`, a compiled `WebAssembly.Module` or a function that returns one. Upstream `cut`, `find`, `head`, `sort`, `uniq`, and `wc` take `source`, raw `Uint8Array` bytes or a function returning bytes, instead. Waffle needs those bytes to add interrupt checks.
+## Dispose and conflicts
 
-An install call writes a small marker file at `/bin/<name>` and registers the program with the runtime. It does not fetch, compile, or start a worker. The first command that runs the utility loads the guest.
+Call `dispose()` after program processes stop. It releases registrations and removes only unchanged markers created by that installation, then allows a later reinstall. `runtime.dispose()` releases the whole runtime instead.
 
-## Dispose an installation
-
-Call `dispose()` after the utility's processes have stopped. It releases the registration and removes the marker file, but only if this installation created the file and the bytes have not changed. `runtime.dispose()` releases everything without it.
-
-## Handle conflicts
-
-- A second install of the same utility on one runtime throws `UtilityConflictError`.
-- A different file or directory already at `/bin/<name>` also throws `UtilityConflictError`. A file that holds this utility's own unchanged marker is accepted, for example from persisted storage.
-- If an install fails, its path stays reserved until rollback finishes. Concurrent attempts conflict during rollback. After it, a fresh install can retry.
-
-## What each utility supports
-
-The cooperative utilities support small subsets. `cut`, `head`, `sort`, `uniq`, and `wc` run upstream uutils through ordinary WASI admission.
-
-| Utility | Supported                                                                                                                                        | Rejected                                                                                                                               |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `cat`   | File operands, or standard input when there are none                                                                                             | Options. Every argument is a file path, so `cat -n` fails                                                                              |
-| `grep`  | `-v -c -q -n -i -F -E`, basic regular expressions by default                                                                                     | Any other option, for example `-P` (status 2)                                                                                          |
-| `cut` | Upstream byte, character and field selection, complements, custom delimiters, binary and NUL records. See [cut](../cut.md) | Invalid options, ranges and delimiters. Locale-dependent multibyte behavior is not qualified |
-| `head`  | Upstream lines, bytes, negative counts, NUL records, headers, help, and version. See [Head](../head.md)                                          | Invalid options and counts (status 1). Buffered stdin can discard unread suffixes                                                      |
-| `mkdir` | `mkdir [-p] [--] dir...`                                                                                                                         | Any other option (status 2)                                                                                                            |
-| `seq`   | `seq end` and `seq start end`, integers                                                                                                          | Step, separator, and other forms (status 2)                                                                                            |
-| `sort`  | Upstream ordering options and file operands. The WASI path buffers input in memory and does not spill to temporary files. See [Sort](../sort.md) | Unsupported upstream options have no new compatibility claims                                                                          |
-| `uniq`  | Adjacent equal-record filtering, counts, and repeated-group selection. See [Uniq](../uniq.md)                                                    | Unsupported upstream options have no new compatibility claims                                                                          |
-| `tail`  | `tail [-n N] [--] [file]`; the last 10 lines by default; `-nN` is also accepted                                                                  | Multiple files, filename headers, `-c`, `-f`, and other options (status 2). Retained input is capped at 16 MiB. See [tail](../tail.md) |
-| `wc`    | Upstream line, word, and byte counts, file operands, standard input, and pipelines. See [wc](../wc.md)                                           | Other upstream options have no new compatibility claims                                                                                |
-
-`grep` is the only program that links the `regex` crate. The core build never does. See [ADR 003](../adr/003-one-core-shell-and-installable-utilities.md) for why the utilities are separate programs.
-
-## Install bounded xargs
-
-Import `installXargs` from `bash-web/utilities/xargs`. It loads an ordinary WASI guest on first spawn. The initial contract parses input and echoes batches only; explicit commands are rejected pending Waffle `runtime_proc.spawn`/`wait` integration. See [xargs](../xargs.md) for flags and limits.
+A duplicate or foreign path fails with `ProgramConflictError`. A failed multi-package install rolls back every path it created. Existing matching markers can be reused without becoming installation-owned files.
 
 ## Related
 
 - [Embed a shell in a page](embed-in-a-page.md)
-- [API reference: utility entries](../reference/api.md#utility-entries)
-
-## Install upstream ls
-
-Import `installLs` from `bash-web/utilities/ls`. It uses the same caller-owned runtime and loads `dist/ls.wasm` on first spawn. This is an ordinary WASI guest. Use `WasiUtilityOptions` with `wasmUrl` or raw `source` bytes, not a compiled module. [ls](../ls.md) lists the qualified flags and the upstream WASI metadata limitations.
-
-## Look up registered programs
-
-Import `installWhich` from `bash-web/utilities/which`. It installs an ordinary WASI guest with the same lazy source and disposal contract. `which [-a|--all] [--] name...` queries live executable registrations, not Unix execute bits or installer markers. See [which](../which.md) for output, status, limitations, and Waffle process requirements.
-
-## Install print-only env
-
-Import `installEnv` from `bash-web/utilities/env`. It lazily loads `dist/env.wasm` as an ordinary WASI guest using `WasiUtilityOptions`. It prints and edits only its own guest environment. Program execution and signal options are outside the initial contract. See [Print-only env](../env.md) for qualified forms and the process dependency.
-
-## Clear the terminal
-
-Import `installClear` from `bash-web/utilities/clear`. It installs a lazy ordinary WASI guest on the caller's runtime. `clear` clears the visible screen, homes the cursor, and requests scrollback erasure. `clear -x` preserves scrollback. Only the explicit xterm profiles are supported; see [clear](../clear.md) for terminal selection, rejected options, and provenance.
+- [API reference](../reference/api.md)

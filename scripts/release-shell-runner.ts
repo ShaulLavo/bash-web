@@ -18,7 +18,6 @@ export function releaseShellRunner(
   return createWaffleRunner({
     modulePath: resolve(directory, "shell-runtime.wasm"),
     fixtureDirectory: directory,
-    utilityDirectory: directory,
     tmp: env.TMP,
     env,
   });

@@ -190,7 +190,7 @@ async function rescoreUnderCandidateInstrument(candidate) {
       BASH_COMPAT_RECORD: "1",
       BASH_COMPAT_SHELL_WASM: wasm,
       BASH_COMPAT_FIXTURE_DIR: release,
-      BASH_COMPAT_UTILITY_DIR: utilities.length ? release : undefined,
+      BASH_COMPAT_UTILITY_DIR: utilities.length ? release : process.env.BASH_COMPAT_UTILITY_DIR,
       BASH_COMPAT_OUT: output,
       BASH_COMPAT_SCRATCH: scratch,
     });

@@ -5,8 +5,11 @@ import { dirname, resolve } from "node:path";
 import {
   chmodSync,
   copyFileSync,
-  existsSync,
   mkdirSync,
+  linkSync,
+  lstatSync,
+  readlinkSync,
+  symlinkSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -19,10 +22,10 @@ import {
   nativeArtifactFiles,
   packCiArtifacts,
   stageCiArtifacts,
+  stageShellArtifacts,
   verifyCiArtifacts,
 } from "./ci-artifacts.ts";
 import { ciInputs } from "./ci-inputs.ts";
-import { utilityNames, writeUtilityArtifacts } from "./utility-artifacts.ts";
 
 import { cappedWasiFixture as wasm } from "./wasi-artifact-fixture.ts";
 
@@ -44,7 +47,6 @@ function fixture(run: (directory: string, consumer: string) => void) {
     const source = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
     writeFileSync(resolve(directory, "cli-source.txt"), source);
     writeFileSync(resolve(directory, "inputs"), `${ciInputs("HEAD").native}\n`);
-    writeUtilityArtifacts(root, directory, resolve(directory, "utility-artifacts"));
     const checksums = nativeArtifactFiles
       .map(
         (name) =>
@@ -60,40 +62,26 @@ function fixture(run: (directory: string, consumer: string) => void) {
   }
 }
 
-test("the complete exact-source artifact stages both CLIs, every guest and utility receipt", () => {
+test("the complete exact-source artifact stages both CLIs and every shell guest", () => {
   fixture((directory, consumer) => {
     chmodSync(resolve(directory, "shell-cli"), 0o644);
     stageCiArtifacts(consumer, directory);
     for (const name of ["shell-engine", "shell-cli"])
       assert.ok(statSync(resolve(consumer, ".build/shell/release", name)).mode & 0o111);
-    for (const name of ["shell-engine", "shell-runtime", "argv-py", "printenv-py"].concat(
-      utilityNames,
-    ))
+    for (const name of ["shell-engine", "shell-runtime", "argv-py", "printenv-py"])
       assert.deepEqual(
         readFileSync(resolve(consumer, `.build/shell/wasm32-wasip1/release/${name}.wasm`)),
         Buffer.from(wasm),
       );
-    for (const name of ["shell-engine", "test-guest", "test-spin"].concat(utilityNames))
+    for (const name of ["shell-engine", "test-guest", "test-spin"])
       assert.deepEqual(
         readFileSync(resolve(consumer, `public/programs/${name}.wasm`)),
         Buffer.from(wasm),
       );
-    assert.ok(existsSync(resolve(consumer, ".build/utility-artifacts/source-sha256.txt")));
     assert.equal(
       readFileSync(resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt"), "utf8"),
       shellNotice,
     );
-  });
-});
-
-test("staged utilities are available at package URLs before browser bundling", () => {
-  fixture((directory, consumer) => {
-    stageCiArtifacts(consumer, directory);
-    for (const name of utilityNames)
-      assert.deepEqual(
-        readFileSync(resolve(consumer, `dist/${name}.wasm`)),
-        readFileSync(resolve(directory, `${name}.wasm`)),
-      );
   });
 });
 
@@ -164,4 +152,156 @@ test("the TypeScript prebuilt runner rejects an old source before invoking Cargo
 test("shell notices are required alongside the unchanged native and ten WASI test files", () => {
   assert.ok(nativeArtifactFiles.includes("THIRD_PARTY_NOTICES.txt"));
   assert.equal(nativeArtifactFiles.filter((name) => name.startsWith("wasi-tests/")).length, 10);
+});
+
+function shellIdentity(directory: string) {
+  return {
+    source: readFileSync(resolve(directory, "cli-source.txt"), "utf8").trim(),
+    inputs: readFileSync(resolve(directory, "inputs"), "utf8").trim(),
+    checksumsSha256: createHash("sha256")
+      .update(readFileSync(resolve(directory, "SHA256SUMS")))
+      .digest("hex"),
+  };
+}
+
+test("accepted shell subset stages normal browser and native paths without other guests", () => {
+  fixture((directory, consumer) => {
+    const identity = shellIdentity(directory);
+    rmSync(resolve(directory, "shell-cli"));
+    stageShellArtifacts(consumer, directory, identity, "browser");
+    stageShellArtifacts(consumer, directory, identity, "native");
+    for (const path of [
+      "public/programs/shell-engine.wasm",
+      "dist/env.wasm",
+      "dist/bash-web-shell.wasm",
+      "dist/bash-web-env.wasm",
+    ])
+      assert.deepEqual(readFileSync(resolve(consumer, path)), Buffer.from(wasm));
+    assert.equal(
+      readFileSync(resolve(consumer, "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"), "utf8"),
+      shellNotice,
+    );
+  });
+});
+
+for (const name of [
+  "cli-source.txt",
+  "inputs",
+  "SHA256SUMS",
+  "shell-runtime.wasm",
+  "env.wasm",
+  "THIRD_PARTY_NOTICES.txt",
+]) {
+  test(`accepted shell subset rejects wrong ${name} before writing`, () => {
+    fixture((directory, consumer) => {
+      const identity = shellIdentity(directory);
+      writeFileSync(resolve(directory, name), "wrong bytes");
+      assert.throws(() => stageShellArtifacts(consumer, directory, identity, "browser"));
+      assert.deepEqual(readdirSync(consumer), []);
+    });
+  });
+}
+
+function treeSnapshot(directory: string): unknown[] {
+  return readdirSync(directory)
+    .sort()
+    .flatMap<unknown>((name) => {
+      const path = resolve(directory, name);
+      const info = lstatSync(path, { bigint: true });
+      const identity = `${info.dev}:${info.ino}`;
+      if (info.isSymbolicLink()) return [{ name, identity, link: readlinkSync(path) }];
+      if (info.isDirectory()) return [{ name, identity, children: treeSnapshot(path) }];
+      return [{ name, identity, bytes: readFileSync(path).toString("hex") }];
+    });
+}
+
+function rejectsWithoutChanges(directory: string, consumer: string, mode: "browser" | "native") {
+  const identity = shellIdentity(directory);
+  const before = treeSnapshot(dirname(directory));
+  let rejection: unknown;
+  try {
+    stageShellArtifacts(consumer, directory, identity, mode);
+  } catch (error) {
+    rejection = error;
+  }
+  assert.deepEqual(
+    treeSnapshot(dirname(directory)),
+    before,
+    "Rejected staging changed fixture bytes or entries",
+  );
+  assert.ok(rejection instanceof Error, "Expected destination preflight rejection");
+}
+
+test("shell destination alias to accepted env rejects without any changes", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "public/programs"), { recursive: true });
+    symlinkSync(
+      resolve(directory, "env.wasm"),
+      resolve(consumer, "public/programs/shell-engine.wasm"),
+    );
+    rejectsWithoutChanges(directory, consumer, "browser");
+  });
+});
+
+test("redirected destination parent rejects without any changes", () => {
+  fixture((directory, consumer) => {
+    const outside = resolve(dirname(directory), "outside");
+    mkdirSync(outside);
+    writeFileSync(resolve(outside, "sentinel"), "caller outside data");
+    symlinkSync(outside, resolve(consumer, "public"));
+    rejectsWithoutChanges(directory, consumer, "browser");
+  });
+});
+
+test("native notice destination alias rejects before copying either guest", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "dist"));
+    const caller = resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt");
+    writeFileSync(caller, "native caller notices");
+    symlinkSync(caller, resolve(consumer, "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"));
+    rejectsWithoutChanges(directory, consumer, "native");
+  });
+});
+
+for (const name of ["env.wasm", "cli-source.txt", "inputs", "SHA256SUMS"]) {
+  test(`destination hardlink to accepted ${name} rejects before any write`, () => {
+    fixture((directory, consumer) => {
+      mkdirSync(resolve(consumer, "public/programs"), { recursive: true });
+      linkSync(resolve(directory, name), resolve(consumer, "public/programs/shell-engine.wasm"));
+      rejectsWithoutChanges(directory, consumer, "browser");
+    });
+  });
+}
+
+test("native caller notice hardlink is protected before guest writes", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "dist"));
+    const caller = resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt");
+    writeFileSync(caller, "native caller notices");
+    linkSync(caller, resolve(consumer, "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"));
+    rejectsWithoutChanges(directory, consumer, "native");
+  });
+});
+
+test("different destinations sharing an inode reject before writes", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "public/programs"), { recursive: true });
+    mkdirSync(resolve(consumer, "dist"));
+    const shell = resolve(consumer, "public/programs/shell-engine.wasm");
+    writeFileSync(shell, "old output");
+    linkSync(shell, resolve(consumer, "dist/env.wasm"));
+    rejectsWithoutChanges(directory, consumer, "browser");
+  });
+});
+
+test("atomic replacement preserves unrelated hardlinks to an old output", () => {
+  fixture((directory, consumer) => {
+    mkdirSync(resolve(consumer, "dist"));
+    const caller = resolve(consumer, "caller-data");
+    writeFileSync(caller, "caller data");
+    linkSync(caller, resolve(consumer, "dist/env.wasm"));
+    stageShellArtifacts(consumer, directory, shellIdentity(directory), "browser");
+    assert.equal(readFileSync(caller, "utf8"), "caller data");
+    assert.deepEqual(readFileSync(resolve(consumer, "dist/env.wasm")), Buffer.from(wasm));
+  });
 });

@@ -2,7 +2,7 @@ export const pythonVersion = "Python 3.15.2\n";
 export const pythonArgv0 = "/cross-build/wasm32-wasip1/python.wasm";
 export const pythonDirectory = "/tmp/python-spec";
 export const pythonEnvironment = {
-  PATH: "/bin",
+  PATH: "/usr/bin:/bin",
   HOME: "/home/guest",
   LC_ALL: "C.UTF-8",
   LANG: "C.UTF-8",

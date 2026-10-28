@@ -23,6 +23,11 @@ for (const [label, directory] of [
   ["Waffle runtime", "node_modules/waffle"],
   ["Hotkeys", "node_modules/@fregat/hotkeys"],
   ["Remix component", "node_modules/remix"],
+  ["Coreutils", "node_modules/waffle-coreutils"],
+  ["Findutils", "node_modules/waffle-findutils"],
+  ["Grep", "node_modules/waffle-grep"],
+  ["Sed", "node_modules/waffle-sed"],
+  ["Ripgrep", "node_modules/waffle-ripgrep"],
 ]) {
   const names = await noticeNames(directory);
   names.sort();
@@ -31,6 +36,6 @@ for (const [label, directory] of [
     text += `\n## ${label} / ${name}\n\n${await readFile(resolve(root, directory, name), "utf8")}\n`;
   }
 }
-text += `\n${await readFile(resolve(root, "public/programs/rg.NOTICES.txt"), "utf8")}`;
+text += `\n${await readFile(resolve(root, "node_modules/waffle-ripgrep/dist/rg.NOTICES.txt"), "utf8")}`;
 await mkdir(resolve(root, "public"), { recursive: true });
 await writeFile(resolve(root, "public/THIRD_PARTY_NOTICES.txt"), text);

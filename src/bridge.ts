@@ -34,6 +34,7 @@ export class SharedBridge {
   readonly state: Int32Array;
   readonly input: Uint8Array;
   readonly output: Uint8Array;
+  private readonly drainListeners = new Set<() => void>();
   constructor(
     readonly buffer = new SharedArrayBuffer(HEADER_BYTES + INPUT_CAPACITY + OUTPUT_CAPACITY),
   ) {
@@ -185,13 +186,28 @@ export class SharedBridge {
       Atomics.notify(this.state, control.outputLock);
     }
   }
+  onOutputDrained(listener: () => void): () => void {
+    this.drainListeners.add(listener);
+    return () => {
+      this.drainListeners.delete(listener);
+    };
+  }
   drain(limit = 32768): Uint8Array {
     const read = Atomics.load(this.state, control.outputRead);
     const available = (Atomics.load(this.state, control.outputWrite) - read) >>> 0;
     const bytes = copyFromRing(this.output, read, Math.min(limit, available));
     Atomics.store(this.state, control.outputRead, read + bytes.length);
-    if (bytes.length) this.signal();
-    if (bytes.length) this.route?.wake();
+    if (!bytes.length) return bytes;
+    // Listener mutation applies to the next actual drain, not this snapshot.
+    for (const listener of Array.from(this.drainListeners)) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("Shared terminal output drain listener failed", error);
+      }
+    }
+    this.signal();
+    this.route?.wake();
     return bytes;
   }
   // Only the shell worker calls this. The main thread drains instead of waiting.

@@ -606,7 +606,7 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
         // trusted baseline launcher, migration supervisor and group draining are shipped code.
         for (const name of [
           "bash-compat.mjs",
-          "build-wc.ts",
+          "compat-programs.ts",
           "bash-compat-helpers.mjs",
           "bash-compat-runner.mjs",
           "shell-scoreboard.mjs",
@@ -615,9 +615,6 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "shell-process-group.mjs",
           "wasi-build.ts",
           "waffle-release-inputs.ts",
-          "sed-source.ts",
-          "xargs-source.ts",
-          "utility-artifacts.ts",
           "verify-wasi-guests.ts",
         ])
           put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
