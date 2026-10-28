@@ -153,17 +153,16 @@ export class SharedBridge {
     const available = (Atomics.load(this.state, control.outputWrite) - read) >>> 0;
     const bytes = copyFromRing(this.output, read, Math.min(limit, available));
     Atomics.store(this.state, control.outputRead, read + bytes.length);
-    if (bytes.length) {
-      // Listener mutation applies to the next actual drain, not this snapshot.
-      for (const listener of Array.from(this.drainListeners)) {
-        try {
-          listener();
-        } catch (error) {
-          console.error("Shared terminal output drain listener failed", error);
-        }
+    if (!bytes.length) return bytes;
+    // Listener mutation applies to the next actual drain, not this snapshot.
+    for (const listener of Array.from(this.drainListeners)) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("Shared terminal output drain listener failed", error);
       }
-      this.signal();
     }
+    this.signal();
     return bytes;
   }
   // Only the shell worker calls this. The main thread drains instead of waiting.
