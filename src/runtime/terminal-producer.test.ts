@@ -186,3 +186,31 @@ test("producer acquisition rejects a child controller without publishing termina
     /terminal root is not live/,
   );
 });
+
+test("UI discard drains the shared cursor under a real raw lease without treating cancel as discard", (context) => {
+  const { producer, stream } = fixture(context);
+  const controls = terminalControls(stream)!;
+  const snapshot = must(controls.snapshot());
+  must(controls.setMode({ expected: snapshot.selection, mode: "cooked" }));
+  assert.equal(producer.pushKeyboard(Uint8Array.of(65, 66, 10)).kind, "ok");
+  const byte = new Uint8Array(1);
+  assert.equal(stream.tryRead!([byte]), 1);
+  assert.equal(byte[0], 65);
+  assert.equal(producer.discardInput(producer.editor), true);
+  assert.equal(producer.available(), 0);
+  assert.equal(must(controls.snapshot()).mode, "raw");
+  producer.pushKeyboard(Uint8Array.of(67));
+  assert.equal(stream.tryRead!([byte]), 1);
+  assert.equal(byte[0], 67);
+});
+
+test("restoring an editor creates an actual raw group instead of restoring its saved cooked mode", (context) => {
+  const { producer, stream } = fixture(context);
+  const controls = terminalControls(stream)!;
+  const snapshot = must(controls.snapshot());
+  must(controls.setMode({ expected: snapshot.selection, mode: "cooked" }));
+  must(producer.restoreEditor());
+  assert.equal(must(controls.snapshot()).mode, "raw");
+  producer.pushKeyboard(Uint8Array.of(68));
+  assert.equal(stream.tryRead!([new Uint8Array(1)]), 1);
+});

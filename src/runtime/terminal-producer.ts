@@ -16,6 +16,7 @@ import {
   type TerminalReason,
   type TerminalResult,
   type TerminalFailure,
+  type TerminalAuthority,
 } from "waffle/browser/runtime-terminals";
 import type { Stream } from "waffle/core";
 import type { WorkerProcessTransport } from "waffle/proc/worker-client";
@@ -41,6 +42,56 @@ type Discard =
       group: TerminalGroup;
       member: TerminalMember;
     };
+type EditorState = {
+  group: TerminalGroup;
+  member: TerminalMember;
+  lease: TerminalLease;
+  next?: Discard;
+};
+function restoreEditor(
+  state: EditorState,
+  authority: TerminalAuthority,
+  pid: number,
+): TerminalResult<void> {
+  try {
+    if (!state.next)
+      state.next = { kind: "group", group: must(authority.createGroup({ initialMode: "raw" })) };
+    if (state.next.kind === "group")
+      state.next = {
+        ...state.next,
+        kind: "member",
+        member: must(authority.admitExisting({ group: state.next.group, pid })).member,
+      };
+    if (state.next.kind === "member") {
+      state.lease = must(authority.transfer({ from: state.lease, to: state.next.group }));
+      state.next = { ...state.next, kind: "selected" };
+    }
+    must(authority.removeMember(state.member));
+    must(authority.retireGroup({ group: state.group, reason: "completed" }));
+    state.group = state.next.group;
+    state.member = state.next.member;
+    state.next = undefined;
+    return { kind: "ok", value: undefined };
+  } catch (error) {
+    if (error instanceof TerminalOperationError) return { kind: "error", code: error.code };
+    throw error;
+  }
+}
+function finishDiscard(
+  state: EditorState,
+  authority: TerminalAuthority,
+  discard: Exclude<Discard, { kind: "group" }>,
+  restore: TerminalGroup,
+): Exclude<Discard, { kind: "group" }> {
+  if (restore === state.group) {
+    const previous = { group: state.group, member: state.member };
+    state.group = discard.group;
+    state.member = discard.member;
+    return { ...previous, kind: "restored" };
+  }
+  state.lease = must(authority.transfer({ from: state.lease, to: restore }));
+  return { ...discard, kind: "restored" };
+}
 function drain(stream: Stream, available: () => number): boolean {
   const bytes = new Uint8Array(4096);
   while (available()) {
@@ -88,8 +139,12 @@ function acquireTerminalProducer(
     }),
   );
   let editor = must(authority.createGroup({ initialMode: options.initialMode ?? "raw" }));
-  let root = must(authority.admitExisting({ group: editor, pid: options.controller.pid }));
-  let lease = must(authority.acquire({ group: editor, expected: null }));
+  const root = must(authority.admitExisting({ group: editor, pid: options.controller.pid }));
+  const state: EditorState = {
+    group: editor,
+    member: root.member,
+    lease: must(authority.acquire({ group: editor, expected: null })),
+  };
   const reader = attachTerminal({
     context: display.inherit(),
     process: options.controller,
@@ -103,15 +158,15 @@ function acquireTerminalProducer(
     terminalInput: input.buffer,
   });
   const track = <T extends { readonly lease: TerminalLease | null }>(result: TerminalResult<T>) => {
-    if (result.kind === "ok" && result.value.lease) lease = result.value.lease;
+    if (result.kind === "ok" && result.value.lease) state.lease = result.value.lease;
     return result;
   };
   return {
     get editor() {
-      return editor;
+      return state.group;
     },
     get rootMember() {
-      return root.member;
+      return state.member;
     },
     rootMetadata: metadata(display.inherit()),
     notification: input.notification,
@@ -129,24 +184,13 @@ function acquireTerminalProducer(
     cancelPlan: (planned: TerminalMemberPlan) => authority.cancelPlan(planned),
     startBackground: (group: TerminalGroup) => authority.startBackground(group),
     select(group: TerminalGroup): TerminalResult<void> {
-      const selected = authority.transfer({ from: lease, to: group });
+      const selected = authority.transfer({ from: state.lease, to: group });
       if (selected.kind === "error") return selected;
-      lease = selected.value;
+      state.lease = selected.value;
       return { kind: "ok", value: undefined };
     },
     restoreEditor(): TerminalResult<void> {
-      const next = authority.createGroup({ initialMode: "raw" });
-      if (next.kind === "error") return next;
-      const member = authority.admitExisting({ group: next.value, pid: options.controller.pid });
-      if (member.kind === "error") return member;
-      const selected = authority.transfer({ from: lease, to: next.value });
-      if (selected.kind === "error") return selected;
-      lease = selected.value;
-      must(authority.removeMember(root.member));
-      must(authority.retireGroup({ group: editor, reason: "completed" }));
-      editor = next.value;
-      root = member.value;
-      return { kind: "ok", value: undefined };
+      return restoreEditor(state, authority, options.controller.pid);
     },
     discardInput(restore: TerminalGroup): boolean {
       if (!discard)
@@ -160,7 +204,7 @@ function acquireTerminalProducer(
           ).member,
         };
       if (discard.kind === "member") {
-        lease = must(authority.transfer({ from: lease, to: discard.group }));
+        state.lease = must(authority.transfer({ from: state.lease, to: discard.group }));
         discard = { ...discard, kind: "selected" };
       }
       if (discard.kind === "selected") {
@@ -171,8 +215,7 @@ function acquireTerminalProducer(
       }
       if (discard.kind === "raw" && !drain(stream, () => input.available())) return false;
       if (discard.kind === "raw") {
-        lease = must(authority.transfer({ from: lease, to: restore }));
-        discard = { ...discard, kind: "restored" };
+        discard = finishDiscard(state, authority, discard, restore);
       }
       must(authority.removeMember(discard.member));
       must(authority.retireGroup({ group: discard.group, reason: "cancelled" }));

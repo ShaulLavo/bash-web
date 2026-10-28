@@ -52,6 +52,23 @@ function tryDiscard(
     throw error;
   }
 }
+function completed(result: TerminalResult<unknown>, retry: () => void): boolean {
+  if (result.kind === "ok") return true;
+  if (result.code === "AGAIN") {
+    retry();
+    return false;
+  }
+  throw new TerminalOperationError(result.code);
+}
+function liveState(state: State | undefined): boolean {
+  if (!state) return false;
+  try {
+    return !readOutcome(state.signals.outcome);
+  } catch (error) {
+    if (error instanceof ProcessError && error.errno === ProcessErrno.SRCH) return false;
+    throw error;
+  }
+}
 
 export function createTerminalController(
   runtime: Runtime,
@@ -91,6 +108,7 @@ export function createTerminalController(
   const groups = new Map<number, Group>([[state.job, editor]]);
   const members = new Map<number, Group>();
   const states = new Map<number, State>();
+  const exited = new Set<number>();
   const disconnect = bridge.connectInput({
     push(bytes) {
       const result = producer.pushKeyboard(bytes);
@@ -163,10 +181,7 @@ export function createTerminalController(
     record.members.size === 0 && !Array.from(record.jobs.values()).some(pending);
   const resumeTarget = (record: Group): Group => {
     let target = record;
-    const live = (pid: number) => {
-      const process = states.get(pid);
-      return !!process && !readOutcome(process.signals.outcome);
-    };
+    const live = (pid: number) => liveState(states.get(pid));
     while (
       target !== editor &&
       (!target.active || !Array.from(target.members.keys()).every(live) || empty(target))
@@ -176,11 +191,27 @@ export function createTerminalController(
   };
   const retryDiscard = () => {
     if (retry || disposed) return;
-    retry = setTimeout(() => {
-      retry = undefined;
-      bridge.discardInput();
-      bridge.signal();
-    }, 1);
+    retry = setTimeout(retryWork, 1);
+  };
+  const cleanupOne = (pid: number) => {
+    const record = members.get(pid);
+    if (!record) {
+      exited.delete(pid);
+      return;
+    }
+    if (!completed(producer.removeMember(record.members.get(pid)!), retryDiscard)) return;
+    members.delete(pid);
+    states.delete(pid);
+    record.members.delete(pid);
+    exited.delete(pid);
+  };
+  const retryWork = () => {
+    retry = undefined;
+    if (disposed) return;
+    bridge.discardInput();
+    for (const pid of exited) cleanupOne(pid);
+    for (const group of new Set(groups.values())) retire(group);
+    bridge.signal();
   };
   const finishDiscard = () => {
     if (disposed) return;
@@ -196,7 +227,6 @@ export function createTerminalController(
       return false;
     }
     if (target === editor) {
-      must(producer.restoreEditor());
       editor.active = false;
       editor = {
         group: producer.editor,
@@ -225,9 +255,10 @@ export function createTerminalController(
       Array.from(record.jobs.values()).some(pending)
     )
       return;
-    if (selected === record) restore(record);
-    if (record.rootMember) must(producer.removeMember(record.rootMember));
-    must(producer.retireGroup(record.group, "completed"));
+    if (selected === record && !restore(record)) return;
+    if (record.rootMember && !completed(producer.removeMember(record.rootMember), retryDiscard))
+      return;
+    if (!completed(producer.retireGroup(record.group, "completed"), retryDiscard)) return;
     record.active = false;
     for (const job of record.jobs.keys()) groups.delete(job);
     if (
@@ -243,9 +274,9 @@ export function createTerminalController(
     if (previous && previous !== editor) {
       must(producer.select(previous.group));
       selected = previous;
-      return;
+      return true;
     }
-    must(producer.restoreEditor());
+    if (!completed(producer.restoreEditor(), retryDiscard)) return false;
     editor.active = false;
     editor = {
       group: producer.editor,
@@ -256,6 +287,7 @@ export function createTerminalController(
     };
     groups.set(state.job, editor);
     selected = editor;
+    return true;
   };
   return {
     metadata: producer.rootMetadata,
@@ -274,14 +306,8 @@ export function createTerminalController(
         this.dispose();
         return;
       }
-      const record = members.get(pid);
-      if (record) {
-        const member = record.members.get(pid)!;
-        members.delete(pid);
-        states.delete(pid);
-        record.members.delete(pid);
-        must(producer.removeMember(member));
-      }
+      exited.add(pid);
+      cleanupOne(pid);
       for (const group of new Set(groups.values())) retire(group);
       bridge.signal();
     },
@@ -294,6 +320,7 @@ export function createTerminalController(
       groups.clear();
       members.clear();
       states.clear();
+      exited.clear();
     },
     retired() {
       ownedDestinations.delete(directory);
