@@ -187,8 +187,7 @@ export function createTerminalController(
         record!.members.set(descendant.pid, admitted.member);
         members.set(descendant.pid, record!);
         states.set(descendant.pid, process);
-        if (created && process.jobForeground && process.jobOwner === root.pid)
-          foreground = record;
+        if (created && process.jobForeground && process.jobOwner === root.pid) foreground = record;
         if (created && process.jobForeground && !paused) selected = record;
       });
       return { kind: "ok", value: undefined };
