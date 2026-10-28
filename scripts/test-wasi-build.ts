@@ -3,6 +3,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { wasiBuildConfiguration, wasiBuildEnvironment } from "./wasi-build.ts";
+import { waffleBuildFixture } from "../tests/helpers/waffle-build-inputs.ts";
+
+const builder = `#!/bin/bash
+set -eu
+[[ ! -e "$1" ]]
+printf 'build\\n' >> "$PWD/builds"
+mkdir -p "$1/lib/wasm32-wasip1"
+printf 'fixture archive' > "$1/lib/wasm32-wasip1/libc.a"
+`;
 
 function fixture(run: (root: string, env: NodeJS.ProcessEnv) => void) {
   const parent = resolve(import.meta.dirname, "../.build");
@@ -14,17 +23,7 @@ function fixture(run: (root: string, env: NodeJS.ProcessEnv) => void) {
       writeFileSync(resolve(root, path), contents);
     };
     put("sdk/VERSION", "34.0\nwasi-libc: 2e6fb9d8ee0c\n");
-    put("node_modules/waffle/patches/wasi-libc/preopen-scan.patch", "fixture scanner patch");
-    put(
-      "node_modules/waffle/scripts/build-wasi-libc.sh",
-      `#!/bin/bash
-set -eu
-[[ ! -e "$1" ]]
-printf 'build\\n' >> "$PWD/builds"
-mkdir -p "$1/lib/wasm32-wasip1"
-printf 'fixture archive' > "$1/lib/wasm32-wasip1/libc.a"
-`,
-    );
+    waffleBuildFixture(root, builder, "fixture scanner patch");
     run(root, { ...process.env, WASI_SDK_PATH: resolve(root, "sdk") });
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -71,10 +70,7 @@ test("changing the pinned scanner recipe builds a fresh output instead of accept
   fixture((root, env) => {
     const original = wasiBuildConfiguration(root, env);
     wasiBuildEnvironment(root, ".build/guest", env);
-    writeFileSync(
-      resolve(root, "node_modules/waffle/patches/wasi-libc/preopen-scan.patch"),
-      "changed scanner",
-    );
+    waffleBuildFixture(root, builder, "changed scanner");
     const changed = wasiBuildConfiguration(root, env);
     assert.notEqual(original.sysroot, changed.sysroot);
     wasiBuildEnvironment(root, ".build/guest", env);

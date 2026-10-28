@@ -9,14 +9,14 @@ export const pythonInputPaths = [
   "scripts/python-source.ts",
   "scripts/python-ci.ts",
   "scripts/wasi-build.ts",
+  "scripts/waffle-release-inputs.ts",
+  "sources.lock.json",
   "scripts/verify-wasi-guests.ts",
   "patches/cpython-wasi-cwd.patch",
   "third-party/cpython/provenance.json",
   "third-party/cpython/LICENSE",
   "third-party/cpython/licenses.json",
   ".github/actions/wasi-sdk/action.yml",
-  "node_modules/waffle/scripts/build-wasi-libc.sh",
-  "node_modules/waffle/patches/wasi-libc/preopen-scan.patch",
 ];
 
 export function pythonCacheKey(root: string, sdk: string, toolchain: string): string {
