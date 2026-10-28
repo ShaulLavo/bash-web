@@ -72,11 +72,12 @@ test("editing wrapped commands preserves every screen row and the cursor", async
       cursor: window.bashWeb!.terminal!.geometry().cursor,
     }));
     const source = `echo ${"a".repeat(columns * (rows - 1) + 11)}TAIL`;
+    const insertion = rows === 2 ? 10 : columns + 7;
     await page.keyboard.insertText(source);
     await page.keyboard.press("Home");
-    for (let index = 0; index < 10; index++) await page.keyboard.press("ArrowRight");
+    for (let index = 0; index < insertion; index++) await page.keyboard.press("ArrowRight");
     await page.keyboard.insertText("MID");
-    const edited = `${source.slice(0, 10)}MID${source.slice(10)}`;
+    const edited = `${source.slice(0, insertion)}MID${source.slice(insertion)}`;
     const painted = `$ ${edited}`;
     const expected = Array.from({ length: rows }, (_, row) =>
       painted.slice(row * columns, (row + 1) * columns),
@@ -90,7 +91,12 @@ test("editing wrapped commands preserves every screen row and the cursor", async
       )
       .toEqual({
         lines: before.lines.slice(0, before.cursor.y).concat(expected),
-        cursor: { x: 15, y: before.cursor.y, pendingWrap: false, visible: true },
+        cursor: {
+          x: (insertion + 5) % columns,
+          y: before.cursor.y + Math.floor((insertion + 5) / columns),
+          pendingWrap: false,
+          visible: true,
+        },
       });
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
