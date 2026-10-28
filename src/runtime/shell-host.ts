@@ -168,8 +168,12 @@ export async function startShell(
   };
   const memory = new SharedArrayBuffer(8);
   const observation = observeRoot(runtime, transport, memory);
-  const writeTerminal = (fd: 1 | 2, bytes: Uint8Array): number => {
+  const tryTerminal = (bytes: Uint8Array): number => {
     const accepted = terminal.tryWrite([bytes]);
+    return accepted < 0 ? 0 : accepted;
+  };
+  const writeTerminal = (fd: 1 | 2, bytes: Uint8Array): number => {
+    const accepted = tryTerminal(bytes);
     const retained = accepted < 0 ? 0 : Math.min(accepted, bytes.length);
     const dropped = bytes.length - retained;
     if (dropped) {
@@ -179,6 +183,10 @@ export async function startShell(
     return accepted;
   };
   let service: ProcessService | undefined;
+  const stopDrain = terminal.onOutputDrained(() => {
+    if (runtime.disposed || !service) return;
+    service.outputDrained(state.pid);
+  });
   let worker: Worker | undefined;
   let acknowledged = false;
   let finished = false;
@@ -224,6 +232,7 @@ export async function startShell(
   };
   const physicallyStop = () =>
     (physicallyStopped ??= (async () => {
+      stopDrain();
       unobserveExit();
       await quiesceTerminal(admission);
       worker?.terminate();
@@ -290,9 +299,7 @@ export async function startShell(
     await service.adoptRuntimeRoot(transport, {
       filesystem: identity,
       acknowledged: () => acknowledged,
-      output: (fd, bytes) => {
-        writeTerminal(fd === 2 ? 2 : 1, bytes);
-      },
+      tryOutput: (_fd, bytes) => tryTerminal(bytes),
       async quiesce() {
         await quiesceTerminal(admission);
       },

@@ -58,6 +58,7 @@ function fixture(
     number,
     { transport: WorkerProcessTransport; options: RuntimeRootOptions }
   >();
+  const workers: Worker[] = [];
   const reaped: FilesystemIdentity[] = [];
   const requests: unknown[] = [];
   let requestPosted!: () => void;
@@ -95,6 +96,9 @@ function fixture(
     async adoptRuntimeRoot(transport: WorkerProcessTransport, options: RuntimeRootOptions) {
       live();
       roots.set(workerProcessState(transport).pid, { transport, options });
+    },
+    outputDrained() {
+      live();
     },
     takeWorker(url: string) {
       live();
@@ -223,6 +227,7 @@ function fixture(
       });
     }
     constructor() {
+      workers.push(this as unknown as Worker);
       if (failConstructor) throw new Error("Worker construction refused");
     }
     terminate() {
@@ -255,6 +260,7 @@ function fixture(
     posted,
     rootStatuses,
     roots,
+    workers,
     exitListeners,
     events,
     get borrowedAfterDispose() {
@@ -679,9 +685,10 @@ test("foreign terminal output drops are surfaced in runtime diagnostics", async 
   const terminal = new SharedBridge();
   const error = context.mock.method(console, "error", () => {});
   const shell = await createShell({ ...host.options, terminal });
-  const root = host.roots.get(shell.process.pid)!;
   const bytes = new Uint8Array(OUTPUT_CAPACITY + 1).fill(19);
-  root.options.output!(1, bytes);
+  host.workers[0]!.onmessage?.(
+    new MessageEvent("message", { data: { type: "stdout", data: bytes } }),
+  );
   assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 1);
   assert.equal(runtimeSnapshot(host.runtime).roots[0]!.droppedTerminalBytes, 1);
   assert.deepEqual(terminal.drain(OUTPUT_CAPACITY + 1), bytes.subarray(0, OUTPUT_CAPACITY));
@@ -691,6 +698,45 @@ test("foreign terminal output drops are surfaced in runtime diagnostics", async 
   );
   await shell.dispose();
   assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 1);
+});
+
+test("bounded root output resumes only after actual terminal drains", async (context) => {
+  const host = fixture(context);
+  const terminal = new SharedBridge();
+  const shell = await createShell({ ...host.options, terminal });
+  const root = host.roots.get(shell.process.pid)!;
+  const bytes = new Uint8Array(400000);
+  for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;
+  assert.equal(root.options.output, undefined);
+  assert.equal(root.options.tryOutput!(1, bytes), OUTPUT_CAPACITY);
+  assert.equal(root.options.tryOutput!(1, Uint8Array.of(1)), 0);
+  assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 0);
+  const drained: number[] = [];
+  let pending = bytes.subarray(OUTPUT_CAPACITY);
+  host.service.outputDrained = (pid) => {
+    drained.push(pid);
+    if (!pending.length) return;
+    const accepted = root.options.tryOutput!(1, pending);
+    pending = pending.subarray(accepted);
+  };
+  const received: Uint8Array[] = [];
+  let total = 0;
+  while (total < bytes.length) {
+    const chunk = terminal.drain();
+    assert.ok(chunk.length);
+    received.push(chunk);
+    total += chunk.length;
+    assert.equal(drained.length, received.length);
+  }
+  assert.equal(pending.length, 0);
+  assert.deepEqual(Buffer.concat(received.map((chunk) => Buffer.from(chunk))), Buffer.from(bytes));
+  assert.ok(drained.every((pid) => pid === shell.process.pid));
+  root.options.tryOutput!(1, Uint8Array.of(99));
+  await shell.dispose();
+  const calls = drained.length;
+  terminal.drain();
+  assert.equal(drained.length, calls);
+  assert.equal(runtimeSnapshot(host.runtime).droppedTerminalBytes, 0);
 });
 
 test("shell facades borrow one page runtime and dispose only their own process tree", async (context) => {
