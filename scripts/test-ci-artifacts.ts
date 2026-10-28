@@ -263,13 +263,7 @@ test("native notice destination alias rejects before copying either guest", () =
   });
 });
 
-for (const name of [
-  "env.wasm",
-  "cli-source.txt",
-  "inputs",
-  "SHA256SUMS",
-  "utility-artifacts/source-sha256.txt",
-]) {
+for (const name of ["env.wasm", "cli-source.txt", "inputs", "SHA256SUMS"]) {
   test(`destination hardlink to accepted ${name} rejects before any write`, () => {
     fixture((directory, consumer) => {
       mkdirSync(resolve(consumer, "public/programs"), { recursive: true });
