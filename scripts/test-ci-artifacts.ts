@@ -19,6 +19,7 @@ import {
   nativeArtifactFiles,
   packCiArtifacts,
   stageCiArtifacts,
+  stageShellArtifacts,
   verifyCiArtifacts,
 } from "./ci-artifacts.ts";
 import { ciInputs } from "./ci-inputs.ts";
@@ -165,3 +166,51 @@ test("shell notices are required alongside the unchanged native and ten WASI tes
   assert.ok(nativeArtifactFiles.includes("THIRD_PARTY_NOTICES.txt"));
   assert.equal(nativeArtifactFiles.filter((name) => name.startsWith("wasi-tests/")).length, 10);
 });
+
+function shellIdentity(directory: string) {
+  return {
+    source: readFileSync(resolve(directory, "cli-source.txt"), "utf8").trim(),
+    inputs: readFileSync(resolve(directory, "inputs"), "utf8").trim(),
+    checksumsSha256: createHash("sha256")
+      .update(readFileSync(resolve(directory, "SHA256SUMS")))
+      .digest("hex"),
+  };
+}
+
+test("accepted shell subset stages normal browser and native paths without other guests", () => {
+  fixture((directory, consumer) => {
+    const identity = shellIdentity(directory);
+    rmSync(resolve(directory, "shell-cli"));
+    stageShellArtifacts(consumer, directory, identity, "browser");
+    stageShellArtifacts(consumer, directory, identity, "native");
+    for (const path of [
+      "public/programs/shell-engine.wasm",
+      "dist/env.wasm",
+      "dist/bash-web-shell.wasm",
+      "dist/bash-web-env.wasm",
+    ])
+      assert.deepEqual(readFileSync(resolve(consumer, path)), Buffer.from(wasm));
+    assert.equal(
+      readFileSync(resolve(consumer, "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"), "utf8"),
+      shellNotice,
+    );
+  });
+});
+
+for (const name of [
+  "cli-source.txt",
+  "inputs",
+  "SHA256SUMS",
+  "shell-runtime.wasm",
+  "env.wasm",
+  "THIRD_PARTY_NOTICES.txt",
+]) {
+  test(`accepted shell subset rejects wrong ${name} before writing`, () => {
+    fixture((directory, consumer) => {
+      const identity = shellIdentity(directory);
+      writeFileSync(resolve(directory, name), "wrong bytes");
+      assert.throws(() => stageShellArtifacts(consumer, directory, identity, "browser"));
+      assert.deepEqual(readdirSync(consumer), []);
+    });
+  });
+}

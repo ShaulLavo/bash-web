@@ -63,6 +63,65 @@ export function verifyCiArtifacts(root: string, directory: string) {
   );
 }
 
+export interface ShellArtifactIdentity {
+  readonly source: string;
+  readonly inputs: string;
+  readonly checksumsSha256: string;
+}
+
+/** Verify an owner-accepted shell/env subset using the unchanged normal native receipts. */
+export function verifyShellArtifacts(directory: string, expected: ShellArtifactIdentity) {
+  assert.match(expected.source, /^[a-f0-9]{40}$/);
+  for (const value of [expected.inputs, expected.checksumsSha256])
+    assert.match(value, /^[a-f0-9]{64}$/);
+  assert.equal(readFileSync(resolve(directory, "cli-source.txt"), "utf8"), `${expected.source}\n`);
+  assert.equal(readFileSync(resolve(directory, "inputs"), "utf8"), `${expected.inputs}\n`);
+  const checksums = readFileSync(resolve(directory, "SHA256SUMS"));
+  assert.equal(createHash("sha256").update(checksums).digest("hex"), expected.checksumsSha256);
+  const hashes = new Map<string, string>();
+  for (const line of checksums.toString().trimEnd().split("\n")) {
+    const match = /^([a-f0-9]{64})  ([a-zA-Z0-9_./-]+)$/.exec(line);
+    assert.ok(match, "Malformed native checksum receipt");
+    assert.ok(!hashes.has(match[2]), "Duplicate native checksum receipt entry");
+    hashes.set(match[2], match[1]);
+  }
+  for (const name of ["shell-runtime.wasm", "env.wasm", "THIRD_PARTY_NOTICES.txt"]) {
+    assert.equal(
+      createHash("sha256")
+        .update(readFileSync(resolve(directory, name)))
+        .digest("hex"),
+      hashes.get(name),
+      `Accepted shell artifact differs: ${name}`,
+    );
+  }
+}
+
+/** Stage existing shell guests; never build a compiler, runtime, worker or guest. */
+export function stageShellArtifacts(
+  destination: string,
+  directory: string,
+  expected: ShellArtifactIdentity,
+  mode: "browser" | "native",
+) {
+  verifyShellArtifacts(directory, expected);
+  const mappings =
+    mode === "browser"
+      ? [
+          ["shell-runtime.wasm", "public/programs/shell-engine.wasm"],
+          ["env.wasm", "dist/env.wasm"],
+          ["THIRD_PARTY_NOTICES.txt", "dist/THIRD_PARTY_NOTICES.txt"],
+        ]
+      : [
+          ["shell-runtime.wasm", "dist/bash-web-shell.wasm"],
+          ["env.wasm", "dist/bash-web-env.wasm"],
+          ["THIRD_PARTY_NOTICES.txt", "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"],
+        ];
+  for (const [name, path] of mappings) {
+    assert.notEqual(resolve(directory, name), resolve(destination, path));
+    copy(resolve(directory, name), resolve(destination, path));
+  }
+}
+
 function copy(sourcePath: string, destination: string) {
   mkdirSync(dirname(destination), { recursive: true });
   copyFileSync(sourcePath, destination);
@@ -146,10 +205,25 @@ export function stageCiArtifacts(root: string, directory: string) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const root = resolve(import.meta.dirname, "..");
-  const [command, directory] = process.argv.slice(2);
-  assert.ok(directory && process.argv.length === 4, "Use pack|stage|notices <artifact directory>");
-  if (command === "pack") packCiArtifacts(root, resolve(directory));
-  else if (command === "stage") stageCiArtifacts(root, resolve(directory));
-  else if (command === "notices") stageCiNotices(root, resolve(directory));
-  else throw new Error("Use pack|stage|notices <artifact directory>");
+  const [command, directory, destination, revision, inputs, checksumsSha256, mode] =
+    process.argv.slice(2);
+  if (command === "stage-shell") {
+    assert.ok(directory && destination && revision && inputs && checksumsSha256);
+    assert.ok(mode === "browser" || mode === "native");
+    stageShellArtifacts(
+      resolve(destination),
+      resolve(directory),
+      { source: revision, inputs, checksumsSha256 },
+      mode,
+    );
+  } else {
+    assert.ok(
+      directory && process.argv.length === 4,
+      "Use pack|stage|notices <artifact directory>",
+    );
+    if (command === "pack") packCiArtifacts(root, resolve(directory));
+    else if (command === "stage") stageCiArtifacts(root, resolve(directory));
+    else if (command === "notices") stageCiNotices(root, resolve(directory));
+    else throw new Error("Use pack|stage|notices <artifact directory>");
+  }
 }
