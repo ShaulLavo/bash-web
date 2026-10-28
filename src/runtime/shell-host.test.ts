@@ -774,14 +774,19 @@ test("direct terminal child gets owned output and cleanup stays behind its fence
         return { terminate: terminateChild };
       },
     } as unknown as ProcessService;
-    launchTerminalWorker<ShellWorkerRequest>(host.runtime, childService,
+    launchTerminalWorker<ShellWorkerRequest>(
+      host.runtime,
+      childService,
       {
-          pid,
-          module: rootRequest.module,
-          interruptible: false,
-          request,
+        pid,
+        module: rootRequest.module,
+        interruptible: false,
+        request,
       } as unknown as ProcessContext,
-      { workerUrl: host.options.workerUrl, request: { module: rootRequest.module, args: request.argv, env: request.env } },
+      {
+        workerUrl: host.options.workerUrl,
+        request: { module: rootRequest.module, args: request.argv, env: request.env },
+      },
     );
     const kill = host.service.killJob.bind(host.service);
     host.service.killJob = async (job, signal, reserved) => {
