@@ -11,7 +11,7 @@ import { createBridgeTerminal } from "./runtime-terminals";
 import type { TerminalAdmission } from "./terminal-admission";
 
 export function createShellTerminals(
-  request: RuntimeWorkerRequest,
+  request: Pick<RuntimeWorkerRequest, "runtimeProcess">,
   output: SharedArrayBuffer | undefined,
   admission: TerminalAdmission,
   root: SharedBridge | undefined,
@@ -27,9 +27,11 @@ export function createShellTerminals(
   if (!request.runtimeProcess || !output)
     throw new TypeError("Terminal input has no owned shell output destination");
   const input = attachTerminalInput(data.terminalInput);
+  // Waffle checks liveness outside policy callbacks. Admission still fences output;
+  // throwing here after a member dies would close the shared terminal session.
   const endpoints = {
-    1: createBridgeTerminal(output, 1, checkActive, admission),
-    2: createBridgeTerminal(output, 2, checkActive, admission),
+    1: createBridgeTerminal(output, 1, undefined, admission),
+    2: createBridgeTerminal(output, 2, undefined, admission),
   };
   const base = createTerminalInputPolicy({
     input,

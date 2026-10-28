@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import {
   attachTerminal,
   claimTerminalAuthority,
@@ -9,7 +9,17 @@ import {
   pushTerminalInput,
   type TerminalResult,
 } from "waffle/browser/runtime-terminals";
-import { createWorkerProcessTransport } from "waffle/proc/worker-client";
+import { DescriptorTable } from "waffle/core/descriptors";
+import { claimOutcome, readOutcome } from "waffle/proc/outcome";
+import {
+  createWorkerProcessTransport,
+  workerProcessState,
+  WorkerProcessClient,
+  type WorkerProcessTransport,
+} from "waffle/proc/worker-client";
+import { SharedBridge } from "../bridge";
+import { createShellTerminals } from "./terminal-endpoints";
+import { createTerminalAdmission, quiesceTerminal } from "./terminal-admission";
 import { terminalGuest } from "../../tests/helpers/terminal-wasi-guest";
 
 function must<T>(result: TerminalResult<T>): T {
@@ -17,34 +27,39 @@ function must<T>(result: TerminalResult<T>): T {
   return result.value;
 }
 
-for (const target of [1, 2] as const) {
-  test(`session terminal target ${target} preserves FD_READ and the shared fd0 input cursor`, (context) => {
-    const root = createWorkerProcessTransport({ capacity: 8 });
-    const input = createTerminalInput();
-    const display = createTerminalSession({
-      controller: root,
-      geometry: { columns: 80, rows: 24 },
-    });
-    context.after(() => display.close("disposed"));
-    const policy = createTerminalInputPolicy({ input });
-    const authority = must(
-      claimTerminalAuthority({
-        identity: display.identity,
-        process: root,
-        checkActive() {},
-        policy,
-      }),
-    );
-    const editor = must(authority.createGroup({ initialMode: "raw" }));
-    const member = must(authority.admitExisting({ group: editor, pid: root.pid }));
-    must(authority.acquire({ group: editor, expected: null }));
-    const attachment = attachTerminal({
-      context: member.context,
+function terminalSession(context: TestContext) {
+  const root = createWorkerProcessTransport({ capacity: 8 });
+  const input = createTerminalInput();
+  const display = createTerminalSession({
+    controller: root,
+    geometry: { columns: 80, rows: 24 },
+  });
+  context.after(() => display.close("disposed"));
+  const policy = createTerminalInputPolicy({ input });
+  const authority = must(
+    claimTerminalAuthority({
+      identity: display.identity,
       process: root,
       checkActive() {},
       policy,
-    });
-    context.after(() => attachment.dispose());
+    }),
+  );
+  const editor = must(authority.createGroup({ initialMode: "raw" }));
+  const member = must(authority.admitExisting({ group: editor, pid: root.pid }));
+  must(authority.acquire({ group: editor, expected: null }));
+  const attachment = attachTerminal({
+    context: member.context,
+    process: root,
+    checkActive() {},
+    policy,
+  });
+  context.after(() => attachment.dispose());
+  return { root, input, display, authority, editor, attachment };
+}
+
+for (const target of [1, 2] as const) {
+  test(`session terminal target ${target} preserves FD_READ and the shared fd0 input cursor`, (context) => {
+    const { input, display, attachment } = terminalSession(context);
     const guest = terminalGuest({
       0: attachment.resolve(0),
       1: attachment.resolve(1),
@@ -83,5 +98,95 @@ for (const target of [1, 2] as const) {
     assert.equal(guest.io("fd_read", 0, 1), 0);
     assert.equal(guest.bytes[256], 68);
     assert.equal(input.available(), 0);
+  });
+}
+
+function outputMember(context: TestContext) {
+  const session = terminalSession(context);
+  const descriptors = new DescriptorTable();
+  context.after(() => descriptors.dispose());
+  let child: WorkerProcessTransport | undefined;
+  const unexpected = (): never => {
+    throw new Error("No descriptor transfer in this membership fixture");
+  };
+  const client = new WorkerProcessClient({
+    transport: session.root,
+    descriptors,
+    codec: { import: unexpected, export: unexpected, discard: unexpected },
+    postMessage(message) {
+      if (message.operation === "spawn") child = message.transport;
+    },
+  });
+  const pid = client.spawn(session.root.pid, {
+    executable: "/owned-terminal-member",
+    argv: [],
+    env: {},
+    cwd: "/",
+    job: 0,
+    fds: [],
+  });
+  assert.ok(child);
+  const admitted = must(session.authority.admitExisting({ group: session.editor, pid }));
+  child.data = {
+    terminalContext: admitted.context,
+    terminalInput: session.input.buffer,
+  };
+  return { ...session, child, bridge: new SharedBridge(), admission: createTerminalAdmission() };
+}
+
+for (const target of [1, 2] as const) {
+  test(`member retirement during fd${target} output leaves the root session readable`, (context) => {
+    const { root, child, input, display, authority, attachment, bridge, admission } =
+      outputMember(context);
+    const retired = new Error("Member retired after Waffle's active check");
+    let armed = false;
+    let checks = 0;
+    const checkActive = () => {
+      if (!armed || ++checks <= 2) return;
+      claimOutcome(workerProcessState(child).signals.outcome, { kind: "signaled", code: 2 });
+      throw retired;
+    };
+    const terminals = createShellTerminals(
+      { runtimeProcess: child },
+      bridge.buffer,
+      admission,
+      undefined,
+      checkActive,
+    );
+    assert.ok(terminals);
+    context.after(() => terminals.dispose());
+    terminals.ready();
+    must(pushTerminalInput(display, input, Uint8Array.of(65)));
+    armed = true;
+    assert.throws(() => terminals.resolve(target).tryWrite!([Uint8Array.of(90)]), retired);
+    assert.equal(readOutcome(workerProcessState(root).signals.outcome), null);
+    const byte = new Uint8Array(1);
+    assert.equal(attachment.resolve(0).tryRead!([byte]), 1, "child retirement is not root EOF");
+    assert.equal(byte[0], 65);
+    assert.equal(authority.createGroup({ initialMode: "raw" }).kind, "ok");
+  });
+
+  test(`fd${target} policy output stays fenced after admission revocation`, async (context) => {
+    const { child, input, display, authority, attachment, bridge, admission } =
+      outputMember(context);
+    const terminals = createShellTerminals(
+      { runtimeProcess: child },
+      bridge.buffer,
+      admission,
+      undefined,
+      () => {},
+    );
+    assert.ok(terminals);
+    context.after(() => terminals.dispose());
+    terminals.ready();
+    must(pushTerminalInput(display, input, Uint8Array.of(65)));
+    assert.equal(await quiesceTerminal(admission), true);
+    const endpoint = terminals.resolve(target);
+    assert.equal(endpoint.tryWrite!([Uint8Array.of(90)]), -29);
+    assert.equal(endpoint.readiness().writable, false);
+    assert.equal(bridge.drain().length, 0, "revoked output never reaches the shell ring");
+    assert.equal(Atomics.load(new Int32Array(admission.state), 1), 0);
+    assert.equal(attachment.resolve(0).tryRead!([new Uint8Array(1)]), 1);
+    assert.equal(authority.createGroup({ initialMode: "raw" }).kind, "ok");
   });
 }
