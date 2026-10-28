@@ -10,6 +10,7 @@ import { workerProcessDirectoryId, type WorkerProcessTransport } from "waffle/pr
 import { observeGuest } from "./diagnostics";
 import type { ShellWorkerRequest } from "./worker";
 import type { TerminalMetadata } from "./terminal-producer";
+import { shellTerminalOutput } from "./terminal-controller";
 import {
   attachTerminal,
   createTerminalAdmission,
@@ -70,7 +71,7 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
   if (!transport) throw new Error("Process has no admitted worker transport");
   const data = transport.data as ShellWorkerData;
   if (!data?.filesystem) throw new TypeError("Process has no filesystem identity");
-  const admission = data.terminalAdmission ?? createTerminalAdmission();
+  const admission = createTerminalAdmission();
   if (data.shellTerminal) attachTerminal(admission, data.shellTerminal);
   transport.data = { ...data, terminalAdmission: admission };
   let handle: ProcessHandle | undefined;
@@ -152,6 +153,9 @@ export function guestLauncher(
           : { ...context.request.env, PWD: context.request.cwd },
         interruptible: context.interruptible,
         memoryUsage: new SharedArrayBuffer(8),
+        shellOutput: service.transportFor(context.pid)
+          ? shellTerminalOutput(runtime, service.transportFor(context.pid)!)
+          : undefined,
       },
       wake() {},
     });

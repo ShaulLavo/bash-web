@@ -11,7 +11,7 @@ import {
 import { SharedBridge, control } from "../bridge";
 import { createExecutableQuery } from "./executable-query";
 import { shellTerminalImports } from "./guest-imports";
-import { createBridgeTerminal } from "./runtime-terminals";
+import { createShellTerminals } from "./terminal-endpoints";
 import { createTerminalAdmission, type TerminalAdmission } from "./terminal-admission";
 import type { ShellWorkerData } from "./worker-launcher";
 
@@ -20,10 +20,11 @@ export interface ShellWorkerRequest extends RuntimeWorkerRequest {
   terminal?: SharedArrayBuffer;
   terminalAdmission?: TerminalAdmission;
   memoryUsage?: SharedArrayBuffer;
+  shellOutput?: SharedArrayBuffer;
 }
 export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellWorkerRequest> {
   const data = request.runtimeProcess?.data as ShellWorkerData | undefined;
-  const terminal = request.terminal ?? data?.shellTerminal;
+  const terminal = request.terminal ?? request.shellOutput ?? data?.shellTerminal;
   const admission =
     request.terminalAdmission ?? data?.terminalAdmission ?? createTerminalAdmission();
   const executableQuery = createExecutableQuery();
@@ -37,12 +38,15 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
     if (sample) Atomics.store(sample, 0, BigInt(bytes));
     if (bridge) Atomics.store(bridge.state, control.memory, bytes);
   };
-  const endpoint = (target: 0 | 1 | 2) => {
-    if (!terminal) throw new Error("Shared terminal descriptor has no admitted destination");
-    return createBridgeTerminal(terminal, target, () => checkActive(), admission);
-  };
+  const terminals = createShellTerminals(request, terminal, admission, bridge, () => checkActive());
+  if (request.terminal && !terminals)
+    throw new TypeError("Shell root requires terminal input metadata");
+  const endpoint = (target: 0 | 1 | 2) => terminals?.resolve(target);
   return {
-    stdio: request.terminal ? { 0: endpoint(0), 1: endpoint(1), 2: endpoint(2) } : undefined,
+    stdio:
+      request.terminal && terminals
+        ? { 0: terminals.resolve(0), 1: terminals.resolve(1), 2: terminals.resolve(2) }
+        : undefined,
     setup(context) {
       checkActive = context.checkActive;
     },
@@ -62,17 +66,22 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
           },
           columns() {
             checkActive();
-            return shell.columns();
+            return terminals?.columns() ?? shell.columns();
           },
           phase(phase: number) {
             checkActive();
             shell.phase(phase);
+            terminals?.phase(phase);
           },
         },
       };
     },
-    ...(terminal ? { resolveTerminal: endpoint } : {}),
-    spawnData: () => ({ shellTerminal: terminal, terminalAdmission: createTerminalAdmission() }),
+    resolveTerminal: endpoint,
+    spawnData: () => ({
+      ...terminals?.metadata(),
+      shellTerminal: terminal,
+      terminalAdmission: createTerminalAdmission(),
+    }),
     beforeBindings({ wasi }) {
       if (!request.terminal) for (const fd of [0, 1, 2]) wasi.descriptors.close(fd);
     },
@@ -80,12 +89,13 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
       if (imports.bash_web_executable) executableQuery.bind(wasi);
       // Sample the guest's allocation at host boundaries without retaining any guest
       // memory view across memory.grow. This telemetry is not an allocation quota.
-      if (!sample && !bridge) return;
+      if (!sample && !bridge && !terminals) return;
       for (const namespace of Object.values(imports))
         for (const [name, value] of Object.entries(namespace)) {
           if (typeof value === "function")
             namespace[name] = (...args: number[]) => {
               sampleMemory();
+              terminals?.prepare();
               return value(...args);
             };
         }
@@ -94,12 +104,16 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
       memory =
         instance.exports.memory instanceof WebAssembly.Memory ? instance.exports.memory : undefined;
       sampleMemory();
+      terminals?.ready();
       if (bridge && memory) {
         Atomics.store(bridge.state, control.phase, 1);
         bridge.signal();
       }
     },
-    beforeFinish: sampleMemory,
+    beforeFinish() {
+      sampleMemory();
+      terminals?.dispose();
+    },
     run: preview1Executor.run,
   };
 }

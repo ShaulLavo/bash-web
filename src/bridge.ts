@@ -20,7 +20,17 @@ export const control = {
 export const INPUT_CAPACITY = 65536;
 export const OUTPUT_CAPACITY = 262144;
 const HEADER_BYTES = 64;
+export interface BridgeInputRoute {
+  push(bytes: Uint8Array): number;
+  available(): number;
+  wake(): void;
+  close(): void;
+  resize(columns: number, rows: number): void;
+  discard(): boolean;
+  interrupt(): void;
+}
 export class SharedBridge {
+  private route?: BridgeInputRoute;
   readonly state: Int32Array;
   readonly input: Uint8Array;
   readonly output: Uint8Array;
@@ -37,12 +47,15 @@ export class SharedBridge {
     Atomics.notify(this.state, control.outputRead);
   }
   interrupt() {
-    Atomics.store(this.state, control.cancel, 1);
+    Atomics.store(this.state, control.cancel, this.route ? 2 : 1);
+    this.route?.interrupt();
     this.signal();
+    this.route?.wake();
   }
   close() {
     Atomics.store(this.state, control.closed, 1);
     this.signal();
+    this.route?.close();
   }
   cancelled() {
     return Atomics.load(this.state, control.cancel) !== 0;
@@ -51,19 +64,38 @@ export class SharedBridge {
     return Atomics.load(this.state, control.closed) !== 0;
   }
   availableInput() {
+    if (this.route) return this.route.available();
     return (
       (Atomics.load(this.state, control.inputWrite) -
         Atomics.load(this.state, control.inputRead)) >>>
       0
     );
   }
-  send(bytes: Uint8Array): boolean {
+  /** Returns the accepted prefix. The caller retains and retries the remaining tail. */
+  send(bytes: Uint8Array): number {
+    if (this.route) return this.cancelled() ? 0 : this.route.push(bytes);
     const write = Atomics.load(this.state, control.inputWrite);
-    if (bytes.length > this.input.length - this.availableInput()) return false;
+    if (bytes.length > this.input.length - this.availableInput()) return 0;
     copyIntoRing(this.input, write, bytes);
     Atomics.store(this.state, control.inputWrite, write + bytes.length);
     this.signal();
-    return true;
+    return bytes.length;
+  }
+  connectInput(route: BridgeInputRoute): () => void {
+    if (this.route) throw new Error("Terminal input already has a producer");
+    const pending = this.receive(INPUT_CAPACITY);
+    if (route.push(pending) !== pending.length) throw new Error("Terminal input transfer failed");
+    this.route = route;
+    return () => {
+      if (this.route === route) this.route = undefined;
+    };
+  }
+  resize(columns: number, rows: number): void {
+    Atomics.store(this.state, control.cols, Math.max(2, columns));
+    Atomics.store(this.state, control.rows, Math.max(2, rows));
+    Atomics.add(this.state, control.resize, 1);
+    this.route?.resize(Math.max(2, columns), Math.max(2, rows));
+    this.signal();
   }
   receive(limit: number): Uint8Array {
     const read = Atomics.load(this.state, control.inputRead);
@@ -74,6 +106,13 @@ export class SharedBridge {
   }
   /** Drops bytes already queued for a cancelled foreground line without touching output. */
   discardInput(): boolean {
+    if (this.route) {
+      if (Atomics.load(this.state, control.cancel) === 2 && this.route.discard()) {
+        Atomics.compareExchange(this.state, control.cancel, 2, 1);
+        this.route.wake();
+      }
+      return !this.cancelled();
+    }
     if (Atomics.compareExchange(this.state, control.inputLock, 0, 1) !== 0) return false;
     try {
       Atomics.store(this.state, control.inputRead, Atomics.load(this.state, control.inputWrite));
@@ -85,7 +124,12 @@ export class SharedBridge {
     }
   }
   resumeInput(): void {
+    if (this.route && this.cancelled()) return;
     Atomics.store(this.state, control.cancel, 0);
+    this.signal();
+  }
+  acknowledgeInputDiscard(): void {
+    Atomics.compareExchange(this.state, control.cancel, 1, 0);
     this.signal();
   }
   // Immediate, bounded I/O for runtime_proc. Multiple guest processes can inherit this terminal.
@@ -147,6 +191,7 @@ export class SharedBridge {
     const bytes = copyFromRing(this.output, read, Math.min(limit, available));
     Atomics.store(this.state, control.outputRead, read + bytes.length);
     if (bytes.length) this.signal();
+    if (bytes.length) this.route?.wake();
     return bytes;
   }
   // Only the shell worker calls this. The main thread drains instead of waiting.

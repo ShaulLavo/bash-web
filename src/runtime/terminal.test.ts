@@ -25,11 +25,11 @@ test("shared terminal input and output stay bounded, wrap and preserve binary by
   const output = createBridgeTerminal(bridge.buffer, 1);
   assert.equal(input.tryRead!([new Uint8Array(1)]), -6);
   const first = new Uint8Array(INPUT_CAPACITY - 2).fill(7);
-  assert.equal(bridge.send(first), true);
-  assert.equal(bridge.send(new Uint8Array(3)), false);
+  assert.equal(bridge.send(first), first.length);
+  assert.equal(bridge.send(new Uint8Array(3)), 0);
   assert.equal(input.tryRead!([new Uint8Array(first.length)]), first.length);
   const binary = Uint8Array.of(0, 255, 13, 10, 27);
-  assert.equal(bridge.send(binary), true);
+  assert.equal(bridge.send(binary), binary.length);
   const read = new Uint8Array(binary.length);
   assert.equal(input.tryRead!([read]), binary.length);
   assert.deepEqual(read, binary);
@@ -43,7 +43,7 @@ test("shared terminal input and output stay bounded, wrap and preserve binary by
 
 test("cancelled terminal input drops queued bytes after a contended lock releases", () => {
   const bridge = new SharedBridge();
-  assert.equal(bridge.send(Uint8Array.of(65, 66)), true);
+  assert.equal(bridge.send(Uint8Array.of(65, 66)), Uint8Array.of(65, 66).length);
   Atomics.store(bridge.state, control.inputLock, 1);
   assert.equal(bridge.discardInput(), false);
   assert.equal(bridge.availableInput(), 2);

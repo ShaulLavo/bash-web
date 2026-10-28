@@ -185,10 +185,7 @@ export class BrowserSession {
     this.flushInput();
   }
   resize(cols: number, rows: number) {
-    Atomics.store(this.bridge.state, control.cols, Math.max(2, cols));
-    Atomics.store(this.bridge.state, control.rows, Math.max(2, rows));
-    Atomics.add(this.bridge.state, control.resize, 1);
-    this.bridge.signal();
+    this.bridge.resize(cols, rows);
   }
   crash() {
     if (this.disposed || this.failed) return;
@@ -249,13 +246,15 @@ export class BrowserSession {
     while (this.queued.length) {
       const bytes = this.queued[0];
       const chunk = bytes.subarray(0, 65536);
-      if (!this.bridge.send(chunk)) return;
-      this.queuedBytes -= chunk.length;
-      if (chunk.length === bytes.length) {
+      const accepted = this.bridge.send(chunk);
+      if (!accepted) return;
+      this.queuedBytes -= accepted;
+      if (accepted === bytes.length) {
         this.queued.shift();
         continue;
       }
-      this.queued[0] = bytes.subarray(chunk.length);
+      this.queued[0] = bytes.subarray(accepted);
+      if (accepted < chunk.length) return;
     }
   }
   private pump() {

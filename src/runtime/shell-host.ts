@@ -24,6 +24,7 @@ import {
 } from "./terminal-admission";
 import { guestLauncher, waitForShellWorkers } from "./worker-launcher";
 import type { ShellWorkerRequest } from "./worker";
+import { createTerminalController } from "./terminal-controller";
 
 const executable = "/programs/shell-engine.wasm";
 interface Registration {
@@ -156,11 +157,12 @@ export async function startShell(
   const state = workerProcessState(transport);
   const admission = createTerminalAdmission();
   attachTerminal(admission, terminal.buffer);
-  transport.data = {
+  const workerData = {
     filesystem: identity,
     shellTerminal: terminal.buffer,
     terminalAdmission: admission,
   };
+  transport.data = workerData;
   const memory = new SharedArrayBuffer(8);
   const observation = observeRoot(runtime, transport, memory);
   const writeTerminal = (fd: 1 | 2, bytes: Uint8Array): number => {
@@ -183,6 +185,7 @@ export async function startShell(
   let cleanup: Promise<void> | undefined;
   let unobserveExit = () => {};
   let release = () => {};
+  let terminalController: ReturnType<typeof createTerminalController> | undefined;
   let resolveDone!: (result: RuntimeExit) => void;
   const done = new Promise<RuntimeExit>((resolve) => {
     resolveDone = resolve;
@@ -224,7 +227,10 @@ export async function startShell(
       worker?.terminate();
       filesystem.port.close();
       observation.stopped();
-      if (!accepted || retired) observation.retired();
+      if (!accepted || retired) {
+        observation.retired();
+        terminalController?.retired();
+      }
       release();
     })());
   const clean = () => {
@@ -249,6 +255,7 @@ export async function startShell(
         : { kind: "signaled", code: signal },
     );
     const status = waitStatus(winner);
+    terminalController?.dispose();
     if (Atomics.load(terminal.state, control.phase) !== 4) {
       Atomics.store(terminal.state, control.status, status);
       Atomics.store(terminal.state, control.phase, result.error ? 4 : 3);
@@ -270,6 +277,8 @@ export async function startShell(
     options.signal?.throwIfAborted();
     // Accepted synchronously, before fetch, FS initialization, or lazy process admission.
     release = runtime.retainConsumer({ filesystem: identity, revoke, stop: physicallyStop });
+    terminalController = createTerminalController(runtime, transport, terminal);
+    transport.data = { ...workerData, ...terminalController.metadata };
     markStartup(options.onStartupStage, "shell-registration-requested");
     await pending(() => registration.initialize(options.onStartupStage));
     markStartup(options.onStartupStage, "shell-registration-resolved");
@@ -279,10 +288,12 @@ export async function startShell(
     if (runtime.disposed) throw new Error("Runtime is disposed");
     markStartup(options.onStartupStage, "shell-processes-requested");
     service = await pending(() => runtime.processes());
+    terminalController.bind(service);
     markStartup(options.onStartupStage, "shell-processes-resolved");
     markStartup(options.onStartupStage, "shell-root-adopt-requested");
     await service.adoptRuntimeRoot(transport, {
       filesystem: identity,
+      prepareDescendant: terminalController.prepareDescendant,
       acknowledged: () => acknowledged,
       output: (fd, bytes) => {
         writeTerminal(fd === 2 ? 2 : 1, bytes);
@@ -295,6 +306,7 @@ export async function startShell(
       retired() {
         retired = true;
         observation.retired();
+        terminalController?.retired();
       },
     });
     markStartup(options.onStartupStage, "shell-root-adopt-resolved");
@@ -310,6 +322,7 @@ export async function startShell(
     // Waffle already owns process completion. Observe its exit event instead of
     // running a second page timer for every idle shell root.
     unobserveExit = supervisor.onChildExit((event) => {
+      terminalController?.exited(event.pid);
       if (event.pid !== state.pid) return;
       if (event.result.kind === "signaled")
         finish({ code: event.result.status }, false, event.result.code);
@@ -386,6 +399,20 @@ export async function startShell(
       wasmBytes: loaded.size,
       done,
       signal(signal) {
+        if (signal === 2 && !finished && !runtime.disposed) {
+          if (!terminal.cancelled()) {
+            terminal.interrupt();
+            terminal.discardInput();
+          }
+          const jobs = terminalController?.foregroundJobs();
+          if (jobs) {
+            for (const job of jobs)
+              void service!
+                .killJob(job, 2)
+                .catch((error) => finish({ code: 1, error: String(error) }));
+            return;
+          }
+        }
         if (!finished && !runtime.disposed)
           void service!
             .kill(state.pid, signal)

@@ -1,0 +1,271 @@
+import type { ProcessService, Runtime } from "waffle";
+import type { RuntimeRootOptions } from "waffle/browser/process-broker";
+import type {
+  TerminalGroup,
+  TerminalMember,
+  TerminalResult,
+} from "waffle/browser/runtime-terminals";
+import { controlLoad } from "waffle/proc/control";
+import { readOutcome } from "waffle/proc/outcome";
+import { ProcessError, ProcessErrno } from "waffle/proc/types";
+import {
+  workerProcessDirectoryId,
+  workerProcessState,
+  type WorkerProcessTransport,
+} from "waffle/proc/worker-client";
+import { SharedBridge, control } from "../bridge";
+import { createTerminalProducer, TerminalOperationError } from "./terminal-producer";
+
+const outputs = new WeakMap<Runtime, Map<string, SharedArrayBuffer>>();
+export function shellTerminalOutput(runtime: Runtime, transport: WorkerProcessTransport) {
+  return outputs.get(runtime)?.get(workerProcessDirectoryId(transport));
+}
+function must<T>(result: TerminalResult<T>): T {
+  if (result.kind === "error") throw new Error(`Terminal control failed: ${result.code}`);
+  return result.value;
+}
+type State = ReturnType<typeof workerProcessState>;
+type Group = {
+  group: TerminalGroup;
+  members: Map<number, TerminalMember>;
+  jobs: Map<number, State["jobPending"]>;
+  rootMember?: TerminalMember;
+  restore?: Group;
+  active: boolean;
+};
+function pending(cell: State["jobPending"]): boolean {
+  try {
+    return controlLoad(cell) !== 0;
+  } catch (error) {
+    if (error instanceof ProcessError && error.errno === ProcessErrno.SRCH) return false;
+    throw error;
+  }
+}
+
+export function createTerminalController(
+  runtime: Runtime,
+  root: WorkerProcessTransport,
+  bridge: SharedBridge,
+) {
+  const state = workerProcessState(root);
+  const producer = createTerminalProducer({
+    controller: root,
+    geometry: {
+      columns: Math.max(2, Atomics.load(bridge.state, control.cols)),
+      rows: Math.max(2, Atomics.load(bridge.state, control.rows)),
+    },
+    checkActive() {
+      if (runtime.disposed || readOutcome(state.signals.outcome))
+        throw new Error("Shell terminal root stopped");
+    },
+  });
+  const directory = workerProcessDirectoryId(root);
+  let destinations = outputs.get(runtime);
+  if (!destinations) outputs.set(runtime, (destinations = new Map()));
+  destinations.set(directory, bridge.buffer);
+  const ownedDestinations = destinations;
+  let editor: Group = {
+    group: producer.editor,
+    members: new Map(),
+    jobs: new Map(),
+    rootMember: producer.rootMember,
+    active: true,
+  };
+  let selected = editor;
+  let foreground: Group | undefined;
+  let disposed = false;
+  let interruptTarget: Group | undefined;
+  let deferred: Group | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  const groups = new Map<number, Group>([[state.job, editor]]);
+  const members = new Map<number, Group>();
+  const disconnect = bridge.connectInput({
+    push(bytes) {
+      const result = producer.pushKeyboard(bytes);
+      return result.kind === "ok" ? result.value : result.accepted;
+    },
+    available: producer.available,
+    wake: producer.wake,
+    close: producer.closeInput,
+    resize: (columns, rows) => {
+      must(producer.resize({ columns, rows }));
+    },
+    interrupt() {
+      interruptTarget = selected;
+    },
+    discard: () => discardInput(),
+  });
+  const wakeInput = () => {
+    if (!disposed) {
+      bridge.signal();
+      watch();
+    }
+  };
+  const watch = () => {
+    if (disposed) return;
+    const sequence = Atomics.load(producer.notification, 0);
+    const wait = Atomics.waitAsync(producer.notification, 0, sequence);
+    if (wait.async) void wait.value.then(wakeInput);
+    else queueMicrotask(watch);
+  };
+  watch();
+
+  const createGroup = (process: State): Group => {
+    const group = must(producer.createGroup("cooked"));
+    const record: Group = { group, members: new Map(), jobs: new Map(), active: true };
+    if (process.jobForeground && process.jobOwner === root.pid) {
+      record.rootMember = must(producer.admitExisting(group, root.pid)).member;
+      foreground = record;
+    }
+    return record;
+  };
+  const prepareDescendant: NonNullable<RuntimeRootOptions["prepareDescendant"]> = (descendant) => {
+    const transport = runtime.disposed ? undefined : service?.transportFor(descendant.pid);
+    if (!transport) throw new Error("Terminal descendant has no admitted transport");
+    const process = workerProcessState(transport);
+    let record = groups.get(descendant.job);
+    if (!record && process.jobForeground && process.jobOwner === root.pid && foreground?.active)
+      record = foreground;
+    const created = !record;
+    if (!record) record = createGroup(process);
+    groups.set(descendant.job, record);
+    record.jobs.set(descendant.job, process.jobPending);
+    const admitted = must(producer.admitExisting(record.group, descendant.pid));
+    record.members.set(descendant.pid, admitted.member);
+    members.set(descendant.pid, record);
+    if (!created) return undefined;
+    record.restore = selected;
+    if (!process.jobForeground || Atomics.load(bridge.state, control.cancel) === 2) {
+      must(producer.startBackground(record.group));
+      if (process.jobForeground) deferred = record;
+      return undefined;
+    }
+    must(producer.select(record.group));
+    selected = record;
+    return undefined;
+  };
+  let service: ProcessService | undefined;
+  const empty = (record: Group) =>
+    record.members.size === 0 && !Array.from(record.jobs.values()).some(pending);
+  const resumeTarget = (record: Group): Group => {
+    let target = record;
+    while (target !== editor && (!target.active || empty(target)))
+      target = target.restore ?? editor;
+    return target;
+  };
+  const retryDiscard = () => {
+    if (retry || disposed) return;
+    retry = setTimeout(() => {
+      retry = undefined;
+      bridge.discardInput();
+      bridge.signal();
+    }, 1);
+  };
+  const finishDiscard = () => {
+    if (disposed) return;
+    for (const group of new Set(groups.values())) retire(group);
+    if (interruptTarget && !interruptTarget.rootMember && empty(interruptTarget))
+      bridge.acknowledgeInputDiscard();
+    producer.wake();
+  };
+  const discardInput = (): boolean => {
+    const target = resumeTarget(selected);
+    try {
+      if (!producer.discardInput(target.group)) {
+        retryDiscard();
+        return false;
+      }
+    } catch (error) {
+      if (error instanceof TerminalOperationError && error.code === "AGAIN") {
+        retryDiscard();
+        return false;
+      }
+      throw error;
+    }
+    selected = target;
+    if (deferred?.active) {
+      must(producer.select(deferred.group));
+      selected = deferred;
+    }
+    deferred = undefined;
+    queueMicrotask(finishDiscard);
+    return true;
+  };
+  const retire = (record: Group) => {
+    if (Atomics.load(bridge.state, control.cancel) === 2) return;
+    if (
+      record === editor ||
+      !record.active ||
+      record.members.size ||
+      Array.from(record.jobs.values()).some(pending)
+    )
+      return;
+    if (selected === record) restore(record);
+    if (record.rootMember) must(producer.removeMember(record.rootMember));
+    must(producer.retireGroup(record.group, "completed"));
+    record.active = false;
+    for (const job of record.jobs.keys()) groups.delete(job);
+    if (
+      interruptTarget === record &&
+      !record.rootMember &&
+      Atomics.load(bridge.state, control.cancel) === 1
+    )
+      bridge.acknowledgeInputDiscard();
+  };
+  const restore = (record: Group) => {
+    let previous = record.restore;
+    while (previous && !previous.active) previous = previous.restore;
+    if (previous && previous !== editor) {
+      must(producer.select(previous.group));
+      selected = previous;
+      return;
+    }
+    must(producer.restoreEditor());
+    editor.active = false;
+    editor = {
+      group: producer.editor,
+      members: new Map(),
+      jobs: new Map(),
+      rootMember: producer.rootMember,
+      active: true,
+    };
+    groups.set(state.job, editor);
+    selected = editor;
+  };
+  return {
+    metadata: producer.rootMetadata,
+    prepareDescendant,
+    bind(processes: ProcessService) {
+      service = processes;
+    },
+    foregroundJobs: () => (selected.rootMember ? undefined : Array.from(selected.jobs.keys())),
+    exited(pid: number) {
+      if (disposed) return;
+      if (pid === root.pid || readOutcome(state.signals.outcome)) {
+        this.dispose();
+        return;
+      }
+      const record = members.get(pid);
+      if (record) {
+        const member = record.members.get(pid)!;
+        members.delete(pid);
+        record.members.delete(pid);
+        must(producer.removeMember(member));
+      }
+      for (const group of new Set(groups.values())) retire(group);
+      bridge.signal();
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      clearTimeout(retry);
+      producer.dispose();
+      disconnect();
+      groups.clear();
+      members.clear();
+    },
+    retired() {
+      ownedDestinations.delete(directory);
+    },
+  };
+}
