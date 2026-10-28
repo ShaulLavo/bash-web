@@ -56,10 +56,10 @@ test("terminal ring wraps without losing binary bytes or exceeding its fixed cap
   const bridge = new SharedBridge();
   const input = createBridgeTerminal(bridge.buffer, 0);
   const first = new Uint8Array(INPUT_CAPACITY - 2).fill(11);
-  assert.equal(bridge.send(first), true);
+  assert.equal(bridge.send(first), first.length);
   assert.equal(input.tryRead!([new Uint8Array(first.length)]), first.length);
   const binary = new Uint8Array([0, 255, 13, 10, 27]);
-  assert.equal(bridge.send(binary), true);
+  assert.equal(bridge.send(binary), binary.length);
   const a = new Uint8Array(2),
     b = new Uint8Array(10);
   assert.equal(input.tryRead!([a, b]), binary.length);

@@ -97,7 +97,10 @@ test("real WASI reads inherited fd2 keys beside pipe content, with remapping and
   assert.equal(writer.tryWrite([content]), content.length);
   assert.equal(child.io("fd_read", 0), 0);
   assert.deepEqual(child.bytes.slice(256, 261), content);
-  assert.equal(bridge.send(Uint8Array.of(27, 91, 65, 0, 255)), true);
+  assert.equal(
+    bridge.send(Uint8Array.of(27, 91, 65, 0, 255)),
+    Uint8Array.of(27, 91, 65, 0, 255).length,
+  );
   assert.equal(child.io("fd_read", 2, 3), 0);
   assert.deepEqual(child.bytes.slice(256, 259), Uint8Array.of(27, 91, 65));
   assert.deepEqual(child.poll(2), { error: 0, nbytes: 2n, flags: 0 });

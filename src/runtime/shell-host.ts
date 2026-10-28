@@ -29,6 +29,7 @@ import {
 } from "./terminal-admission";
 import { guestLauncher, waitForShellWorkers } from "./worker-launcher";
 import type { ShellWorkerRequest } from "./worker";
+import { createTerminalController } from "./terminal-controller";
 
 const executable = "/programs/shell-engine.wasm";
 interface Registration {
@@ -38,6 +39,11 @@ interface Registration {
   initialize(observer?: StartupObserver): Promise<void>;
 }
 const registrations = new WeakMap<Runtime, Registration>();
+function interruptTerminal(terminal: SharedBridge) {
+  if (terminal.cancelled()) return;
+  terminal.interrupt();
+  terminal.discardInput();
+}
 /** Internal adapter admission for embeddings/tests; does not launch a root or load assets. */
 export function registerShell(runtime: Runtime, options: ShellOptions): Registration {
   if (runtime.disposed) throw new Error("Runtime is disposed");
@@ -161,11 +167,12 @@ export async function startShell(
   const state = workerProcessState(transport);
   const admission = createTerminalAdmission();
   attachTerminal(admission, terminal.buffer);
-  transport.data = {
+  const workerData = {
     filesystem: identity,
     shellTerminal: terminal.buffer,
     terminalAdmission: admission,
   };
+  transport.data = workerData;
   const memory = new SharedArrayBuffer(8);
   const observation = observeRoot(runtime, transport, memory);
   const tryTerminal = (bytes: Uint8Array): number => {
@@ -196,6 +203,7 @@ export async function startShell(
   let cleanup: Promise<void> | undefined;
   let unobserveExit = () => {};
   let release = () => {};
+  let terminalController: ReturnType<typeof createTerminalController> | undefined;
   let resolveDone!: (result: RuntimeExit) => void;
   const done = new Promise<RuntimeExit>((resolve) => {
     resolveDone = resolve;
@@ -233,13 +241,15 @@ export async function startShell(
   const physicallyStop = () =>
     (physicallyStopped ??= (async () => {
       unobserveExit();
+      await terminalController?.quiesce();
       await quiesceTerminal(admission);
-      worker?.terminate();
+      await worker?.terminate();
       filesystem.port.close();
       observation.stopped();
       if (!accepted || retired) {
         stopDrain();
         observation.retired();
+        terminalController?.retired();
       }
       release();
     })());
@@ -265,6 +275,7 @@ export async function startShell(
         : { kind: "signaled", code: signal },
     );
     const status = waitStatus(winner);
+    terminalController?.stop();
     if (Atomics.load(terminal.state, control.phase) !== 4) {
       Atomics.store(terminal.state, control.status, status);
       Atomics.store(terminal.state, control.phase, result.error ? 4 : 3);
@@ -281,11 +292,26 @@ export async function startShell(
     rejectAbort(new Error("Runtime is disposed"));
     finish({ code: 137, error: "Runtime was disposed" }, false, 9);
   };
+  const signalFailure = (error: unknown) => finish({ code: 1, error: String(error) });
+  const interruptForeground = () => {
+    interruptTerminal(terminal);
+    const jobs = terminalController?.foregroundJobs();
+    if (!jobs) return false;
+    for (const job of jobs) void service!.killJob(job, 2).catch(signalFailure);
+    return true;
+  };
+  const sendSignal = (signal: 2 | 9) => {
+    if (finished || runtime.disposed) return;
+    if (signal === 2 && interruptForeground()) return;
+    void service!.kill(state.pid, signal).catch(signalFailure);
+  };
   try {
     options.signal?.addEventListener("abort", abort, { once: true });
     options.signal?.throwIfAborted();
     // Accepted synchronously, before fetch, FS initialization, or lazy process admission.
     release = runtime.retainConsumer({ filesystem: identity, revoke, stop: physicallyStop });
+    terminalController = createTerminalController(runtime, transport, terminal, signalFailure);
+    transport.data = { ...workerData, ...terminalController.metadata };
     markStartup(options.onStartupStage, "shell-registration-requested");
     await pending(() => registration.initialize(options.onStartupStage));
     markStartup(options.onStartupStage, "shell-registration-resolved");
@@ -295,14 +321,17 @@ export async function startShell(
     if (runtime.disposed) throw new Error("Runtime is disposed");
     markStartup(options.onStartupStage, "shell-processes-requested");
     service = await pending(() => runtime.processes());
+    terminalController.bind(service);
     observeProcessService(runtime, service);
     markStartup(options.onStartupStage, "shell-processes-resolved");
     markStartup(options.onStartupStage, "shell-root-adopt-requested");
     await service.adoptRuntimeRoot(transport, {
       filesystem: identity,
+      prepareDescendant: terminalController.prepareDescendant,
       acknowledged: () => acknowledged,
       tryOutput: (_fd, bytes) => tryTerminal(bytes),
       async quiesce() {
+        await terminalController?.quiesce();
         await quiesceTerminal(admission);
       },
       stop: physicallyStop,
@@ -311,6 +340,7 @@ export async function startShell(
         retired = true;
         stopDrain();
         observation.retired();
+        terminalController?.retired();
       },
     });
     markStartup(options.onStartupStage, "shell-root-adopt-resolved");
@@ -326,6 +356,7 @@ export async function startShell(
     // Waffle already owns process completion. Observe its exit event instead of
     // running a second page timer for every idle shell root.
     unobserveExit = supervisor.onChildExit((event) => {
+      terminalController?.exited(event.pid);
       if (event.pid !== state.pid) return;
       if (event.result.kind === "signaled")
         finish({ code: event.result.status }, false, event.result.code);
@@ -401,12 +432,7 @@ export async function startShell(
       pid: state.pid,
       wasmBytes: loaded.size,
       done,
-      signal(signal) {
-        if (!finished && !runtime.disposed)
-          void service!
-            .kill(state.pid, signal)
-            .catch((error) => finish({ code: 1, error: String(error) }));
-      },
+      signal: sendSignal,
       async dispose() {
         if (!runtime.disposed) {
           // A facade owns only its descendants. The shared runtime and other shell

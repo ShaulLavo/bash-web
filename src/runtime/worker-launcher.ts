@@ -9,6 +9,8 @@ import type { ProcessContext, ProcessHandle } from "waffle/proc/types";
 import { workerProcessDirectoryId, type WorkerProcessTransport } from "waffle/proc/worker-client";
 import { observeGuest } from "./diagnostics";
 import type { ShellWorkerRequest } from "./worker";
+import type { TerminalMetadata } from "./terminal-producer";
+import { shellTerminalOutput } from "./terminal-controller";
 import {
   attachTerminal,
   createTerminalAdmission,
@@ -17,7 +19,7 @@ import {
   type TerminalAdmission,
 } from "./terminal-admission";
 
-export interface ShellWorkerData {
+export interface ShellWorkerData extends Partial<TerminalMetadata> {
   filesystem: FilesystemIdentity;
   shellTerminal?: SharedArrayBuffer;
   terminalAdmission?: TerminalAdmission;
@@ -69,7 +71,7 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
   if (!transport) throw new Error("Process has no admitted worker transport");
   const data = transport.data as ShellWorkerData;
   if (!data?.filesystem) throw new TypeError("Process has no filesystem identity");
-  const admission = data.terminalAdmission ?? createTerminalAdmission();
+  const admission = createTerminalAdmission();
   if (data.shellTerminal) attachTerminal(admission, data.shellTerminal);
   transport.data = { ...data, terminalAdmission: admission };
   let handle: ProcessHandle | undefined;
@@ -122,7 +124,11 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
       retired: cleanup,
     });
     accepted = true;
-    handle = service.launchWorker(context, { ...options, cleanup });
+    handle = service.launchWorker(context, {
+      ...options,
+      request: { ...options.request, shellOutput: shellTerminalOutput(runtime, transport) },
+      cleanup,
+    });
     return handle;
   } catch (error) {
     // No local worker ownership exists. An accepted broker controller and retained

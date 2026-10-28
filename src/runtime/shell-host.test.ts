@@ -37,6 +37,7 @@ import { createShell } from "../shell";
 import { runtimeSnapshot } from "./diagnostics";
 import { registerShell } from "./shell-host";
 import { createStartupDiagnostics } from "./startup-diagnostics";
+import { launchTerminalWorker } from "./worker-launcher";
 
 function quiesceFilesystem(identity: FilesystemIdentity): Promise<void> {
   revokeFilesystem(identity);
@@ -72,6 +73,10 @@ function fixture(
   let borrowedAfterDispose = 0;
   let ownerDisposals = 0;
   let terminated = 0;
+  let firstReleased!: () => void;
+  const firstRelease = new Promise<void>((resolve) => {
+    firstReleased = resolve;
+  });
   const live = () => {
     if (disposed) {
       borrowedAfterDispose++;
@@ -182,7 +187,7 @@ function fixture(
       live();
       consumers.add(consumer);
       return () => {
-        if (!disposed) consumers.delete(consumer);
+        if (!disposed && consumers.delete(consumer)) firstReleased();
       };
     },
     async processes() {
@@ -251,6 +256,7 @@ function fixture(
   };
   return {
     runtime,
+    firstRelease,
     options,
     service,
     consumers,
@@ -808,7 +814,7 @@ test("shell facades borrow one page runtime and dispose only their own process t
   assert.equal(host.terminated, 2);
 });
 
-test("facade disposal joins its adapter child cleanup behind a held fence, not another shell", async (context) => {
+test("direct terminal child gets owned output and cleanup stays behind its fence", async (context) => {
   const host = fixture(context);
   let releaseFence!: () => void;
   const fence = new Promise<void>((resolve) => {
@@ -843,7 +849,19 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
       fds: [],
     };
     const pid = client.spawn(shell.process.pid, request);
-    child.data = { filesystem: createFilesystemIdentity(undefined, 1024 * 1024) };
+    const childFilesystem = createFilesystemIdentity(undefined, 1024 * 1024);
+    const metadata = rootTransport.data;
+    assert.ok(
+      metadata &&
+        typeof metadata === "object" &&
+        "terminalContext" in metadata &&
+        "terminalInput" in metadata,
+    );
+    child.data = {
+      filesystem: childFilesystem,
+      terminalContext: metadata.terminalContext,
+      terminalInput: metadata.terminalInput,
+    };
     let terminateChild!: () => Promise<void>;
     let stopped = false;
     const childService = {
@@ -852,6 +870,7 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
       },
       registerController() {},
       launchWorker(_context: ProcessContext, options: WorkerLaunchOptions<ShellWorkerRequest>) {
+        assert.equal(options.request.shellOutput, rootRequest.terminal);
         terminateChild = async () => {
           await fence;
           stopped = true;
@@ -860,17 +879,19 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
         return { terminate: terminateChild };
       },
     } as unknown as ProcessService;
-    await host.adapters.get("bash-web:preview1")!(
-      {
-        ...({
-          pid,
-          module: rootRequest.module,
-          interruptible: false,
-          request,
-        } as unknown as ProcessContext),
-        identity: createProcessIdentity({ pid, parentPid: shell.process.pid }),
-      },
+    launchTerminalWorker<ShellWorkerRequest>(
+      host.runtime,
       childService,
+      {
+        pid,
+        module: rootRequest.module,
+        interruptible: false,
+        request,
+      } as unknown as ProcessContext,
+      {
+        workerUrl: host.options.workerUrl,
+        request: { module: rootRequest.module, args: request.argv, env: request.env },
+      },
     );
     const kill = host.service.killJob.bind(host.service);
     host.service.killJob = async (job, signal, reserved) => {
@@ -882,7 +903,7 @@ test("facade disposal joins its adapter child cleanup behind a held fence, not a
     void disposal.then(() => {
       settled = true;
     });
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await host.firstRelease;
     assert.equal(settled, false);
     assert.equal(stopped, false);
     assert.equal(host.terminated, 1);

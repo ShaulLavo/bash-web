@@ -106,14 +106,16 @@ setInterval(() => {
   if (bytes.length) newlines.write(bytes, (chunk) => terminal.write(chunk));
 }, 16);
 
-// Input: send raw key bytes. send() returns false when the 64 KiB input ring is full.
-shell.terminal.send(new TextEncoder().encode("echo hi\n"));
+// Input: retain the unaccepted tail on backpressure.
+const keys = new TextEncoder().encode("echo hi\n");
+let accepted = 0;
+while (accepted < keys.length) {
+  accepted += shell.terminal.send(keys.subarray(accepted));
+  if (accepted < keys.length) await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 // Resize: store the size, bump the counter, wake the shell.
-Atomics.store(shell.terminal.state, control.cols, 80);
-Atomics.store(shell.terminal.state, control.rows, 24);
-Atomics.add(shell.terminal.state, control.resize, 1);
-shell.terminal.signal();
+shell.terminal.resize(80, 24);
 
 // Ctrl+C: stops the foreground job, not background jobs or other shells.
 shell.interrupt();

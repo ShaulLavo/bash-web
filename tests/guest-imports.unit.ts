@@ -2,12 +2,25 @@
 import assert from "node:assert/strict";
 import { bootstrap, type RuntimeWorkerMessage } from "waffle/browser/worker";
 import { createFilesystemConnection } from "waffle/fs";
-import { createWorkerProcessTransport } from "waffle/proc/worker-client";
+import {
+  createWorkerProcessTransport,
+  type WorkerProcessTransport,
+} from "waffle/proc/worker-client";
 import { shellExecutor, type ShellWorkerRequest } from "../src/runtime/worker";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { MAX_DESCRIPTOR } from "waffle/core/descriptors";
 import { SharedBridge, control } from "../src/bridge";
 import { shellTerminalImports } from "../src/runtime/guest-imports";
+import { createTerminalProducer } from "../src/runtime/terminal-producer";
+function ownTerminal(owner: TestContext, transport: WorkerProcessTransport) {
+  const producer = createTerminalProducer({
+    controller: transport,
+    geometry: { columns: 80, rows: 24 },
+    checkActive() {},
+  });
+  owner.after(() => producer.dispose());
+  return producer;
+}
 
 test("shell terminal columns follow the live bridge and default to 80 for a child", () => {
   const bridge = new SharedBridge();
@@ -45,7 +58,7 @@ test("shell metadata distinguishes an empty binding list from default root stdio
   );
 });
 
-test("production worker keeps terminal stdio for an empty root transport but not an empty child", async () => {
+test("production worker keeps terminal stdio for an empty root transport but not an empty child", async (owner) => {
   // Original probe: an empty _start and memory, plus an exported shell_terminal import.
   // Calling the export observes the real Wasm linker/namespace wiring, not source text.
   const module = new WebAssembly.Module(
@@ -160,8 +173,9 @@ test("production worker keeps terminal stdio for an empty root transport but not
     try {
       const bridge = new SharedBridge();
       const transport = createWorkerProcessTransport();
+      const producer = ownTerminal(owner, transport);
       // A child can know its terminal destination without inheriting any descriptor.
-      transport.data = { shellTerminal: bridge.buffer };
+      transport.data = { ...producer.rootMetadata, shellTerminal: bridge.buffer };
       if (mode === "redirected") {
         transport.resources = [{ kind: "web-terminal", target: 1 }];
         transport.bindings = [1, 3, MAX_DESCRIPTOR].map((fd) => ({

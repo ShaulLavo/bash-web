@@ -53,7 +53,7 @@ test("tiny cooked input bounds storage despite large guest vectors", (t) => {
   const first = new Uint8Array(1);
   const rest = new Uint8Array(1024 * 1024).fill(91);
   const chunks = [new Uint8Array(0), first, new Uint8Array(0), rest];
-  assert.equal(bridge.send(Uint8Array.of(65)), true);
+  assert.equal(bridge.send(Uint8Array.of(65)), Uint8Array.of(65).length);
   const measured = measureByteAllocations(() => input.tryRead!(chunks));
   t.diagnostic(
     `one byte read: ${measured.lengths.length} byte buffers, ${totalBytes(measured.lengths)} bytes`,
@@ -70,7 +70,7 @@ test("full cooked ring bounds normalization storage and returns a short read", (
   const { bridge, input } = cookedTerminal();
   const destination = new Uint8Array(1024 * 1024).fill(91);
   const bytes = new Uint8Array(INPUT_CAPACITY).fill(65);
-  assert.equal(bridge.send(bytes), true);
+  assert.equal(bridge.send(bytes), bytes.length);
   const measured = measureByteAllocations(() => input.tryRead!([destination]));
   assert.equal(measured.value, INPUT_CAPACITY);
   assert.deepEqual(destination.subarray(0, INPUT_CAPACITY), bytes);
@@ -83,7 +83,7 @@ test("zero-length cooked vectors preserve queued bytes and split CRLF state", ()
   const { bridge, input } = cookedTerminal();
   const empty = new Uint8Array(0);
   const byte = new Uint8Array(1);
-  assert.equal(bridge.send(Uint8Array.of(13, 10, 66)), true);
+  assert.equal(bridge.send(Uint8Array.of(13, 10, 66)), Uint8Array.of(13, 10, 66).length);
   assert.equal(input.tryRead!([empty, byte]), 1);
   assert.equal(byte[0], 10);
   const measured = measureByteAllocations(() => [
@@ -106,7 +106,10 @@ test("cooked normalization preserves vector boundaries, wraparound and shared sp
   const first = new Uint8Array(2);
   const second = new Uint8Array(2).fill(91);
   const empty = new Uint8Array(0);
-  assert.equal(bridge.send(Uint8Array.of(65, 13, 10, 66, 13)), true);
+  assert.equal(
+    bridge.send(Uint8Array.of(65, 13, 10, 66, 13)),
+    Uint8Array.of(65, 13, 10, 66, 13).length,
+  );
   assert.equal(input.tryRead!([empty, first, empty, second, empty]), 3);
   assert.deepEqual(first, Uint8Array.of(65, 10));
   assert.deepEqual(second, Uint8Array.of(66, 91));
@@ -114,7 +117,7 @@ test("cooked normalization preserves vector boundaries, wraparound and shared sp
   assert.equal(input.tryRead!([first.subarray(0, 1)]), 1);
   assert.equal(first[0], 10);
   const inherited = createBridgeTerminal(bridge.buffer, 0);
-  assert.equal(bridge.send(Uint8Array.of(10, 255, 0)), true);
+  assert.equal(bridge.send(Uint8Array.of(10, 255, 0)), Uint8Array.of(10, 255, 0).length);
   assert.equal(inherited.tryRead!([empty, second]), 1);
   assert.equal(second[0], 255);
   assert.equal(inherited.tryRead!([first.subarray(0, 1)]), 1);
@@ -134,7 +137,7 @@ test("empty cooked reads preserve contended-lock and EOF precedence", () => {
   const eof = measureByteAllocations(() => input.tryRead!(chunks));
   assert.equal(eof.value, 0);
   assert.ok(totalBytes(eof.lengths) <= 1);
-  assert.equal(bridge.send(Uint8Array.of(13, 10)), true);
+  assert.equal(bridge.send(Uint8Array.of(13, 10)), Uint8Array.of(13, 10).length);
   assert.equal(input.tryRead!(chunks), 1);
   assert.equal(chunks[0][0], 10);
   assert.equal(input.tryRead!(chunks), 0);
@@ -143,7 +146,7 @@ test("empty cooked reads preserve contended-lock and EOF precedence", () => {
 test("cooked reads preserve cancellation, admission revocation and terminal teardown", async () => {
   const { bridge, admission, input } = cookedTerminal();
   const chunks = [new Uint8Array(1024 * 1024)];
-  assert.equal(bridge.send(Uint8Array.of(13, 10)), true);
+  assert.equal(bridge.send(Uint8Array.of(13, 10)), Uint8Array.of(13, 10).length);
   bridge.interrupt();
   const cancelled = measureByteAllocations(() => input.tryRead!(chunks));
   assert.equal(cancelled.value, -6);
@@ -182,7 +185,7 @@ function sendAfterEmptySnapshot<T>(bridge: SharedBridge, operation: () => T) {
     const available = original.call(this);
     if (pending && this.buffer === bridge.buffer && available === 0) {
       pending = false;
-      assert.equal(bridge.send(Uint8Array.of(13, 10)), true);
+      assert.equal(bridge.send(Uint8Array.of(13, 10)), Uint8Array.of(13, 10).length);
     }
     return available;
   };
