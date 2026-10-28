@@ -142,7 +142,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.93": true
+    "waffle@0.0.96": true
   },
   "trustedDependencies": [
     "waffle",
