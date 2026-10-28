@@ -7,6 +7,7 @@ import { availableParallelism } from "node:os";
 import { basename, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { buildWasiShell } from "./wasi-build.ts";
+import { compatibilityPrograms } from "./compat-programs.ts";
 import { pythonHelpers } from "./bash-compat-helpers.mjs";
 import {
   bashStderrTransport,
@@ -750,6 +751,7 @@ class Pool {
         utilityDirectory: process.env.BASH_COMPAT_UTILITY_DIR
           ? resolve(root, process.env.BASH_COMPAT_UTILITY_DIR)
           : undefined,
+        programs: compatibilityPrograms,
         tmp: virtualTmp,
         home: virtualHome,
         env: { HOME: virtualHome, TMP: virtualTmp, SH: "bash", LC_ALL: "C.UTF-8" },

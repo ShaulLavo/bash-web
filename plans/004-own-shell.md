@@ -1384,6 +1384,7 @@ Answer `-k`, `-r`, `-w` (and the related `-u`/`-g`/`-x` family) from runtime met
 - `bashkit-suite:test-operators:32`: Bash status 0, stdout `readable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -r: unsupported predicate\n`.
 - `bashkit-suite:test-operators:40`: Bash status 0, stdout `writable\n`; ours status 2, stdout ``, stderr `/usr/bin/bash: [: -w: unsupported predicate\n`.
 - `oils:builtin-bracket:280`: Bash status 0, stdout `status=1\nstatus=1\n`; ours status 0, stdout `status=2\nstatus=2\n`, stderr `/usr/bin/bash: test: -k: unsupported predicate\n/usr/bin/bash: test: -k: unsupported predicate\n`.
+- `brush-suite:builtins/test:31`, unmasked by PR168's published `touch`: `touch testfile; test -x testfile` returns Bash status 1 with no output, while the real Waffle filesystem has no executable metadata and ours returns status 2 with `test: -x: unsupported predicate`. Supply the actual metadata rather than preserving the accidental absent-file pass.
 
 #### Authoritative permissions integration, 2026-10-21
 
@@ -1450,6 +1451,17 @@ Give the Waffle Node instrument the oracle sandbox's read-only `/usr` (needs a W
 ### R6. Ambiguous redirect diagnostics
 
 `oils:var-sub:24` (`echo hi > "$@"` with two words) now passes on stdout and status, but only because `_tmp` is missing: Bash reports an ambiguous redirect. Diagnose multi-word redirect targets as Bash does; the stdout/status score cannot show this.
+
+### R7. `GLOBIGNORE` pathname filtering
+
+Implement Bash-compatible `GLOBIGNORE` parsing and pathname filtering. PR168's published `touch` unmasked two accidental main passes:
+
+- `oils:globignore:108`: after `touch {1.txt,2.log,3.md}` and `GLOBIGNORE=*`, `echo *` must print `*`, not `1.txt 2.log 3.md`.
+- `oils:globignore:150`: after `touch image.jpeg`, all four assignment forms `GLOBIGNORE=*`, `GLOBIGNORE='*'`, `GLOBIGNORE="*"` and `GLOBIGNORE=\*` must leave `echo *` printing `*`, not `image.jpeg`.
+
+### R8. `declare +x` through a nameref
+
+Apply export-attribute removal to the nameref target. In `brush-suite:nameref:99`, `export target=was_exported; declare -n ref=target; declare +x ref; env | grep '^target='` must produce no match and the fallback must print `not exported`; PR168's published `env` exposed that the target remains exported.
 
 ## Default echo options and bytes, 2026-10-19
 

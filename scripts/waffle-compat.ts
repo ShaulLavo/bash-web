@@ -16,6 +16,8 @@ export interface WaffleCaseOptions {
   readonly utilityDirectory?: string;
   /** Explicit core-only selection; does not change where published assets come from. */
   readonly installPrograms?: boolean;
+  /** Explicit caller program set; undefined retains every published base program. */
+  readonly programs?: readonly string[];
 }
 export interface WaffleCaseResult {
   stdout: Buffer;
@@ -47,8 +49,26 @@ function compiled(path: string): Promise<WebAssembly.Module> {
   return module;
 }
 
-function localBasePackages(directory: string | undefined, waffle: typeof Api): ProgramPackage[] {
-  return waffle.basePackages.map((family) => ({
+export function selectBasePackages(
+  packages: readonly ProgramPackage[],
+  names?: readonly string[],
+): ProgramPackage[] {
+  if (!names) return packages.slice();
+  const selected = new Set(names);
+  return packages.map((family) => ({
+    ...family,
+    programs: family.programs.filter((program) =>
+      selected.has(program.path.slice(program.path.lastIndexOf("/") + 1)),
+    ),
+  }));
+}
+
+function localBasePackages(
+  directory: string | undefined,
+  waffle: typeof Api,
+  names?: readonly string[],
+): ProgramPackage[] {
+  return selectBasePackages(waffle.basePackages, names).map((family) => ({
     ...family,
     programs: family.programs.map((program) => {
       const name = program.path.slice(program.path.lastIndexOf("/") + 1);
@@ -90,7 +110,7 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
     });
   }
   if (options.installPrograms === false) return;
-  const packages = localBasePackages(options.utilityDirectory, waffle);
+  const packages = localBasePackages(options.utilityDirectory, waffle, options.programs);
   const launcher = waffle.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory));
   await waffle.installPrograms(runtime, packages, { launcher });
 }
