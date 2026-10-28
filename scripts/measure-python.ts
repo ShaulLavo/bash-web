@@ -1,6 +1,7 @@
 import { createRuntime, type Runtime } from "waffle";
+import { installPython } from "@waffle/python/install";
 import { createShell, type Shell } from "../src/shell.ts";
-import { installPython } from "../src/utilities/python.ts";
+import { genericProgramLauncher } from "../src/runtime/program-launcher.ts";
 import {
   pythonDirectory,
   pythonEnvironment,
@@ -131,7 +132,7 @@ async function create() {
     const beforeInstall = metrics.snapshot();
     const start = now();
     const installedUtility = await installPython(runtime, {
-      workerUrl: "/shell-worker.js",
+      launcher: genericProgramLauncher("/program-worker.js"),
       wasmUrl: "/python.wasm",
       payloadUrl: "/python-stdlib.json",
     });
@@ -264,7 +265,7 @@ async function disposeUtility() {
   await fixture.release();
   await fixture.release();
   return {
-    markerRemoved: !(await fixture.runtime.filesystem.lookup("/bin/python")),
+    markerRemoved: !(await fixture.runtime.filesystem.lookup("/usr/bin/python")),
     payloadRemoved: !(await fixture.runtime.filesystem.lookup("/Lib/os.py")),
     callerFile: new TextDecoder().decode(
       await fixture.runtime.filesystem.readFile("/Lib/caller-owned.txt"),
@@ -280,7 +281,7 @@ async function disposeUnused() {
   await fixture.release();
   await fixture.release();
   return {
-    markerRemoved: !(await fixture.runtime.filesystem.lookup("/bin/python")),
+    markerRemoved: !(await fixture.runtime.filesystem.lookup("/usr/bin/python")),
     payloadAbsent:
       !(await fixture.runtime.filesystem.lookup("/Lib")) &&
       !(await fixture.runtime.filesystem.lookup("/cross-build")),

@@ -23,7 +23,7 @@ function text(value: unknown): string {
 const json = (path: string) => object(JSON.parse(readFileSync(path, "utf8")));
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-export function waffleRelease(root: string) {
+function waffleRelease(root: string) {
   const selected = object(json(resolve(root, "sources.lock.json")).waffle);
   const inputs = object(selected.buildInputs);
   const release = {

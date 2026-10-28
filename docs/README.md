@@ -8,8 +8,6 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [Embed a shell in a page](guides/embed-in-a-page.md): Run a script or an interactive shell in the browser
 - [Install program families](guides/install-utilities.md): Install coreutils, findutils, grep, sed, and ripgrep through `waffle-base`
 - [Troubleshooting](troubleshooting.md): Fix `command not found`, isolation errors, missing assets
-- [Local Git API](git-local.md): Run local repository operations on the caller's filesystem; shell registration is blocked at the pinned runtime
-- [Python](python.md): Load CPython and its standard library on first use
 
 ## Understand
 

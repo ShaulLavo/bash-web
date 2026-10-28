@@ -33,9 +33,9 @@ jobs:
           key: packages-${{ runner.os }}-${{ runner.arch }}-node26.12.1-${{ steps.inputs.outputs.dependencies }}
       - if: steps.packages.outputs.cache-hit != 'true' || steps.downloads.outputs.cache-hit != 'true'
         run: npm ci --ignore-scripts
-      - run: npm run sources:browser && npm run pack:git:tests && npm run build:node-harness
+      - run: npm run sources:browser && npm run build:worker && npm run build:node-harness
       - name: Pack shared JavaScript inputs
-        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node .build/git-package dist/git-command.js dist/git-command.d.ts dist/git.NOTICES.txt dist/shell-worker.js dist/fs-worker.js
+        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node dist/shell-worker.js dist/fs-worker.js
       - uses: actions/upload-artifact@v4
         with:
           name: javascript-${{ github.sha }}
@@ -79,7 +79,6 @@ jobs:
       - run: ulimit -c 0; npm run quality:js
       - run: npm run test:ci
       - run: npm run test:guest-build
-      - run: node --test scripts/test-git-source.ts scripts/test-git-local-recording.ts scripts/test-git-package.ts scripts/test-git-review.ts
       - run: npm run typecheck:guest-build
       - run: npm run typecheck:ci
   native:
@@ -157,42 +156,6 @@ jobs:
             .build/shell/cli-sha256.txt
             .build/shell/cli-source.txt
           retention-days: 3
-  python:
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.12.1
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.14.8
-      - uses: ./.github/actions/javascript
-      - uses: ./.github/actions/wasi-sdk
-      - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
-        with:
-          version: v49.0.3
-      - id: python-inputs
-        run: node scripts/python-ci.ts
-      - uses: actions/cache@v4
-        id: python-assets
-        with:
-          path: .build/python-assets
-          key: python-${{ runner.os }}-${{ runner.arch }}-${{ steps.python-inputs.outputs.key }}
-      - name: Build and qualify Python once
-        if: steps.python-assets.outputs.cache-hit != 'true'
-        run: npm run build:python -- --output .build/python-assets
-      - name: Validate Python assets before distribution
-        run: npm run build:python -- --stage .build/python-assets --output .build/python-distribution
-      - uses: actions/upload-artifact@v4
-        with:
-          name: python-${{ github.sha }}
-          path: .build/python-distribution
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
   wasi:
     needs:
       - prepare
@@ -423,7 +386,6 @@ jobs:
     needs:
       - prepare
       - native
-      - python
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -448,11 +410,6 @@ jobs:
       - run: npx playwright install --with-deps chromium firefox
       - run: npm run test:git:browser
       - run: npm run build:browser:assets:ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-${{ github.sha }}
-          path: .build/python-assets
-      - run: npm run build:python -- --stage .build/python-assets --output dist
       - run: npm run prepare:python:browser
         env:
           BASH_WEB_PYTHON_SHELL_WASM: public/programs/shell-engine.wasm
@@ -472,7 +429,6 @@ jobs:
       - layers
       - quality
       - native
-      - python
       - wasi
       - fuzz
       - own-shell-scoreboard
