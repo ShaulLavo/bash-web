@@ -17,6 +17,7 @@ import {
   type WorkerProcessTransport,
 } from "waffle/proc/worker-client";
 import { createTerminalProducer, type TerminalMetadata } from "./terminal-producer";
+import { SharedBridge } from "../bridge";
 
 function must<T>(result: TerminalResult<T>): T {
   if (result.kind === "error") throw new Error(result.code);
@@ -210,4 +211,33 @@ test("restoring an editor creates an actual raw group instead of restoring its s
   assert.equal(must(controls.snapshot()).mode, "raw");
   producer.pushKeyboard(Uint8Array.of(68));
   assert.equal(stream.tryRead!([new Uint8Array(1)]), 1);
+});
+
+test("connected bridge sends only to the admitted input and exposes no second readable queue", (context) => {
+  const { producer, stream } = fixture(context);
+  const bridge = new SharedBridge();
+  const disconnect = bridge.connectInput({
+    push(bytes) {
+      const result = producer.pushKeyboard(bytes);
+      return result.kind === "ok" ? result.value : result.accepted;
+    },
+    available: producer.available,
+    wake: producer.wake,
+    close: producer.closeInput,
+    resize: (columns, rows) => {
+      must(producer.resize({ columns, rows }));
+    },
+    interrupt() {},
+    discard: () => true,
+  });
+  context.after(disconnect);
+  assert.equal(bridge.send(Uint8Array.of(65)), 1);
+  assert.equal(bridge.availableInput(), 1);
+  assert.throws(() => bridge.receive(1), /admitted terminal endpoint/);
+  assert.equal(bridge.tryRead([new Uint8Array(1)]), -8);
+  const byte = new Uint8Array(1);
+  assert.equal(stream.tryRead!([byte]), 1);
+  assert.equal(byte[0], 65);
+  bridge.close();
+  assert.equal(bridge.send(byte), 0);
 });

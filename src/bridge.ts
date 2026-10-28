@@ -73,6 +73,7 @@ export class SharedBridge {
   }
   /** Returns the accepted prefix. The caller retains and retries the remaining tail. */
   send(bytes: Uint8Array): number {
+    if (this.closed()) return 0;
     if (this.route) return this.cancelled() ? 0 : this.route.push(bytes);
     const write = Atomics.load(this.state, control.inputWrite);
     if (bytes.length > this.input.length - this.availableInput()) return 0;
@@ -98,6 +99,7 @@ export class SharedBridge {
     this.signal();
   }
   receive(limit: number): Uint8Array {
+    if (this.route) throw new Error("Running shell input requires an admitted terminal endpoint");
     const read = Atomics.load(this.state, control.inputRead);
     const bytes = copyFromRing(this.input, read, Math.min(limit, this.availableInput()));
     Atomics.store(this.state, control.inputRead, read + bytes.length);
@@ -135,6 +137,7 @@ export class SharedBridge {
   // Immediate, bounded I/O for runtime_proc. Multiple guest processes can inherit this terminal.
   // A contended endpoint returns EAGAIN rather than waiting on the page or another guest.
   tryRead(chunks: readonly Uint8Array[]): number {
+    if (this.route) return -8;
     if (!chunks.some((chunk) => chunk.length)) return 0;
     if (Atomics.compareExchange(this.state, control.inputLock, 0, 1) !== 0) return -6;
     let consumed = false;
