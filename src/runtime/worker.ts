@@ -22,6 +22,15 @@ export interface ShellWorkerRequest extends RuntimeWorkerRequest {
   memoryUsage?: SharedArrayBuffer;
   shellOutput?: SharedArrayBuffer;
 }
+function wrapNamespace(namespace: WebAssembly.ModuleImports, before: () => void) {
+  for (const [name, value] of Object.entries(namespace)) {
+    if (typeof value !== "function") continue;
+    namespace[name] = (...args: number[]) => {
+      before();
+      return value(...args);
+    };
+  }
+}
 export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellWorkerRequest> {
   const data = request.runtimeProcess?.data as ShellWorkerData | undefined;
   const terminal = request.terminal ?? request.shellOutput ?? data?.shellTerminal;
@@ -90,15 +99,11 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
       // Sample the guest's allocation at host boundaries without retaining any guest
       // memory view across memory.grow. This telemetry is not an allocation quota.
       if (!sample && !bridge && !terminals) return;
-      for (const namespace of Object.values(imports))
-        for (const [name, value] of Object.entries(namespace)) {
-          if (typeof value === "function")
-            namespace[name] = (...args: number[]) => {
-              sampleMemory();
-              terminals?.prepare();
-              return value(...args);
-            };
-        }
+      const before = () => {
+        sampleMemory();
+        terminals?.prepare();
+      };
+      for (const namespace of Object.values(imports)) wrapNamespace(namespace, before);
     },
     instantiated({ instance }) {
       memory =
