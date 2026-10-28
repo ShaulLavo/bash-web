@@ -5,7 +5,6 @@ import { dirname, resolve } from "node:path";
 import {
   chmodSync,
   copyFileSync,
-  existsSync,
   mkdirSync,
   linkSync,
   lstatSync,
@@ -27,7 +26,6 @@ import {
   verifyCiArtifacts,
 } from "./ci-artifacts.ts";
 import { ciInputs } from "./ci-inputs.ts";
-import { utilityNames, writeUtilityArtifacts } from "./utility-artifacts.ts";
 
 import { cappedWasiFixture as wasm } from "./wasi-artifact-fixture.ts";
 
@@ -49,7 +47,6 @@ function fixture(run: (directory: string, consumer: string) => void) {
     const source = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
     writeFileSync(resolve(directory, "cli-source.txt"), source);
     writeFileSync(resolve(directory, "inputs"), `${ciInputs("HEAD").native}\n`);
-    writeUtilityArtifacts(root, directory, resolve(directory, "utility-artifacts"));
     const checksums = nativeArtifactFiles
       .map(
         (name) =>
@@ -65,40 +62,26 @@ function fixture(run: (directory: string, consumer: string) => void) {
   }
 }
 
-test("the complete exact-source artifact stages both CLIs, every guest and utility receipt", () => {
+test("the complete exact-source artifact stages both CLIs and every shell guest", () => {
   fixture((directory, consumer) => {
     chmodSync(resolve(directory, "shell-cli"), 0o644);
     stageCiArtifacts(consumer, directory);
     for (const name of ["shell-engine", "shell-cli"])
       assert.ok(statSync(resolve(consumer, ".build/shell/release", name)).mode & 0o111);
-    for (const name of ["shell-engine", "shell-runtime", "argv-py", "printenv-py"].concat(
-      utilityNames,
-    ))
+    for (const name of ["shell-engine", "shell-runtime", "argv-py", "printenv-py"])
       assert.deepEqual(
         readFileSync(resolve(consumer, `.build/shell/wasm32-wasip1/release/${name}.wasm`)),
         Buffer.from(wasm),
       );
-    for (const name of ["shell-engine", "test-guest", "test-spin"].concat(utilityNames))
+    for (const name of ["shell-engine", "test-guest", "test-spin"])
       assert.deepEqual(
         readFileSync(resolve(consumer, `public/programs/${name}.wasm`)),
         Buffer.from(wasm),
       );
-    assert.ok(existsSync(resolve(consumer, ".build/utility-artifacts/source-sha256.txt")));
     assert.equal(
       readFileSync(resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt"), "utf8"),
       shellNotice,
     );
-  });
-});
-
-test("staged utilities are available at package URLs before browser bundling", () => {
-  fixture((directory, consumer) => {
-    stageCiArtifacts(consumer, directory);
-    for (const name of utilityNames)
-      assert.deepEqual(
-        readFileSync(resolve(consumer, `dist/${name}.wasm`)),
-        readFileSync(resolve(directory, `${name}.wasm`)),
-      );
   });
 });
 
@@ -280,13 +263,7 @@ test("native notice destination alias rejects before copying either guest", () =
   });
 });
 
-for (const name of [
-  "env.wasm",
-  "cli-source.txt",
-  "inputs",
-  "SHA256SUMS",
-  "utility-artifacts/source-sha256.txt",
-]) {
+for (const name of ["env.wasm", "cli-source.txt", "inputs", "SHA256SUMS"]) {
   test(`destination hardlink to accepted ${name} rejects before any write`, () => {
     fixture((directory, consumer) => {
       mkdirSync(resolve(consumer, "public/programs"), { recursive: true });

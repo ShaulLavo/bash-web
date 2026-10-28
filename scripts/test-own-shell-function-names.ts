@@ -143,7 +143,6 @@ const runner = recordPath
   : await createWaffleRunner({
       modulePath: resolve(directory, "shell-runtime.wasm"),
       fixtureDirectory: directory,
-      utilityDirectory: directory,
       tmp: "/tmp/spec",
       env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" },
     });

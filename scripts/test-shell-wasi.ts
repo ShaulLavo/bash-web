@@ -5,8 +5,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
-import { buildWc } from "./build-wc.ts";
 import { verifyCiArtifacts } from "./ci-artifacts.ts";
+import { familyWasmPath, familyWasiAdapter } from "./family-assets.ts";
 import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
@@ -31,7 +31,6 @@ if (prebuilt) {
       { stdio: "inherit" },
     );
 } else {
-  buildWc();
   const cargoEnv = wasiBuildEnvironment(root, shellTargetDirectory(root));
   const env = {
     ...cargoEnv,
@@ -62,8 +61,6 @@ if (prebuilt) {
       "wasm32-wasip1",
       "-p",
       "shell-engine",
-      "-p",
-      "shell-utilities",
       "--release",
       "-j2",
     ],
@@ -104,8 +101,8 @@ const helpers = execFileSync(
   { encoding: "utf8" },
 );
 assert.equal(helpers, "['a', 'b c']\n/home/fixture\nNone\n");
-const size = (label: string, path: string) => {
-  verifyWasiGuest(path);
+const size = (label: string, path: string, filesystemAdapter?: string) => {
+  verifyWasiGuest(path, undefined, filesystemAdapter);
   const bytes = readFileSync(path);
   const brotli = brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
   const gzip = gzipSync(bytes, { level: 9 }).length;
@@ -130,4 +127,4 @@ for (const name of [
   "uniq",
   "wc",
 ])
-  size(`Utility add-on ${name}`, resolve(release, `${name}.wasm`));
+  size(`Utility add-on ${name}`, familyWasmPath(name), familyWasiAdapter(name));

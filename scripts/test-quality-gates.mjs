@@ -4,6 +4,8 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "nod
 import { resolve } from "node:path";
 import test from "node:test";
 import { duplicateArgs, duplicateModes } from "./check-duplicates.mjs";
+import { compatibilityPrograms } from "./compat-programs.ts";
+import { selectBasePackages } from "./waffle-compat.ts";
 
 const root = resolve(import.meta.dirname, "..");
 function fixture(run) {
@@ -32,6 +34,19 @@ function rejected(result, diagnostic) {
   assert.notEqual(result.status, 0, result.output);
   assert.match(result.output, diagnostic);
 }
+
+test("compatibility admits exactly the historical ten published programs", () => {
+  const expected = ["cat", "find", "grep", "head", "mkdir", "seq", "sort", "tail", "uniq", "wc"];
+  assert.deepEqual(compatibilityPrograms, expected);
+  const programs = expected.concat(["touch", "sed", "which", "ls", "env"]).map((name) => ({
+    path: `/usr/bin/${name}`,
+  }));
+  const selected = selectBasePackages([{ programs }], compatibilityPrograms);
+  assert.deepEqual(
+    selected.flatMap((family) => family.programs.map((program) => program.path)),
+    expected.map((name) => `/usr/bin/${name}`),
+  );
+});
 
 for (const [label, source, diagnostic] of [
   ["debugger", "debugger;\n", /no-debugger/],

@@ -57,6 +57,7 @@ function functionNames(module: WebAssembly.Module) {
 export function verifyWasiGuest(
   path: string,
   sdk = process.env.WASI_SDK_PATH ?? "/work/cache/wasi-sdk-34.0-x86_64-linux",
+  filesystemAdapter = "shell_engine::runtime::wasi",
 ) {
   const bytes = readFileSync(path);
   const module = new WebAssembly.Module(bytes);
@@ -96,7 +97,7 @@ export function verifyWasiGuest(
       if (entry.module !== "wasi_snapshot_preview1" || !/^(fd_prestat_|path_)/.test(entry.name))
         continue;
       assert.equal(
-        names.get(`shell_engine::runtime::wasi::${entry.name}`),
+        names.get(`${filesystemAdapter}::${entry.name}`),
         index,
         `${path}: filesystem imports remain but libc scanner is missing`,
       );

@@ -1,6 +1,7 @@
-import { createRuntime, type Runtime } from "waffle";
+import { createRuntime, type ProcessService, type Runtime } from "waffle";
+import { installPython } from "@waffle/python/install";
 import { createShell, type Shell } from "../src/shell.ts";
-import { installPython } from "../src/utilities/python.ts";
+import { genericProgramLauncher } from "../src/runtime/program-launcher.ts";
 import {
   pythonDirectory,
   pythonEnvironment,
@@ -26,10 +27,9 @@ function processRequest(record: WorkerRecord, message: unknown) {
   record.process = true;
 }
 
-function observeProcessWorkers() {
+function observeProcessWorkers(service: ProcessService) {
   const original = globalThis.Worker;
   const records = new Map<Worker, WorkerRecord>();
-  const processURL = new URL("/shell-worker.js", location.href).href;
   let nextId = 0;
   class ObservedWorker extends original {
     constructor(url: string | URL, options?: WorkerOptions) {
@@ -53,12 +53,12 @@ function observeProcessWorkers() {
   globalThis.Worker = ObservedWorker;
   return {
     snapshot() {
-      const live = Array.from(records.values()).filter(
-        (record) => !record.stopped && record.url === processURL,
+      const live = Array.from(records, ([worker, record]) => ({ worker, record })).filter(
+        ({ record }) => !record.stopped,
       );
       return {
-        pool: live.filter((record) => !record.process),
-        processes: live.filter((record) => record.process),
+        pool: live.filter(({ worker }) => service.isIdleWorker(worker)).map(({ record }) => record),
+        processes: live.filter(({ record }) => record.process).map(({ record }) => record),
         retired: Array.from(records.values()).filter((record) => record.process && record.stopped),
       };
     },
@@ -69,8 +69,8 @@ function observeProcessWorkers() {
   };
 }
 
-function instrumentation() {
-  const workers = observeProcessWorkers();
+function instrumentation(service: ProcessService) {
+  const workers = observeProcessWorkers(service);
   const compiles: (Sample & { bytes: number })[] = [];
   const originalCompile = WebAssembly.compile;
   WebAssembly.compile = async (...args) => {
@@ -117,7 +117,7 @@ async function create() {
   });
   let active: Shell | undefined;
   let installation: Installation | undefined;
-  const metrics = instrumentation();
+  const metrics = instrumentation(await runtime.processes());
   async function close() {
     try {
       await active?.dispose();
@@ -131,7 +131,7 @@ async function create() {
     const beforeInstall = metrics.snapshot();
     const start = now();
     const installedUtility = await installPython(runtime, {
-      workerUrl: "/shell-worker.js",
+      launcher: genericProgramLauncher("/program-worker.js"),
       wasmUrl: "/python.wasm",
       payloadUrl: "/python-stdlib.json",
     });
@@ -264,7 +264,7 @@ async function disposeUtility() {
   await fixture.release();
   await fixture.release();
   return {
-    markerRemoved: !(await fixture.runtime.filesystem.lookup("/bin/python")),
+    markerRemoved: !(await fixture.runtime.filesystem.lookup("/usr/bin/python")),
     payloadRemoved: !(await fixture.runtime.filesystem.lookup("/Lib/os.py")),
     callerFile: new TextDecoder().decode(
       await fixture.runtime.filesystem.readFile("/Lib/caller-owned.txt"),
@@ -280,7 +280,7 @@ async function disposeUnused() {
   await fixture.release();
   await fixture.release();
   return {
-    markerRemoved: !(await fixture.runtime.filesystem.lookup("/bin/python")),
+    markerRemoved: !(await fixture.runtime.filesystem.lookup("/usr/bin/python")),
     payloadAbsent:
       !(await fixture.runtime.filesystem.lookup("/Lib")) &&
       !(await fixture.runtime.filesystem.lookup("/cross-build")),

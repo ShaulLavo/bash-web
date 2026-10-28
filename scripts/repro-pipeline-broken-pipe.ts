@@ -29,7 +29,6 @@ const tmp = "/tmp/spec";
 const runner = await createWaffleRunner({
   env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: tmp, LC_ALL: "C.UTF-8" },
   tmp,
-  utilityDirectory: directory,
   fixtureDirectory: directory,
   modulePath: resolve(directory, "shell-runtime.wasm"),
 });
