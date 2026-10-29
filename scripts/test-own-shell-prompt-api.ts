@@ -281,32 +281,25 @@ for (const typeahead of [false, true]) {
   );
 }
 
-test(
-  "handled exit resumes a following shell read without a new prompt",
-  { timeout: 5000 },
-  async (context) => {
-    const { shell, initial, output, ready } = await signalFixture(context, "handled");
-    await send(shell, 'signal-status; read x; printf "[%s]" "$x"');
-    await ready();
-    shell.interrupt();
-    await until(context, () => output().includes("SIGNAL_HANDLED 1\n"));
-    await send(shell, "y", context.signal);
-    const prompt = await shell.waitForPrompt({ after: initial.generation, signal: context.signal });
-    assert.equal(prompt.status, 0, output());
-    assert.ok(output().includes("[y]"), output());
-  },
-);
-
-test(
-  "external exit preserves cooked input for a following shell read",
-  { timeout: 4000 },
-  async (context) => {
-    const { shell, initial, output, ready } = await signalFixture(context, "exit");
-    await send(shell, 'signal-status; read x; printf "[%s]" "$x"');
-    await ready();
-    await send(shell, "y", context.signal);
-    const prompt = await shell.waitForPrompt({ after: initial.generation, signal: context.signal });
-    assert.equal(prompt.status, 0, output());
-    assert.ok(output().includes("[y]"), output());
-  },
-);
+for (const mode of ["handled", "exit"] as const) {
+  test(
+    `external ${mode} preserves cooked input for a following shell read`,
+    { timeout: 5000 },
+    async (context) => {
+      const { shell, initial, output, ready } = await signalFixture(context, mode);
+      await send(shell, 'signal-status; read x; printf "[%s]" "$x"');
+      await ready();
+      if (mode === "handled") {
+        shell.interrupt();
+        await until(context, () => output().includes("SIGNAL_HANDLED 1\n"));
+      }
+      await send(shell, "y", context.signal);
+      const prompt = await shell.waitForPrompt({
+        after: initial.generation,
+        signal: context.signal,
+      });
+      assert.equal(prompt.status, 0, output());
+      assert.ok(output().includes("[y]"), output());
+    },
+  );
+}
