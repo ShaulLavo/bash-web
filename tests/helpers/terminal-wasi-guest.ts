@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Wasi, type Stream } from "waffle/core";
 import { MemFS } from "waffle/fs/memory";
 
-function leb(value: number): number[] {
+export function leb(value: number): number[] {
   const bytes: number[] = [];
   do {
     const byte = value & 127;
@@ -11,10 +11,10 @@ function leb(value: number): number[] {
   } while (value);
   return bytes;
 }
-function name(value: string): number[] {
+export function name(value: string): number[] {
   return leb(value.length).concat(Array.from(new TextEncoder().encode(value)));
 }
-function section(id: number, bytes: number[]): number[] {
+export function section(id: number, bytes: number[]): number[] {
   return [id].concat(leb(bytes.length), bytes);
 }
 // Tiny original guest. Each exported four-i32 function calls its actual WASI import.

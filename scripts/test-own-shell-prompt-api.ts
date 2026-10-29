@@ -113,3 +113,56 @@ test("runtime disposal rejects the public prompt wait", { timeout: 15000 }, asyn
   await rejected;
   await assert.rejects(shell.waitForPrompt(), /Shell closed/);
 });
+
+for (const { mode, status } of [
+  { mode: "handled", status: 0 },
+  { mode: "handled", status: 7 },
+  { mode: "default", status: 0 },
+  { mode: "removed", status: 0 },
+  { mode: "once", status: 0 },
+] as const) {
+  test(
+    `public prompt preserves ${mode} SIGINT guest result ${status}`,
+    { timeout: 15000 },
+    async (context) => {
+      const { runtime, shell } = await fixture(context);
+      let output = "";
+      const decoder = new TextDecoder();
+      const drain = setInterval(() => {
+        output += decoder.decode(shell.terminal.drain(), { stream: true });
+      }, 1);
+      context.after(() => clearInterval(drain));
+      context.after(() => context.diagnostic(JSON.stringify(output)));
+      const initial = await shell.waitForPrompt({ signal: context.signal });
+      await api.installPrograms(
+        runtime,
+        [
+          {
+            name: "signal-status",
+            programs: [
+              {
+                path: "/bin/signal-status",
+                source: async () => api.signalStatusGuest(mode, status),
+              },
+            ],
+          },
+        ],
+        { launcher: api.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory)) },
+      );
+      await send(shell, "signal-status");
+      while (!output.includes("SIGNAL_READY\n")) {
+        context.signal.throwIfAborted();
+        assert.equal(shell.terminal.readPrompt()?.generation, initial.generation, output);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      shell.interrupt();
+      const prompt = await shell.waitForPrompt({
+        after: initial.generation,
+        signal: context.signal,
+      });
+      output += decoder.decode(shell.terminal.drain(), { stream: true });
+      assert.equal(prompt.status, mode === "handled" ? status : 130, output);
+      if (mode === "handled") assert.ok(output.includes("SIGNAL_HANDLED\n"), output);
+    },
+  );
+}

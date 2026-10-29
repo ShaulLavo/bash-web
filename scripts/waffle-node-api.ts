@@ -19,3 +19,4 @@ export { genericProgramLauncher } from "../src/runtime/program-launcher";
 export { createShell } from "../src/shell";
 export { SharedBridge, control } from "../src/bridge";
 export { shellTerminalImports } from "../src/runtime/guest-imports";
+export { signalStatusGuest } from "../tests/helpers/signal-status-guest";
