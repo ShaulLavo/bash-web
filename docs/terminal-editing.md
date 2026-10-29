@@ -16,9 +16,11 @@ A command holds at most 64 KiB. A paste drops its remaining text after reaching 
 
 The editor keeps a model of where the prompt and command sit on the terminal. Rows of a command taller than the screen that scrolled into history are counted, so cursor movement never aims above the screen. An edit repaints from the first row that changed. Moving the caret only moves the cursor. Explicit newlines are written as CRLF because the runtime does not translate LF to CRLF.
 
-Enter, Ctrl+C, Ctrl+D and a host interrupt first move the cursor below the command's last row, so output and the next prompt never overwrite it. `^C` is echoed after the command text, as in GNU Readline. Ctrl+L clears the screen with `CSI H CSI 2J` and repaints the prompt and command at the top.
+Enter, Ctrl+C, Ctrl+D, a host interrupt and the end of input first recount the command at the current width, then move the cursor below its last row, so output and the next prompt never overwrite it. `^C` is echoed after the command text, as in GNU Readline. Ctrl+L clears the screen with `CSI H CSI 2J` and repaints the prompt and command at the top.
 
 When the caret moves into rows that have scrolled into history, the editor repaints from the caret's row at the top of the screen. History keeps the earlier copy of those rows, because a terminal cannot edit its scrollback.
+
+While the margin space follows a full last row, typing repaints instead of echoing, so a combining mark joins the last glyph rather than the padding. A repaint waits for a character's last UTF-8 byte.
 
 Cell widths come from `shell/engine/src/terminal/width.rs`, generated from the pinned libghostty-vt by `npm run terminal:widths` with grapheme clustering (mode 2027) off, which is the terminal's default. A test fails when the table no longer matches the pinned terminal. The prompt is assumed to start at column 0. A resize recounts the reflowed command before the next edit, assuming the terminal keeps the command's end at the bottom of the screen.
 

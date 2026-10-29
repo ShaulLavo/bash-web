@@ -265,10 +265,6 @@ impl Display {
     }
     /// One byte was written at the cursor, which was at the end of the region.
     pub fn echoed(&mut self, byte: u8) {
-        if std::mem::take(&mut self.margin) {
-            // The margin space sits under the cursor; the echoed byte replaces it.
-            self.shown.pop();
-        }
         self.shown.push(byte);
         self.cursor_at = self.shown.len();
         self.pending_utf8.push(byte);
@@ -288,6 +284,11 @@ impl Display {
         self.cursor = walk.at;
         self.bottom = self.bottom.max(self.cursor.row);
         self.scrolled();
+    }
+    /// Whether an append may be echoed at the cursor. Over the margin space, a
+    /// zero-width scalar would join the padding cell instead of the last glyph.
+    pub fn echoes_appends(&self) -> bool {
+        !self.margin
     }
     /// The next render starts from a cleared screen with the prompt at the top.
     pub fn clear_screen(&mut self) {

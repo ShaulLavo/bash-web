@@ -134,7 +134,7 @@ fn finishing_from_an_earlier_wrapped_row_moves_below_the_command() {
         type_bytes(&mut editor, &mut screen, b"echo abcdefghij\x01");
         assert_eq!((screen.row, screen.column), (0, 2));
         editor.clear();
-        screen.write(&editor.finish(interrupted));
+        screen.write(&editor.finish(Geometry::new(12, 1000), interrupted));
         assert_eq!((screen.row, screen.column), (2, 0));
     }
 }

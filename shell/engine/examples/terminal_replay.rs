@@ -1,7 +1,8 @@
 //! Drives the interactive line editor the way `runtime_main.rs` does and prints the
 //! bytes it writes, so `scripts/test-terminal-display.ts` can replay them into
 //! libghostty-vt. Input lines: `prompt HEX`, `keys HEX`, `resize COLUMNS ROWS`,
-//! `output HEX` (command output) and `cancel` (a host interrupt while reading).
+//! `output HEX` (command output), `cancel` (a host interrupt while reading) and
+//! `eof` (input ends while reading).
 //! Output lines: `W HEX` (terminal bytes), `S HEX` (a submitted command),
 //! `R COLUMNS ROWS` (resize the terminal now) and `E` (end of input).
 #[path = "../src"]
@@ -21,7 +22,7 @@ fn unhex(text: &str) -> Vec<u8> {
         .map(|at| u8::from_str_radix(&text[at..at + 2], 16).expect("hex input"))
         .collect()
 }
-fn key(editor: &mut Editor, byte: u8) -> Vec<String> {
+fn key(editor: &mut Editor, geometry: Geometry, byte: u8) -> Vec<String> {
     match editor.feed(byte) {
         Action::Echo(byte) => {
             editor.echoed(byte);
@@ -31,10 +32,13 @@ fn key(editor: &mut Editor, byte: u8) -> Vec<String> {
         Action::Bell => vec!["W 07".into()],
         Action::Submit(line) => vec![
             format!("S {}", hex(&line)),
-            format!("W {}", hex(&editor.finish(false))),
+            format!("W {}", hex(&editor.finish(geometry, false))),
         ],
-        Action::Interrupt => vec![format!("W {}", hex(&editor.finish(true)))],
-        Action::Eof => vec![format!("W {}", hex(&editor.finish(false))), "E".into()],
+        Action::Interrupt => vec![format!("W {}", hex(&editor.finish(geometry, true)))],
+        Action::Eof => vec![
+            format!("W {}", hex(&editor.finish(geometry, false))),
+            "E".into(),
+        ],
         Action::None => Vec::new(),
     }
 }
@@ -57,7 +61,7 @@ fn main() {
                 .into_iter()
                 .flat_map(|byte| {
                     editor.resize(geometry);
-                    key(&mut editor, byte)
+                    key(&mut editor, geometry, byte)
                 })
                 .collect(),
             "resize" => {
@@ -68,8 +72,12 @@ fn main() {
             "output" => vec![format!("W {argument}")],
             "cancel" => {
                 editor.clear();
-                vec![format!("W {}", hex(&editor.finish(true)))]
+                vec![format!("W {}", hex(&editor.finish(geometry, true)))]
             }
+            "eof" => vec![
+                format!("W {}", hex(&editor.finish(geometry, false))),
+                "E".into(),
+            ],
             other => panic!("unknown replay command {other}"),
         };
         for record in records {

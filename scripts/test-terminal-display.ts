@@ -27,7 +27,8 @@ type Step =
   | { keys: string }
   | { output: string }
   | { resize: [number, number] }
-  | { cancel: true };
+  | { cancel: true }
+  | { eof: true };
 const hex = (text: string) => Buffer.from(text).toString("hex");
 const left = (count: number) => "\x1b[D".repeat(count);
 
@@ -37,7 +38,7 @@ function replay(columns: number, rows: number, steps: readonly Step[]) {
     if ("keys" in step) return `keys ${hex(step.keys)}`;
     if ("output" in step) return `output ${hex(step.output)}`;
     if ("resize" in step) return `resize ${step.resize.join(" ")}`;
-    return "cancel";
+    return "cancel" in step ? "cancel" : "eof";
   });
   const run = spawnSync(replayer, [String(columns), String(rows)], {
     input: script.join("\n") + "\n",
@@ -46,17 +47,20 @@ function replay(columns: number, rows: number, steps: readonly Step[]) {
   assert.equal(run.status, 0, run.stderr);
   const terminal = runtime.createTerminal({ columns, rows });
   const submitted: string[] = [];
+  const repaints: Buffer[] = [];
   let written = "";
   for (const record of run.stdout.trim().split("\n")) {
     const [kind, first = "", second = ""] = record.split(" ");
     if (kind === "W") {
+      // Echo writes one byte at a time; anything longer is a repaint or a finish.
+      if (first.length > 2) repaints.push(Buffer.from(first, "hex"));
       terminal.write(Buffer.from(first, "hex"));
       written += Buffer.from(first, "hex").toString("latin1");
     }
     if (kind === "S") submitted.push(Buffer.from(first, "hex").toString());
     if (kind === "R") terminal.resize({ columns: Number(first), rows: Number(second) });
   }
-  const result = { written, submitted, ...snapshot(terminal) };
+  const result = { written, submitted, repaints, ...snapshot(terminal) };
   terminal.dispose();
   return result;
 }
@@ -86,6 +90,7 @@ function direct(columns: number, rows: number, text: string, caret = text) {
   prefix.dispose();
   return { lines, cursor };
 }
+const utf8 = new TextDecoder("utf-8", { fatal: true });
 const prompts = (lines: readonly string[]) => lines.filter((line) => line.startsWith("$ ")).length;
 
 test("the checked-in width table matches the pinned terminal", async () => {
@@ -287,4 +292,37 @@ test("multiline commands repaint hard rows and leave output below them", () => {
     { keys: `one${newline}two${newline}three${newline}four${newline}five\x01X` },
   ]);
   assert.deepEqual(home.screen, ["$ Xone", "two", "three"]);
+});
+
+test("a host interrupt or end of input after a resize finishes below the reflowed command", () => {
+  const typed = [
+    { prompt: "$ " },
+    { keys: "echo abcdefghijklmnop\x01" },
+    { resize: [8, 6] },
+  ] as const;
+  const cancelled = replay(12, 6, [...typed, { cancel: true }, { prompt: "$ " }]);
+  assert.deepEqual(cancelled.lines, ["$ echo a", "bcdefghi", "jklmnop^", "C", "$"]);
+  const ended = replay(12, 6, [...typed, { eof: true }]);
+  assert.deepEqual(ended.lines, ["$ echo a", "bcdefghi", "jklmnop"]);
+  assert.deepEqual(ended.cursor, { row: 3, column: 0 });
+});
+
+test("typing after a cursor move at the right margin matches text written directly", () => {
+  const cases: [string, string, string][] = [
+    [`abcdef${left(1)}\x1b[C\u0301Z`, "abcdef\u0301Z", "abcdef\u0301Z"],
+    [`abcdef${left(1)}\x1b[C\u0301`, "abcdef\u0301", "abcdef\u0301"],
+    [`abcdef${left(1)}\x1b[Cé`, "abcdefé", "abcdefé"],
+    [`abcdef${left(1)}\x1b[C中`, "abcdef中", "abcdef中"],
+    [`abcdef${left(2)}é`, "abcdéef", "abcdé"],
+    [`abcdefgh${left(3)}\u0301`, "abcde\u0301fgh", "abcde\u0301"],
+  ];
+  for (const [keys, text, caret] of cases) {
+    const result = replay(8, 6, [{ prompt: "$ " }, { keys }]);
+    const reference = direct(8, 6, `$ ${text}`, `$ ${caret}`);
+    assert.deepEqual(result.lines, reference.lines, JSON.stringify(keys));
+    assert.deepEqual(result.cursor, reference.cursor, JSON.stringify(keys));
+    // A repaint between a scalar's bytes would briefly show U+FFFD.
+    for (const repaint of result.repaints)
+      assert.doesNotThrow(() => utf8.decode(repaint), JSON.stringify(keys));
+  }
 });

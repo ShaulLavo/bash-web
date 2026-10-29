@@ -160,8 +160,10 @@ impl Editor {
         paint_text(&mut region, &self.line[self.cursor..]);
         self.display.render(region, caret)
     }
-    /// After a submit, interrupt or EOF: moves below the displayed command.
-    pub fn finish(&mut self, interrupted: bool) -> Vec<u8> {
+    /// After a submit, interrupt or EOF: moves below the displayed command. The
+    /// terminal may have reflowed it since the last key, so recount it first.
+    pub fn finish(&mut self, geometry: Geometry, interrupted: bool) -> Vec<u8> {
+        self.display.resize(geometry);
         self.display.finish(interrupted)
     }
     fn previous(&self) -> usize {
@@ -296,8 +298,12 @@ impl Editor {
         let append = self.cursor == self.line.len();
         self.line.insert(self.cursor, byte);
         self.cursor += 1;
-        if append && byte != b'\n' {
+        if append && byte != b'\n' && self.display.echoes_appends() {
             return Action::Echo(byte);
+        }
+        // Repainting between a scalar's bytes would hand the terminal a partial sequence.
+        if incomplete_scalar(&self.line[..self.cursor]) {
+            return Action::None;
         }
         Action::Redraw
     }
@@ -393,6 +399,18 @@ impl Editor {
             _ => Action::None,
         }
     }
+}
+fn incomplete_scalar(text: &[u8]) -> bool {
+    let continuation = text
+        .iter()
+        .rev()
+        .take(3)
+        .take_while(|&&byte| byte & 0xc0 == 0x80)
+        .count();
+    let Some(&lead) = text.len().checked_sub(continuation + 1).map(|at| &text[at]) else {
+        return false;
+    };
+    utf8_length(lead) > continuation + 1
 }
 fn word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte >= 0x80

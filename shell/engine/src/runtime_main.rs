@@ -241,17 +241,21 @@ mod guest {
         write(output, b"\x1b[?2004l").await.map_err(|_| 1)?;
         match action {
             Ok(Action::Submit(source)) => {
-                write(output, &editor.finish(false)).await.map_err(|_| 1)?;
+                write(output, &editor.finish(geometry(), false))
+                    .await
+                    .map_err(|_| 1)?;
                 Ok(Some(source))
             }
             Ok(Action::Interrupt) => {
                 session.state().borrow_mut().publish_status(130);
                 editor.clear();
-                write(output, &editor.finish(true)).await.map_err(|_| 1)?;
+                write(output, &editor.finish(geometry(), true))
+                    .await
+                    .map_err(|_| 1)?;
                 Ok(None)
             }
             Ok(Action::Eof) => {
-                let _ = write(output, &editor.finish(false)).await;
+                let _ = write(output, &editor.finish(geometry(), false)).await;
                 Err(session.state().borrow().status())
             }
             Err(_) => Err(1),
