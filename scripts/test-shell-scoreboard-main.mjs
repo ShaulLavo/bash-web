@@ -1254,6 +1254,26 @@ function assertBaselineCommands({ root, put }, input) {
     assert.equal(readFileSync(output, "utf8"), `${name}=${input.mainSha}\n`);
   }
   assert.throws(() => execute("NODE_OPTIONS"));
+  const dependent = structuredClone(input.event);
+  dependent.pull_request.base.ref = "terminal/a2-multiline";
+  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(dependent));
+  writeFileSync(output, "");
+  execute("LAYERS_BASE_REF");
+  assert.equal(readFileSync(output, "utf8"), `LAYERS_BASE_REF=${input.mainSha}\n`);
+  assert.throws(() => execute("BASH_COMPAT_BASE_REF"), /PR does not target main/);
+  const foreign = structuredClone(dependent);
+  foreign.pull_request.base.repo.id++;
+  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(foreign));
+  assert.throws(() => execute("LAYERS_BASE_REF"), /PR base repository/);
+  const forged = structuredClone(dependent);
+  forged.pull_request.head.sha = input.mainSha;
+  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(forged));
+  assert.throws(() => execute("LAYERS_BASE_REF"), /second parent differs/);
+  const unrelated = structuredClone(dependent);
+  unrelated.pull_request.base.sha = input.event.pull_request.head.sha;
+  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(unrelated));
+  assert.throws(() => execute("LAYERS_BASE_REF"), /event base is not in tested base history/);
+
   const push = {
     repository: input.event.repository,
     ref: "refs/heads/main",

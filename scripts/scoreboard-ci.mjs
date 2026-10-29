@@ -30,7 +30,7 @@ function json(path) {
 function write(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
-function sourceBinding({ root, event, eventName, sourceSha, mainSha }) {
+function targetBinding({ root, event, eventName, sourceSha }) {
   assert.equal(event.repository?.id, authority.repositoryId, "wrong event repository");
   assert.equal(
     git(root, ["rev-parse", "HEAD"]),
@@ -51,22 +51,29 @@ function sourceBinding({ root, event, eventName, sourceSha, mainSha }) {
   assert.equal(eventName, "pull_request", "unsupported qualification event");
   const headSha = fullSha(event.pull_request.head.sha);
   const eventBaseSha = fullSha(event.pull_request.base.sha);
-  assert.equal(event.pull_request.base.ref, "main", "PR does not target main");
   assert.equal(event.pull_request.base.repo.id, authority.repositoryId, "PR base repository");
   const parents = git(root, ["show", "-s", "--format=%P", sourceSha]).split(" ");
   assert.equal(parents.length, 2, "tested source must be a two-parent merge");
   assert.equal(parents[1], headSha, "tested merge second parent differs from PR head");
   const baseSha = fullSha(parents[0]);
-  const mainHistory = git(root, ["rev-list", "--first-parent", fullSha(mainSha)]).split("\n");
-  assert.ok(mainHistory.includes(baseSha), "tested base is not in captured main history");
   const baseHistory = git(root, ["rev-list", "--first-parent", baseSha]).split("\n");
   assert.ok(baseHistory.includes(eventBaseSha), "event base is not in tested base history");
+  return { kind: "pull-request", headSha, testedMergeSha: sourceSha, baseSha };
+}
+function sourceBinding(input) {
+  const selected = targetBinding(input);
+  if (selected.kind === "main-push") return selected;
+  const { root, event, sourceSha, mainSha } = input;
+  assert.equal(event.pull_request.base.ref, "main", "PR does not target main");
+  const { baseSha } = selected;
+  const mainHistory = git(root, ["rev-list", "--first-parent", fullSha(mainSha)]).split("\n");
+  assert.ok(mainHistory.includes(baseSha), "tested base is not in captured main history");
   const included = git(root, ["merge-base", mainSha, sourceSha]) === mainSha;
   assert.ok(
     included || sourceEquivalent(root, baseSha, mainSha),
     `current main ${mainSha} is not included or scoring-equivalent to tested base ${baseSha}`,
   );
-  return { kind: "pull-request", headSha, testedMergeSha: sourceSha, baseSha, mainSha };
+  return { ...selected, mainSha };
 }
 export function verifyBinding(input) {
   const { eventName, sourceSha, run } = input;
@@ -81,6 +88,10 @@ export function verifyBinding(input) {
     "wrong host source",
   );
   return selected;
+}
+function selectLayerBaseline(input) {
+  const selected = targetBinding(input);
+  return selected.kind === "pull-request" ? selected.baseSha : selected.beforeSha;
 }
 export function selectBaseline(input) {
   const selected = sourceBinding(input);
@@ -310,13 +321,14 @@ async function main() {
   if (command === "baseline") {
     assert.equal(args.length, 1);
     assert.ok(["LAYERS_BASE_REF", "BASH_COMPAT_BASE_REF"].includes(args[0]));
-    const baseline = selectBaseline({
+    const select = args[0] === "LAYERS_BASE_REF" ? selectLayerBaseline : selectBaseline;
+    const baseline = select({
       root,
       event: json(process.env.GITHUB_EVENT_PATH),
       eventName: process.env.GITHUB_EVENT_NAME,
       sourceSha: process.env.GITHUB_SHA,
       mainSha:
-        process.env.GITHUB_EVENT_NAME === "pull_request"
+        args[0] === "BASH_COMPAT_BASE_REF" && process.env.GITHUB_EVENT_NAME === "pull_request"
           ? git(root, ["rev-parse", "refs/remotes/origin/main"])
           : undefined,
     });
