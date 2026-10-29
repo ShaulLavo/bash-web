@@ -186,11 +186,22 @@ impl Rows {
             ends: vec![0],
         };
         let mut walk = Walk::new(columns);
+        // Escapes between a row's last glyph and a soft wrap belong to the next row.
+        let mut boundary = 0;
         scalars(bytes, |start, end, character| {
-            rows.reach(walk.at.caret(columns).row, start);
-            if let Step::Glyph { row } = walk.step(character) {
-                rows.reach(row, start);
-                rows.ends[row] = end;
+            let before = walk.at.row;
+            match walk.step(character) {
+                Step::Glyph { row } => {
+                    rows.reach(row, if row > before { boundary } else { start });
+                    rows.ends[row] = end;
+                    boundary = end;
+                }
+                // A pending wrap followed by CR LF starts one row, not two.
+                Step::Control if walk.at.row > before => {
+                    rows.reach(walk.at.row, end);
+                    boundary = end;
+                }
+                Step::Control => {}
             }
         });
         rows.reach(walk.at.caret(columns).row, bytes.len());
@@ -326,25 +337,28 @@ impl Display {
         }
         let text = &self.shown[..self.shown.len() - usize::from(self.margin)];
         let end = position(text, columns);
-        let pending = end.column == columns;
-        let column = if interrupted && !pending {
-            end.column
-        } else {
-            0
-        };
-        self.move_to(
-            &mut out,
-            Position {
-                row: end.row,
-                column,
-            },
-        );
-        if interrupted {
-            // After a full last row, `^C` starts the next row, as a wrap would put it.
-            out.extend_from_slice(if pending { b"\r\n^C" } else { b"^C" });
-        }
-        out.extend_from_slice(b"\r\n");
         self.pending_utf8.clear();
+        if !interrupted {
+            if self.cursor.row != end.row {
+                self.move_rows(&mut out, end.row);
+            }
+            out.extend_from_slice(b"\r\n");
+            return out;
+        }
+        // After a full last row, `^C` starts the next row, as a wrap would put it.
+        if end.column == columns {
+            self.move_to(
+                &mut out,
+                Position {
+                    row: end.row,
+                    column: 0,
+                },
+            );
+            out.extend_from_slice(b"\r\n");
+        } else {
+            self.move_to(&mut out, end);
+        }
+        out.extend_from_slice(b"^C\r\n");
         out
     }
     /// The first region row whose painted cells must change, if any is on screen.

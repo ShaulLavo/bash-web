@@ -1,4 +1,4 @@
-//! Original bounded single-line terminal editor. The guest owns echo; the browser
+//! Original bounded multiline terminal editor. The guest owns echo; the browser
 //! forwards raw bytes, including ANSI arrows, without maintaining shell state.
 #[path = "terminal_display.rs"]
 mod display;
@@ -9,6 +9,7 @@ pub enum Action {
     Redraw,
     /// Appending at the painted end needs only byte echo, not a whole-line redraw.
     Echo(u8),
+    Bell,
     Submit(Vec<u8>),
     Eof,
     Interrupt,
@@ -29,6 +30,7 @@ enum Parameters {
     Empty,
     First(u32),
     Modified(u32, u32),
+    Third(u32, u32, u32),
     Unsupported,
 }
 impl Parameters {
@@ -38,6 +40,10 @@ impl Parameters {
             (Self::First(first), b';') => Self::Modified(first, 0),
             (Self::First(value), b'0'..=b'9') => append_digit(value, byte)
                 .map(Self::First)
+                .unwrap_or(Self::Unsupported),
+            (Self::Modified(first, second), b';') => Self::Third(first, second, 0),
+            (Self::Third(first, second, value), b'0'..=b'9') => append_digit(value, byte)
+                .map(|value| Self::Third(first, second, value))
                 .unwrap_or(Self::Unsupported),
             (Self::Modified(first, value), b'0'..=b'9') => append_digit(value, byte)
                 .map(|value| Self::Modified(first, value))
@@ -49,6 +55,68 @@ impl Parameters {
 fn append_digit(value: u32, byte: u8) -> Option<u32> {
     value.checked_mul(10)?.checked_add(u32::from(byte - b'0'))
 }
+const LINE_LIMIT: usize = 64 * 1024;
+const PASTE_END: &[u8] = b"\x1b[201~";
+
+#[derive(Default)]
+struct Paste {
+    bytes: Vec<u8>,
+    delimiter: usize,
+    cr: bool,
+    overflow: bool,
+}
+impl Paste {
+    fn push(&mut self, byte: u8, capacity: usize) {
+        if self.overflow {
+            return;
+        }
+        if byte == b'\n' && self.cr {
+            self.cr = false;
+            return;
+        }
+        self.cr = byte == b'\r';
+        let byte = if self.cr { b'\n' } else { byte };
+        if utf8_length(byte) > capacity - self.bytes.len() {
+            self.overflow = true;
+            return;
+        }
+        self.bytes.push(byte);
+    }
+    fn feed(&mut self, byte: u8, capacity: usize) -> bool {
+        if byte == PASTE_END[self.delimiter] {
+            self.delimiter += 1;
+            return self.delimiter == PASTE_END.len();
+        }
+        for &pending in &PASTE_END[..self.delimiter] {
+            self.push(pending, capacity);
+        }
+        self.delimiter = usize::from(byte == PASTE_END[0]);
+        if self.delimiter == 0 {
+            self.push(byte, capacity);
+        }
+        false
+    }
+}
+fn utf8_length(byte: u8) -> usize {
+    match byte {
+        0xc2..=0xdf => 2,
+        0xe0..=0xef => 3,
+        0xf0..=0xf4 => 4,
+        _ => 1,
+    }
+}
+/// The bytes that show `line`. A newline ends the row; every repaint clears below
+/// its first row, so no row needs its own erase.
+fn paint_text(bytes: &mut Vec<u8>, line: &[u8]) {
+    for &byte in line {
+        match byte {
+            b'\n' => bytes.extend_from_slice(b"\r\n"),
+            b'\t' => bytes.push(byte),
+            0..=31 | 127 => bytes.extend_from_slice(&[b'^', byte ^ 0x40]),
+            _ => bytes.push(byte),
+        }
+    }
+}
 #[derive(Default)]
 pub struct Editor {
     line: Vec<u8>,
@@ -59,12 +127,16 @@ pub struct Editor {
     draft: Vec<u8>,
     prompt: Vec<u8>,
     display: Display,
+    paste: Option<Paste>,
+    discard_utf8: usize,
 }
 impl Editor {
     pub fn clear(&mut self) {
         self.line.clear();
         self.cursor = 0;
         self.escape = Escape::None;
+        self.paste = None;
+        self.discard_utf8 = 0;
         self.history_at = None;
         self.draft.clear();
     }
@@ -82,8 +154,10 @@ impl Editor {
         self.display.echoed(byte);
     }
     pub fn redraw(&mut self) -> Vec<u8> {
-        let caret = self.prompt.len() + self.cursor;
-        let region = [self.prompt.as_slice(), &self.line].concat();
+        let mut region = self.prompt.clone();
+        paint_text(&mut region, &self.line[..self.cursor]);
+        let caret = region.len();
+        paint_text(&mut region, &self.line[self.cursor..]);
         self.display.render(region, caret)
     }
     /// After a submit, interrupt or EOF: moves below the displayed command.
@@ -141,8 +215,15 @@ impl Editor {
         Action::Redraw
     }
     fn csi(&mut self, parameters: Parameters, byte: u8) -> Action {
-        use Parameters::{Empty, First, Modified};
+        use Parameters::{Empty, First, Modified, Third};
         match (parameters, byte) {
+            (Third(27, 2, 13), b'~') | (Modified(13, 2), b'u') => {
+                return self.insert(b'\n');
+            }
+            (First(200), b'~') => {
+                self.paste = Some(Paste::default());
+                return Action::None;
+            }
             (Empty, b'A') => self.history(true),
             (Empty, b'B') => self.history(false),
             (Empty, b'D') if self.cursor > 0 => self.cursor = self.previous(),
@@ -201,7 +282,44 @@ impl Editor {
             .unwrap_or_else(|| self.draft.clone());
         self.cursor = self.line.len();
     }
+    fn insert(&mut self, byte: u8) -> Action {
+        if self.discard_utf8 > 0 && byte & 0xc0 == 0x80 {
+            self.discard_utf8 -= 1;
+            return Action::None;
+        }
+        self.discard_utf8 = 0;
+        let width = utf8_length(byte);
+        if width > LINE_LIMIT - self.line.len() {
+            self.discard_utf8 = width - 1;
+            return Action::Bell;
+        }
+        let append = self.cursor == self.line.len();
+        self.line.insert(self.cursor, byte);
+        self.cursor += 1;
+        if append && byte != b'\n' {
+            return Action::Echo(byte);
+        }
+        Action::Redraw
+    }
+    fn feed_paste(&mut self, byte: u8) -> Action {
+        let Some(mut paste) = self.paste.take() else {
+            unreachable!("paste bytes require an active paste");
+        };
+        let overflow = paste.overflow;
+        if paste.feed(byte, LINE_LIMIT - self.line.len()) {
+            let length = paste.bytes.len();
+            self.line.splice(self.cursor..self.cursor, paste.bytes);
+            self.cursor += length;
+            return Action::Redraw;
+        }
+        let bell = !overflow && paste.overflow;
+        self.paste = Some(paste);
+        if bell { Action::Bell } else { Action::None }
+    }
     pub fn feed(&mut self, byte: u8) -> Action {
+        if self.paste.is_some() {
+            return self.feed_paste(byte);
+        }
         if byte == 0x1b {
             self.escape = Escape::Start;
             return Action::None;
@@ -271,16 +389,7 @@ impl Editor {
                 self.display.clear_screen();
                 Action::Redraw
             }
-            b'\t' | 32..=126 | 128..=255 if self.line.len() < 64 * 1024 => {
-                let append = self.cursor == self.line.len();
-                self.line.insert(self.cursor, byte);
-                self.cursor += 1;
-                if append {
-                    Action::Echo(byte)
-                } else {
-                    Action::Redraw
-                }
-            }
+            b'\t' | 32..=126 | 128..=255 => self.insert(byte),
             _ => Action::None,
         }
     }
@@ -298,10 +407,129 @@ mod tests {
         }
     }
 
+    fn assert_utf8_limit(text: &str, room: usize) {
+        let mut editor = Editor::default();
+        feed(&mut editor, &vec![b'a'; LINE_LIMIT - room]);
+        feed(&mut editor, text.as_bytes());
+        let Action::Submit(line) = editor.feed(b'\r') else {
+            panic!("expected submit")
+        };
+        let line = std::str::from_utf8(&line).expect("cap must retain valid UTF-8");
+        let retained = if room == text.len() { text } else { "" };
+        assert_eq!(line, format!("{}{retained}", "a".repeat(LINE_LIMIT - room)));
+    }
+
+    #[test]
+    fn utf8_at_the_line_limit_is_kept_or_dropped_as_a_whole_scalar() {
+        for text in ["é", "中", "😀"] {
+            for room in 0..=text.len() {
+                assert_utf8_limit(text, room);
+            }
+        }
+    }
+
+    #[test]
+    fn split_paste_utf8_at_the_cap_does_not_invalidate_the_command() {
+        for text in ["é", "中", "😀"] {
+            let mut editor = Editor::default();
+            feed(&mut editor, &vec![b'a'; LINE_LIMIT - 1]);
+            feed(&mut editor, b"\x1b[200~");
+            assert_eq!(editor.feed(text.as_bytes()[0]), Action::Bell);
+            feed(&mut editor, &text.as_bytes()[1..]);
+            feed(&mut editor, b"\r\nignored\x1b[20");
+            assert_eq!(editor.feed(b'1'), Action::None);
+            assert_eq!(editor.feed(b'~'), Action::Redraw);
+            assert_eq!(editor.line.len(), LINE_LIMIT - 1);
+            assert!(std::str::from_utf8(&editor.line).is_ok());
+            assert_eq!(editor.feed(b'!'), Action::Echo(b'!'));
+            let Action::Submit(line) = editor.feed(b'\r') else {
+                panic!("expected submit")
+            };
+            assert_eq!(line.len(), LINE_LIMIT);
+            assert_eq!(line.last(), Some(&b'!'));
+        }
+    }
+
+    #[test]
+    fn pasted_control_bytes_are_painted_as_text_instead_of_terminal_controls() {
+        let mut editor = Editor::default();
+        editor.begin("$ ", Geometry::new(80, 24));
+        feed(&mut editor, b"\x1b[200~a\x1b[2J\x03\x7f\x1b[201~");
+        assert_eq!(editor.redraw(), b"\r\x1b[J$ a^[[2J^C^?");
+    }
+
+    #[test]
+    fn shift_enter_inserts_a_newline_without_submitting() {
+        for sequence in [b"\x1b[27;2;13~".as_slice(), b"\x1b[13;2u"] {
+            let mut editor = Editor::default();
+            feed(&mut editor, b"echo first");
+            feed(&mut editor, sequence);
+            assert_eq!(editor.line, b"echo first\n");
+            assert_eq!(editor.cursor, editor.line.len());
+            feed(&mut editor, b"echo second");
+            assert_eq!(
+                editor.feed(b'\r'),
+                Action::Submit(b"echo first\necho second".to_vec())
+            );
+        }
+    }
+
+    #[test]
+    fn bracketed_paste_normalizes_newlines_and_requires_explicit_enter() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"headtail\x01\x1b[C\x1b[C\x1b[C\x1b[C");
+        for byte in b"\x1b[200~a\r\nb\rc\n\x1b[201~" {
+            assert!(!matches!(editor.feed(*byte), Action::Submit(_)));
+        }
+        assert_eq!(editor.line, b"heada\nb\nc\ntail");
+        assert_eq!(editor.cursor, b"heada\nb\nc\n".len());
+        assert_eq!(
+            editor.feed(b'\r'),
+            Action::Submit(b"heada\nb\nc\ntail".to_vec())
+        );
+    }
+
+    #[test]
+    fn paste_control_bytes_and_false_end_markers_are_literal() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"\x1b[200~a\x03\x04\x1b[20x\x1b\x1b[201~");
+        assert_eq!(editor.line, b"a\x03\x04\x1b[20x\x1b");
+        assert_eq!(
+            editor.feed(b'\r'),
+            Action::Submit(b"a\x03\x04\x1b[20x\x1b".to_vec())
+        );
+    }
+
+    #[test]
+    fn paste_overflow_stays_bounded_until_the_closing_marker() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"prefix\x1b[200~");
+        let mut bells = 0;
+        for _ in 0..(64 * 1024 + 100) {
+            let action = editor.feed(b'x');
+            bells += usize::from(action == Action::Bell);
+            assert!(!matches!(action, Action::Submit(_)));
+        }
+        for byte in b"\r\nignored\x1b[201~" {
+            assert!(!matches!(editor.feed(*byte), Action::Submit(_)));
+        }
+        assert_eq!(bells, 1);
+        assert_eq!(editor.line.len(), 64 * 1024);
+        assert!(editor.line.starts_with(b"prefix"));
+        assert!(editor.line[6..].iter().all(|byte| *byte == b'x'));
+        assert_eq!(editor.feed(127), Action::Redraw);
+        assert_eq!(editor.feed(b'!'), Action::Echo(b'!'));
+        let Action::Submit(line) = editor.feed(b'\r') else {
+            panic!("explicit Enter must submit")
+        };
+        assert_eq!(line.len(), 64 * 1024);
+        assert_eq!(line.last(), Some(&b'!'));
+    }
+
     #[test]
     fn long_csi_is_consumed_through_its_final_byte() {
         let mut editor = Editor::default();
-        feed(&mut editor, b"before\x1b[27;2;13~after");
+        feed(&mut editor, b"before\x1b[27;3;13~after");
         assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
     }
 
@@ -363,7 +591,7 @@ mod tests {
     fn non_cancelling_controls_inside_csi_do_not_release_its_tail_as_text() {
         for control in [0, 7, 9, 127] {
             let mut editor = Editor::default();
-            feed(&mut editor, b"before\x1b[27;2;");
+            feed(&mut editor, b"before\x1b[27;3;");
             assert_eq!(editor.feed(control), Action::None);
             feed(&mut editor, b"13~after");
             assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
@@ -378,7 +606,7 @@ mod tests {
     fn can_and_sub_cancel_partial_sequences() {
         for control in [0x18, 0x1a] {
             let mut editor = Editor::default();
-            feed(&mut editor, b"before\x1b[27;2;");
+            feed(&mut editor, b"before\x1b[27;3;");
             assert_eq!(editor.feed(control), Action::None);
             assert_eq!(editor.feed(b'x'), Action::Echo(b'x'));
             assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforex".to_vec()));

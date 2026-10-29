@@ -262,3 +262,29 @@ test("resizing recounts the reflowed command before the next edit", () => {
   assert.deepEqual(shortened.lines, tall.lines);
   assert.deepEqual(shortened.cursor, tall.cursor);
 });
+
+test("multiline commands repaint hard rows and leave output below them", () => {
+  const newline = "\x1b[27;2;13~";
+  const margin = replay(8, 6, [{ prompt: "$ " }, { keys: `abcdef${newline}gh${left(1)}Z` }]);
+  assert.deepEqual(margin.lines, ["$ abcdef", "gZh"]);
+  assert.deepEqual(margin.cursor, { row: 1, column: 2 });
+  const pasted = replay(12, 6, [
+    { prompt: "$ " },
+    { keys: "\x1b[200~echo abcdefghijklmnop\r\necho two\x1b[201~\x01\r" },
+    { output: "OUT\r\n" },
+    { prompt: "$ " },
+  ]);
+  assert.deepEqual(pasted.submitted, ["echo abcdefghijklmnop\necho two"]);
+  assert.deepEqual(pasted.lines, ["$ echo abcde", "fghijklmnop", "echo two", "OUT", "$"]);
+  const tall = replay(8, 3, [
+    { prompt: "$ " },
+    { keys: `one${newline}two${newline}three${newline}four${newline}five${left(2)}Z` },
+  ]);
+  assert.deepEqual(tall.lines, ["$ one", "two", "three", "four", "fiZve"]);
+  assert.deepEqual(tall.cursor, { row: 4, column: 3 });
+  const home = replay(8, 3, [
+    { prompt: "$ " },
+    { keys: `one${newline}two${newline}three${newline}four${newline}five\x01X` },
+  ]);
+  assert.deepEqual(home.screen, ["$ Xone", "two", "three"]);
+});

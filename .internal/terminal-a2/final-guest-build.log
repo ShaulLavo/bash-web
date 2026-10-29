@@ -1,0 +1,7 @@
+
+> bash-web@0.0.109 build:shell:browser
+> node scripts/build-shell-browser.mjs
+
+   Compiling shell-engine v0.0.73 (/work/worktrees/bash-web/terminal-a2-multiline/shell/engine)
+    Finished `release` profile [optimized] target(s) in 21.30s
+Verified no retained libc filesystem code and 256 MiB cap: /work/worktrees/bash-web/terminal-a2-multiline/.build/shell/wasm32-wasip1/release/shell-runtime.wasm

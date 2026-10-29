@@ -25,6 +25,7 @@ fn key(editor: &mut Editor, byte: u8) -> Vec<String> {
             vec![format!("W {}", hex(&[byte]))]
         }
         Action::Redraw => vec![format!("W {}", hex(&editor.redraw()))],
+        Action::Bell => vec!["W 07".into()],
         Action::Submit(line) => vec![
             format!("S {}", hex(&line)),
             format!("W {}", hex(&editor.finish(false))),

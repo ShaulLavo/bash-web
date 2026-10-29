@@ -188,6 +188,76 @@ mod guest {
             }
         }
     }
+    struct PromptRead<'a> {
+        editor: &'a mut Editor,
+        input: &'a Endpoint,
+        output: &'a Endpoint,
+        cancel: &'a RefCell<Cancel>,
+        skip_lf: &'a mut bool,
+    }
+    impl PromptRead<'_> {
+        async fn paint(&mut self, byte: u8) -> Result<Action, IoError> {
+            self.editor.resize(geometry());
+            match self.editor.feed(byte) {
+                Action::Echo(byte) => {
+                    write(self.output, &[byte]).await?;
+                    self.editor.echoed(byte);
+                }
+                Action::Redraw => write(self.output, &self.editor.redraw()).await?,
+                Action::Bell => write(self.output, b"\x07").await?,
+                action => return Ok(action),
+            }
+            Ok(Action::None)
+        }
+        async fn read(&mut self) -> Result<Action, IoError> {
+            loop {
+                let mut byte = [0];
+                let cancel = self.cancel.borrow().clone();
+                match self.input.read_cancelled(&mut byte, &cancel).await {
+                    Ok(0) => return Ok(Action::Eof),
+                    Err(IoError::Cancelled) => return Ok(Action::Interrupt),
+                    Err(error) => return Err(error),
+                    Ok(_) => {}
+                }
+                if std::mem::take(self.skip_lf) && byte[0] == b'\n' {
+                    continue;
+                }
+                let action = self.paint(byte[0]).await?;
+                if matches!(action, Action::Submit(_)) {
+                    *self.skip_lf = byte[0] == b'\r';
+                }
+                if action != Action::None {
+                    return Ok(action);
+                }
+            }
+        }
+    }
+    async fn finish_prompt(
+        session: &Session,
+        editor: &mut Editor,
+        output: &Endpoint,
+        action: Result<Action, IoError>,
+    ) -> Result<Option<Vec<u8>>, i32> {
+        write(output, b"\x1b[?2004l").await.map_err(|_| 1)?;
+        match action {
+            Ok(Action::Submit(source)) => {
+                write(output, &editor.finish(false)).await.map_err(|_| 1)?;
+                Ok(Some(source))
+            }
+            Ok(Action::Interrupt) => {
+                session.state().borrow_mut().publish_status(130);
+                editor.clear();
+                write(output, &editor.finish(true)).await.map_err(|_| 1)?;
+                Ok(None)
+            }
+            Ok(Action::Eof) => {
+                let _ = write(output, &editor.finish(false)).await;
+                Err(session.state().borrow().status())
+            }
+            Err(_) => Err(1),
+            Ok(_) => unreachable!("prompt reader returns a command, interrupt or EOF"),
+        }
+    }
     async fn interactive(session: Rc<Session>, input_cancel: Rc<RefCell<Cancel>>) -> i32 {
         let mut editor = Editor::default();
         let mut skip_lf = false;
@@ -204,66 +274,26 @@ mod guest {
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "$ ".to_owned());
             editor.begin(&prompt, geometry());
+            if write(&output, b"\x1b[?2004h").await.is_err() {
+                return 1;
+            }
             if write(&output, prompt.as_bytes()).await.is_err() {
+                let _ = write(&output, b"\x1b[?2004l").await;
                 return 1;
             }
             set_phase(1);
-            let source = loop {
-                let mut byte = [0];
-                let cancel = input_cancel.borrow().clone();
-                match input.read_cancelled(&mut byte, &cancel).await {
-                    Ok(0) => {
-                        let _ = write(&output, &editor.finish(false)).await;
-                        return session.state().borrow().status();
-                    }
-                    Err(IoError::Cancelled) => {
-                        session.state().borrow_mut().publish_status(130);
-                        editor.clear();
-                        *input_cancel.borrow_mut() = Cancel::new();
-                        if write(&output, &editor.finish(true)).await.is_err() {
-                            return 1;
-                        }
-                        break None;
-                    }
-                    Err(_) => return 1,
-                    Ok(_) => {}
-                }
-                if skip_lf && byte[0] == b'\n' {
-                    skip_lf = false;
-                    continue;
-                }
-                skip_lf = false;
-                editor.resize(geometry());
-                match editor.feed(byte[0]) {
-                    Action::Echo(byte) => {
-                        if write(&output, &[byte]).await.is_err() {
-                            return 1;
-                        }
-                        editor.echoed(byte);
-                    }
-                    Action::Submit(source) => {
-                        skip_lf = byte[0] == b'\r';
-                        if write(&output, &editor.finish(false)).await.is_err() {
-                            return 1;
-                        }
-                        break Some(source);
-                    }
-                    Action::Interrupt => {
-                        session.state().borrow_mut().publish_status(130);
-                        let _ = write(&output, &editor.finish(true)).await;
-                        break None;
-                    }
-                    Action::Eof => {
-                        let _ = write(&output, &editor.finish(false)).await;
-                        return session.state().borrow().status();
-                    }
-                    Action::Redraw => {
-                        if write(&output, &editor.redraw()).await.is_err() {
-                            return 1;
-                        }
-                    }
-                    Action::None => {}
-                }
+            let action = PromptRead {
+                editor: &mut editor,
+                input: &input,
+                output: &output,
+                cancel: &input_cancel,
+                skip_lf: &mut skip_lf,
+            }
+            .read()
+            .await;
+            let source = match finish_prompt(&session, &mut editor, &output, action).await {
+                Ok(source) => source,
+                Err(code) => return code,
             };
             drop(input);
             drop(output);
