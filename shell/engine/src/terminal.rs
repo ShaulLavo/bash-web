@@ -403,9 +403,77 @@ mod tests {
     }
 
     #[test]
+    fn shift_enter_inserts_a_newline_without_submitting() {
+        for sequence in [b"\x1b[27;2;13~".as_slice(), b"\x1b[13;2u"] {
+            let mut editor = Editor::default();
+            feed(&mut editor, b"echo first");
+            feed(&mut editor, sequence);
+            assert_eq!(editor.line, b"echo first\n");
+            assert_eq!(editor.cursor, editor.line.len());
+            feed(&mut editor, b"echo second");
+            assert_eq!(
+                editor.feed(b'\r'),
+                Action::Submit(b"echo first\necho second".to_vec())
+            );
+        }
+    }
+
+    #[test]
+    fn bracketed_paste_normalizes_newlines_and_requires_explicit_enter() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"headtail\x01\x1b[C\x1b[C\x1b[C\x1b[C");
+        for byte in b"\x1b[200~a\r\nb\rc\n\x1b[201~" {
+            assert!(!matches!(editor.feed(*byte), Action::Submit(_)));
+        }
+        assert_eq!(editor.line, b"heada\nb\nc\ntail");
+        assert_eq!(editor.cursor, b"heada\nb\nc\n".len());
+        assert_eq!(
+            editor.feed(b'\r'),
+            Action::Submit(b"heada\nb\nc\ntail".to_vec())
+        );
+    }
+
+    #[test]
+    fn paste_control_bytes_and_false_end_markers_are_literal() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"\x1b[200~a\x03\x04\x1b[20x\x1b\x1b[201~");
+        assert_eq!(editor.line, b"a\x03\x04\x1b[20x\x1b");
+        assert_eq!(
+            editor.feed(b'\r'),
+            Action::Submit(b"a\x03\x04\x1b[20x\x1b".to_vec())
+        );
+    }
+
+    #[test]
+    fn paste_overflow_stays_bounded_until_the_closing_marker() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"prefix\x1b[200~");
+        let mut bells = 0;
+        for _ in 0..(64 * 1024 + 100) {
+            let action = editor.feed(b'x');
+            bells += usize::from(format!("{action:?}") == "Bell");
+            assert!(!matches!(action, Action::Submit(_)));
+        }
+        for byte in b"\r\nignored\x1b[201~" {
+            assert!(!matches!(editor.feed(*byte), Action::Submit(_)));
+        }
+        assert_eq!(bells, 1);
+        assert_eq!(editor.line.len(), 64 * 1024);
+        assert!(editor.line.starts_with(b"prefix"));
+        assert!(editor.line[6..].iter().all(|byte| *byte == b'x'));
+        assert_eq!(editor.feed(127), Action::Redraw);
+        assert_eq!(editor.feed(b'!'), Action::Echo(b'!'));
+        let Action::Submit(line) = editor.feed(b'\r') else {
+            panic!("explicit Enter must submit")
+        };
+        assert_eq!(line.len(), 64 * 1024);
+        assert_eq!(line.last(), Some(&b'!'));
+    }
+
+    #[test]
     fn long_csi_is_consumed_through_its_final_byte() {
         let mut editor = Editor::default();
-        feed(&mut editor, b"before\x1b[27;2;13~after");
+        feed(&mut editor, b"before\x1b[27;3;13~after");
         assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
     }
 
@@ -467,7 +535,7 @@ mod tests {
     fn non_cancelling_controls_inside_csi_do_not_release_its_tail_as_text() {
         for control in [0, 7, 9, 127] {
             let mut editor = Editor::default();
-            feed(&mut editor, b"before\x1b[27;2;");
+            feed(&mut editor, b"before\x1b[27;3;");
             assert_eq!(editor.feed(control), Action::None);
             feed(&mut editor, b"13~after");
             assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
@@ -482,7 +550,7 @@ mod tests {
     fn can_and_sub_cancel_partial_sequences() {
         for control in [0x18, 0x1a] {
             let mut editor = Editor::default();
-            feed(&mut editor, b"before\x1b[27;2;");
+            feed(&mut editor, b"before\x1b[27;3;");
             assert_eq!(editor.feed(control), Action::None);
             assert_eq!(editor.feed(b'x'), Action::Echo(b'x'));
             assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforex".to_vec()));
