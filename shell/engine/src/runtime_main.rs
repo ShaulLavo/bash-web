@@ -14,7 +14,7 @@ fn main() {
 
 #[cfg(target_os = "wasi")]
 mod guest {
-    use super::terminal::{Action, Editor};
+    use super::terminal::{Action, Editor, Geometry};
     use futures::FutureExt;
     use shell_engine::{
         Limits, Session,
@@ -27,11 +27,16 @@ mod guest {
     unsafe extern "C" {
         fn phase(value: i32);
         fn columns() -> i32;
+        fn rows() -> i32;
     }
     fn set_phase(value: i32) {
         unsafe {
             phase(value);
         }
+    }
+    fn geometry() -> Geometry {
+        let (columns, rows) = unsafe { (columns(), rows()) };
+        Geometry::new(columns.max(2) as usize, rows.max(2) as usize)
     }
     fn report(error: impl std::fmt::Display) -> ! {
         eprintln!("shell-runtime: {error}");
@@ -185,7 +190,6 @@ mod guest {
     }
     struct PromptRead<'a> {
         editor: &'a mut Editor,
-        prompt: &'a str,
         input: &'a Endpoint,
         output: &'a Endpoint,
         cancel: &'a RefCell<Cancel>,
@@ -193,14 +197,13 @@ mod guest {
     }
     impl PromptRead<'_> {
         async fn paint(&mut self, byte: u8) -> Result<Action, IoError> {
-            self.editor
-                .resize(self.prompt, unsafe { columns() }.max(2) as usize);
+            self.editor.resize(geometry());
             match self.editor.feed(byte) {
                 Action::Echo(byte) => {
                     write(self.output, &[byte]).await?;
                     self.editor.echoed(byte);
                 }
-                Action::Redraw => write(self.output, &self.editor.redraw(self.prompt)).await?,
+                Action::Redraw => write(self.output, &self.editor.redraw()).await?,
                 Action::Bell => write(self.output, b"\x07").await?,
                 action => return Ok(action),
             }
@@ -238,17 +241,21 @@ mod guest {
         write(output, b"\x1b[?2004l").await.map_err(|_| 1)?;
         match action {
             Ok(Action::Submit(source)) => {
-                write(output, b"\r\n").await.map_err(|_| 1)?;
+                write(output, &editor.finish(geometry(), false))
+                    .await
+                    .map_err(|_| 1)?;
                 Ok(Some(source))
             }
             Ok(Action::Interrupt) => {
                 session.state().borrow_mut().publish_status(130);
                 editor.clear();
-                write(output, b"^C\r\n").await.map_err(|_| 1)?;
+                write(output, &editor.finish(geometry(), true))
+                    .await
+                    .map_err(|_| 1)?;
                 Ok(None)
             }
             Ok(Action::Eof) => {
-                let _ = write(output, b"\r\n").await;
+                let _ = write(output, &editor.finish(geometry(), false)).await;
                 Err(session.state().borrow().status())
             }
             Err(_) => Err(1),
@@ -270,7 +277,7 @@ mod guest {
                 .get("PS1")
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "$ ".to_owned());
-            editor.begin(&prompt, unsafe { columns() }.max(2) as usize);
+            editor.begin(&prompt, geometry());
             if write(&output, b"\x1b[?2004h").await.is_err() {
                 return 1;
             }
@@ -281,7 +288,6 @@ mod guest {
             set_phase(1);
             let action = PromptRead {
                 editor: &mut editor,
-                prompt: &prompt,
                 input: &input,
                 output: &output,
                 cancel: &input_cancel,
