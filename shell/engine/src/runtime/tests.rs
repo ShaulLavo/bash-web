@@ -375,6 +375,11 @@ impl Abi for Fake {
                 }));
                 return;
             }
+            if command == "handled-int" {
+                cancel.cancelled().await;
+                status.set(Some(WaitResult::Exited(argv[1].parse().unwrap())));
+                return;
+            }
             let run = async {
                 let output = fds.get(1).ok_or(1)?;
                 match command.as_str() {
@@ -4044,3 +4049,30 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
 
 mod inherited;
 mod read_exact;
+
+#[test]
+fn handled_interrupt_preserves_child_status_and_stops_the_read_unit() {
+    for code in [0, 7] {
+        for source in [
+            format!("handled-int {code}; echo UNREACHABLE"),
+            format!("{{ handled-int {code}; echo UNREACHABLE; }}"),
+            format!("while :; do :; done | handled-int {code}"),
+        ] {
+            handled_interrupt_result(&source, code);
+        }
+    }
+}
+
+fn handled_interrupt_result(source: &str, expected: i32) {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let command = session.start(source).unwrap();
+    executor.drive(64);
+    assert_eq!(fake.children.borrow().len(), 1);
+    session.interrupt();
+    let actual = finish(&executor, &runtime, command);
+    let output = fake.output.bytes();
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert!(output.is_empty(), "cancelled reader continued: {source}");
+    assert_eq!(actual, expected, "{source}");
+}
