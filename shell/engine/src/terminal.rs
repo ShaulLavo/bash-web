@@ -270,6 +270,7 @@ impl Editor {
             return;
         }
         let next = match (self.history_at, up) {
+            (None, false) | (Some(0), true) => return,
             (None, true) => {
                 self.draft = self.line.clone();
                 Some(self.history.len() - 1)
@@ -334,6 +335,10 @@ impl Editor {
             return self.feed_escape(byte);
         }
         match byte {
+            2 => self.csi(Parameters::Empty, b'D'),
+            6 => self.csi(Parameters::Empty, b'C'),
+            16 => self.csi(Parameters::Empty, b'A'),
+            14 => self.csi(Parameters::Empty, b'B'),
             b'\r' | b'\n' => {
                 let line = self.line.clone();
                 if !line.is_empty() && self.history.last() != Some(&line) {
