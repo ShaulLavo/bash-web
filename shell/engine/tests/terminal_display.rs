@@ -1,7 +1,10 @@
 //! Original, deterministic VT transcript regressions. No worker, browser or guest build.
-#[path = "../src/terminal.rs"]
-mod terminal;
-use terminal::{Action, Editor};
+#[path = "../src"]
+mod source {
+    pub mod terminal;
+}
+use source::terminal;
+use terminal::{Action, Editor, Geometry};
 
 struct Screen {
     columns: usize,
@@ -54,6 +57,7 @@ impl Screen {
                         .unwrap_or(0);
                     match bytes[at] {
                         b'A' => self.row = self.row.saturating_sub(number.max(1)),
+                        b'B' => self.row = (self.row + number.max(1)).min(self.lines.len() - 1),
                         b'C' => self.column = (self.column + number.max(1)).min(self.columns - 1),
                         b'D' => self.column = self.column.saturating_sub(number.max(1)),
                         b'J' => {
@@ -85,13 +89,13 @@ impl Screen {
 }
 fn type_bytes(editor: &mut Editor, screen: &mut Screen, bytes: &[u8]) {
     for byte in bytes {
-        editor.resize("$ ", screen.columns);
+        editor.resize(Geometry::new(screen.columns, 1000));
         match editor.feed(*byte) {
             Action::Echo(byte) => {
                 screen.write(&[byte]);
                 editor.echoed(byte);
             }
-            Action::Redraw => screen.write(&editor.redraw("$ ")),
+            Action::Redraw => screen.write(&editor.redraw()),
             // Escape sequences arrive byte by byte, just as they do in the guest.
             // Their incomplete prefixes intentionally produce no display action.
             Action::None => {}
@@ -101,7 +105,7 @@ fn type_bytes(editor: &mut Editor, screen: &mut Screen, bytes: &[u8]) {
 }
 fn start(columns: usize) -> (Editor, Screen) {
     let mut editor = Editor::default();
-    editor.begin("$ ", columns);
+    editor.begin("$ ", Geometry::new(columns, 1000));
     let mut screen = Screen::new(columns);
     screen.write(b"$ ");
     (editor, screen)
@@ -121,6 +125,17 @@ fn long_appended_commands_echo_each_byte_once_without_duplicate_prefixes() {
             editor.feed(b'\r'),
             Action::Submit(source.as_bytes().to_vec())
         );
+    }
+}
+#[test]
+fn finishing_from_an_earlier_wrapped_row_moves_below_the_command() {
+    for interrupted in [false, true] {
+        let (mut editor, mut screen) = start(12);
+        type_bytes(&mut editor, &mut screen, b"echo abcdefghij\x01");
+        assert_eq!((screen.row, screen.column), (0, 2));
+        editor.clear();
+        screen.write(&editor.finish(Geometry::new(12, 1000), interrupted));
+        assert_eq!((screen.row, screen.column), (2, 0));
     }
 }
 #[test]

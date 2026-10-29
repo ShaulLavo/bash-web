@@ -85,6 +85,7 @@ function interactive(
     namespaces.shell_terminal = {
       inherited_fd: (index: number) => [0, 1, 2][index] ?? -1,
       columns: () => 12,
+      rows: () => 6,
       phase: (next: number, result: number) => {
         phase = next;
         status = result;

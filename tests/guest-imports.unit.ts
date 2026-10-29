@@ -22,14 +22,19 @@ function ownTerminal(owner: TestContext, transport: WorkerProcessTransport) {
   return producer;
 }
 
-test("shell terminal columns follow the live bridge and default to 80 for a child", () => {
+test("shell terminal geometry follows the live bridge and defaults to 80x24 for a child", () => {
   const bridge = new SharedBridge();
   const root = shellTerminalImports(bridge.buffer);
   Atomics.store(bridge.state, control.cols, 103);
+  Atomics.store(bridge.state, control.rows, 41);
   assert.equal(root.columns(), 103);
+  assert.equal(root.rows(), 41);
   Atomics.store(bridge.state, control.cols, 0);
+  Atomics.store(bridge.state, control.rows, 0);
   assert.equal(root.columns(), 2);
+  assert.equal(root.rows(), 2);
   assert.equal(shellTerminalImports().columns(), 80);
+  assert.equal(shellTerminalImports().rows(), 24);
 });
 
 test("shell metadata enumerates exact inherited bindings, including the maximum fd", () => {

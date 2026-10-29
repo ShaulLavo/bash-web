@@ -110,6 +110,7 @@ function runPaused(options: {
     namespaces.shell_terminal = {
       inherited_fd: (index: number) => inheritedFds[index] ?? -1,
       columns: () => 80,
+      rows: () => 24,
       phase: () => {},
     };
     const instance = new WebAssembly.Instance(guest, wasi.imports(guest));

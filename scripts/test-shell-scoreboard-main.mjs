@@ -1237,6 +1237,7 @@ function assertBaselineCommands({ root, put }, input) {
     "shell-scoreboard-floor.mjs",
     "shell-scoreboard.mjs",
     "shell-scoreboard-accepted-gains.mjs",
+    "shell-scoreboard-terminal-recovery.mjs",
   ])
     put(`scripts/${file}`, readFileSync(new URL(file, import.meta.url)));
   symlinkSync(resolve(import.meta.dirname, "../node_modules"), resolve(root, "node_modules"));
