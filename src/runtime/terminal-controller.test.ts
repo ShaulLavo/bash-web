@@ -868,7 +868,7 @@ for (const timing of ["queued", "cleaned", "during-select"] as const) {
     if (timing === "during-select") {
       const transfer = f.authority.transfer.bind(f.authority);
       let pending = true;
-      context.mock.method(f.authority, "transfer", (options) => {
+      context.mock.method(f.authority, "transfer", (options: Parameters<typeof transfer>[0]) => {
         if (pending) f.supervisor.exit(first.pid, 0);
         pending = false;
         return transfer(options);

@@ -285,7 +285,7 @@ export function createTerminalController(
     if (member && status !== "removed" && status !== "stale")
       terminalValue(journal.removeMember(member));
   };
-  const forgetMember = (pid: number) => {
+  const forgetMember = (pid: number): undefined => {
     members.get(pid)?.members.delete(pid);
     members.delete(pid);
     states.delete(pid);
@@ -423,7 +423,9 @@ export function createTerminalController(
         if (result.kind === "error" && result.code !== "PROCESS_GONE") terminalValue(result);
         if (result.kind === "error") {
           // Exit cleanup retries the acknowledgement after reconciling the new departure.
-          journal.publish(() => departed.forEach(forgetMember));
+          journal.publish(() => {
+            departed.forEach(forgetMember);
+          });
           return;
         }
       }
