@@ -29,9 +29,11 @@ impl Interrupts {
         strand
     }
     fn live(&self) -> Vec<Rc<Strand>> {
-        let mut strands = self.strands.borrow_mut();
-        strands.retain(|strand| strand.strong_count() != 0);
-        strands.iter().filter_map(Weak::upgrade).collect()
+        self.strands
+            .borrow()
+            .iter()
+            .filter_map(Weak::upgrade)
+            .collect()
     }
     pub(crate) fn deliver(&self, host: &dyn ProcessHost) -> bool {
         let mut running = false;
@@ -51,6 +53,15 @@ impl Interrupts {
         self.delegated.set(false);
         for strand in self.live() {
             strand.force();
+        }
+    }
+}
+impl Drop for Strand {
+    fn drop(&mut self) {
+        if let Some(job) = &self.job {
+            job.strands
+                .borrow_mut()
+                .retain(|strand| !std::ptr::eq(strand.as_ptr(), self));
         }
     }
 }
@@ -123,6 +134,22 @@ impl WaitGuard {
 mod tests {
     use super::*;
     use crate::{executor::Executor, process::InProcessHost};
+
+    #[test]
+    fn completed_strands_release_their_registrations_without_an_interrupt() {
+        let routing = Rc::new(Interrupts::default());
+        let root = routing.strand();
+        for _ in 0..100_000 {
+            let first = root.fork();
+            let second = first.fork();
+            assert_eq!(routing.strands.borrow().len(), 3);
+            drop(first);
+            drop(second);
+            assert_eq!(routing.strands.borrow().len(), 1);
+        }
+        drop(root);
+        assert!(routing.strands.borrow().is_empty());
+    }
 
     #[test]
     fn running_and_parked_strands_never_acknowledge_an_undelivered_event() {

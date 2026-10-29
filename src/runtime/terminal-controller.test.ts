@@ -844,3 +844,65 @@ test("delegated acknowledgement after target exit preserves the editor", async (
   assert.equal(f.attachment.resolve(0).tryRead!([byte]), 1);
   assert.equal(byte[0], 121);
 });
+
+for (const timing of ["queued", "cleaned", "during-select"] as const) {
+  test(`delegated acknowledgement restores a surviving pipeline reader: ${timing}`, async (context) => {
+    const f = await fixture(context);
+    f.bridge.publishPrompt(0);
+    Atomics.store(f.bridge.state, control.phase, 2);
+    const { first, second } = await startPair(f);
+    const childTerminal = createShellTerminals(
+      { runtimeProcess: second.transport },
+      f.bridge.buffer,
+      createTerminalAdmission(),
+      undefined,
+      () => {},
+    );
+    assert.ok(childTerminal);
+    context.after(() => childTerminal.dispose());
+    childTerminal.ready();
+    f.bridge.interrupt();
+    f.bridge.discardInput();
+    await barrier(f.bridge);
+    await f.flush();
+    if (timing === "during-select") {
+      const transfer = f.authority.transfer.bind(f.authority);
+      let pending = true;
+      context.mock.method(f.authority, "transfer", (options) => {
+        if (pending) f.supervisor.exit(first.pid, 0);
+        pending = false;
+        return transfer(options);
+      });
+    }
+    if (timing !== "cleaned") f.controller.interruptDelegated(1n);
+    if (timing !== "during-select") f.supervisor.exit(first.pid, 0);
+    await f.supervisor.waitForExit(f.root.pid, first.pid);
+    await f.flush();
+    if (timing === "cleaned") f.controller.interruptDelegated(1n);
+    await f.flush();
+    assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
+    assert.equal(f.bridge.send(Uint8Array.of(120)), 1);
+    const byte = new Uint8Array(1);
+    assert.equal(childTerminal.resolve(0).tryRead!([byte]), 1);
+    assert.equal(byte[0], 120);
+  });
+}
+
+test("queued stale acknowledgement cannot clear the next generation interrupt", async (context) => {
+  const f = await fixture(context);
+  f.bridge.publishPrompt(0);
+  const child = f.reserve();
+  await f.start(child);
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await barrier(f.bridge);
+  await f.flush();
+  f.controller.interruptDelegated(1n);
+  f.bridge.publishPrompt(7);
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await barrier(f.bridge);
+  await f.flush();
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
+  f.bridge.acknowledgeInputDiscard();
+});

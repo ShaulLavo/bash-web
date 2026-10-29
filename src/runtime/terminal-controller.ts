@@ -230,7 +230,9 @@ export function createTerminalController(
     const live = (pid: number) => liveState(states.get(pid));
     while (
       target !== editor &&
-      (!target.active || !Array.from(target.members.keys()).every(live) || empty(target))
+      (!target.active ||
+        (target.members.size > 0 && !Array.from(target.members.keys()).some(live)) ||
+        empty(target))
     )
       target = target.restore ?? editor;
     return target;
@@ -277,20 +279,23 @@ export function createTerminalController(
   const retireGroups = async () => {
     for (const record of new Set(groups.values())) await retireOne(record);
   };
+  const removeMember = (journal: TerminalProducerTurn, pid: number) => {
+    const member = members.get(pid)?.members.get(pid);
+    const status = member ? producer.memberStatus(member) : "unknown";
+    if (member && status !== "removed" && status !== "stale")
+      terminalValue(journal.removeMember(member));
+  };
+  const forgetMember = (pid: number) => {
+    members.get(pid)?.members.delete(pid);
+    members.delete(pid);
+    states.delete(pid);
+    exited.delete(pid);
+  };
   const cleanupOne = (pid: number) =>
     execute((journal) =>
       terminalResult(() => {
-        const record = members.get(pid);
-        const member = record?.members.get(pid);
-        const status = member ? producer.memberStatus(member) : "unknown";
-        if (member && status !== "removed" && status !== "stale")
-          terminalValue(journal.removeMember(member));
-        journal.publish(() => {
-          record?.members.delete(pid);
-          members.delete(pid);
-          states.delete(pid);
-          exited.delete(pid);
-        });
+        removeMember(journal, pid);
+        journal.publish(() => forgetMember(pid));
       }),
     );
   const cleanExited = () => {
@@ -301,6 +306,7 @@ export function createTerminalController(
       try {
         while (exited.size) await cleanupOne(exited.values().next().value!);
         await retireGroups();
+        if (delegated && !discarding) resumeDelegated();
         bridge.signal();
         completed = true;
       } finally {
@@ -407,14 +413,24 @@ export function createTerminalController(
         return;
       }
       const target = resumeTarget(receipt.group);
+      const departed = Array.from(target.members.keys()).filter(
+        (pid) => !liveState(states.get(pid)),
+      );
+      for (const pid of departed) removeMember(journal, pid);
       const reselect = target !== editor && target !== selected;
       if (reselect) {
         const result = journal.select(target.group);
         if (result.kind === "error" && result.code !== "PROCESS_GONE") terminalValue(result);
+        if (result.kind === "error") {
+          // Exit cleanup retries the acknowledgement after reconciling the new departure.
+          journal.publish(() => departed.forEach(forgetMember));
+          return;
+        }
       }
       if (target === editor && Atomics.load(bridge.state, control.phase) === 2)
         terminalValue(journal.mode("cooked"));
       journal.publish(() => {
+        departed.forEach(forgetMember);
         if (reselect) selected = target;
         delegated = undefined;
         bridge.acknowledgeInputDiscard();

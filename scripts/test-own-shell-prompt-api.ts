@@ -326,3 +326,37 @@ for (const mode of ["handled", "exit"] as const) {
     },
   );
 }
+
+for (let run = 0; run < 6; run++) {
+  test(
+    `delegated pipeline keeps its reader after a handled sibling exits: ${run}`,
+    { timeout: 5000 },
+    async (context) => {
+      const { runtime, shell, initial, output } = await signalFixture(context, "handled", 7);
+      await api.installPrograms(
+        runtime,
+        [
+          {
+            name: "reader",
+            programs: [
+              { path: "/bin/reader", source: async () => api.signalStatusGuest("reader") },
+            ],
+          },
+        ],
+        { launcher: api.guestLauncher(runtime, new URL("shell.mjs", nodeDirectory).href) },
+      );
+      context.after(() => context.diagnostic(output()));
+      await send(shell, "{ signal-status 1>&2 | reader 0<&3; } 3<&0");
+      await until(context, () => output().split("SIGNAL_READY\n").length === 3);
+      shell.interrupt();
+      await until(context, () => output().split("SIGNAL_HANDLED 1\n").length === 3);
+      await sendBytes(shell, encoder.encode("x"), context.signal);
+      const receipt = await shell.waitForPrompt({
+        after: initial.generation,
+        signal: context.signal,
+      });
+      assert.deepEqual(receipt, { generation: initial.generation + 1n, status: 0 }, output());
+      assert.ok(output().includes("READER_INPUT x\n"), output());
+    },
+  );
+}
