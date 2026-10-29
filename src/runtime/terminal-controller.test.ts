@@ -188,6 +188,10 @@ async function finishHolder(
 ) {
   Atomics.store(cells, 1, 1);
   Atomics.notify(cells, 1);
+  if (cells.length > 5) {
+    Atomics.store(cells, 5, 1);
+    Atomics.notify(cells, 5);
+  }
   await changed(cells, 3);
   await lifetime.quiesce();
   await worker.terminate();
@@ -598,12 +602,18 @@ test("input observation resumes after an empty foreign Session releases only the
     process,
     terminals: [{ identity: display.identity, inputs: [f.input] }],
   });
-  const flag = new SharedArrayBuffer(16);
+  const flag = new SharedArrayBuffer(24);
   const cells = new Int32Array(flag);
   const worker = new Worker(
     new URL("../../tests/helpers/terminal-input-holder.ts", import.meta.url),
     {
-      workerData: { process, context: member.context, input: f.input.buffer, flag },
+      workerData: {
+        process,
+        context: member.context,
+        input: f.input.buffer,
+        flag,
+        pauseAfterUnlock: true,
+      },
       execArgv: [],
     },
   );
