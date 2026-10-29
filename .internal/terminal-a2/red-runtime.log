@@ -1,0 +1,54 @@
+✖ runtime prompt brackets paste, holds multiline commands and disables mode for execution (15.085828ms)
+✖ runtime prompt rearms paste after cancellation and empty input, and disables it on exit (1.958393ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 143.539409
+
+✖ failing tests:
+
+test at scripts/test-own-shell-terminal.ts:107:1
+✖ runtime prompt brackets paste, holds multiline commands and disables mode for execution (15.085828ms)
+  AssertionError [ERR_ASSERTION]: "$ "
+      at prompt (file:///work/worktrees/bash-web/terminal-a2-multiline/scripts/test-own-shell-terminal.ts:103:10)
+      at file:///work/worktrees/bash-web/terminal-a2-multiline/scripts/test-own-shell-terminal.ts:110:7
+      at Object.wait (file:///work/worktrees/bash-web/terminal-a2-multiline/scripts/test-own-shell-terminal.ts:75:38)
+      at ProcessABI.poll (file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:19370:49)
+      at file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:18851:70
+      at ProcessABI.result (file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:18886:18)
+      at poll (file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:18851:52)
+      at shell_runtime-b458fed554e5cea4.wasm.<shell_engine::runtime::wasi::WasiAbi as shell_engine::runtime::Abi>::poll (wasm://wasm/shell_runtime-b458fed554e5cea4.wasm-00a2a7b2:wasm-function[3022]:0x17fc7d)
+      at shell_runtime-b458fed554e5cea4.wasm.<shell_engine::runtime::Runtime>::poll (wasm://wasm/shell_runtime-b458fed554e5cea4.wasm-00a2a7b2:wasm-function[2680]:0x156cc6)
+      at shell_runtime-b458fed554e5cea4.wasm.shell_runtime::main (wasm://wasm/shell_runtime-b458fed554e5cea4.wasm-00a2a7b2:wasm-function[3664]:0x1e110b) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at scripts/test-own-shell-terminal.ts:141:1
+✖ runtime prompt rearms paste after cancellation and empty input, and disables it on exit (1.958393ms)
+  AssertionError [ERR_ASSERTION]: "$ "
+      at prompt (file:///work/worktrees/bash-web/terminal-a2-multiline/scripts/test-own-shell-terminal.ts:103:10)
+      at file:///work/worktrees/bash-web/terminal-a2-multiline/scripts/test-own-shell-terminal.ts:144:7
+      at Object.wait (file:///work/worktrees/bash-web/terminal-a2-multiline/scripts/test-own-shell-terminal.ts:75:38)
+      at ProcessABI.poll (file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:19370:49)
+      at file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:18851:70
+      at ProcessABI.result (file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:18886:18)
+      at poll (file:///work/worktrees/bash-web/terminal-a2-multiline/.build/node/api.mjs:18851:52)
+      at shell_runtime-b458fed554e5cea4.wasm.<shell_engine::runtime::wasi::WasiAbi as shell_engine::runtime::Abi>::poll (wasm://wasm/shell_runtime-b458fed554e5cea4.wasm-00a2a7b2:wasm-function[3022]:0x17fc7d)
+      at shell_runtime-b458fed554e5cea4.wasm.<shell_engine::runtime::Runtime>::poll (wasm://wasm/shell_runtime-b458fed554e5cea4.wasm-00a2a7b2:wasm-function[2680]:0x156cc6)
+      at shell_runtime-b458fed554e5cea4.wasm.shell_runtime::main (wasm://wasm/shell_runtime-b458fed554e5cea4.wasm-00a2a7b2:wasm-function[3664]:0x1e110b) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

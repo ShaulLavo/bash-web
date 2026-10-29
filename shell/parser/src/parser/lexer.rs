@@ -2040,7 +2040,7 @@ impl<'a> Lexer<'a> {
 
     /// Decode the body of `$'...'` at the start of `s` (just after `$'`):
     /// the resolved text and the bytes consumed through the closing `'`.
-    pub(crate) fn decode_ansi_c_body(s: &str) -> Option<(String, usize)> {
+    pub fn decode_ansi_c_body(s: &str) -> Option<(String, usize)> {
         let mut lexer = Lexer::new(s);
         let (text, closed) = lexer.read_dollar_single_quoted_content();
         closed.then_some((text, lexer.position.offset))

@@ -1,0 +1,37 @@
+   Compiling shell-engine v0.0.73 (/work/worktrees/bash-web/terminal-a2-multiline/shell/engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.91s
+     Running tests/terminal_display.rs (.build/native/debug/deps/terminal_display-8648fc187cd88466)
+
+running 29 tests
+test editing_a_wrapped_command_clears_from_the_first_row_and_removes_old_tail ... ok
+test exact_margin_backspace_cancels_pending_wrap_without_creating_a_duplicate_row ... ok
+test long_appended_commands_echo_each_byte_once_without_duplicate_prefixes ... ok
+test terminal::tests::alt_and_ctrl_arrows_move_by_word ... ok
+test resizing_multiline_text_recounts_the_existing_caret ... ok
+test multiline_editing_clears_each_row_and_counts_hard_newlines_at_the_margin ... ok
+test resize_recounts_the_existing_caret_before_editing_reflowed_text ... ok
+test multiline_paste_redraws_once_and_middle_edits_keep_the_cursor ... ok
+test terminal::tests::can_and_sub_cancel_partial_sequences ... ok
+test terminal::tests::bracketed_paste_normalizes_newlines_and_requires_explicit_enter ... ok
+test terminal::tests::clear_and_a_new_escape_reset_partial_sequences ... ok
+test terminal::tests::editing_and_history_keep_byte_exact_commands ... ok
+test terminal::tests::meta_backspace_deletes_the_previous_word_and_keeps_utf8_whole ... ok
+test terminal::tests::long_csi_is_consumed_through_its_final_byte ... ok
+test terminal::tests::meta_d_deletes_the_next_word_and_keeps_the_cursor ... ok
+test terminal::tests::meta_word_movement_skips_punctuation_and_preserves_utf8 ... ok
+test terminal::tests::non_cancelling_controls_inside_csi_do_not_release_its_tail_as_text ... ok
+test terminal::tests::parameterized_ss3_sequences_are_consumed_without_inserting_their_tail ... ok
+test terminal::tests::paste_control_bytes_and_false_end_markers_are_literal ... ok
+test terminal::tests::pasted_control_bytes_are_painted_as_text_instead_of_terminal_controls ... ok
+test terminal::tests::shift_enter_inserts_a_newline_without_submitting ... ok
+test terminal::tests::ss3_keys_share_csi_navigation ... ok
+test terminal::tests::csi_length_and_numeric_overflow_do_not_end_the_sequence ... ok
+test terminal::tests::unknown_escape_sequences_do_not_insert_text_or_run_commands ... ok
+test terminal::tests::utf8_backspace_ctrl_d_and_interrupt ... ok
+test wrapped_middle_insertion_and_deletion_restore_the_caret_not_just_the_last_row ... ok
+test terminal::tests::paste_overflow_stays_bounded_until_the_closing_marker ... ok
+test terminal::tests::split_paste_utf8_at_the_cap_does_not_invalidate_the_command ... ok
+test terminal::tests::utf8_at_the_line_limit_is_kept_or_dropped_as_a_whole_scalar ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+

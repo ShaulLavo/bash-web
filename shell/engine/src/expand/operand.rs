@@ -283,6 +283,9 @@ impl<'a> Scanner<'a> {
             Some('\'') if self.literal_single || self.quote == Quote::Double => {
                 return Ok(self.text("$", self.protected()));
             }
+            Some('\'') if self.case_positionals && self.context == Context::Operand => {
+                return self.ansi_c_quote(work, cancel).await;
+            }
             Some('"') if self.quote == Quote::Double => {
                 return Ok(self.text("$", true));
             }
@@ -378,6 +381,23 @@ impl<'a> Scanner<'a> {
         Ok(Piece::Expansion {
             part,
             protected: self.protected(),
+        })
+    }
+
+    async fn ansi_c_quote(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Piece<'a>, Error> {
+        self.take();
+        let tail = &self.source[self.cursor..];
+        // Admit a bounded decoder input before its synchronous allocations.
+        // A closing quote leaves the remaining pattern for the normal scanner.
+        let end = tail.floor_char_boundary(tail.len().min(MAX_TOKEN_BYTES));
+        let body = &tail[..end];
+        work.admit_parse(body.len(), cancel).await?;
+        work.admit_storage(body.len().saturating_mul(4).saturating_add(256))?;
+        let (value, used) = parse::ansi_c_quote(body).ok_or(2)?;
+        self.cursor += used;
+        Ok(Piece::Expansion {
+            part: WordPart::Literal(value),
+            protected: true,
         })
     }
 

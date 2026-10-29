@@ -23,6 +23,15 @@ impl Screen {
             self.lines.push(vec![b' '; self.columns]);
         }
     }
+    fn erase_line(&mut self, mode: usize) {
+        assert!(mode == 0 || mode == 2);
+        let start = if mode == 2 {
+            0
+        } else {
+            self.column.min(self.columns - 1)
+        };
+        self.lines[self.row][start..].fill(b' ');
+    }
     fn write(&mut self, bytes: &[u8]) {
         let mut at = 0;
         while at < bytes.len() {
@@ -52,10 +61,7 @@ impl Screen {
                             self.lines[self.row][self.column.min(self.columns)..].fill(b' ');
                             self.lines.truncate(self.row + 1);
                         }
-                        b'K' => {
-                            assert_eq!(number, 2);
-                            self.lines[self.row].fill(b' ');
-                        }
+                        b'K' => self.erase_line(number),
                         other => panic!("unsupported editor CSI {}", char::from(other)),
                     }
                 }
@@ -159,6 +165,58 @@ fn resize_recounts_the_existing_caret_before_editing_reflowed_text() {
     screen = Screen::new(8);
     screen.write(b"$ abcdefghijklmnopqrst");
     type_bytes(&mut editor, &mut screen, b"\x1b[H\x0b");
+    assert_eq!(screen.text(), "$");
+    assert_eq!((screen.row, screen.column), (0, 2));
+}
+
+#[test]
+fn multiline_editing_clears_each_row_and_counts_hard_newlines_at_the_margin() {
+    let (mut editor, mut screen) = start(8);
+    type_bytes(
+        &mut editor,
+        &mut screen,
+        b"abcdef\x1b[27;2;13~ghijklmnop\x1b[13;2uTAIL",
+    );
+    assert_eq!(screen.lines[0], b"$ abcdef");
+    assert_eq!(screen.lines[1], b"ghijklmn");
+    assert_eq!(screen.lines[2], b"op      ");
+    assert_eq!(screen.lines[3], b"TAIL    ");
+    assert_eq!((screen.row, screen.column), (3, 4));
+    type_bytes(&mut editor, &mut screen, b"\x01\x0b");
+    assert_eq!(screen.text(), "$");
+    assert_eq!((screen.row, screen.column), (0, 2));
+}
+
+#[test]
+fn multiline_paste_redraws_once_and_middle_edits_keep_the_cursor() {
+    let (mut editor, mut screen) = start(8);
+    type_bytes(
+        &mut editor,
+        &mut screen,
+        b"\x1b[200~first\r\nsecond\rthird\x1b[201~",
+    );
+    assert_eq!(screen.lines[0], b"$ first ");
+    assert_eq!(screen.lines[1], b"second  ");
+    assert_eq!(screen.lines[2], b"third   ");
+    assert_eq!((screen.row, screen.column), (2, 5));
+    type_bytes(&mut editor, &mut screen, b"\x01\x1b[C\x1b[C\x1b[CX");
+    assert_eq!(screen.lines[0], b"$ firXst");
+    assert_eq!((screen.row, screen.column), (0, 6));
+    type_bytes(&mut editor, &mut screen, b"\x0b");
+    assert_eq!(screen.text(), "$ firX");
+}
+
+#[test]
+fn resizing_multiline_text_recounts_the_existing_caret() {
+    let (mut editor, mut screen) = start(12);
+    type_bytes(
+        &mut editor,
+        &mut screen,
+        b"\x1b[200~abcdefghij\nklmnopqrst\x1b[201~",
+    );
+    screen = Screen::new(8);
+    screen.write(b"$ abcdefghij\r\nklmnopqrst");
+    type_bytes(&mut editor, &mut screen, b"\x01\x0b");
     assert_eq!(screen.text(), "$");
     assert_eq!((screen.row, screen.column), (0, 2));
 }

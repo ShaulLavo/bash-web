@@ -279,6 +279,18 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
     run,
     /fuzz:shell-echo:ci -- --waffle --shell "\$GITHUB_WORKSPACE\/\.build\/shell\/wasm32-wasip1\/release\/shell-runtime.wasm"/,
   );
+  assert.match(
+    run,
+    /node scripts\/diagnose-compat.ts "\$\{\{ runner.temp \}\}\/echo-diagnostics" -- timeout --signal=TERM --kill-after=5s 5m npm run fuzz:shell-echo:ci/,
+  );
+  assert.ok(Array.isArray(compat.steps));
+  const steps = compat.steps.map(object);
+  const echo = steps.find((step) => step.name === "Observe bounded Waffle echo cases");
+  assert.ok(echo);
+  assert.equal(object(echo.env).BASH_WEB_WAFFLE_TRACE, "1");
+  const upload = steps.find((step) => step.id === "current-upload");
+  assert.ok(upload);
+  assert.match(String(object(upload.with).path), /echo-diagnostics\//);
   const text = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
   assert.equal(text.match(/TMPDIR: \$\{\{ runner.temp \}\}/g)?.length, 2);
   const darwin = object(

@@ -1,0 +1,58 @@
+{
+  "checks": [
+    {
+      "command": "CARGO_TARGET_DIR=.build/native cargo test --locked --manifest-path shell/Cargo.toml -p shell-engine --test terminal_display -j2",
+      "result": "29 passed"
+    },
+    {
+      "command": "node --test scripts/test-own-shell-terminal.ts",
+      "result": "4 passed against real WASI guest and pinned Waffle"
+    },
+    {
+      "command": "BASH_WEB_TEST_PORT=4243 npx playwright test tests/multiline-paste.spec.ts --project chromium",
+      "result": "3 passed in 4.2 seconds"
+    },
+    {
+      "command": "CARGO_TARGET_DIR=.build/native npm run test:rust",
+      "result": "1951 passed across 26 targets"
+    },
+    {
+      "command": "LAYERS_BASE_REF=$(git rev-parse origin/main) npm run check:layers",
+      "result": "0 production and 0 test-only violations"
+    },
+    {
+      "command": "npm run compat:shell",
+      "result": "4762 passing; no lost or newly failing cases"
+    },
+    {
+      "command": "npm run sources:browser && npm run build:worker && npm run quality:js",
+      "result": "passed"
+    },
+    {
+      "command": "npm run check:duplicates",
+      "result": "passed again after the hard-newline correction"
+    },
+    {
+      "command": "npm run build:shell:browser",
+      "result": "passed with WASI SDK 34.0 and pinned Waffle builder; verified 256 MiB cap and no retained libc filesystem code"
+    },
+    {
+      "command": "Pinned jscpd 5.4.1 through npm exec using duplicateArgs and duplicateModes from scripts/check-duplicates.mjs",
+      "result": "passed after the final ASCII screen-helper extraction; same exact and Rust structural baseline settings"
+    }
+  ],
+  "buildEnvironment": {
+    "CARGO_BUILD_JOBS": "2",
+    "UV_CACHE_DIR": "/work/cache/uv",
+    "toolProvider": "uv run --no-project --with cmake --with ninja"
+  },
+  "dependency": {
+    "pr": 173,
+    "source": "3bd992b9778f0c1f267ce269cd21c983c09b7d69",
+    "merged": "b8d7d16b600968523ac6165275852c2a552014db"
+  },
+  "historyMerge": "eb6907d6",
+  "failingFirstCommit": "d5649af5",
+  "fixCommit": "9357c7cd",
+  "hardNewlineFixCommit": "9b6638fb"
+}
