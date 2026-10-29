@@ -36,6 +36,11 @@ const fixtures = [
 
 class OutputLimit extends Error {}
 
+function traceCase(code: string, phase: string) {
+  if (process.env.BASH_WEB_WAFFLE_TRACE !== "1") return;
+  process.stderr.write(JSON.stringify({ kind: "waffle-case", phase, code }) + "\n");
+}
+
 let api: Promise<typeof Api> | undefined;
 function loadApi(): Promise<typeof Api> {
   api ??= import(new URL("api.mjs", nodeDirectory).href) as Promise<typeof Api>;
@@ -120,6 +125,7 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
   const waffle = await loadApi();
   const shell = await compiled(options.modulePath);
   return async (code: string): Promise<WaffleCaseResult> => {
+    traceCase(code, "create");
     const runtime = waffle.createRuntime({
       filesystem: { workerURL: new URL("fs.mjs", nodeDirectory), mode: "memory" },
     });
@@ -139,8 +145,11 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
       (fd === 2 ? stderr : stdout).push(Buffer.from(bytes));
     };
     try {
+      traceCase(code, "provision");
       await provision(runtime, options, waffle);
+      traceCase(code, "drain");
       await runtime.filesystem.drain();
+      traceCase(code, "run");
       const status = await runRoot(runtime, waffle, shell, options, code, append, (stop) => {
         stopRoot = stop;
       });
@@ -154,8 +163,11 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
         ...(error instanceof OutputLimit || limited ? { outputLimit: true } : {}),
       };
     } finally {
+      traceCase(code, "dispose");
       await runtime.dispose();
+      traceCase(code, "stop-workers");
       await stopNodeWorkers();
+      traceCase(code, "complete");
     }
   };
 }
