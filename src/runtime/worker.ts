@@ -77,9 +77,9 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
             checkActive();
             return terminals?.columns() ?? shell.columns();
           },
-          phase(phase: number) {
+          phase(phase: number, status: number) {
             checkActive();
-            shell.phase(phase);
+            shell.phase(phase, status);
             terminals?.phase(phase);
           },
         },
@@ -110,10 +110,6 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
         instance.exports.memory instanceof WebAssembly.Memory ? instance.exports.memory : undefined;
       sampleMemory();
       terminals?.ready();
-      if (bridge && memory) {
-        Atomics.store(bridge.state, control.phase, 1);
-        bridge.signal();
-      }
     },
     beforeFinish() {
       sampleMemory();

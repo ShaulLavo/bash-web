@@ -161,12 +161,12 @@ test("only the interactive root owns shell phase and columns follow its live ter
   const root = shellTerminalImports(bridge.buffer);
   Atomics.store(bridge.state, control.cols, 103);
   assert.equal(root.columns(), 103);
-  root.phase(2);
+  root.phase(2, 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);
-  shellTerminalImports().phase(1);
+  shellTerminalImports().phase(1, 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);
   bridge.close();
-  root.phase(1);
+  root.phase(1, 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);
 });
 

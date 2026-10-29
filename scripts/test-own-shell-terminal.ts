@@ -17,7 +17,10 @@ const encoder = new TextEncoder();
 const enable = "\x1b[?2004h";
 const disable = "\x1b[?2004l";
 
-function interactive(steps: readonly ((output: string, phase: number) => string | null)[]) {
+function interactive(
+  steps: readonly ((output: string, phase: number, status: number) => string | null)[],
+  exitStatus = 0,
+) {
   const input = new api.PipeController({ relay: "manual" });
   const output: Uint8Array[] = [];
   const errors: Uint8Array[] = [];
@@ -49,6 +52,7 @@ function interactive(steps: readonly ((output: string, phase: number) => string 
     wasi.descriptors.openAt(0, input.retain(pid, "read"), (1n << 29n) - 1n, 0n);
     let memory: WebAssembly.Memory | undefined;
     let phase = 0;
+    let status = 0;
     let pauses = 0;
     const signals = supervisor.get(pid);
     assert.ok(signals);
@@ -65,7 +69,7 @@ function interactive(steps: readonly ((output: string, phase: number) => string 
       wait() {
         const step = steps[pauses++];
         assert.ok(step, "unexpected extra read from the interactive guest");
-        const next = step(Buffer.concat(output).toString(), phase);
+        const next = step(Buffer.concat(output).toString(), phase, status);
         if (next === null) {
           feed.close();
           return;
@@ -78,14 +82,15 @@ function interactive(steps: readonly ((output: string, phase: number) => string 
     namespaces.shell_terminal = {
       inherited_fd: (index: number) => [0, 1, 2][index] ?? -1,
       columns: () => 12,
-      phase: (next: number) => {
+      phase: (next: number, result: number) => {
         phase = next;
+        status = result;
       },
     };
     const instance = new WebAssembly.Instance(guest, wasi.imports(guest));
     assert.ok(instance.exports.memory instanceof WebAssembly.Memory);
     memory = instance.exports.memory;
-    assert.equal(wasi.start(instance), 0, Buffer.concat(errors).toString());
+    assert.equal(wasi.start(instance), exitStatus, Buffer.concat(errors).toString());
     assert.equal(pauses, steps.length);
     return Buffer.concat(output).toString();
   } finally {
@@ -196,4 +201,33 @@ test("runtime accepts a capped paste ending at a UTF-8 boundary", () => {
     },
   ]);
   assert.ok(output.endsWith(`${disable}\r\n`));
+});
+
+test("runtime publishes the shell result at each real prompt without probing commands", () => {
+  const cases = [
+    { source: "false", status: 1 },
+    { source: "true", status: 0 },
+    { source: "cd /missing", status: 1 },
+    { source: "if ;", status: 2 },
+    { source: "echo $((1/0))", status: 1 },
+    { source: "missing-command", status: 127 },
+    { source: "false | true", status: 0 },
+    { source: "true | false", status: 1 },
+    { source: "\x03", status: 130 },
+    { source: "", status: 130 },
+    { source: "true &", status: 0 },
+  ];
+  let expected = 0;
+  interactive(
+    cases.map(({ source, status }) => (output, phase, result) => {
+      prompt(output, phase);
+      assert.equal(result, expected, source);
+      expected = status;
+      return source + "\r";
+    }).concat([(output, phase, result) => {
+      prompt(output, phase);
+      assert.equal(result, expected);
+      return "exit 0\r";
+    }]),
+  );
 });
