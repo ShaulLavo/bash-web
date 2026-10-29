@@ -4,13 +4,21 @@ The interactive shell guest owns its prompt, echo, command buffer and history. T
 
 ## Newlines and paste
 
-Shift+Enter inserts a newline in the current command without executing it. The editor accepts both `CSI 27;2;13~` and `CSI 13;2u`. Enter submits the entire buffer, including its newlines. Up and Down navigate whole history entries, including multiline commands.
+Shift+Enter inserts a newline in the current command without executing it. The editor accepts both `CSI 27;2;13~` and `CSI 13;2u`. Enter submits the entire buffer, including its newlines.
 
 Each prompt enables bracketed paste with `CSI ?2004h`. The shell disables it with `CSI ?2004l` before executing commands and when the input loop exits. A foreground program therefore receives its normal input unless it enables bracketed paste itself.
 
 Between `CSI 200~` and `CSI 201~`, pasted bytes become command text. CRLF and CR become LF. Newlines, including a trailing newline, never submit the command. Control bytes in a paste are stored as text and displayed with caret notation rather than interpreted as editing keys or terminal controls. The closing delimiter triggers one redraw.
 
 A command holds at most 64 KiB. A paste drops its remaining text after reaching that limit and rings the bell once, while still consuming its closing delimiter. UTF-8 characters that do not fit are dropped whole, even when their bytes arrive in separate chunks. Typing also preserves the UTF-8 boundary at the cap.
+
+## Navigation
+
+Ctrl+A and Home move to the beginning of the current hard line. Ctrl+E and End move to its end. Cmd+Left and Cmd+Right work the same way when the host maps them to Ctrl+A and Ctrl+E.
+
+Up and Down move between LF-delimited lines in the command buffer before browsing history. They keep the logical display column across shorter lines, using the terminal's scalar widths and eight-column tab stops, without splitting UTF-8. Horizontal movement or an edit resets that preferred column. Up on the first hard line and Down on the last hard line retain the existing whole-entry history navigation and draft restoration. Ctrl+P and Ctrl+N share the arrow behavior.
+
+Soft wrapping does not add editing boundaries. A wrapped command without an LF still has one hard line. Home moves to its start, and Up browses history. This contract does not claim visual-row navigation or native shell parity for soft wraps.
 
 ## Display
 

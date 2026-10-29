@@ -289,7 +289,9 @@ test("multiline commands repaint hard rows and leave output below them", () => {
   assert.deepEqual(tall.cursor, { row: 4, column: 3 });
   const home = replay(8, 3, [
     { prompt: "$ " },
-    { keys: `one${newline}two${newline}three${newline}four${newline}five\x01X` },
+    {
+      keys: `one${newline}two${newline}three${newline}four${newline}five\x01${"\x1b[A".repeat(4)}X`,
+    },
   ]);
   assert.deepEqual(home.screen, ["$ Xone", "two", "three"]);
 });
@@ -325,4 +327,24 @@ test("typing after a cursor move at the right margin matches text written direct
     for (const repaint of result.repaints)
       assert.doesNotThrow(() => utf8.decode(repaint), JSON.stringify(keys));
   }
+});
+
+test("hard-line navigation preserves the pasted screen and places the caret before edits", () => {
+  const command = "# Heading\n\nA paragraph longer than the terminal width.\n\nTail";
+  const pasted = `\x1b[200~${command}\x1b[201~`;
+  const steps: Step[] = [{ prompt: "$ " }, { keys: `${pasted}\x01` }];
+  const home = replay(12, 12, steps);
+  const reference = direct(
+    12,
+    12,
+    `$ ${command.replaceAll("\n", "\r\n")}`,
+    "$ # Heading\r\n\r\nA paragraph longer than the terminal width.\r\n\r\n",
+  );
+  assert.deepEqual(home.lines, reference.lines);
+  assert.deepEqual(home.cursor, reference.cursor);
+  const edited = replay(12, 12, steps.concat([{ keys: "!\x1b[A?\x01\x1b[A>" }]));
+  const expected = "$ # Heading\r\n\r\n>A paragraph longer than the terminal width.\r\n?\r\n!Tail";
+  const after = direct(12, 12, expected, "$ # Heading\r\n\r\n>");
+  assert.deepEqual(edited.lines, after.lines);
+  assert.deepEqual(edited.cursor, after.cursor);
 });
