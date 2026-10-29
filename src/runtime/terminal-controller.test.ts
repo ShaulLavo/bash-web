@@ -641,6 +641,15 @@ test("input observation resumes after an empty foreign Session releases only the
   Atomics.store(cells, 1, 1);
   Atomics.notify(cells, 1);
   terminalValue(await waiting);
+  await changed(cells, 4);
+  assert.equal(
+    Atomics.load(f.input.notification, 0),
+    sequence,
+    "lock observation resumes before the holder publishes its data wake",
+  );
+  Atomics.store(cells, 5, 1);
+  Atomics.notify(cells, 5);
+  await changed(cells, 3);
   assert.ok(
     Atomics.load(f.input.notification, 0) > sequence,
     "contended unlock publishes a wake without adding input data",

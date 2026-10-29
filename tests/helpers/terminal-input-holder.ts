@@ -37,11 +37,7 @@ Atomics.notify = new Proxy(notify, {
   apply(target, receiver, args: unknown[]) {
     const notified: unknown = Reflect.apply(target, receiver, args);
     const [array] = args;
-    if (
-      data.pauseAfterUnlock &&
-      array instanceof BigInt64Array &&
-      array.buffer === data.input
-    ) {
+    if (data.pauseAfterUnlock && array instanceof BigInt64Array && array.buffer === data.input) {
       Atomics.store(cells, 4, 1);
       notify(cells, 4);
       Atomics.wait(cells, 5, 0);
