@@ -197,6 +197,13 @@ test("recalling and submitting a tall command keeps output below it", () => {
 
 test("moving into rows that scrolled away shows the caret's row at the top", () => {
   const command = "abcdefghijklmnopqrstuvwx1234567890";
+  const home = replay(8, 3, [{ prompt: "$ " }, { keys: `${command}\x01` }]);
+  assert.deepEqual(home.screen, ["$ abcdef", "ghijklmn", "opqrstuv"]);
+  assert.deepEqual(home.cursor, { row: home.lines.length - 3, column: 2 });
+  const back = replay(8, 3, [{ prompt: "$ " }, { keys: `${command}\x01\x05!` }]);
+  const end = direct(8, 3, `$ ${command}!`);
+  assert.deepEqual(back.screen, end.lines.slice(-3));
+  assert.deepEqual(back.cursor.column, end.cursor.column);
   const result = replay(8, 3, [{ prompt: "$ " }, { keys: `${command}\x01X` }]);
   assert.deepEqual(result.screen, ["$ Xabcde", "fghijklm", "nopqrstu"]);
   assert.deepEqual(result.cursor.row - (result.lines.length - result.screen.length), 0);
