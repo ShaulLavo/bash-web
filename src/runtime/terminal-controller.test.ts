@@ -775,6 +775,44 @@ test("runtime disposal before task completion is shutdown rather than a new root
   assert.deepEqual(f.failures, []);
 });
 
+async function foregroundFixture(context: TestContext) {
+  const f = await fixture(context);
+  f.bridge.publishPrompt(0);
+  const child = f.reserve();
+  await f.start(child);
+  return Object.assign(f, { child });
+}
+
+function attachChildTerminal(
+  context: TestContext,
+  f: Awaited<ReturnType<typeof fixture>>,
+  transport: WorkerProcessTransport,
+) {
+  const terminal = createShellTerminals(
+    { runtimeProcess: transport },
+    f.bridge.buffer,
+    createTerminalAdmission(),
+    undefined,
+    () => {},
+  );
+  assert.ok(terminal);
+  context.after(() => terminal.dispose());
+  terminal.ready();
+  return terminal;
+}
+
+function assertInput(
+  f: Awaited<ReturnType<typeof fixture>>,
+  terminal: Pick<typeof f.attachment, "resolve">,
+  expected = 120,
+) {
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
+  assert.equal(f.bridge.send(Uint8Array.of(expected)), 1);
+  const byte = new Uint8Array(1);
+  assert.equal(terminal.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], expected);
+}
+
 test("stale delegated acknowledgement does not change the current interrupt barrier", async (context) => {
   const f = await fixture(context);
   f.bridge.publishPrompt(0);
@@ -792,20 +830,9 @@ test("stale delegated acknowledgement does not change the current interrupt barr
 });
 
 test("delegated acknowledgement waits for discard and clears only the completed barrier", async (context) => {
-  const f = await fixture(context);
-  f.bridge.publishPrompt(0);
-  const child = f.reserve();
-  await f.start(child);
-  const childTerminal = createShellTerminals(
-    { runtimeProcess: child.transport },
-    f.bridge.buffer,
-    createTerminalAdmission(),
-    undefined,
-    () => {},
-  );
-  assert.ok(childTerminal);
-  context.after(() => childTerminal.dispose());
-  childTerminal.ready();
+  const f = await foregroundFixture(context);
+  const { child } = f;
+  const childTerminal = attachChildTerminal(context, f, child.transport);
   const states: number[] = [];
   const acknowledge = f.bridge.acknowledgeInputDiscard.bind(f.bridge);
   context.mock.method(f.bridge, "acknowledgeInputDiscard", () => {
@@ -821,28 +848,19 @@ test("delegated acknowledgement waits for discard and clears only the completed 
   assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
   assert.ok(states.includes(1));
   assert.ok(!states.includes(2));
-  assert.equal(f.bridge.send(Uint8Array.of(120)), 1);
-  const byte = new Uint8Array(1);
-  assert.equal(childTerminal.resolve(0).tryRead!([byte]), 1);
-  assert.equal(byte[0], 120);
+  assertInput(f, childTerminal);
 });
 
 test("delegated acknowledgement after target exit preserves the editor", async (context) => {
-  const f = await fixture(context);
-  f.bridge.publishPrompt(0);
-  const child = f.reserve();
-  await f.start(child);
+  const f = await foregroundFixture(context);
+  const { child } = f;
   f.bridge.interrupt();
   f.bridge.discardInput();
   await barrier(f.bridge);
   await exitChild(f, child);
   f.controller.interruptDelegated(1n);
   await f.flush();
-  assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
-  assert.equal(f.bridge.send(Uint8Array.of(121)), 1);
-  const byte = new Uint8Array(1);
-  assert.equal(f.attachment.resolve(0).tryRead!([byte]), 1);
-  assert.equal(byte[0], 121);
+  assertInput(f, f.attachment, 121);
 });
 
 for (const timing of ["queued", "cleaned", "during-select"] as const) {
@@ -851,16 +869,7 @@ for (const timing of ["queued", "cleaned", "during-select"] as const) {
     f.bridge.publishPrompt(0);
     Atomics.store(f.bridge.state, control.phase, 2);
     const { first, second } = await startPair(f);
-    const childTerminal = createShellTerminals(
-      { runtimeProcess: second.transport },
-      f.bridge.buffer,
-      createTerminalAdmission(),
-      undefined,
-      () => {},
-    );
-    assert.ok(childTerminal);
-    context.after(() => childTerminal.dispose());
-    childTerminal.ready();
+    const childTerminal = attachChildTerminal(context, f, second.transport);
     f.bridge.interrupt();
     f.bridge.discardInput();
     await barrier(f.bridge);
@@ -880,19 +889,13 @@ for (const timing of ["queued", "cleaned", "during-select"] as const) {
     await f.flush();
     if (timing === "cleaned") f.controller.interruptDelegated(1n);
     await f.flush();
-    assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
-    assert.equal(f.bridge.send(Uint8Array.of(120)), 1);
-    const byte = new Uint8Array(1);
-    assert.equal(childTerminal.resolve(0).tryRead!([byte]), 1);
-    assert.equal(byte[0], 120);
+    assertInput(f, childTerminal);
   });
 }
 
 test("queued stale acknowledgement cannot clear the next generation interrupt", async (context) => {
-  const f = await fixture(context);
-  f.bridge.publishPrompt(0);
-  const child = f.reserve();
-  await f.start(child);
+  const f = await foregroundFixture(context);
+  const { child } = f;
   f.bridge.interrupt();
   f.bridge.discardInput();
   await barrier(f.bridge);
