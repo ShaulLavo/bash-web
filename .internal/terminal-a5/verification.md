@@ -60,3 +60,13 @@ All checks below passed on the combined source after merging main at `c442e234`.
 - Duplicate gates: zero new clones in exact and structural scans. No baseline, pin, version or gate suppression changed.
 
 The accepted design limitation remains: an in-shell process-substitution loop beside a delegated external is interrupted only when that command finishes. Bun's final integrated consumer acceptance, independent review, CI follow-up and merge remain coordinator-owned. Task-generated dependency/build/browser payloads are removed after verification; the clean author checkout stays for fixes.
+
+## Second-review regressions
+
+The retained review probes reproduced both findings on the reviewed source: delegated restoration accepted input while the surviving pipeline reader returned AGAIN, and 100,000 completed strands retained 100,001 registrations. The host now removes departed terminal members in the restoration control turn before selecting a surviving group. A PROCESS_GONE selection keeps the acknowledgement pending for ordinary exit cleanup to retry. The generation, discard and single-CAS contract is unchanged. Strand destruction now removes its weak registration immediately, without waiting for SIGINT.
+
+Checked-in tests cover acknowledgement queued before sibling cleanup, cleanup before acknowledgement, a child exiting during selection, the stale-generation guard, six real partial-pipeline reader attempts, and 100,000 fork/drop iterations with no interrupt. The retained standalone probe now reports one registration for the one live strand; repeat-delivery and forced-shutdown controls still pass.
+
+Review-fix verification passed: `npm run check:rust` across native/WASI workspace all targets with `-D warnings` and cargo-machete 0.9.2; 1,961 native tests across 26 targets; full `quality:js`; 229 runtime/controller tests; 131 CI and 21 guest-builder tests plus their typechecks; 25 layer tests, zero violations and layer typecheck against immutable main c442e234; zero new exact/structural clones; 35 source-built guest/API tests; and the Chromium public receipt/handled-reader test. The full frozen compatibility command is repeated separately with its final output retained in the coordinator report. No baseline, timeout, assertion, pin, version or public wait contract was weakened.
+
+Fetched main remains c442e234, already an ancestor, so there is no current-main conflict at this checkpoint. Future A3 ABI integration must retain rows() alongside phase(value,status) and rebuild the guest and worker together. The unmerged replacement candidate records its exact producer commit/tree, inputs and checksums. Bun consumer acceptance, focused independent review, CI follow-up and merge remain coordinator-owned.

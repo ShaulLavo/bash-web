@@ -895,7 +895,6 @@ for (const timing of ["queued", "cleaned", "during-select"] as const) {
 
 test("queued stale acknowledgement cannot clear the next generation interrupt", async (context) => {
   const f = await foregroundFixture(context);
-  const { child } = f;
   f.bridge.interrupt();
   f.bridge.discardInput();
   await barrier(f.bridge);
