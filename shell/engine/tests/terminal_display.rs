@@ -1,7 +1,7 @@
 //! Original, deterministic VT transcript regressions. No worker, browser or guest build.
 #[path = "../src/terminal.rs"]
 mod terminal;
-use terminal::{Action, Editor};
+use terminal::{Action, Editor, Geometry};
 
 struct Screen {
     columns: usize,
@@ -45,6 +45,7 @@ impl Screen {
                         .unwrap_or(0);
                     match bytes[at] {
                         b'A' => self.row = self.row.saturating_sub(number.max(1)),
+                        b'B' => self.row = (self.row + number.max(1)).min(self.lines.len() - 1),
                         b'C' => self.column = (self.column + number.max(1)).min(self.columns - 1),
                         b'D' => self.column = self.column.saturating_sub(number.max(1)),
                         b'J' => {
@@ -79,13 +80,13 @@ impl Screen {
 }
 fn type_bytes(editor: &mut Editor, screen: &mut Screen, bytes: &[u8]) {
     for byte in bytes {
-        editor.resize("$ ", screen.columns);
+        editor.resize(Geometry::new(screen.columns, 1000));
         match editor.feed(*byte) {
             Action::Echo(byte) => {
                 screen.write(&[byte]);
                 editor.echoed(byte);
             }
-            Action::Redraw => screen.write(&editor.redraw("$ ")),
+            Action::Redraw => screen.write(&editor.redraw()),
             // Escape sequences arrive byte by byte, just as they do in the guest.
             // Their incomplete prefixes intentionally produce no display action.
             Action::None => {}
@@ -95,7 +96,7 @@ fn type_bytes(editor: &mut Editor, screen: &mut Screen, bytes: &[u8]) {
 }
 fn start(columns: usize) -> (Editor, Screen) {
     let mut editor = Editor::default();
-    editor.begin("$ ", columns);
+    editor.begin("$ ", Geometry::new(columns, 1000));
     let mut screen = Screen::new(columns);
     screen.write(b"$ ");
     (editor, screen)

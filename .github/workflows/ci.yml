@@ -125,6 +125,7 @@ jobs:
           npm run check:rust
           cargo fmt --manifest-path tests/guest/Cargo.toml --check
           cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
+          npm run test:terminal:display
       - name: Build shared WASI guests and test binaries
         run: |
           ulimit -c 0

@@ -14,7 +14,7 @@ fn main() {
 
 #[cfg(target_os = "wasi")]
 mod guest {
-    use super::terminal::{Action, Editor};
+    use super::terminal::{Action, Editor, Geometry};
     use futures::FutureExt;
     use shell_engine::{
         Limits, Session,
@@ -27,11 +27,16 @@ mod guest {
     unsafe extern "C" {
         fn phase(value: i32);
         fn columns() -> i32;
+        fn rows() -> i32;
     }
     fn set_phase(value: i32) {
         unsafe {
             phase(value);
         }
+    }
+    fn geometry() -> Geometry {
+        let (columns, rows) = unsafe { (columns(), rows()) };
+        Geometry::new(columns.max(2) as usize, rows.max(2) as usize)
     }
     fn report(error: impl std::fmt::Display) -> ! {
         eprintln!("shell-runtime: {error}");
@@ -198,7 +203,7 @@ mod guest {
                 .get("PS1")
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "$ ".to_owned());
-            editor.begin(&prompt, unsafe { columns() }.max(2) as usize);
+            editor.begin(&prompt, geometry());
             if write(&output, prompt.as_bytes()).await.is_err() {
                 return 1;
             }
@@ -208,14 +213,14 @@ mod guest {
                 let cancel = input_cancel.borrow().clone();
                 match input.read_cancelled(&mut byte, &cancel).await {
                     Ok(0) => {
-                        let _ = write(&output, b"\r\n").await;
+                        let _ = write(&output, &editor.finish(false)).await;
                         return session.state().borrow().status();
                     }
                     Err(IoError::Cancelled) => {
                         session.state().borrow_mut().publish_status(130);
                         editor.clear();
                         *input_cancel.borrow_mut() = Cancel::new();
-                        if write(&output, b"^C\r\n").await.is_err() {
+                        if write(&output, &editor.finish(true)).await.is_err() {
                             return 1;
                         }
                         break None;
@@ -228,7 +233,7 @@ mod guest {
                     continue;
                 }
                 skip_lf = false;
-                editor.resize(&prompt, unsafe { columns() }.max(2) as usize);
+                editor.resize(geometry());
                 match editor.feed(byte[0]) {
                     Action::Echo(byte) => {
                         if write(&output, &[byte]).await.is_err() {
@@ -238,22 +243,22 @@ mod guest {
                     }
                     Action::Submit(source) => {
                         skip_lf = byte[0] == b'\r';
-                        if write(&output, b"\r\n").await.is_err() {
+                        if write(&output, &editor.finish(false)).await.is_err() {
                             return 1;
                         }
                         break Some(source);
                     }
                     Action::Interrupt => {
                         session.state().borrow_mut().publish_status(130);
-                        let _ = write(&output, b"^C\r\n").await;
+                        let _ = write(&output, &editor.finish(true)).await;
                         break None;
                     }
                     Action::Eof => {
-                        let _ = write(&output, b"\r\n").await;
+                        let _ = write(&output, &editor.finish(false)).await;
                         return session.state().borrow().status();
                     }
                     Action::Redraw => {
-                        if write(&output, &editor.redraw(&prompt)).await.is_err() {
+                        if write(&output, &editor.redraw()).await.is_err() {
                             return 1;
                         }
                     }

@@ -77,6 +77,10 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
             checkActive();
             return terminals?.columns() ?? shell.columns();
           },
+          rows() {
+            checkActive();
+            return terminals?.rows() ?? shell.rows();
+          },
           phase(phase: number) {
             checkActive();
             shell.phase(phase);

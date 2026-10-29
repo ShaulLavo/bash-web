@@ -1,5 +1,9 @@
 //! Original bounded single-line terminal editor. The guest owns echo; the browser
 //! forwards raw bytes, including ANSI arrows, without maintaining shell state.
+#[path = "terminal_display.rs"]
+mod display;
+use display::Display;
+pub use display::Geometry;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Action {
     Redraw,
@@ -53,84 +57,8 @@ pub struct Editor {
     history: Vec<Vec<u8>>,
     history_at: Option<usize>,
     draft: Vec<u8>,
-    painted: Position,
-    columns: usize,
-    pending_utf8: Vec<u8>,
-}
-#[derive(Clone, Copy, Default)]
-struct Position {
-    row: usize,
-    column: usize,
-}
-impl Position {
-    fn advance(&mut self, character: char, columns: usize) {
-        match character {
-            '\r' => self.column = 0,
-            '\n' => {
-                self.row += 1;
-                self.column = 0;
-            }
-            '\t' => {
-                // VT tab stops move within the row; they do not autowrap.
-                self.column = ((self.column / 8 + 1) * 8).min(columns - 1);
-            }
-            _ => {
-                let width = scalar_width(character);
-                if width == 0 {
-                    return;
-                }
-                if self.column + width > columns {
-                    self.row += 1;
-                    self.column = 0;
-                }
-                self.column += width;
-            }
-        }
-    }
-    fn caret(mut self, columns: usize) -> Self {
-        if self.column == columns {
-            self.row += 1;
-            self.column = 0;
-        }
-        self
-    }
-}
-// This remains a scalar editor, not a grapheme editor. Keep the usual combining
-// marks zero-width and East Asian/emoji scalars wide when counting wrapped rows.
-fn scalar_width(character: char) -> usize {
-    let code = u32::from(character);
-    if character.is_control()
-        || matches!(code, 0x0300..=0x036f | 0x1ab0..=0x1aff | 0x1dc0..=0x1dff
-            | 0x200b..=0x200f | 0x20d0..=0x20ff | 0xfe00..=0xfe0f | 0xfe20..=0xfe2f)
-    {
-        0
-    } else if matches!(code, 0x1100..=0x115f | 0x2329..=0x232a | 0x2e80..=0xa4cf
-        | 0xac00..=0xd7a3 | 0xf900..=0xfaff | 0xfe10..=0xfe19 | 0xfe30..=0xfe6f
-        | 0xff01..=0xff60 | 0xffe0..=0xffe6 | 0x1f300..=0x1faff | 0x20000..=0x3fffd)
-    {
-        2
-    } else {
-        1
-    }
-}
-fn position(prompt: &str, line: &[u8], columns: usize) -> Position {
-    let mut point = Position::default();
-    // Prompt SGR/OSC controls occupy no cells. Their interpretation stays with
-    // the terminal; only printing scalars contribute to the editor's row count.
-    let mut escape = 0;
-    for character in prompt.chars().chain(String::from_utf8_lossy(line).chars()) {
-        match (escape, character) {
-            (0, '\x1b') => escape = 1,
-            (1, '[') => escape = 2,
-            (1, ']') => escape = 3,
-            (1, _) => escape = 0,
-            (2, '\x40'..='\x7e') | (3, '\x07') | (4, '\\') => escape = 0,
-            (3, '\x1b') => escape = 4,
-            (0, character) => point.advance(character, columns),
-            _ => {}
-        }
-    }
-    point
+    prompt: Vec<u8>,
+    display: Display,
 }
 impl Editor {
     pub fn clear(&mut self) {
@@ -139,63 +67,28 @@ impl Editor {
         self.escape = Escape::None;
         self.history_at = None;
         self.draft.clear();
-        self.pending_utf8.clear();
     }
-    pub fn begin(&mut self, prompt: &str, columns: usize) {
-        self.columns = columns.max(2);
-        self.painted = position(prompt, &self.line[..self.cursor], self.columns);
-        self.pending_utf8.clear();
+    /// The prompt is about to be written at column 0.
+    pub fn begin(&mut self, prompt: &str, geometry: Geometry) {
+        self.prompt = prompt.as_bytes().to_vec();
+        self.display.begin(&self.prompt, geometry);
     }
     /// Auto-fit terminal resizing reflows the already painted line. Recount its
     /// cursor BEFORE editing, while the old command/caret are still available.
-    pub fn resize(&mut self, prompt: &str, columns: usize) {
-        if self.columns != columns.max(2) {
-            self.begin(prompt, columns);
-        }
+    pub fn resize(&mut self, geometry: Geometry) {
+        self.display.resize(geometry);
     }
     pub fn echoed(&mut self, byte: u8) {
-        self.pending_utf8.push(byte);
-        match std::str::from_utf8(&self.pending_utf8) {
-            Ok(text) => {
-                for character in text.chars() {
-                    self.painted.advance(character, self.columns.max(2));
-                }
-                self.pending_utf8.clear();
-            }
-            Err(error) if error.error_len().is_none() => {}
-            Err(_) => {
-                for character in String::from_utf8_lossy(&self.pending_utf8).chars() {
-                    self.painted.advance(character, self.columns.max(2));
-                }
-                self.pending_utf8.clear();
-            }
-        }
+        self.display.echoed(byte);
     }
-    pub fn redraw(&mut self, prompt: &str) -> Vec<u8> {
-        let columns = self.columns.max(2);
-        let mut bytes = Vec::new();
-        if self.painted.row > 0 {
-            bytes.extend_from_slice(format!("\x1b[{}A", self.painted.row).as_bytes());
-        }
-        // EL2 only clears one physical row. ED0 removes every old wrapped row
-        // after returning to the prompt origin, including a now-shorter tail.
-        bytes.extend_from_slice(b"\r\x1b[J");
-        bytes.extend_from_slice(prompt.as_bytes());
-        bytes.extend_from_slice(&self.line);
-        bytes.push(b' ');
-        let mut end = position(prompt, &self.line, columns);
-        end.advance(' ', columns);
-        let cursor = position(prompt, &self.line[..self.cursor], columns).caret(columns);
-        if end.row > cursor.row {
-            bytes.extend_from_slice(format!("\x1b[{}A", end.row - cursor.row).as_bytes());
-        }
-        bytes.push(b'\r');
-        if cursor.column > 0 {
-            bytes.extend_from_slice(format!("\x1b[{}C", cursor.column).as_bytes());
-        }
-        self.painted = cursor;
-        self.pending_utf8.clear();
-        bytes
+    pub fn redraw(&mut self) -> Vec<u8> {
+        let caret = self.prompt.len() + self.cursor;
+        let region = [self.prompt.as_slice(), &self.line].concat();
+        self.display.render(region, caret)
+    }
+    /// After a submit, interrupt or EOF: moves below the displayed command.
+    pub fn finish(&mut self, interrupted: bool) -> Vec<u8> {
+        self.display.finish(interrupted)
     }
     fn previous(&self) -> usize {
         let mut at = self.cursor.saturating_sub(1);
@@ -374,7 +267,10 @@ impl Editor {
                 self.line.drain(self.cursor..end);
                 Action::Redraw
             }
-            12 => Action::Redraw,
+            12 => {
+                self.display.clear_screen();
+                Action::Redraw
+            }
             b'\t' | 32..=126 | 128..=255 if self.line.len() < 64 * 1024 => {
                 let append = self.cursor == self.line.len();
                 self.line.insert(self.cursor, byte);
