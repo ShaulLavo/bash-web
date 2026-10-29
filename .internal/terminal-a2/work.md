@@ -40,3 +40,7 @@ The first WASI build failed because cmake and ninja were not on PATH. They are s
 ## Integration checkpoint
 
 A1 #173 merged as `b8d7d16b600968523ac6165275852c2a552014db`. A2 merged `origin/main` without force-push in `eb6907d6`. The merge conflicted because #173 was squashed. `git diff 3bd992b9778f0c1f267ce269cd21c983c09b7d69 origin/main -- shell/engine/src/terminal.rs` was empty, so the A2 terminal file was kept intact. `git diff 9357c7cd eb6907d6 --stat` was empty. There was no source change from this history alignment and no wait for main CI.
+
+## Real-display correction
+
+The first Chromium run passed paste submission and Shift+Enter, then caught a multiline edge the ASCII model missed. With a hard newline immediately after the right margin, `EL0` erased the last printed cell because the native cursor still addressed that cell while wrap was pending. A2 now emits CRLF directly at the margin and uses `EL0` before CRLF only when a row has an unpainted tail. The existing margin/multiline display case now models EL0's native cursor clamp. This is within L3's hard-newline redraw, not A3's earlier-row submission or viewport-height work.

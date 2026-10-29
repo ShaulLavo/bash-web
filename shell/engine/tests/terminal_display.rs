@@ -57,7 +57,7 @@ impl Screen {
                             let start = if number == 2 {
                                 0
                             } else {
-                                self.column.min(self.columns)
+                                self.column.min(self.columns - 1)
                             };
                             self.lines[self.row][start..].fill(b' ');
                         }

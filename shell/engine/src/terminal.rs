@@ -101,14 +101,29 @@ fn utf8_length(byte: u8) -> usize {
         _ => 1,
     }
 }
-fn paint_line(bytes: &mut Vec<u8>, line: &[u8]) {
+fn paint_text(bytes: &mut Vec<u8>, line: &[u8]) {
     for &byte in line {
         match byte {
-            b'\n' => bytes.extend_from_slice(b"\x1b[K\r\n"),
             b'\t' => bytes.push(byte),
             0..=31 | 127 => bytes.extend_from_slice(&[b'^', byte ^ 0x40]),
             _ => bytes.push(byte),
         }
+    }
+}
+fn paint_line(bytes: &mut Vec<u8>, prompt: &str, line: &[u8], columns: usize) {
+    let mut chunks = line.split(|byte| *byte == b'\n').peekable();
+    let mut prefix = prompt;
+    while let Some(chunk) = chunks.next() {
+        paint_text(bytes, chunk);
+        if chunks.peek().is_none() {
+            return;
+        }
+        // EL at a pending right-margin wrap erases the last printed cell.
+        if position(prefix, chunk, columns).column < columns {
+            bytes.extend_from_slice(b"\x1b[K");
+        }
+        bytes.extend_from_slice(b"\r\n");
+        prefix = "";
     }
 }
 #[derive(Default)]
@@ -259,7 +274,7 @@ impl Editor {
         // after returning to the prompt origin, including a now-shorter tail.
         bytes.extend_from_slice(b"\r\x1b[J");
         bytes.extend_from_slice(prompt.as_bytes());
-        paint_line(&mut bytes, &self.line);
+        paint_line(&mut bytes, prompt, &self.line, columns);
         bytes.push(b' ');
         let mut end = position(prompt, &self.line, columns);
         end.advance(' ', columns);
