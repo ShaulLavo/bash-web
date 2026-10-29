@@ -185,19 +185,19 @@ test("fixed matrix covers every scalar unit dimension without inert value paddin
 });
 
 test("all transitive process-runner sources participate in fixture identity", () => {
-  assert.deepEqual(sourceFiles, [
-    "fuzz-shell-functions.ts",
-    "fuzz-shell-control-flow.mjs",
+  const expected = ["fuzz-shell-functions.ts", "fuzz-shell-control-flow.mjs"].concat([
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
-  for (const [name, hash] of Object.entries(sourceHashes()))
+  assert.deepEqual(sourceFiles, expected);
+  Object.entries(sourceHashes()).forEach(([name, hash]) => {
     assert.equal(
       hash,
       createHash("sha256")
         .update(readFileSync(new URL(name, import.meta.url)))
         .digest("hex"),
     );
+  });
   assert.equal(
     fingerprint(),
     createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex"),
@@ -238,7 +238,7 @@ test("fixture validation rejects every identity and unhealthy-observation mutati
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-functions.ts"] = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
-    (f) => (f.sourceHashes["shell-process-group.ts"] = "stale"),
+    (f) => (f.sourceHashes[sourceFiles[3]] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),
     (f) => (f.environment = { ...environment, locale: "C.UTF-8" }),

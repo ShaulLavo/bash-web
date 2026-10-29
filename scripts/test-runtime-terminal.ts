@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const root = resolve(import.meta.dirname, "..");
-async function tests(directory, suffix) {
+async function tests(directory: string, suffix: string): Promise<string[]> {
   return (await readdir(resolve(root, directory), { withFileTypes: true }))
     .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
     .map((entry) => resolve(root, directory, entry.name));

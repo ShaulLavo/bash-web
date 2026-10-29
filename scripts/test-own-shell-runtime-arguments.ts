@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 import {
   api,
   prepareWaffleDirectories,
@@ -8,11 +9,11 @@ import {
   waffleFixture,
 } from "./own-shell-waffle-fixture.ts";
 
-async function invoke(context, args) {
+async function invoke(context: TestContext, args: string[]) {
   const fixture = await waffleFixture(context);
   await prepareWaffleDirectories(fixture.runtime, ["/tmp/spec"]);
-  const stdout = [];
-  const stderr = [];
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
   const status = await runRoot(
     fixture.runtime,
     api,
@@ -65,7 +66,7 @@ for (const [source, status] of [
   ["", 0],
   ["false", 1],
   ["exit 37", 37],
-]) {
+] as const) {
   test(
     `WASI -c preserves status ${status} for ${JSON.stringify(source)}`,
     { timeout: 15000 },

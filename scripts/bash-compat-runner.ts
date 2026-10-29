@@ -180,7 +180,7 @@ function collectShell(
     child.once("exit", kill);
     child.once("close", (status, signal) => {
       clearTimeout(timer);
-      let shellStatus = status ?? 128 + (constants.signals[signal] ?? 0);
+      let shellStatus = status ?? 128 + ((signal && constants.signals[signal]) ?? 0);
       if (realPipe && !timeout && !outputLimit) {
         try {
           const message: unknown = JSON.parse(Buffer.concat(protocol).toString("ascii"));

@@ -415,12 +415,12 @@ test("manifest schema and limits reject the whole input before filesystem mutati
 });
 
 test("all transitive harness sources are pinned and raw bytes/status stay strict", () => {
-  assert.deepEqual(sourceFiles, [
-    "fuzz-shell-path.ts",
+  const expected = ["fuzz-shell-path.ts"].concat([
     "fuzz-shell-control-flow.mjs",
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
+  assert.deepEqual(sourceFiles, expected);
   for (const [name, hash] of Object.entries(sourceHashes()))
     assert.equal(
       hash,

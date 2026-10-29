@@ -843,7 +843,7 @@ for (const name of names) writeFileSync(resolve(release, name + '.wasm'), wasm);
 `,
     );
     put(
-      "scripts/bash-compat.mjs",
+      "scripts/bash-compat.ts",
       `
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';

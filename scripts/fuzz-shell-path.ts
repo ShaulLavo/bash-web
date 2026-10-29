@@ -663,21 +663,22 @@ const queue = process.env.FUZZ_HEAVY_RUNNER;
 export function scratchParent(env = process.env) {
   return env.FUZZ_JOB_SCRATCH ?? env.RUNNER_TEMP ?? tmpdir();
 }
+const processGroupSource = "shell-process-group.ts";
 export const sourceFiles = [
   "fuzz-shell-path.ts",
   "fuzz-shell-control-flow.mjs",
   "fuzz-shell-results.ts",
-  "shell-process-group.ts",
+  processGroupSource,
 ];
-export const sourceHashes = () =>
-  Object.fromEntries(
-    sourceFiles.map((name) => [
-      name,
-      createHash("sha256")
-        .update(readFileSync(new URL(name, import.meta.url)))
-        .digest("hex"),
-    ]),
-  );
+export const sourceHashes = () => {
+  const entries = sourceFiles.map((name) => {
+    const hash = createHash("sha256")
+      .update(readFileSync(new URL(name, import.meta.url)))
+      .digest("hex");
+    return [name, hash] as const;
+  });
+  return Object.fromEntries(entries);
+};
 export const fingerprint = () =>
   createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex");
 export function optionsFor(args: string[]) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { rmSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
@@ -7,14 +8,36 @@ import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { createShellRunner } from "./bash-compat-runner.ts";
+import type { ActiveChildren, ScratchDirectories, ShellResult } from "./bash-compat-runner.ts";
+
+interface ProcessIdentity {
+  pid: string;
+  start: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return isRecord(error) && error.code === code;
+}
+
+function parseIdentities(value: unknown): ProcessIdentity[] {
+  assert.ok(Array.isArray(value));
+  return value.map((entry: unknown) => {
+    assert.ok(isRecord(entry) && typeof entry.pid === "string" && typeof entry.start === "string");
+    return { pid: entry.pid, start: entry.start };
+  });
+}
 
 const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
 
 test("Bash capture uses real stdout pipe without changing shell input or status", async (t) => {
   const scratch = await mkdtemp(resolve(root, "audit-runner-test-"));
-  const activeChildren = new Map();
-  const workers = new Set();
+  const activeChildren: ActiveChildren = new Map();
+  const workers = new Set<ChildProcess>();
   const helpers = resolve(scratch, "helpers");
   const path = `${helpers}:/usr/local/bin:/usr/bin:/bin`;
   const exitCleanup = () => {
@@ -41,7 +64,7 @@ test("Bash capture uses real stdout pipe without changing shell input or status"
   });
   await mkdir(helpers);
   const run = createShellRunner({ scratch, timeoutMs: 5000, activeChildren });
-  const capture = (code) => run("/usr/bin/bash", code, path, true);
+  const capture = (code: string) => run("/usr/bin/bash", code, path, true);
 
   await t.test("reopening /dev/stdout and /dev/fd/1 succeeds", async () => {
     const code = "printf first >/dev/stdout; printf second >/dev/fd/1; exit 37";
@@ -102,7 +125,7 @@ test("Bash capture uses real stdout pipe without changing shell input or status"
       ["if", 2],
       ["kill -TERM $$", 143],
       ["false | true; exit 29", 29],
-    ]) {
+    ] as const) {
       const result = await capture(code);
       assert.equal(result.status, status, code);
       assert.equal(result.timeout, false);
@@ -152,7 +175,7 @@ test("Bash capture uses real stdout pipe without changing shell input or status"
     assert.equal(activeChildren.size, 0);
   });
 
-  for (const ownerSignal of ["SIGTERM", "SIGKILL"]) {
+  for (const ownerSignal of ["SIGTERM", "SIGKILL"] as const) {
     await t.test(
       `owner ${ownerSignal} tears down active supervisors and guests`,
       { timeout: 5000 },
@@ -210,8 +233,9 @@ test("Bash capture uses real stdout pipe without changing shell input or status"
         worker.once("close", () => workers.delete(worker));
         subtest.after(() => worker.kill("SIGTERM"));
         const closed = once(worker, "close");
+        assert.ok(worker.stdout);
         const [ready] = await once(worker.stdout, "data");
-        const identities = JSON.parse(ready.toString());
+        const identities = parseIdentities(JSON.parse(ready.toString()));
         assert.equal(identities.length, 2, "guest must report a live shell and background child");
         worker.kill(ownerSignal);
         const [status, signal] = await closed;
@@ -253,10 +277,10 @@ test("Bash capture uses real stdout pipe without changing shell input or status"
 
 test("capture teardown retains scratch and ownership until its process group stops", async (t) => {
   const scratch = await mkdtemp(resolve(root, "audit-runner-barrier-"));
-  const activeChildren = new Map();
+  const activeChildren: ActiveChildren = new Map();
   const signal = process.kill;
-  const groups = new Set();
-  let pending;
+  const groups = new Set<number>();
+  let pending: Promise<ShellResult> | undefined;
   // Model delayed signal delivery without leaving a real consumer unowned. The
   // test releases only its recorded groups, and always restores the global hook.
   const release = () => {
@@ -265,7 +289,7 @@ test("capture teardown retains scratch and ownership until its process group sto
       try {
         signal(pid, "SIGKILL");
       } catch (error) {
-        if (error.code !== "ESRCH") throw error;
+        if (!hasErrorCode(error, "ESRCH")) throw error;
       }
     }
   };
@@ -283,7 +307,7 @@ test("capture teardown retains scratch and ownership until its process group sto
     }
     return signal(pid, kind);
   };
-  const created = Promise.withResolvers();
+  const created = Promise.withResolvers<ScratchDirectories>();
   const run = createShellRunner({
     scratch,
     timeoutMs: 5000,

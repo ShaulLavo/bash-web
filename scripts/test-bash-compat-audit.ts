@@ -1,17 +1,83 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { rmSync } from "node:fs";
 import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 import { sealOracle } from "./shell-scoreboard.mjs";
+
+interface AuditReport {
+  originalIdentity: unknown;
+  membershipIdentity: unknown;
+  sourceIdentity: unknown;
+  changed: string[];
+  transportChanged: string[];
+  incomplete: string[];
+  cases: {
+    pipe: { status: number; stdout: string; stderr: string; timeout?: boolean };
+    socket: { timeout?: boolean };
+    socketMatchesFrozen: boolean;
+    deterministic: boolean;
+  }[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function stringArray(value: unknown): string[] {
+  assert.ok(Array.isArray(value));
+  return value.map((entry: unknown) => {
+    assert.ok(typeof entry === "string");
+    return entry;
+  });
+}
+
+function parseAuditCase(value: unknown): AuditReport["cases"][number] {
+  assert.ok(isRecord(value) && isRecord(value.pipe) && isRecord(value.socket));
+  assert.ok(typeof value.pipe.status === "number");
+  assert.ok(typeof value.pipe.stdout === "string" && typeof value.pipe.stderr === "string");
+  assert.ok(value.pipe.timeout === undefined || typeof value.pipe.timeout === "boolean");
+  assert.ok(value.socket.timeout === undefined || typeof value.socket.timeout === "boolean");
+  assert.ok(
+    typeof value.socketMatchesFrozen === "boolean" && typeof value.deterministic === "boolean",
+  );
+  return {
+    pipe: {
+      status: value.pipe.status,
+      stdout: value.pipe.stdout,
+      stderr: value.pipe.stderr,
+      ...(value.pipe.timeout === undefined ? {} : { timeout: value.pipe.timeout }),
+    },
+    socket: {
+      ...(value.socket.timeout === undefined ? {} : { timeout: value.socket.timeout }),
+    },
+    socketMatchesFrozen: value.socketMatchesFrozen,
+    deterministic: value.deterministic,
+  };
+}
+
+function parseAuditReport(value: unknown): AuditReport {
+  assert.ok(isRecord(value) && Array.isArray(value.cases));
+  return {
+    originalIdentity: value.originalIdentity,
+    membershipIdentity: value.membershipIdentity,
+    sourceIdentity: value.sourceIdentity,
+    changed: stringArray(value.changed),
+    transportChanged: stringArray(value.transportChanged),
+    incomplete: stringArray(value.incomplete),
+    cases: value.cases.map(parseAuditCase),
+  };
+}
 
 const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
 
-async function readyMarker(scratch) {
+async function readyMarker(scratch: string) {
   for (const audit of await readdir(scratch)) {
     if (!audit.startsWith("audit-")) continue;
     const directory = resolve(scratch, audit);
@@ -23,9 +89,9 @@ async function readyMarker(scratch) {
   }
 }
 
-test("read-only transport audit preserves input and reports incomplete controls", async (t) => {
+test("read-only transport audit preserves input and reports incomplete controls", async (t: TestContext) => {
   const scratch = await mkdtemp(resolve(root, "audit-test-"));
-  const children = new Set();
+  const children = new Set<ChildProcess>();
   const exitCleanup = () => {
     for (const child of children) child.kill("SIGTERM");
     rmSync(scratch, { recursive: true, force: true });
@@ -45,7 +111,7 @@ test("read-only transport audit preserves input and reports incomplete controls"
   const input = resolve(scratch, "oracle.json");
   const output = resolve(scratch, "report.json");
   const run = (destination = output) =>
-    new Promise((done, fail) => {
+    new Promise<{ status: number | null; stdout: Buffer; stderr: Buffer }>((done, fail) => {
       const child = spawn(
         process.execPath,
         [resolve(import.meta.dirname, "audit-bash-oracle-pipe.ts")],
@@ -61,8 +127,9 @@ test("read-only transport audit preserves input and reports incomplete controls"
         },
       );
       children.add(child);
-      const stdout = [];
-      const stderr = [];
+      assert.ok(child.stdout && child.stderr);
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
       child.stdout.on("data", (chunk) => stdout.push(chunk));
       child.stderr.on("data", (chunk) => stderr.push(chunk));
       child.once("error", fail);
@@ -71,7 +138,7 @@ test("read-only transport audit preserves input and reports incomplete controls"
         done({ status, stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr) });
       });
     });
-  const fixture = (code) =>
+  const fixture = (code: string) =>
     sealOracle({
       schema: 1,
       oracle: { version: "original test fixture", executableSha256: "different", sandbox: "test" },
@@ -118,7 +185,7 @@ test("read-only transport audit preserves input and reports incomplete controls"
       const result = await run();
       assert.equal(result.status, 0, result.stderr.toString());
       assert.equal(await readFile(input, "utf8"), bytes);
-      const report = JSON.parse(await readFile(output, "utf8"));
+      const report = parseAuditReport(JSON.parse(await readFile(output, "utf8")));
       assert.deepEqual(report.originalIdentity, oracle.identity);
       assert.equal(report.membershipIdentity, oracle.identity.caseSet);
       assert.equal(report.sourceIdentity, oracle.identity.sources);
@@ -202,7 +269,8 @@ test("read-only transport audit preserves input and reports incomplete controls"
       );
       children.add(child);
       const closed = once(child, "close");
-      const stderr = [];
+      assert.ok(child.stderr);
+      const stderr: Buffer[] = [];
       child.stderr.on("data", (chunk) => stderr.push(chunk));
       child.once("close", () => children.delete(child));
       subtest.after(async () => {

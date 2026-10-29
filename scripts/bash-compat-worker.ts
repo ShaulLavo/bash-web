@@ -26,7 +26,8 @@ function parseEnvironment(value: unknown): Record<string, string> {
 
 function parseWorkerData(value: unknown): WaffleCaseOptions {
   if (!isRecord(value)) throw new Error("Invalid compatibility worker data");
-  if (value.engine !== "own-shell") throw new Error(`Unknown compatibility engine: ${value.engine}`);
+  if (value.engine !== "own-shell")
+    throw new Error(`Unknown compatibility engine: ${value.engine}`);
   const utilityDirectory = value.utilityDirectory;
   const programs = value.programs;
   const installPrograms = value.installPrograms;
@@ -34,7 +35,8 @@ function parseWorkerData(value: unknown): WaffleCaseOptions {
     throw new Error("Invalid worker utilityDirectory");
   if (installPrograms !== undefined && typeof installPrograms !== "boolean")
     throw new Error("Invalid worker installPrograms");
-  if (programs !== undefined && !Array.isArray(programs)) throw new Error("Invalid worker programs");
+  if (programs !== undefined && !Array.isArray(programs))
+    throw new Error("Invalid worker programs");
   return {
     modulePath: requiredString(value, "modulePath"),
     fixtureDirectory: requiredString(value, "fixtureDirectory"),
@@ -57,14 +59,15 @@ function thrownMessage(error: unknown): string {
   return String(error);
 }
 
-if (!parentPort) throw new Error("Compatibility worker requires a parent port");
+const port = parentPort;
+if (!port) throw new Error("Compatibility worker requires a parent port");
 const run = await createWaffleRunner(parseWorkerData(workerData));
-parentPort.on("message", async (value: unknown) => {
+port.on("message", async (value: unknown) => {
   const { id, code } = parseRequest(value);
   try {
-    parentPort.postMessage({ id, ...(await run(code)) });
+    port.postMessage({ id, ...(await run(code)) });
   } catch (error) {
-    parentPort.postMessage({
+    port.postMessage({
       id,
       stdout: Buffer.alloc(0),
       stderr: Buffer.alloc(0),
@@ -72,4 +75,4 @@ parentPort.on("message", async (value: unknown) => {
     });
   }
 });
-parentPort.postMessage({ ready: true });
+port.postMessage({ ready: true });

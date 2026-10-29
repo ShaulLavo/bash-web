@@ -26,9 +26,233 @@ import {
   compareScores,
   validateScore,
 } from "./shell-scoreboard.mjs";
+import type { ActiveChildren, BufferedResult, ShellResult } from "./bash-compat-runner.ts";
+
+type Corpus = "oils" | "brush-suite" | "bashkit-suite";
+type EngineName = "own-shell";
+type CaseKind = "builtins-only" | "needs-commands";
+type Outcome = "pass" | "fail" | "timeout" | "crash" | "missing-command";
+
+interface JudgedResult {
+  outcome: Outcome;
+  stderrAgrees?: boolean;
+  missing?: string[];
+  status?: number;
+  stdout?: string;
+  stderr?: string;
+  crash?: string;
+}
+
+interface CompatCase {
+  corpus: Corpus;
+  file: string;
+  line?: number;
+  name: string;
+  code: string;
+  category?: string;
+  kind?: CaseKind;
+  excluded?: string;
+  described?: boolean;
+  needs?: string[];
+  bash?: ShellResult;
+  results?: Record<string, JudgedResult>;
+}
+
+interface ParsedCase {
+  line: number;
+  name: string;
+  code: string;
+}
+
+interface SpotCheck {
+  name: string;
+  code: string;
+  bash?: ShellResult;
+  results?: Record<string, string>;
+}
+
+interface PackedResult {
+  status: number;
+  stdout: string;
+  stderr: string;
+  timeout?: boolean;
+  outputLimit?: boolean;
+  crash?: string;
+}
+
+interface OracleCase {
+  id: string;
+  corpus: Corpus;
+  file: string;
+  line: number;
+  name: string;
+  category: string;
+  code: string;
+  kind?: CaseKind;
+  excluded?: string;
+  needs?: string[];
+  bash: PackedResult;
+}
+
+interface CaptureRecord extends Omit<OracleCase, "bash"> {
+  bash?: PackedResult;
+}
+
+interface Oracle {
+  sources: Record<Corpus, { revision: string }>;
+  environment: { nodeVersion: string };
+  identity: unknown;
+  cases: OracleCase[];
+}
+
+interface ScoreCase {
+  id: string;
+  corpus: Corpus;
+  category: string;
+  kind?: CaseKind;
+  outcome: string;
+  excluded?: string;
+  actual?: unknown;
+}
+
+interface Score {
+  identity: unknown;
+  engine: string;
+  counts: unknown;
+  cases: ScoreCase[];
+}
+
+interface SourcePin {
+  repository?: string;
+  revision: string;
+  archiveSha256?: string;
+}
+
+interface Pins {
+  oils: SourcePin;
+  brush: { revision: string };
+  bashkitTerminal: { revision: string };
+  shellScoreboard?: { oracleSha256: string };
+}
+
+interface PoolResult extends BufferedResult {
+  cancelled?: boolean;
+  dead?: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCorpus(value: unknown): value is Corpus {
+  return value === "oils" || value === "brush-suite" || value === "bashkit-suite";
+}
+
+function validatePin(value: unknown): asserts value is SourcePin {
+  if (!isRecord(value)) throw new Error("Invalid source pin");
+  if (value.repository !== undefined && typeof value.repository !== "string")
+    throw new Error("Invalid source repository");
+  if (typeof value.revision !== "string") throw new Error("Invalid source revision");
+  if (value.archiveSha256 !== undefined && typeof value.archiveSha256 !== "string")
+    throw new Error("Invalid source archive checksum");
+}
+
+function validatePins(value: unknown): asserts value is Pins {
+  if (!isRecord(value)) throw new Error("Invalid sources.lock.json");
+  validatePin(value.oils);
+  if (!isRecord(value.brush) || typeof value.brush.revision !== "string")
+    throw new Error("Invalid Brush pin");
+  if (!isRecord(value.bashkitTerminal) || typeof value.bashkitTerminal.revision !== "string")
+    throw new Error("Invalid Bashkit pin");
+  if (value.shellScoreboard === undefined) return;
+  if (!isRecord(value.shellScoreboard) || typeof value.shellScoreboard.oracleSha256 !== "string")
+    throw new Error("Invalid shell scoreboard pin");
+}
+
+function validatedOracle(value: unknown): Oracle {
+  verifyOracle(value);
+  return value as Oracle;
+}
+
+function validatedScore(oracle: Oracle, value: unknown): Score {
+  validateScore(oracle, value);
+  return value as Score;
+}
+
+interface ClassificationCase {
+  corpus: Corpus;
+  file: string;
+  line: number;
+  name: string;
+  kind?: CaseKind;
+  excluded?: string;
+  needs?: string[];
+}
+
+function parseClassification(value: unknown): ClassificationCase[] {
+  if (!isRecord(value) || !Array.isArray(value.cases))
+    throw new Error("Invalid published compatibility classification");
+  return value.cases.map((entry: unknown) => {
+    if (!isRecord(entry) || !isCorpus(entry.corpus))
+      throw new Error("Invalid published compatibility case");
+    if (typeof entry.file !== "string" || typeof entry.line !== "number")
+      throw new Error("Invalid case location");
+    if (typeof entry.name !== "string") throw new Error("Invalid case name");
+    if (
+      entry.kind !== undefined &&
+      entry.kind !== null &&
+      entry.kind !== "builtins-only" &&
+      entry.kind !== "needs-commands"
+    )
+      throw new Error("Invalid case kind");
+    if (
+      entry.excluded !== undefined &&
+      entry.excluded !== null &&
+      typeof entry.excluded !== "string"
+    )
+      throw new Error("Invalid case exclusion");
+    if (entry.needs !== undefined && entry.needs !== null && !Array.isArray(entry.needs))
+      throw new Error("Invalid case commands");
+    const needs = entry.needs?.map((need: unknown) => {
+      if (typeof need !== "string") throw new Error("Invalid case command");
+      return need;
+    });
+    return {
+      corpus: entry.corpus,
+      file: entry.file,
+      line: entry.line,
+      name: entry.name,
+      kind: entry.kind ?? undefined,
+      excluded: entry.excluded ?? undefined,
+      needs,
+    };
+  });
+}
+
+interface BrushSuite {
+  cases: Record<string, unknown>[];
+  commonTestFiles: unknown;
+}
+
+function parseBrushSuite(value: unknown): BrushSuite {
+  if (!isRecord(value)) throw new Error("Invalid Brush compatibility suite");
+  if (value.cases !== undefined && value.cases !== null && !Array.isArray(value.cases))
+    throw new Error("Invalid Brush case list");
+  const cases = (value.cases ?? []).map((entry: unknown) => {
+    if (!isRecord(entry)) throw new Error("Invalid Brush compatibility case");
+    if (entry.name !== undefined && entry.name !== null && typeof entry.name !== "string")
+      throw new Error("Invalid Brush case name");
+    if (entry.stdin !== undefined && entry.stdin !== null && typeof entry.stdin !== "string")
+      throw new Error("Invalid Brush case source");
+    return entry;
+  });
+  return { cases, commonTestFiles: value.common_test_files };
+}
 
 const root = resolve(import.meta.dirname, "..");
-const pins = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
+const rawPins: unknown = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
+validatePins(rawPins);
+const pins: Pins = rawPins;
 const mode = process.env.BASH_COMPAT_MODE ?? "live";
 if (!["live", "capture", "frozen"].includes(mode))
   throw new Error(`Unknown compatibility mode: ${mode}`);
@@ -41,7 +265,7 @@ const baselineFile = resolve(
   root,
   process.env.BASH_COMPAT_BASELINE ?? "docs/evidence/own-shell-baseline.json",
 );
-const sourceFiles = {};
+const sourceFiles: Partial<Record<Corpus, Record<string, string>>> = {};
 const brushCorpus = resolve(root, process.env.BASH_COMPAT_BRUSH_DIR ?? ".sources/brush");
 const bashkitCorpus = resolve(root, process.env.BASH_COMPAT_BASHKIT_DIR ?? ".sources/bashkit");
 const jobs = Number(
@@ -59,7 +283,7 @@ const bashPath = process.env.BASH_COMPAT_BASH ?? "/usr/bin/bash";
 const virtualTmp = "/tmp/spec";
 const virtualHome = "/home/user";
 
-const engines = {
+const engines: Record<EngineName, { modulePath: string }> = {
   "own-shell": {
     modulePath: resolve(
       root,
@@ -68,9 +292,13 @@ const engines = {
     ),
   },
 };
-const engineNames = process.env.BASH_COMPAT_ENGINES?.split(",") ?? ["own-shell"];
-if (!engineNames.length || engineNames.some((name) => !(name in engines)))
-  throw new Error(`Unknown compatibility engines: ${engineNames.join(",")}`);
+function isEngineName(name: string): name is EngineName {
+  return name in engines;
+}
+const requestedEngines = process.env.BASH_COMPAT_ENGINES?.split(",") ?? ["own-shell"];
+if (!requestedEngines.length || requestedEngines.some((name) => !isEngineName(name)))
+  throw new Error(`Unknown compatibility engines: ${requestedEngines.join(",")}`);
+const engineNames = requestedEngines.filter(isEngineName);
 if (
   !Number.isInteger(jobs) ||
   jobs < 1 ||
@@ -350,16 +578,16 @@ const spotSetup =
 const scratchRoot = process.env.BASH_COMPAT_SCRATCH ?? process.env.RUNNER_TEMP ?? "/work/tmp";
 await mkdir(scratchRoot, { recursive: true });
 const scratch = await mkdtemp(resolve(scratchRoot, "bash-web-compat-"));
-const pools = [];
-const activeChildren = new Map();
+const pools: Pool[] = [];
+const activeChildren: ActiveChildren = new Map();
 const runShell = createShellRunner({ scratch, timeoutMs, activeChildren });
 let cancelled = false;
-let shutdown = Promise.resolve();
+let shutdown: Promise<unknown> = Promise.resolve();
 const killAll = () => {
   for (const kill of activeChildren.keys()) kill();
 };
 const closePools = () => Promise.allSettled(pools.map((pool) => pool.close()));
-const stop = (status) => {
+const stop = (status: number) => {
   cancelled = true;
   process.exitCode = status;
   killAll();
@@ -419,7 +647,7 @@ async function main() {
   if (cancelled) return;
   log("bash oracle done");
 
-  const spots = spotChecks.map(([name, code]) => ({ name, code: spotSetup + code }));
+  const spots: SpotCheck[] = spotChecks.map(([name, code]) => ({ name, code: spotSetup + code }));
   await mapLimit(spots, jobs, async (spot) => {
     if (cancelled) return;
     spot.bash = await runShell(bashPath, spot.code, fullPath);
@@ -431,7 +659,7 @@ async function main() {
   ).sort();
   const inventoryScript = `for n in ${inventoryNames.map(shellQuote).join(" ")}; do command -v "$n" >/dev/null 2>&1 && echo "$n"; done`;
 
-  const inventories = {};
+  const inventories: Record<EngineName, string[]> = { "own-shell": [] };
   for (const engine of engineNames) {
     if (cancelled) return;
     const pool = new Pool(engine, jobs);
@@ -454,11 +682,11 @@ async function main() {
       const actual = await pool.run(spot.code);
       if (cancelled) return;
       spot.results ??= {};
-      spot.results[engine] = same(spot.bash, normalizeResult(actual))
-        ? "pass"
-        : actual.timeout
-          ? "timeout"
-          : "fail";
+      if (!spot.bash) throw new Error(`Missing Bash result for ${spot.name}`);
+      let outcome = "fail";
+      if (same(spot.bash, normalizeResult(actual))) outcome = "pass";
+      else if (actual.timeout) outcome = "timeout";
+      spot.results[engine] = outcome;
     });
     await pool.close();
     if (cancelled) return;
@@ -480,7 +708,7 @@ async function main() {
   log(`wrote ${output}`);
 }
 
-async function prepareCorpus() {
+async function prepareCorpus(): Promise<string> {
   const pin = pins.oils;
   const destination = resolve(root, ".sources/oils");
   const marker = resolve(destination, ".revision");
@@ -492,6 +720,7 @@ async function prepareCorpus() {
     );
     if (!response.ok) throw new Error(`Oils source download failed: ${response.status}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
+    if (typeof pin.archiveSha256 !== "string") throw new Error("Missing Oils archive checksum");
     if (createHash("sha256").update(bytes).digest("hex") !== pin.archiveSha256)
       throw new Error("Oils source archive checksum mismatch");
     const archive = resolve(scratch, "oils.tar.gz");
@@ -518,8 +747,9 @@ function prepareEngines() {
   buildWasiShell(["--workspace"]);
 }
 
-async function loadOilsCases(corpus) {
+async function loadOilsCases(corpus: string | undefined): Promise<CompatCase[]> {
   if (!corpusNames.includes("oils")) return [];
+  if (!corpus) throw new Error("Oils corpus was not prepared");
   const listed = new Map(
     Object.entries(categories).flatMap(([category, files]) =>
       files.map((file) => [file, category]),
@@ -536,7 +766,7 @@ async function loadOilsCases(corpus) {
     if (!isOils && /\bbash\b/.test(compare) && !known.has(name))
       throw new Error(`Unclassified bash spec file: ${name}`);
   }
-  const cases = [];
+  const cases: CompatCase[] = [];
   for (const [file, category] of listed) {
     if (onlyFiles && !onlyFiles.includes(file)) continue;
     const text = await corpusText(
@@ -558,7 +788,7 @@ async function loadOilsCases(corpus) {
 
 // Secondary signal: Brush's own bash-comparison cases. Only cases defined by a script alone
 // are used; cases with arguments, files, environment, terminals or skips are left out.
-async function loadBrushCases() {
+async function loadBrushCases(): Promise<CompatCase[]> {
   if (!corpusNames.includes("brush-suite")) return [];
   const directory = resolve(brushCorpus, "brush-shell/tests/cases/compat");
   const plain = new Set([
@@ -569,23 +799,25 @@ async function loadBrushCases() {
     "min_oracle_version",
     "timeout_in_seconds",
   ]);
-  const cases = [];
+  const cases: CompatCase[] = [];
   const files = (await readdir(directory, { recursive: true }))
     .filter((name) => name.endsWith(".yaml"))
     .sort();
   const { parse } = await import("yaml");
   for (const file of files) {
-    const suite = parse(await corpusText("brush-suite", file, resolve(directory, file)));
-    for (const [index, entry] of (suite.cases ?? []).entries()) {
+    const suite = parseBrushSuite(
+      parse(await corpusText("brush-suite", file, resolve(directory, file))),
+    );
+    for (const [index, entry] of suite.cases.entries()) {
       const extra = Object.keys(entry).filter((key) => !plain.has(key));
       cases.push({
         corpus: "brush-suite",
         file: file.replace(/\.yaml$/, ""),
         line: index + 1,
-        name: entry.name ?? `case ${index + 1}`,
-        code: entry.stdin ?? "",
+        name: typeof entry.name === "string" ? entry.name : `case ${index + 1}`,
+        code: typeof entry.stdin === "string" ? entry.stdin : "",
         excluded:
-          !entry.stdin || suite.common_test_files || extra.length
+          !entry.stdin || suite.commonTestFiles || extra.length
             ? "needs Brush harness arguments, files, environment, terminal or a skip marker"
             : undefined,
       });
@@ -596,9 +828,9 @@ async function loadBrushCases() {
 
 // Secondary signal: Bashkit's own bash spec cases, parsed like its spec_runner.rs.
 // Files ported from Oils or just-bash are left out: they duplicate other corpora.
-function parseBashkitCases(file, lines) {
-  const cases = [];
-  let current;
+function parseBashkitCases(file: string, lines: readonly string[]): CompatCase[] {
+  const cases: CompatCase[] = [];
+  let current: CompatCase | undefined;
   for (const [index, line] of lines.entries()) {
     if (line.startsWith("### ")) {
       const directive = line.slice(4).trim();
@@ -625,14 +857,14 @@ function parseBashkitCases(file, lines) {
   return cases;
 }
 
-async function loadBashkitCases() {
+async function loadBashkitCases(): Promise<CompatCase[]> {
   if (!corpusNames.includes("bashkit-suite")) return [];
   const directory = resolve(bashkitCorpus, "crates/bashkit/tests/spec_cases/bash");
   const files = (await readdir(directory))
     .filter((name) => name.endsWith(".test.sh"))
     .filter((name) => !name.startsWith("oils-") && !name.includes("just-bash"))
     .sort();
-  const cases = [];
+  const cases: CompatCase[] = [];
   for (const file of files) {
     const lines = (await corpusText("bashkit-suite", file, resolve(directory, file))).split("\n");
     cases.push(...parseBashkitCases(file, lines));
@@ -643,11 +875,11 @@ async function loadBashkitCases() {
 
 // Port of the tokenizer in Oils test/sh_spec.py: comment lines are dropped from code,
 // blank lines are kept once code has started, and `## key: value` lines end the code.
-function parseSpecFile(text) {
+function parseSpecFile(text: string): ParsedCase[] {
   const keyValue = /^##\s+(?:(?:OK(?:-\d)?|BUG(?:-\d)?|N-I)\s+[\w+/]+\s+)?([\w-]+):\s*(.*)$/;
   const lines = text.split(/(?<=\n)/);
-  const cases = [];
-  let current;
+  const cases: ParsedCase[] = [];
+  let current: ParsedCase | undefined;
   let state = "header";
   let resume = "after-code";
   for (const [index, line] of lines.entries()) {
@@ -662,6 +894,7 @@ function parseSpecFile(text) {
       if (/^##\s+END/.test(line)) state = resume;
       continue;
     }
+    if (!current) throw new Error("Spec case content has no case header");
     const metadata = keyValue.exec(line);
     if (metadata) {
       // Metadata may precede the code; metadata after code ends it.
@@ -679,32 +912,33 @@ function parseSpecFile(text) {
   return cases.filter((item) => item.code);
 }
 
-function normalizeResult(actual) {
+function normalizeResult<T extends BufferedResult>(actual: T): T {
   return normalize(actual, [
     [virtualTmp, "$TMP"],
     [virtualHome, "$HOME"],
   ]);
 }
 
-function same(expected, actual) {
+function same(
+  expected: Pick<BufferedResult, "status" | "stdout">,
+  actual: Pick<BufferedResult, "status" | "stdout">,
+) {
   return expected.status === actual.status && expected.stdout.equals(actual.stdout);
 }
 
-function judge(item, raw, available) {
+function judge(item: CompatCase, raw: PoolResult, available: ReadonlySet<string>): JudgedResult {
   const actual = normalizeResult(raw);
+  if (!item.bash) throw new Error(`Missing Bash result for ${caseId(item)}`);
   if (!actual.timeout && !actual.crash && same(item.bash, actual))
     return {
       outcome: "pass",
       stderrAgrees: !item.bash.stderr.length === !actual.stderr.length,
     };
   const missing = (item.needs ?? []).filter((name) => !available.has(name));
-  const outcome = actual.timeout
-    ? "timeout"
-    : actual.crash
-      ? "crash"
-      : missing.length
-        ? "missing-command"
-        : "fail";
+  let outcome: Outcome = "fail";
+  if (actual.timeout) outcome = "timeout";
+  else if (actual.crash) outcome = "crash";
+  else if (missing.length) outcome = "missing-command";
   return {
     outcome,
     missing: missing.length ? missing : undefined,
@@ -715,32 +949,62 @@ function judge(item, raw, available) {
   };
 }
 
-function clip(bytes, limit = 240) {
+function clip(bytes: Buffer, limit = 240) {
   const text = bytes.toString("utf8");
   return text.length > limit ? text.slice(0, limit) + "…" : text;
 }
 
-function shellQuote(value) {
+function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function optionalBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new Error(`Invalid compatibility worker ${key}`);
+  return value;
+}
+
+function parseWorkerResult(value: unknown, id: number): PoolResult | null {
+  if (!isRecord(value) || value.id !== id) return null;
+  if (!(value.stdout instanceof Uint8Array) || !(value.stderr instanceof Uint8Array))
+    throw new Error("Invalid compatibility worker output");
+  if (value.status !== undefined && typeof value.status !== "number")
+    throw new Error("Invalid compatibility worker status");
+  if (value.crash !== undefined && typeof value.crash !== "string")
+    throw new Error("Invalid compatibility worker crash");
+  return {
+    stdout: Buffer.from(value.stdout),
+    stderr: Buffer.from(value.stderr),
+    status: value.status,
+    crash: value.crash,
+    timeout: optionalBoolean(value, "timeout"),
+    outputLimit: optionalBoolean(value, "outputLimit"),
+    cancelled: optionalBoolean(value, "cancelled"),
+    dead: optionalBoolean(value, "dead"),
+  };
+}
+
 class Pool {
-  constructor(engine, size) {
+  private readonly engine: EngineName;
+  private idle: Worker[] = [];
+  private readonly waiting: ((worker: Worker | null) => void)[] = [];
+  private readonly workers = new Set<Worker>();
+  private readonly size: number;
+  private sequence = 0;
+  private closed = cancelled;
+  private closing: Promise<void> = Promise.resolve();
+
+  constructor(engine: EngineName, size: number) {
     this.engine = engine;
-    this.idle = [];
-    this.waiting = [];
-    this.workers = new Set();
     this.size = size;
-    this.sequence = 0;
-    this.closed = cancelled;
-    this.closing = Promise.resolve();
   }
 
-  async spawn() {
+  async spawn(): Promise<Worker | null> {
     if (this.closed) return null;
     const worker = new Worker(resolve(import.meta.dirname, "bash-compat-worker.ts"), {
       workerData: {
-        engine: this.engine.startsWith("bashkit") ? "bashkit" : this.engine,
+        engine: this.engine,
         modulePath: engines[this.engine].modulePath,
         scratch,
         fixtureDirectory: resolve(
@@ -763,13 +1027,13 @@ class Pool {
     worker.stdout.resume();
     worker.stderr.resume();
     this.workers.add(worker);
-    await new Promise((ready, fail) => {
+    await new Promise<void>((ready, fail) => {
       const onReady = () => {
         worker.off("error", fail);
         worker.off("exit", onExit);
         ready();
       };
-      const onExit = (code) => fail(new Error(`worker exited before ready: ${code}`));
+      const onExit = (code: number) => fail(new Error(`worker exited before ready: ${code}`));
       worker.once("message", onReady);
       worker.once("error", fail);
       worker.once("exit", onExit);
@@ -781,9 +1045,9 @@ class Pool {
     return worker;
   }
 
-  async acquire() {
+  async acquire(): Promise<Worker | null> {
     if (this.closed) return null;
-    if (this.idle.length) return this.idle.pop();
+    if (this.idle.length) return this.idle.pop() ?? null;
     if (this.workers.size < this.size) return this.spawn();
     return new Promise((resume) => {
       if (this.closed) resume(null);
@@ -791,14 +1055,14 @@ class Pool {
     });
   }
 
-  release(worker) {
+  release(worker: Worker) {
     if (this.closed) return;
     const next = this.waiting.shift();
     if (next) next(worker);
     else this.idle.push(worker);
   }
 
-  async replace(worker) {
+  async replace(worker: Worker) {
     this.workers.delete(worker);
     await worker.terminate();
     if (this.closed) return;
@@ -806,13 +1070,13 @@ class Pool {
     if (next) next(await this.spawn());
   }
 
-  async run(code) {
+  async run(code: string): Promise<PoolResult> {
     const worker = await this.acquire();
     if (!worker)
       return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), cancelled: true, dead: true };
     const id = ++this.sequence;
-    const result = await new Promise((done) => {
-      const finish = (value) => {
+    const result = await new Promise<PoolResult>((done) => {
+      const finish = (value: PoolResult) => {
         clearTimeout(timer);
         worker.off("message", onMessage);
         worker.off("error", onError);
@@ -820,16 +1084,13 @@ class Pool {
         done(value);
       };
       const empty = { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
-      const onMessage = (message) => {
-        if (message.id === id)
-          finish({
-            ...message,
-            stdout: Buffer.from(message.stdout),
-            stderr: Buffer.from(message.stderr),
-          });
+      const onMessage = (message: unknown) => {
+        const value = parseWorkerResult(message, id);
+        if (value) finish(value);
       };
-      const onError = (error) => finish({ ...empty, crash: String(error), dead: true });
-      const onExit = (code) => finish({ ...empty, crash: `worker exited ${code}`, dead: true });
+      const onError = (error: unknown) => finish({ ...empty, crash: String(error), dead: true });
+      const onExit = (code: number) =>
+        finish({ ...empty, crash: `worker exited ${code}`, dead: true });
       const timer = setTimeout(() => finish({ ...empty, timeout: true, dead: true }), timeoutMs);
       worker.on("message", onMessage);
       worker.on("error", onError);
@@ -841,7 +1102,7 @@ class Pool {
     return result;
   }
 
-  async close() {
+  async close(): Promise<void> {
     if (this.closed) return this.closing;
     this.closed = true;
     for (const resume of this.waiting.splice(0)) resume(null);
@@ -853,7 +1114,11 @@ class Pool {
   }
 }
 
-async function mapLimit(items, limit, task) {
+async function mapLimit<T>(
+  items: readonly T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<void>,
+) {
   let next = 0;
   let stopped = false;
   const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -873,19 +1138,29 @@ async function mapLimit(items, limit, task) {
   if (failure) throw failure.reason;
 }
 
-function rate(passed, total) {
+function rate(passed: number, total: number) {
   return total ? Math.round((1000 * passed) / total) / 10 : null;
 }
 
-function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames }) {
+interface EvidenceInput {
+  bashVersion: string;
+  cases: CompatCase[];
+  spots: SpotCheck[];
+  inventories: Record<EngineName, string[]>;
+  inventoryNames: string[];
+}
+
+function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames }: EvidenceInput) {
   const scored = cases.filter((item) => !item.excluded);
   const builtins = scored.filter((item) => item.kind === "builtins-only");
-  const summarize = (items) =>
+  const summarize = (items: CompatCase[]) =>
     Object.fromEntries(
       engineNames.map((engine) => {
-        const outcomes = {};
+        const outcomes: Record<string, number> = {};
         for (const item of items) {
-          const outcome = item.results[engine].outcome;
+          const result = item.results?.[engine];
+          if (!result) throw new Error(`Missing ${engine} result for ${caseId(item)}`);
+          const outcome = result.outcome;
           outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
         }
         return [
@@ -894,9 +1169,12 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
         ];
       }),
     );
-  const count = (items, key) => {
-    const counts = {};
-    for (const item of items) counts[item[key]] = (counts[item[key]] ?? 0) + 1;
+  const count = (items: CompatCase[]) => {
+    const counts: Record<string, number> = {};
+    for (const item of items) {
+      if (!item.excluded) continue;
+      counts[item.excluded] = (counts[item.excluded] ?? 0) + 1;
+    }
     return counts;
   };
   const oils = builtins.filter((item) => item.corpus === "oils");
@@ -908,10 +1186,7 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
         name,
         {
           cases: all.length,
-          exclusions: count(
-            all.filter((item) => item.excluded),
-            "excluded",
-          ),
+          exclusions: count(all.filter((item) => item.excluded)),
           builtinsOnly: summarize(builtins.filter((item) => item.corpus === name)),
           needsCommands: summarize(kept.filter((item) => item.kind === "needs-commands")),
         },
@@ -957,7 +1232,7 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
             [["cases", items.length]].concat(
               engineNames.map((engine) => [
                 engine,
-                items.filter((item) => item.results[engine].outcome === "pass").length,
+                items.filter((item) => judgedFor(item, engine).outcome === "pass").length,
               ]),
             ),
           ),
@@ -966,10 +1241,10 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
     ),
     stderrAgreementOnOilsPasses: Object.fromEntries(
       engineNames.map((engine) => {
-        const passes = oils.filter((item) => item.results[engine].outcome === "pass");
+        const passes = oils.filter((item) => judgedFor(item, engine).outcome === "pass");
         return [
           engine,
-          rate(passes.filter((item) => item.results[engine].stderrAgrees).length, passes.length),
+          rate(passes.filter((item) => judgedFor(item, engine).stderrAgrees).length, passes.length),
         ];
       }),
     ),
@@ -981,6 +1256,7 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
     // Oils cases keep clipped output for every failure. Secondary corpora keep outcomes only.
     cases: cases.map((item) => {
       const detailed = item.corpus === "oils";
+      const bash = item.bash;
       return {
         corpus: item.corpus,
         file: item.file,
@@ -991,21 +1267,16 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
         needs: item.needs?.length ? item.needs : undefined,
         bash:
           detailed &&
+          bash &&
           item.results &&
           Object.values(item.results).some((value) => value.outcome !== "pass")
-            ? { status: item.bash.status, stdout: clip(item.bash.stdout) }
+            ? { status: bash.status, stdout: clip(bash.stdout) }
             : undefined,
         results: item.results
           ? Object.fromEntries(
               Object.entries(item.results).map(([engine, value]) => [
                 engine,
-                value.outcome === "pass"
-                  ? "pass"
-                  : detailed
-                    ? value
-                    : value.crash
-                      ? { outcome: value.outcome, crash: value.crash }
-                      : value.outcome,
+                evidenceResult(value, detailed),
               ]),
             )
           : undefined,
@@ -1014,10 +1285,13 @@ function buildEvidence({ bashVersion, cases, spots, inventories, inventoryNames 
   };
 }
 
-function renderSummary(evidence) {
+function renderSummary(evidence: ReturnType<typeof buildEvidence>) {
   const header = `| Category | Cases | ${engineNames.join(" | ")} |`;
   const divider = `| --- | ---: | ${engineNames.map(() => "---:").join(" | ")} |`;
-  const row = (label, summary) => {
+  const row = (
+    label: string,
+    summary: ReturnType<typeof buildEvidence>["oilsByCategory"][string],
+  ) => {
     const first = summary[engineNames[0]];
     return `| ${label} | ${first.cases} | ${engineNames
       .map((engine) => (summary[engine].passRate === null ? "-" : `${summary[engine].passRate}%`))
@@ -1033,19 +1307,32 @@ function renderSummary(evidence) {
   return [header, divider].concat(rows, corpusRows).join("\n");
 }
 
-function log(message) {
+function log(message: string) {
   console.error(`[bash-compat] ${message}`);
 }
 
-async function corpusText(corpus, file, path) {
+async function corpusText(corpus: Corpus, file: string, path: string) {
   const bytes = await readFile(path);
   (sourceFiles[corpus] ??= {})[file] = bytesDigest(bytes);
   return bytes.toString("utf8");
 }
-function caseId(item) {
+function caseId(item: { corpus: string; file: string; line?: number }) {
   return `${item.corpus}:${item.file}:${item.line}`;
 }
-const packResult = (result) => ({
+
+function judgedFor(item: CompatCase, engine: EngineName): JudgedResult {
+  const result = item.results?.[engine];
+  if (!result) throw new Error(`Missing ${engine} result for ${caseId(item)}`);
+  return result;
+}
+
+function evidenceResult(value: JudgedResult, detailed: boolean) {
+  if (value.outcome === "pass") return "pass";
+  if (detailed) return value;
+  if (value.crash) return { outcome: value.outcome, crash: value.crash };
+  return value.outcome;
+}
+const packResult = (result: ShellResult): PackedResult => ({
   status: result.status,
   stdout: result.stdout.toString("base64"),
   stderr: result.stderr.toString("base64"),
@@ -1080,23 +1367,24 @@ function runtimeEnvironment() {
     scoring: "stdout bytes and exit status; stderr retained separately, not scored",
   };
 }
-async function captureOracle(cases, helperDirectory, bashVersion) {
+async function captureOracle(cases: CompatCase[], helperDirectory: string, bashVersion: string) {
   if (process.version !== runtimeEnvironment().nodeVersion)
     throw new Error(`Capture requires ${runtimeEnvironment().nodeVersion}, got ${process.version}`);
   if (!bashVersion.startsWith("GNU bash, version 5.3.15(1)-release"))
     throw new Error(`Expected GNU bash 5.3.15(1)-release, got ${bashVersion}`);
-  const previous = JSON.parse(
+  const previous: unknown = JSON.parse(
     await readFile(resolve(root, "docs/evidence/bash-compatibility.json"), "utf8"),
   );
-  const classified = new Map(previous.cases.map((item) => [caseId(item), item]));
+  const classified = new Map(parseClassification(previous).map((item) => [caseId(item), item]));
   if (classified.size !== cases.length)
     throw new Error("Pinned corpus case count differs from published classification");
   let done = 0;
-  const records = await Promise.all(
+  const records: CaptureRecord[] = await Promise.all(
     cases.map(async (item) => {
       const old = classified.get(caseId(item));
       if (
         !old ||
+        item.line === undefined ||
         old.name !== item.name ||
         Boolean(old.excluded?.startsWith("needs Brush")) !==
           Boolean(item.excluded?.startsWith("needs Brush"))
@@ -1136,37 +1424,38 @@ async function captureOracle(cases, helperDirectory, bashVersion) {
     if (++done % 250 === 0) log(`fresh bash oracle: ${done}`);
   });
   if (cancelled) return;
-  const oracle = sealOracle({
-    schema: 1,
-    oracle: {
-      version: bashVersion,
-      executableSha256: bytesDigest(await readFile(bashPath)),
-      captureNode: process.version,
-      stdoutTransport: bashStdoutTransport,
-      stderrTransport: bashStderrTransport,
-      capturePlatform: process.platform,
-      captureArch: process.arch,
-      sandbox:
-        "bubblewrap unshare-all; /usr read-only; private case home/tmp; no network or owner files",
-      classification:
-        "Published docs/evidence/bash-compatibility.json builtins-only membership, fresh observations; external and excluded cases retained as skips",
-      classificationSha256: bytesDigest(
-        await readFile(resolve(root, "docs/evidence/bash-compatibility.json")),
-      ),
-      helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.ts"))),
-    },
-    environment: runtimeEnvironment(),
-    sources: {
-      oils: { ...pins.oils, files: sourceFiles.oils },
-      "brush-suite": { revision: pins.brush.revision, files: sourceFiles["brush-suite"] },
-      "bashkit-suite": {
-        revision: pins.bashkitTerminal.revision,
-        files: sourceFiles["bashkit-suite"],
+  const oracle = validatedOracle(
+    sealOracle({
+      schema: 1,
+      oracle: {
+        version: bashVersion,
+        executableSha256: bytesDigest(await readFile(bashPath)),
+        captureNode: process.version,
+        stdoutTransport: bashStdoutTransport,
+        stderrTransport: bashStderrTransport,
+        capturePlatform: process.platform,
+        captureArch: process.arch,
+        sandbox:
+          "bubblewrap unshare-all; /usr read-only; private case home/tmp; no network or owner files",
+        classification:
+          "Published docs/evidence/bash-compatibility.json builtins-only membership, fresh observations; external and excluded cases retained as skips",
+        classificationSha256: bytesDigest(
+          await readFile(resolve(root, "docs/evidence/bash-compatibility.json")),
+        ),
+        helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.ts"))),
       },
-    },
-    cases: records,
-  });
-  verifyOracle(oracle);
+      environment: runtimeEnvironment(),
+      sources: {
+        oils: { ...pins.oils, files: sourceFiles.oils },
+        "brush-suite": { revision: pins.brush.revision, files: sourceFiles["brush-suite"] },
+        "bashkit-suite": {
+          revision: pins.bashkitTerminal.revision,
+          files: sourceFiles["bashkit-suite"],
+        },
+      },
+      cases: records,
+    }),
+  );
   await writeRows(oracleFile, oracle);
   log(`wrote fresh oracle ${oracleFile}`);
   console.log(
@@ -1182,7 +1471,7 @@ async function captureOracle(cases, helperDirectory, bashVersion) {
     ),
   );
 }
-async function writeRows(path, value) {
+async function writeRows<T extends { cases: unknown[] }>(path: string, value: T) {
   const rows = value.cases.map((item) => JSON.stringify(item)).join(",\n");
   await writeFile(
     path,
@@ -1193,8 +1482,7 @@ async function writeRows(path, value) {
   );
 }
 async function runFrozen() {
-  const oracle = JSON.parse(await readFile(oracleFile, "utf8"));
-  verifyOracle(oracle);
+  const oracle = validatedOracle(JSON.parse(await readFile(oracleFile, "utf8")));
   if (pins.shellScoreboard?.oracleSha256 !== bytesDigest(await readFile(oracleFile)))
     throw new Error("Fixed oracle checksum differs from sources.lock.json");
   if (
@@ -1208,12 +1496,12 @@ async function runFrozen() {
     process.version !== oracle.environment.nodeVersion
   )
     throw new Error("incomparable runtime environment");
-  const baselines = [];
+  const baselines: { label: string; score: unknown }[] = [];
   if (process.env.BASH_COMPAT_RECORD !== "1" && process.env.BASH_COMPAT_RAW !== "1") {
-    const committed = JSON.parse(await readFile(baselineFile, "utf8"));
+    const committed: unknown = JSON.parse(await readFile(baselineFile, "utf8"));
     baselines.push({ label: "committed baseline", score: committed });
     if (cancelled) return;
-    let target;
+    let target: unknown;
     try {
       target = await targetBranchBaseline(root, process.env.BASH_COMPAT_BASE_REF, oracle);
     } catch (error) {
@@ -1222,13 +1510,16 @@ async function runFrozen() {
     }
     if (cancelled) return;
     if (target) baselines.push({ label: "target branch baseline", score: target });
-    for (const baseline of baselines) validateScore(oracle, baseline.score);
   }
+  const validatedBaselines = baselines.map((baseline) => ({
+    label: baseline.label,
+    score: validatedScore(oracle, baseline.score),
+  }));
   if (cancelled) return;
   prepareEngines();
   const pool = new Pool("own-shell", jobs);
   pools.push(pool);
-  const cases = oracle.cases.map((item) => ({
+  const cases: ScoreCase[] = oracle.cases.map((item) => ({
     id: item.id,
     corpus: item.corpus,
     category: item.category,
@@ -1242,13 +1533,10 @@ async function runFrozen() {
     const actual = normalizeResult(await pool.run(item.code));
     if (cancelled) return;
     const expected = { status: item.bash.status, stdout: Buffer.from(item.bash.stdout, "base64") };
-    const outcome = actual.timeout
-      ? "timeout"
-      : actual.crash
-        ? "crash"
-        : same(expected, actual)
-          ? "pass"
-          : "fail";
+    let outcome = "fail";
+    if (actual.timeout) outcome = "timeout";
+    else if (actual.crash) outcome = "crash";
+    else if (same(expected, actual)) outcome = "pass";
     cases[index] = {
       ...cases[index],
       outcome,
@@ -1258,7 +1546,7 @@ async function runFrozen() {
   });
   await pool.close();
   if (cancelled) return;
-  const score = {
+  const score: Score = {
     identity: oracle.identity,
     engine: "own-shell",
     counts: summarize({ cases }),
@@ -1268,8 +1556,10 @@ async function runFrozen() {
   console.log(JSON.stringify({ identity: score.identity, counts: summarize(score) }, null, 2));
   if (process.env.BASH_COMPAT_OUT) await writeRows(output, score);
   let passed = true;
-  for (const baseline of baselines) {
-    const delta = compareScores(baseline.score, score);
+  for (const baseline of validatedBaselines) {
+    const delta: unknown = compareScores(baseline.score, score);
+    if (!isRecord(delta) || typeof delta.ok !== "boolean")
+      throw new Error("Invalid score comparison");
     console.log(JSON.stringify({ baseline: baseline.label, ...delta }, null, 2));
     passed &&= delta.ok;
   }
