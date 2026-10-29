@@ -36,3 +36,7 @@ The coordinator assigned Enter/interrupt from an earlier wrapped row, lines tall
 The UTF-8 cap regression reproduces on A1 with `valid_up_to: 65535, error_len: None`. Both ordinary insertion and paste now reserve a full scalar's bytes when seeing its leading byte. A scalar that cannot fit is dropped, including later continuation bytes. Paste overflow remains latched until its end delimiter and rings once.
 
 The first WASI build failed because cmake and ninja were not on PATH. They are supplied through `uv run --no-project --with cmake --with ninja`, using the shared `/work/cache/uv`, without changing system configuration. The actual build still uses the pinned Waffle builder and WASI SDK 34.0. The Mac was checked twice and was reserved by another agent before A2 could acquire its lock. No Mac files or processes were created.
+
+## Integration checkpoint
+
+A1 #173 merged as `b8d7d16b600968523ac6165275852c2a552014db`. A2 merged `origin/main` without force-push in `eb6907d6`. The merge conflicted because #173 was squashed. `git diff 3bd992b9778f0c1f267ce269cd21c983c09b7d69 origin/main -- shell/engine/src/terminal.rs` was empty, so the A2 terminal file was kept intact. `git diff 9357c7cd eb6907d6 --stat` was empty. There was no source change from this history alignment and no wait for main CI.
