@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 import {
   api,
   prepareWaffleDirectories,
@@ -8,14 +9,18 @@ import {
   waffleFixture,
 } from "./own-shell-waffle-fixture.ts";
 
-async function invoke(context, argv, files) {
+async function invoke(
+  context: TestContext,
+  argv: string[],
+  files: readonly (readonly [string, string | Buffer])[],
+) {
   const fixture = await waffleFixture(context);
   await prepareWaffleDirectories(fixture.runtime, ["/workdir", "/other"]);
   for (const [path, bytes] of files)
     await fixture.runtime.filesystem.writeFile(path, new Uint8Array(Buffer.from(bytes)));
   await fixture.runtime.filesystem.drain();
-  const stdout = [];
-  const stderr = [];
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
   const status = await runRoot(
     fixture.runtime,
     api,
@@ -69,7 +74,7 @@ for (const [name, status] of [
   ["missing.sh", 127],
   ["", 127],
   ["/other", 126],
-]) {
+] as const) {
   test(`WASI named open failure ${JSON.stringify(name)}`, { timeout: 15000 }, async (context) => {
     const result = await invoke(context, ["sh", name], [["/other/missing.sh", "echo WRONG"]]);
     assert.equal(result.status, status);
@@ -81,7 +86,7 @@ for (const [bytes, status, pattern] of [
   [Buffer.from([255]), 2, /invalid UTF-8/],
   [Buffer.from(": " + " ".repeat(256 * 1024 - 2)), 0, /^$/],
   [Buffer.alloc(256 * 1024 + 1, 32), 2, /shell source limit exceeded/],
-]) {
+] as const) {
   test(`WASI named source bounds ${bytes.length} bytes`, { timeout: 15000 }, async (context) => {
     const result = await invoke(context, ["sh", "file.sh"], [["/workdir/file.sh", bytes]]);
     assert.equal(result.status, status);

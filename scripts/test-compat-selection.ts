@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 test("unknown engines fail before source downloads or builds", () => {
-  const result = spawnSync(process.execPath, ["scripts/bash-compat.mjs"], {
+  const result = spawnSync(process.execPath, ["scripts/bash-compat.ts"], {
     encoding: "utf8",
     env: { ...process.env, BASH_COMPAT_MODE: "live", BASH_COMPAT_ENGINES: "typo" },
   });
@@ -13,7 +13,7 @@ test("unknown engines fail before source downloads or builds", () => {
 });
 
 test("a selected non-Oils corpus never prepares Oils or Brush", () => {
-  const result = spawnSync(process.execPath, ["scripts/bash-compat.mjs"], {
+  const result = spawnSync(process.execPath, ["scripts/bash-compat.ts"], {
     encoding: "utf8",
     env: {
       ...process.env,

@@ -3,16 +3,21 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
-export function killGroup(pid, signal) {
+function hasErrorCode(error: unknown, codes: readonly string[]): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  return typeof error.code === "string" && codes.includes(error.code);
+}
+
+export function killGroup(pid: number | undefined, signal: NodeJS.Signals) {
   if (!pid) return;
   try {
     process.kill(-pid, signal);
   } catch (error) {
-    if (error.code !== "ESRCH") throw error;
+    if (!hasErrorCode(error, ["ESRCH"])) throw error;
   }
 }
 
-export async function drainGroup(pid) {
+export async function drainGroup(pid: number | undefined) {
   if (!pid) return;
   killGroup(pid, "SIGKILL");
   const deadline = Date.now() + 10000;
@@ -20,7 +25,7 @@ export async function drainGroup(pid) {
     try {
       process.kill(-pid, 0);
     } catch (error) {
-      if (error.code === "ESRCH") return;
+      if (hasErrorCode(error, ["ESRCH"])) return;
       throw error;
     }
     // Orphaned zombies cannot consume scratch, but live descendants can.
@@ -32,7 +37,7 @@ export async function drainGroup(pid) {
           const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
           return fields[2] === String(pid) && !["Z", "X"].includes(fields[0]);
         } catch (error) {
-          if (["ENOENT", "ESRCH", "EACCES"].includes(error.code)) return false;
+          if (hasErrorCode(error, ["ENOENT", "ESRCH", "EACCES"])) return false;
           throw error;
         }
       }),

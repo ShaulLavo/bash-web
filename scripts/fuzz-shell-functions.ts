@@ -229,21 +229,22 @@ const sourcePath = fileURLToPath(import.meta.url);
 const bashBin = "/usr/bin/bash";
 const oracleVersion = /^GNU bash, version 5\.3\.15(?:\(|\s)/;
 const queue = "/work/platform-production/heavy/current/run.js";
+const processGroupSource = "shell-process-group.ts";
 export const sourceFiles = [
   "fuzz-shell-functions.ts",
   "fuzz-shell-control-flow.mjs",
   "fuzz-shell-results.ts",
-  "shell-process-group.mjs",
+  processGroupSource,
 ];
-export const sourceHashes = () =>
-  Object.fromEntries(
-    sourceFiles.map((name) => [
-      name,
-      createHash("sha256")
-        .update(readFileSync(new URL(name, import.meta.url)))
-        .digest("hex"),
-    ]),
-  );
+export const sourceHashes = () => {
+  const hashes: Record<string, string> = {};
+  for (const name of sourceFiles) {
+    hashes[name] = createHash("sha256")
+      .update(readFileSync(new URL(name, import.meta.url)))
+      .digest("hex");
+  }
+  return hashes;
+};
 export const fingerprint = () =>
   createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex");
 const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";

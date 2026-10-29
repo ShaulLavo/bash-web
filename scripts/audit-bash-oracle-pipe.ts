@@ -4,13 +4,61 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { pythonHelpers } from "./bash-compat-helpers.mjs";
+import { pythonHelpers } from "./bash-compat-helpers.ts";
 import {
   bashStderrTransport,
   bashStdoutTransport,
   createShellRunner,
-} from "./bash-compat-runner.mjs";
+} from "./bash-compat-runner.ts";
+import type { ActiveChildren, ShellResult } from "./bash-compat-runner.ts";
 import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.mjs";
+
+interface PackedResult {
+  status: number;
+  stdout: string;
+  stderr: string;
+  timeout?: boolean;
+  outputLimit?: boolean;
+}
+
+interface OracleCase {
+  id: string;
+  code: string;
+  kind?: string;
+  excluded?: string;
+  bash: PackedResult;
+}
+
+interface Oracle {
+  cases: OracleCase[];
+  environment: { timeoutMs: number };
+  identity: { sources: unknown; caseSet: unknown };
+  oracle: { executableSha256: string; sandbox: string };
+}
+
+interface Observation {
+  id: string;
+  pipe: PackedResult;
+  repeatSha256: string;
+  repeat?: PackedResult;
+  socket: PackedResult;
+  stdoutStatusChanged: boolean;
+  stderrChanged: boolean;
+  transportChanged: boolean;
+  socketMatchesFrozen: boolean;
+  deterministic: boolean;
+  stderrDeterministic: boolean;
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  return error.code === code;
+}
+
+function validatedOracle(value: unknown): Oracle {
+  verifyOracle(value);
+  return value as Oracle;
+}
 
 const root = resolve(import.meta.dirname, "..");
 const oraclePath = resolve(
@@ -26,8 +74,8 @@ const shell = process.env.BASH_COMPAT_BASH ?? "/usr/bin/bash";
 const jobs = Number(process.env.BASH_COMPAT_JOBS ?? 4);
 assert.ok(Number.isInteger(jobs) && jobs >= 1 && jobs <= 32, "jobs must be 1..32");
 const inputStat = await stat(oraclePath);
-const outputStat = await stat(destination).catch((error) => {
-  if (error.code !== "ENOENT") throw error;
+const outputStat = await stat(destination).catch((error: unknown) => {
+  if (!hasErrorCode(error, "ENOENT")) throw error;
   return null;
 });
 assert.ok(
@@ -35,18 +83,17 @@ assert.ok(
   "Audit output must not alias its frozen oracle input",
 );
 const originalBytes = await readFile(oraclePath);
-const oracle = JSON.parse(originalBytes);
-verifyOracle(oracle);
+const oracle = validatedOracle(JSON.parse(originalBytes.toString("utf8")));
 const eligible = oracle.cases.filter((item) => !item.excluded && item.kind === "builtins-only");
 await mkdir(scratchRoot, { recursive: true });
 const scratch = await mkdtemp(resolve(scratchRoot, "audit-"));
-const activeChildren = new Map();
+const activeChildren: ActiveChildren = new Map();
 let cancelled = false;
 const killAll = () => {
   for (const kill of activeChildren.keys()) kill();
 };
 // Signals enter awaited teardown; scratch is never removed ahead of its consumers.
-const stop = (status) => {
+const stop = (status: number) => {
   cancelled = true;
   process.exitCode = status;
   killAll();
@@ -54,21 +101,22 @@ const stop = (status) => {
 process.on("SIGINT", () => stop(130));
 process.on("SIGTERM", () => stop(143));
 process.on("exit", killAll);
-const pack = (value) => ({
+const pack = (value: ShellResult): PackedResult => ({
   status: value.status,
   stdout: value.stdout.toString("base64"),
   stderr: value.stderr.toString("base64"),
   ...(value.timeout ? { timeout: true } : {}),
   ...(value.outputLimit ? { outputLimit: true } : {}),
 });
-const same = (first, second) => first.status === second.status && first.stdout === second.stdout;
-const sameAll = (first, second) =>
+const same = (first: PackedResult, second: PackedResult) =>
+  first.status === second.status && first.stdout === second.stdout;
+const sameAll = (first: PackedResult, second: PackedResult) =>
   same(first, second) &&
   first.stderr === second.stderr &&
   Boolean(first.timeout) === Boolean(second.timeout) &&
   Boolean(first.outputLimit) === Boolean(second.outputLimit);
-const observed = Array.from({ length: eligible.length });
-let workers = [];
+const observed: (Observation | undefined)[] = Array.from({ length: eligible.length });
+let workers: Promise<void>[] = [];
 try {
   const helpers = resolve(scratch, "helpers");
   await mkdir(helpers);
@@ -131,12 +179,14 @@ try {
   });
   await Promise.all(workers);
   assert.ok(!cancelled, "audit interrupted");
+  const completed = observed.filter((item): item is Observation => item !== undefined);
+  assert.equal(completed.length, eligible.length, "audit missing observations");
   assert.equal(
     bytesDigest(await readFile(oraclePath)),
     bytesDigest(originalBytes),
     "audit changed its frozen input",
   );
-  const changed = observed.filter((item) => item.stdoutStatusChanged).map((item) => item.id);
+  const changed = completed.filter((item) => item.stdoutStatusChanged).map((item) => item.id);
   const report = {
     schema: 1,
     createdAt: new Date().toISOString(),
@@ -153,7 +203,7 @@ try {
       stdoutTransport: bashStdoutTransport,
       stderrTransport: bashStderrTransport,
       sandbox: oracle.oracle.sandbox,
-      helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.mjs"))),
+      helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.ts"))),
     },
     environment: oracle.environment,
     sourceIdentity: oracle.identity.sources,
@@ -163,15 +213,15 @@ try {
     eligible: eligible.length,
     skipped: oracle.cases.length - eligible.length,
     changed,
-    transportChanged: observed.filter((item) => item.transportChanged).map((item) => item.id),
-    socketDiffersFromFrozen: observed
+    transportChanged: completed.filter((item) => item.transportChanged).map((item) => item.id),
+    socketDiffersFromFrozen: completed
       .filter((item) => !item.socketMatchesFrozen)
       .map((item) => item.id),
-    nondeterministic: observed.filter((item) => !item.deterministic).map((item) => item.id),
-    stderrNondeterministic: observed
+    nondeterministic: completed.filter((item) => !item.deterministic).map((item) => item.id),
+    stderrNondeterministic: completed
       .filter((item) => !item.stderrDeterministic)
       .map((item) => item.id),
-    incomplete: observed
+    incomplete: completed
       .filter(
         (item) =>
           item.pipe.timeout ||
@@ -182,7 +232,7 @@ try {
           item.socket.outputLimit,
       )
       .map((item) => item.id),
-    cases: observed,
+    cases: completed,
   };
   await writeFile(destination, JSON.stringify(report, null, 2) + "\n");
   console.log(

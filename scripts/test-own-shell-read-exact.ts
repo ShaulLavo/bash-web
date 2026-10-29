@@ -5,7 +5,7 @@ import { liveNodeWorkers } from "./node-worker-host.ts";
 
 const run = await releaseShellRunner();
 
-async function check(script, expected) {
+async function check(script: string, expected: string) {
   const actual = await run(script);
   assert.equal(actual.crash, undefined);
   assert.equal(actual.status, 0, actual.stderr.toString());

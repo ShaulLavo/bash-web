@@ -1,16 +1,22 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
-import { drainGroup, killGroup } from "./shell-process-group.mjs";
+import type { TestContext } from "node:test";
+import { drainGroup, killGroup } from "./shell-process-group.ts";
 
 const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
 
-async function waitFor(check, message, timeout = 10000) {
+async function waitFor<T>(
+  check: () => T | null | undefined | Promise<T | null | undefined>,
+  message: string,
+  timeout = 10000,
+): Promise<T> {
   const deadline = Date.now() + timeout;
   for (;;) {
     const value = await check();
@@ -20,16 +26,88 @@ async function waitFor(check, message, timeout = 10000) {
   }
 }
 
-function fixtureOwner(t) {
-  const owner = { groups: new Set(), messages: [], stderr: [] };
+type OwnerMessage = string | { kind: string; pid?: number };
+
+interface FixtureOwner {
+  groups: Set<number>;
+  messages: OwnerMessage[];
+  stderr: Buffer[];
+  child?: ChildProcess;
+  closed?: Promise<[number | null, NodeJS.Signals | null]>;
+  scratch?: string;
+  start: (body: string, env: NodeJS.ProcessEnv) => ChildProcess;
+  message: (kind: string, timeout?: number) => Promise<OwnerMessage>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function ownerClosed(owner: FixtureOwner) {
+  const closed = owner.closed;
+  assert.ok(closed);
+  return closed;
+}
+
+function ownerMessage(value: unknown): OwnerMessage {
+  if (typeof value === "string") return value;
+  if (!isRecord(value) || typeof value.kind !== "string") throw new Error("Invalid child message");
+  if (value.pid !== undefined && typeof value.pid !== "number")
+    throw new Error("Invalid child pid");
+  return { kind: value.kind, pid: value.pid };
+}
+
+function fixtureOwner(t: TestContext): FixtureOwner {
+  const owner: FixtureOwner = {
+    groups: new Set(),
+    messages: [],
+    stderr: [],
+    start(body, env) {
+      const script = `
+      (async () => {
+        try {
+          ${body}
+          await import(${JSON.stringify(new URL("./bash-compat.ts", import.meta.url).href)});
+        } finally {
+          process.disconnect?.();
+        }
+      })().catch((error) => { console.error(error); process.exitCode = 1; });
+    `;
+      const child = spawn(process.execPath, ["-e", script], {
+        env: { ...process.env, ...env, BASH_COMPAT_SCRATCH: owner.scratch },
+        stdio: ["ignore", "ignore", "pipe", "ipc"],
+      });
+      owner.child = child;
+      owner.closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+      assert.ok(child.stderr);
+      child.stderr.on("data", (chunk: Buffer) => owner.stderr.push(chunk));
+      child.on("message", (value: unknown) => {
+        const message = ownerMessage(value);
+        owner.messages.push(message);
+        if (typeof message !== "string" && message.kind === "deferred" && message.pid !== undefined)
+          owner.groups.add(message.pid);
+      });
+      return child;
+    },
+    message: (kind, timeout) =>
+      waitFor(
+        () =>
+          owner.messages.find(
+            (value) => value === kind || (typeof value !== "string" && value.kind === kind),
+          ),
+        `missing ${kind} message: ${Buffer.concat(owner.stderr)}`,
+        timeout,
+      ),
+  };
   // No pre-existing children or scratch belong to this fixture. Register teardown before setup.
   t.after(async () => {
-    if (owner.child) {
-      if (owner.child.exitCode === null && owner.child.signalCode === null) {
-        if (owner.child.connected) owner.child.send("release", () => {});
-        owner.child.kill("SIGTERM");
+    const child = owner.child;
+    if (child) {
+      if (child.exitCode === null && child.signalCode === null) {
+        if (child.connected) child.send("release", () => {});
+        child.kill("SIGTERM");
       }
-      const timer = setTimeout(() => owner.child.kill("SIGKILL"), 1500).unref();
+      const timer = setTimeout(() => child.kill("SIGKILL"), 1500).unref();
       try {
         await owner.closed;
       } finally {
@@ -40,36 +118,6 @@ function fixtureOwner(t) {
     for (const pid of owner.groups) await drainGroup(pid);
     if (owner.scratch) await rm(owner.scratch, { recursive: true, force: true });
   });
-  owner.start = (body, env) => {
-    const script = `
-      (async () => {
-        try {
-          ${body}
-          await import(${JSON.stringify(new URL("./bash-compat.mjs", import.meta.url).href)});
-        } finally {
-          process.disconnect?.();
-        }
-      })().catch((error) => { console.error(error); process.exitCode = 1; });
-    `;
-    const child = spawn(process.execPath, ["-e", script], {
-      env: { ...process.env, ...env, BASH_COMPAT_SCRATCH: owner.scratch },
-      stdio: ["ignore", "ignore", "pipe", "ipc"],
-    });
-    owner.child = child;
-    owner.closed = once(child, "close");
-    child.stderr.on("data", (chunk) => owner.stderr.push(chunk));
-    child.on("message", (message) => {
-      owner.messages.push(message);
-      if (message?.kind === "deferred") owner.groups.add(message.pid);
-    });
-    return child;
-  };
-  owner.message = (kind, timeout) =>
-    waitFor(
-      () => owner.messages.find((value) => value === kind || value?.kind === kind),
-      `missing ${kind} message: ${Buffer.concat(owner.stderr)}`,
-      timeout,
-    );
   return owner;
 }
 
@@ -133,12 +181,12 @@ test("live capture cancellation holds owned groups until they stop", async (t) =
   assert.equal(child.exitCode, null, "SIGTERM exited before the owned group stopped");
   assert.equal(await readFile(marker, "utf8"), "ready");
   child.send("release");
-  const [status] = await owner.closed;
+  const [status] = await ownerClosed(owner);
   assert.equal(status, 143, Buffer.concat(owner.stderr).toString());
   assert.deepEqual(await readdir(scratch), ["crates"]);
 });
 
-async function workerLifetime(t, mode, bypassInterception = false) {
+async function workerLifetime(t: TestContext, mode: "frozen" | "live", bypassInterception = false) {
   const owner = fixtureOwner(t);
   const scratch = await mkdtemp(resolve(root, `compat-cleanup-${mode}-`));
   owner.scratch = scratch;
@@ -212,7 +260,7 @@ async function workerLifetime(t, mode, bypassInterception = false) {
   assert.equal(child.exitCode, null, "SIGTERM exited before worker termination completed");
   assert.ok(await readdir(resolve(scratch, directory)));
   child.send("release");
-  const [status] = await owner.closed;
+  const [status] = await ownerClosed(owner);
   assert.equal(status, 143, Buffer.concat(owner.stderr).toString());
   assert.deepEqual(
     (await readdir(scratch)).sort(),
@@ -220,7 +268,7 @@ async function workerLifetime(t, mode, bypassInterception = false) {
   );
 }
 
-for (const mode of ["frozen", "live"]) {
+for (const mode of ["frozen", "live"] as const) {
   test(`${mode} replay awaits worker termination before removing scratch`, (t) =>
     workerLifetime(t, mode));
 }
@@ -231,7 +279,8 @@ test("worker cleanup observation rejects a bypassed dispatch interceptor", async
 
 test("record-only frozen cancellation during oracle loading starts no build or worker", async (t) => {
   const owner = fixtureOwner(t);
-  owner.scratch = await mkdtemp(resolve(root, "compat-cleanup-loading-"));
+  const scratch = await mkdtemp(resolve(root, "compat-cleanup-loading-"));
+  owner.scratch = scratch;
   const child = owner.start(
     `
     const fs = await import("node:fs/promises");
@@ -279,7 +328,7 @@ test("record-only frozen cancellation during oracle loading starts no build or w
   await delay(50);
   assert.equal(child.exitCode, null, "entrypoint abandoned its outstanding oracle read");
   child.send("release");
-  const [status] = await owner.closed;
+  const [status] = await ownerClosed(owner);
   assert.equal(status, 143, Buffer.concat(owner.stderr).toString());
-  assert.deepEqual(await readdir(owner.scratch), []);
+  assert.deepEqual(await readdir(scratch), []);
 });

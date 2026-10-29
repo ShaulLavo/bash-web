@@ -160,7 +160,7 @@ test("own source and every imported process runner source participate in identit
     "fuzz-shell-job-lifetime.mjs",
     "fuzz-shell-control-flow.mjs",
     "fuzz-shell-results.ts",
-    "shell-process-group.mjs",
+    "shell-process-group.ts",
   ]);
   for (const name of sourceFiles)
     assert.equal(
@@ -213,7 +213,7 @@ test("fixture validation rejects source, oracle, environment, grammar and proces
       f.sourceHashes["fuzz-shell-control-flow.mjs"] = "changed";
     },
     (f) => {
-      f.sourceHashes["shell-process-group.mjs"] = "changed";
+      f.sourceHashes["shell-process-group.ts"] = "changed";
     },
     (f) => {
       f.bash = "GNU bash, version 5.2.0";

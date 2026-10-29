@@ -6,12 +6,23 @@ import { test } from "node:test";
 
 const root = resolve(import.meta.dirname, "..");
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function packageVersion(value: unknown): string {
+  assert.ok(isRecord(value) && typeof value.version === "string");
+  return value.version;
+}
+
 test("Bun-prepared Waffle resolves and shares its real Node exports", async () => {
-  const sources = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
-  const installed = JSON.parse(
+  const sources: unknown = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
+  assert.ok(isRecord(sources));
+  const expectedVersion = packageVersion(sources.waffle);
+  const installed: unknown = JSON.parse(
     await readFile(resolve(root, "node_modules/waffle/package.json"), "utf8"),
   );
-  assert.equal(installed.version, sources.waffle.version);
+  assert.equal(packageVersion(installed), expectedVersion);
   const expected = await realpath(resolve(root, "node_modules/waffle/dist/index.js"));
   assert.equal(import.meta.resolve("waffle"), pathToFileURL(expected).href);
   const node = await import("waffle");

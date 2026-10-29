@@ -8,18 +8,38 @@ import { liveNodeWorkers } from "./node-worker-host.ts";
 
 import { fixture } from "./own-shell-runner-fixture.ts";
 
-async function runFixture(outputSize) {
+interface WorkerResult {
+  stdout: Uint8Array;
+  stderr: Uint8Array;
+  status?: number;
+  crash?: string;
+  outputLimit?: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isWorkerResult(value: unknown): value is WorkerResult {
+  if (!isRecord(value)) return false;
+  if (!(value.stdout instanceof Uint8Array) || !(value.stderr instanceof Uint8Array)) return false;
+  if (value.status !== undefined && typeof value.status !== "number") return false;
+  if (value.crash !== undefined && typeof value.crash !== "string") return false;
+  return value.outputLimit === undefined || typeof value.outputLimit === "boolean";
+}
+
+async function runFixture(outputSize: number): Promise<WorkerResult> {
   const scratch = await mkdtemp(
     resolve(
       process.env.BASH_COMPAT_SCRATCH ?? process.env.RUNNER_TEMP ?? "/work/tmp",
       "bash-web-runner-test-",
     ),
   );
-  let worker;
+  let worker: Worker | undefined;
   try {
     const modulePath = resolve(scratch, "fixture.wasm");
     await writeFile(modulePath, fixture(outputSize));
-    worker = new Worker(new URL("./bash-compat-worker.mjs", import.meta.url), {
+    worker = new Worker(new URL("./bash-compat-worker.ts", import.meta.url), {
       workerData: {
         engine: "own-shell",
         modulePath,
@@ -27,20 +47,29 @@ async function runFixture(outputSize) {
         home: "/home/user",
         tmp: "/tmp/spec",
         env: {},
+        fixtureDirectory: scratch,
       },
       stdout: true,
       stderr: true,
     });
     worker.stdout.resume();
     worker.stderr.resume();
+    const currentWorker = worker;
     return await new Promise((done, fail) => {
       const timer = setTimeout(() => fail(new Error("fixture worker timed out")), 5000);
-      worker.on("message", (message) => {
-        if (message.ready) return worker.postMessage({ id: 1, code: "fixture" });
+      currentWorker.on("message", (message: unknown) => {
+        if (isRecord(message) && message.ready) {
+          currentWorker.postMessage({ id: 1, code: "fixture" });
+          return;
+        }
         clearTimeout(timer);
+        if (!isWorkerResult(message)) {
+          fail(new Error("invalid fixture worker response"));
+          return;
+        }
         done(message);
       });
-      worker.once("error", (error) => {
+      currentWorker.once("error", (error) => {
         clearTimeout(timer);
         fail(error);
       });
@@ -51,7 +80,7 @@ async function runFixture(outputSize) {
     await assert.rejects(access(scratch), { code: "ENOENT" });
   }
 }
-function assertFixtureResult(result, label) {
+function assertFixtureResult(result: WorkerResult, label: string) {
   assert.equal(result.crash, undefined, label);
   assert.equal(result.status, 7, label);
   assert.deepEqual(Buffer.from(result.stdout), Buffer.from([255, 0]), label);
@@ -62,6 +91,7 @@ test("own-shell worker preserves raw stdout, separate stderr and status", async 
 });
 test("own-shell worker enforces the combined output ceiling before writing", async () => {
   const result = await runFixture(4 * 1024 * 1024 + 1);
+  assert.ok(result.crash);
   assert.match(result.crash, /output limit exceeded/);
   assert.equal(result.stdout.length, 0);
 });

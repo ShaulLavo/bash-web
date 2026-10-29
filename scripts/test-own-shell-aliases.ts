@@ -4,19 +4,58 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
-const fixture = JSON.parse(
-  readFileSync(new URL("fixtures/shell-aliases.json", import.meta.url), "utf8"),
+interface AliasCase {
+  id: string;
+  code: string;
+  status: number;
+  stdout: string;
+  stderr: string;
+}
+
+interface AliasFixture {
+  bash: string;
+  cases: AliasCase[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseCase(value: unknown): AliasCase {
+  assert.ok(isRecord(value));
+  assert.ok(typeof value.id === "string" && typeof value.code === "string");
+  assert.ok(typeof value.status === "number" && typeof value.stdout === "string");
+  assert.ok(typeof value.stderr === "string");
+  return {
+    id: value.id,
+    code: value.code,
+    status: value.status,
+    stdout: value.stdout,
+    stderr: value.stderr,
+  };
+}
+
+function parseFixture(value: unknown): AliasFixture {
+  assert.ok(isRecord(value) && typeof value.bash === "string" && Array.isArray(value.cases));
+  return { bash: value.bash, cases: value.cases.map(parseCase) };
+}
+
+const fixture = parseFixture(
+  JSON.parse(readFileSync(new URL("fixtures/shell-aliases.json", import.meta.url), "utf8")),
 );
 assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
+const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };
 const run = await createWaffleRunner({
   modulePath: resolve(directory, "shell-runtime.wasm"),
   fixtureDirectory: directory,
   tmp: "/tmp/spec",
-  env: { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" },
+  env,
 });
-const tableCost = JSON.parse(
-  readFileSync(new URL("fixtures/shell-alias-table-cost.json", import.meta.url), "utf8"),
+const tableCost = parseFixture(
+  JSON.parse(
+    readFileSync(new URL("fixtures/shell-alias-table-cost.json", import.meta.url), "utf8"),
+  ),
 );
 assert.equal(tableCost.bash, fixture.bash);
 for (const entry of fixture.cases.concat(tableCost.cases)) {

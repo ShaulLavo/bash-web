@@ -37,8 +37,8 @@ type Fixture = FuzzFixture<Case>;
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-functions-seed-1.json";
 const fixtureHashes: Record<string, string> = {
-  1: "30a63172f071c9ffc08348bf9c7e41fa59ee2c8a18245c91712298ef8434c7c0",
-  42: "5bf569081490a4d4833794a7a5302d078bb371768ecdc07c51ba8c42d1c4d24a",
+  1: "9bce12c9e3a5209b34d77d1f65b9412ceda9d5d42ce81350bdd2279c39012ace",
+  42: "9e43bdc6377898d5e3e76218b4b5ffb23b1333876314edc9273f8d02233da049",
 };
 const observation = (patch = {}) => ({
   status: 0,
@@ -185,19 +185,19 @@ test("fixed matrix covers every scalar unit dimension without inert value paddin
 });
 
 test("all transitive process-runner sources participate in fixture identity", () => {
-  assert.deepEqual(sourceFiles, [
-    "fuzz-shell-functions.ts",
-    "fuzz-shell-control-flow.mjs",
+  const expected = ["fuzz-shell-functions.ts", "fuzz-shell-control-flow.mjs"].concat([
     "fuzz-shell-results.ts",
-    "shell-process-group.mjs",
+    "shell-process-group.ts",
   ]);
-  for (const [name, hash] of Object.entries(sourceHashes()))
+  assert.deepEqual(sourceFiles, expected);
+  Object.entries(sourceHashes()).forEach(([name, hash]) => {
     assert.equal(
       hash,
       createHash("sha256")
         .update(readFileSync(new URL(name, import.meta.url)))
         .digest("hex"),
     );
+  });
   assert.equal(
     fingerprint(),
     createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex"),
@@ -238,7 +238,7 @@ test("fixture validation rejects every identity and unhealthy-observation mutati
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-functions.ts"] = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
-    (f) => (f.sourceHashes["shell-process-group.mjs"] = "stale"),
+    (f) => (f.sourceHashes[sourceFiles[3]] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),
     (f) => (f.environment = { ...environment, locale: "C.UTF-8" }),
