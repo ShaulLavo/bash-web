@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   cpSync,
   existsSync,
@@ -52,6 +53,7 @@ async function prepareBrowser() {
   });
   assert.ok(existsSync("dist/program-worker.js"), "Missing generated dist/program-worker.js");
   writeFileSync("dist/serve.mjs", stripTypeScriptTypes(readFileSync("scripts/serve.ts", "utf8")));
+  chmodSync("dist/serve.mjs", 0o644);
   writeFileSync(
     "dist/python-tests.html",
     '<!doctype html><meta charset="utf-8"><script type="module" src="/python-tests.js"></script>',

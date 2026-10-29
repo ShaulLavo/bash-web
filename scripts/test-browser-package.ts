@@ -121,9 +121,12 @@ test("worker preparation bundles the public Waffle FS worker and finish-build re
   // finish-build must also restore the stable URLs for package consumers.
   await rm(resolve(scratch, "dist"), { recursive: true });
   await mkdir(resolve(scratch, "dist"));
-  await run(process.execPath, [resolve(scratch, "scripts/finish-build.ts")], { timeout: 30000 });
+  const finishBuild = resolve(scratch, "scripts/finish-build.ts");
+  const umask = `data:text/javascript,${encodeURIComponent("process.umask(0o077);")}`;
+  await run(process.execPath, ["--import", umask, finishBuild], { timeout: 30000 });
   for (const [worker, bytes] of prepared) {
     assert.deepEqual(await readFile(resolve(scratch, `dist/${worker}.js`)), bytes);
   }
   await run(process.execPath, ["--check", resolve(scratch, "dist/serve.mjs")], { timeout: 30000 });
+  assert.equal((await stat(resolve(scratch, "dist/serve.mjs"))).mode & 0o777, 0o644);
 });
