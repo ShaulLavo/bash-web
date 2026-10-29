@@ -19,9 +19,8 @@ export function shellTerminalImports(
       if (!buffer) return;
       const bridge = new SharedBridge(buffer);
       if (bridge.closed() || (phase !== 1 && phase !== 2)) return;
-      if (phase === 1) Atomics.store(bridge.state, control.status, status);
-      const previous = Atomics.exchange(bridge.state, control.phase, phase);
-      if (phase === 1 || previous !== phase) bridge.signal();
+      if (phase === 1) return bridge.publishPrompt(status);
+      if (Atomics.exchange(bridge.state, control.phase, phase) !== phase) bridge.signal();
     },
   };
 }

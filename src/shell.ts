@@ -2,7 +2,8 @@
 // exact Runtime, not a shell-specific runtime interface or a second service owner.
 import type { Runtime } from "waffle";
 import type { StartupObserver } from "./runtime/startup-diagnostics";
-import { SharedBridge } from "./bridge";
+import { SharedBridge, type ShellPrompt } from "./bridge";
+import { waitForPrompt, type PromptWaitOptions } from "./shell-prompt";
 import { runtimeSnapshot } from "./runtime/diagnostics";
 import { startShell } from "./runtime/shell-host";
 
@@ -38,6 +39,7 @@ export interface Shell {
   readonly terminal: SharedBridge;
   readonly process: RuntimeProcess;
   readonly done: Promise<RuntimeExit>;
+  waitForPrompt(options?: PromptWaitOptions): Promise<ShellPrompt>;
   interrupt(): void;
   dispose(): Promise<void>;
   diagnostics(): ReturnType<typeof runtimeSnapshot>;
@@ -49,9 +51,13 @@ export async function createShell(options: ShellOptions): Promise<Shell> {
     terminal,
     process,
     done: process.done,
+    waitForPrompt: (options) => waitForPrompt(terminal, options),
     // The shell handles SIGINT and forwards only its foreground job.
     interrupt: () => process.signal(2),
     dispose: () => process.dispose(),
     diagnostics: () => runtimeSnapshot(options.runtime),
   };
 }
+
+export type { ShellPrompt } from "./bridge";
+export type { PromptWaitOptions } from "./shell-prompt";
