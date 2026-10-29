@@ -1,5 +1,9 @@
 //! Original bounded multiline terminal editor. The guest owns echo; the browser
 //! forwards raw bytes, including ANSI arrows, without maintaining shell state.
+mod display;
+mod width;
+use display::Display;
+pub use display::Geometry;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Action {
     Redraw,
@@ -101,29 +105,16 @@ fn utf8_length(byte: u8) -> usize {
         _ => 1,
     }
 }
+/// The bytes that show `line`. A newline ends the row; every repaint clears below
+/// its first row, so no row needs its own erase.
 fn paint_text(bytes: &mut Vec<u8>, line: &[u8]) {
     for &byte in line {
         match byte {
+            b'\n' => bytes.extend_from_slice(b"\r\n"),
             b'\t' => bytes.push(byte),
             0..=31 | 127 => bytes.extend_from_slice(&[b'^', byte ^ 0x40]),
             _ => bytes.push(byte),
         }
-    }
-}
-fn paint_line(bytes: &mut Vec<u8>, prompt: &str, line: &[u8], columns: usize) {
-    let mut chunks = line.split(|byte| *byte == b'\n').peekable();
-    let mut prefix = prompt;
-    while let Some(chunk) = chunks.next() {
-        paint_text(bytes, chunk);
-        if chunks.peek().is_none() {
-            return;
-        }
-        // EL at a pending right-margin wrap erases the last printed cell.
-        if position(prefix, chunk, columns).column < columns {
-            bytes.extend_from_slice(b"\x1b[K");
-        }
-        bytes.extend_from_slice(b"\r\n");
-        prefix = "";
     }
 }
 #[derive(Default)]
@@ -134,94 +125,10 @@ pub struct Editor {
     history: Vec<Vec<u8>>,
     history_at: Option<usize>,
     draft: Vec<u8>,
-    painted: Position,
-    columns: usize,
-    pending_utf8: Vec<u8>,
+    prompt: Vec<u8>,
+    display: Display,
     paste: Option<Paste>,
     discard_utf8: usize,
-}
-#[derive(Clone, Copy, Default)]
-struct Position {
-    row: usize,
-    column: usize,
-}
-impl Position {
-    fn advance(&mut self, character: char, columns: usize) {
-        match character {
-            '\r' => self.column = 0,
-            '\n' => {
-                self.row += 1;
-                self.column = 0;
-            }
-            '\t' => {
-                // VT tab stops move within the row; they do not autowrap.
-                self.column = ((self.column / 8 + 1) * 8).min(columns - 1);
-            }
-            _ => {
-                let width = scalar_width(character);
-                if width == 0 {
-                    return;
-                }
-                if self.column + width > columns {
-                    self.row += 1;
-                    self.column = 0;
-                }
-                self.column += width;
-            }
-        }
-    }
-    fn caret(mut self, columns: usize) -> Self {
-        if self.column == columns {
-            self.row += 1;
-            self.column = 0;
-        }
-        self
-    }
-}
-// This remains a scalar editor, not a grapheme editor. Keep the usual combining
-// marks zero-width and East Asian/emoji scalars wide when counting wrapped rows.
-fn scalar_width(character: char) -> usize {
-    let code = u32::from(character);
-    if character.is_control()
-        || matches!(code, 0x0300..=0x036f | 0x1ab0..=0x1aff | 0x1dc0..=0x1dff
-            | 0x200b..=0x200f | 0x20d0..=0x20ff | 0xfe00..=0xfe0f | 0xfe20..=0xfe2f)
-    {
-        0
-    } else if matches!(code, 0x1100..=0x115f | 0x2329..=0x232a | 0x2e80..=0xa4cf
-        | 0xac00..=0xd7a3 | 0xf900..=0xfaff | 0xfe10..=0xfe19 | 0xfe30..=0xfe6f
-        | 0xff01..=0xff60 | 0xffe0..=0xffe6 | 0x1f300..=0x1faff | 0x20000..=0x3fffd)
-    {
-        2
-    } else {
-        1
-    }
-}
-fn position(prompt: &str, line: &[u8], columns: usize) -> Position {
-    let mut point = Position::default();
-    // Prompt SGR/OSC controls occupy no cells. Their interpretation stays with
-    // the terminal; only printing scalars contribute to the editor's row count.
-    let mut escape = 0;
-    for character in prompt.chars() {
-        match (escape, character) {
-            (0, '\x1b') => escape = 1,
-            (1, '[') => escape = 2,
-            (1, ']') => escape = 3,
-            (1, _) => escape = 0,
-            (2, '\x40'..='\x7e') | (3, '\x07') | (4, '\\') => escape = 0,
-            (3, '\x1b') => escape = 4,
-            (0, character) => point.advance(character, columns),
-            _ => {}
-        }
-    }
-    for character in String::from_utf8_lossy(line).chars() {
-        if character.is_ascii_control() && !matches!(character, '\n' | '\t') {
-            point.advance('^', columns);
-            point.advance('?', columns);
-            continue;
-        }
-        point.advance(character, columns);
-    }
-    point
 }
 impl Editor {
     pub fn clear(&mut self) {
@@ -232,63 +139,32 @@ impl Editor {
         self.discard_utf8 = 0;
         self.history_at = None;
         self.draft.clear();
-        self.pending_utf8.clear();
     }
-    pub fn begin(&mut self, prompt: &str, columns: usize) {
-        self.columns = columns.max(2);
-        self.painted = position(prompt, &self.line[..self.cursor], self.columns);
-        self.pending_utf8.clear();
+    /// The prompt is about to be written at column 0.
+    pub fn begin(&mut self, prompt: &str, geometry: Geometry) {
+        self.prompt = prompt.as_bytes().to_vec();
+        self.display.begin(&self.prompt, geometry);
     }
     /// Auto-fit terminal resizing reflows the already painted line. Recount its
     /// cursor BEFORE editing, while the old command/caret are still available.
-    pub fn resize(&mut self, prompt: &str, columns: usize) {
-        if self.columns != columns.max(2) {
-            self.begin(prompt, columns);
-        }
+    pub fn resize(&mut self, geometry: Geometry) {
+        self.display.resize(geometry);
     }
     pub fn echoed(&mut self, byte: u8) {
-        self.pending_utf8.push(byte);
-        match std::str::from_utf8(&self.pending_utf8) {
-            Ok(text) => {
-                for character in text.chars() {
-                    self.painted.advance(character, self.columns.max(2));
-                }
-                self.pending_utf8.clear();
-            }
-            Err(error) if error.error_len().is_none() => {}
-            Err(_) => {
-                for character in String::from_utf8_lossy(&self.pending_utf8).chars() {
-                    self.painted.advance(character, self.columns.max(2));
-                }
-                self.pending_utf8.clear();
-            }
-        }
+        self.display.echoed(byte);
     }
-    pub fn redraw(&mut self, prompt: &str) -> Vec<u8> {
-        let columns = self.columns.max(2);
-        let mut bytes = Vec::new();
-        if self.painted.row > 0 {
-            bytes.extend_from_slice(format!("\x1b[{}A", self.painted.row).as_bytes());
-        }
-        // EL2 only clears one physical row. ED0 removes every old wrapped row
-        // after returning to the prompt origin, including a now-shorter tail.
-        bytes.extend_from_slice(b"\r\x1b[J");
-        bytes.extend_from_slice(prompt.as_bytes());
-        paint_line(&mut bytes, prompt, &self.line, columns);
-        bytes.push(b' ');
-        let mut end = position(prompt, &self.line, columns);
-        end.advance(' ', columns);
-        let cursor = position(prompt, &self.line[..self.cursor], columns).caret(columns);
-        if end.row > cursor.row {
-            bytes.extend_from_slice(format!("\x1b[{}A", end.row - cursor.row).as_bytes());
-        }
-        bytes.push(b'\r');
-        if cursor.column > 0 {
-            bytes.extend_from_slice(format!("\x1b[{}C", cursor.column).as_bytes());
-        }
-        self.painted = cursor;
-        self.pending_utf8.clear();
-        bytes
+    pub fn redraw(&mut self) -> Vec<u8> {
+        let mut region = self.prompt.clone();
+        paint_text(&mut region, &self.line[..self.cursor]);
+        let caret = region.len();
+        paint_text(&mut region, &self.line[self.cursor..]);
+        self.display.render(region, caret)
+    }
+    /// After a submit, interrupt or EOF: moves below the displayed command. The
+    /// terminal may have reflowed it since the last key, so recount it first.
+    pub fn finish(&mut self, geometry: Geometry, interrupted: bool) -> Vec<u8> {
+        self.display.resize(geometry);
+        self.display.finish(interrupted)
     }
     fn previous(&self) -> usize {
         let mut at = self.cursor.saturating_sub(1);
@@ -423,8 +299,12 @@ impl Editor {
         let append = self.cursor == self.line.len();
         self.line.insert(self.cursor, byte);
         self.cursor += 1;
-        if append && byte != b'\n' {
+        if append && byte != b'\n' && self.display.echoes_appends() {
             return Action::Echo(byte);
+        }
+        // Repainting between a scalar's bytes would hand the terminal a partial sequence.
+        if incomplete_scalar(&self.line[..self.cursor]) {
+            return Action::None;
         }
         Action::Redraw
     }
@@ -516,11 +396,26 @@ impl Editor {
                 self.line.drain(self.cursor..end);
                 Action::Redraw
             }
-            12 => Action::Redraw,
+            12 => {
+                self.display.clear_screen();
+                Action::Redraw
+            }
             b'\t' | 32..=126 | 128..=255 => self.insert(byte),
             _ => Action::None,
         }
     }
+}
+fn incomplete_scalar(text: &[u8]) -> bool {
+    let continuation = text
+        .iter()
+        .rev()
+        .take(3)
+        .take_while(|&&byte| byte & 0xc0 == 0x80)
+        .count();
+    let Some(&lead) = text.len().checked_sub(continuation + 1).map(|at| &text[at]) else {
+        return false;
+    };
+    utf8_length(lead) > continuation + 1
 }
 fn word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte >= 0x80
@@ -581,9 +476,9 @@ mod tests {
     #[test]
     fn pasted_control_bytes_are_painted_as_text_instead_of_terminal_controls() {
         let mut editor = Editor::default();
-        editor.begin("$ ", 80);
+        editor.begin("$ ", Geometry::new(80, 24));
         feed(&mut editor, b"\x1b[200~a\x1b[2J\x03\x7f\x1b[201~");
-        assert_eq!(editor.redraw("$ "), b"\r\x1b[J$ a^[[2J^C^? \r\x1b[12C");
+        assert_eq!(editor.redraw(), b"\r\x1b[J$ a^[[2J^C^?");
     }
 
     #[test]

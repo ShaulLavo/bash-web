@@ -75,6 +75,41 @@ function gitBytes(root, args) {
 export function git(root, args) {
   return gitBytes(root, args).toString("utf8").trimEnd();
 }
+export function assertAcceptedRecordCheckout(root, sourceSha) {
+  assert.equal(git(root, ["rev-parse", "HEAD"]), fullSha(sourceSha), "candidate checkout changed");
+  assert.equal(
+    git(root, ["diff", "--name-only", sourceSha, "--", "scoreboard/accepted-gains"]),
+    "",
+    "mutable accepted records",
+  );
+  assert.equal(
+    git(root, ["ls-files", "--others", "--exclude-standard", "--", "scoreboard/accepted-gains"]),
+    "",
+    "unbound accepted records",
+  );
+}
+export function assertJobBinding(job, run) {
+  assert.equal(job.run_id, run.id, "wrong job run");
+  assert.equal(job.run_attempt, run.run_attempt, "wrong job attempt");
+  assert.equal(job.head_sha, run.head_sha, "wrong job source");
+}
+export function assertLandedPullRequest(pr, { landed, original }) {
+  assert.equal(pr.number, landed.pr);
+  assert.equal(pr.merged, true, "unmerged record cannot certify candidate");
+  assert.equal(pr.base.ref, "main");
+  assert.equal(pr.base.repo.id, authority.repositoryId);
+  assert.equal(pr.head.repo.id, authority.repositoryId);
+  assert.equal(pr.head.sha, original.binding.headSha);
+  assert.equal(pr.merge_commit_sha, landed.mergeCommit);
+}
+export function assertObservationSequence(raw, bound, observed, sealed) {
+  assert.ok(
+    Date.parse(observed.started_at) >= Date.parse(bound.completed_at) &&
+      Date.parse(observed.completed_at) > Date.parse(raw.capturedAt) &&
+      Date.parse(observed.completed_at) <= Date.parse(sealed.started_at),
+    "stale Waffle observation",
+  );
+}
 export function oracleAt(root, sourceSha) {
   fullSha(sourceSha);
   const bytes = gitBytes(root, ["show", `${sourceSha}:docs/evidence/own-shell-oracle.json`]);

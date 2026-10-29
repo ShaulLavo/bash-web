@@ -93,5 +93,8 @@ export function createShellTerminals(
     columns() {
       return Math.max(2, Atomics.load(display.state, control.cols));
     },
+    rows() {
+      return Math.max(2, Atomics.load(display.state, control.rows));
+    },
   };
 }

@@ -14,7 +14,15 @@ A command holds at most 64 KiB. A paste drops its remaining text after reaching 
 
 ## Display
 
-Redraw returns to the prompt origin, clears old rows, then paints the buffer. Explicit newlines erase the remainder of the current row and write CRLF because the runtime does not translate LF to CRLF. Cursor accounting includes both explicit newlines and wrapped rows. Width changes recount the existing caret before an edit.
+The editor keeps a model of where the prompt and command sit on the terminal. Rows of a command taller than the screen that scrolled into history are counted, so cursor movement never aims above the screen. An edit repaints from the first row that changed. Moving the caret only moves the cursor. Explicit newlines are written as CRLF because the runtime does not translate LF to CRLF.
+
+Enter, Ctrl+C, Ctrl+D, a host interrupt and the end of input first recount the command at the current width, then move the cursor below its last row, so output and the next prompt never overwrite it. `^C` is echoed after the command text, as in GNU Readline. Ctrl+L clears the screen with `CSI H CSI 2J` and repaints the prompt and command at the top.
+
+When the caret moves into rows that have scrolled into history, the editor repaints from the caret's row at the top of the screen. History keeps the earlier copy of those rows, because a terminal cannot edit its scrollback.
+
+While the margin space follows a full last row, typing repaints instead of echoing, so a combining mark joins the last glyph rather than the padding. A repaint waits for a character's last UTF-8 byte.
+
+Cell widths come from `shell/engine/src/terminal/width.rs`, generated from the pinned libghostty-vt by `npm run terminal:widths` with grapheme clustering (mode 2027) off, which is the terminal's default. A test fails when the table no longer matches the pinned terminal. The prompt is assumed to start at column 0. A resize recounts the reflowed command before the next edit, assuming the terminal keeps the command's end at the bottom of the screen.
 
 ## Limits
 
@@ -22,6 +30,6 @@ The editor handles UTF-8 scalars rather than grapheme clusters. Automatic contin
 
 ## Verification
 
-Rust byte tests cover Enter sequences, paste framing, CRLF normalization, literal controls, overflow and split UTF-8. The discovered terminal display tests replay wrapping, multiline edits and resizing. Runtime tests execute the WASI shell against the pinned Waffle API and check prompt modes during command execution, interruption and EOF. Playwright tests paste through the actual browser terminal, check screen rows and cursor positions, and require explicit Enter before execution.
+Rust byte tests cover Enter sequences, paste framing, CRLF normalization, literal controls, overflow and split UTF-8. The discovered terminal display tests replay wrapping, multiline edits and resizing. Runtime tests execute the WASI shell against the pinned Waffle API and check prompt modes during command execution, interruption and EOF. Playwright tests paste through the actual browser terminal, check screen rows and cursor positions, and require explicit Enter before execution. `npm run test:terminal:display` drives the editor with a native replay example and feeds its exact bytes to the pinned libghostty-vt, comparing screen, history and cursor with the same text written directly: wrapped and wide text, combining marks, emoji, commands taller than the screen, Enter and interrupts from earlier rows, Ctrl+L, resize and multiline commands.
 
 These tests check the shell's editing contract. The frozen GNU Bash 5.3.15 corpus checks command execution compatibility. Shift+Enter newline insertion is the product's explicit editing policy.
