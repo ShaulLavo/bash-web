@@ -16,7 +16,7 @@ enum Escape {
     None,
     Start,
     Csi(Parameters),
-    CsiIntermediates,
+    Discard,
     Ss3,
 }
 #[derive(Clone, Copy, Default)]
@@ -267,15 +267,19 @@ impl Editor {
     }
     fn feed_escape(&mut self, byte: u8) -> Action {
         match (std::mem::take(&mut self.escape), byte) {
+            (state @ (Escape::Csi(_) | Escape::Discard | Escape::Ss3), 0 | 127) => {
+                self.escape = state;
+            }
             (Escape::Start, b'[') => self.escape = Escape::Csi(Parameters::Empty),
             (Escape::Start, b'O') => self.escape = Escape::Ss3,
             (Escape::Start, byte) => return self.meta(byte),
+            (Escape::Ss3, 0x20..=0x3f) => self.escape = Escape::Discard,
             (Escape::Ss3, byte) => return self.csi(Parameters::Empty, byte),
             (Escape::Csi(parameters), 0x30..=0x3f) => {
                 self.escape = Escape::Csi(parameters.feed(byte));
             }
-            (Escape::Csi(_), 0x20..=0x2f) | (Escape::CsiIntermediates, 0x20..=0x3f) => {
-                self.escape = Escape::CsiIntermediates;
+            (Escape::Csi(_), 0x20..=0x2f) | (Escape::Discard, 0x20..=0x3f) => {
+                self.escape = Escape::Discard;
             }
             (Escape::Csi(parameters), 0x40..=0x7e) => return self.csi(parameters, byte),
             _ => {}
@@ -445,6 +449,28 @@ mod tests {
             assert_eq!(editor.line, b"before", "{sequence:?}");
             assert_eq!(editor.cursor, 6, "{sequence:?}");
             feed(&mut editor, b"after");
+            assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
+        }
+    }
+
+    #[test]
+    fn parameterized_ss3_sequences_are_consumed_without_inserting_their_tail() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"before\x1bO1;5Dafter");
+        assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
+    }
+
+    #[test]
+    fn nul_and_del_inside_csi_do_not_release_its_tail_as_text() {
+        for control in [0, 127] {
+            let mut editor = Editor::default();
+            feed(&mut editor, b"before\x1b[27;2;");
+            assert_eq!(editor.feed(control), Action::None);
+            feed(&mut editor, b"13~after");
+            assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
+            feed(&mut editor, b"before\x1b[ !");
+            assert_eq!(editor.feed(control), Action::None);
+            feed(&mut editor, b"~after");
             assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
         }
     }
