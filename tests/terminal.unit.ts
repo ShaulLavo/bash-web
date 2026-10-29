@@ -66,7 +66,7 @@ test("terminal ring wraps without losing binary bytes or exceeding its fixed cap
   assert.deepEqual(a, binary.subarray(0, 2));
   assert.deepEqual(b.subarray(0, 3), binary.subarray(2));
   assert.equal(bridge.availableInput(), 0);
-  assert.equal(bridge.buffer.byteLength, 64 + INPUT_CAPACITY + OUTPUT_CAPACITY);
+  assert.equal(bridge.buffer.byteLength, 72 + INPUT_CAPACITY + OUTPUT_CAPACITY);
 });
 
 test("arbitrary fd remapping preserves transferable terminal endpoint provenance", () => {

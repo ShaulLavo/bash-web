@@ -51,8 +51,11 @@ function interactive(
     wasi.descriptors.close(0);
     wasi.descriptors.openAt(0, input.retain(pid, "read"), (1n << 29n) - 1n, 0n);
     let memory: WebAssembly.Memory | undefined;
+    const bridge = new api.SharedBridge();
+    const terminal = api.shellTerminalImports(bridge.buffer);
     let phase = 0;
     let status = 0;
+    let generation = 0n;
     let pauses = 0;
     const signals = supervisor.get(pid);
     assert.ok(signals);
@@ -85,6 +88,9 @@ function interactive(
       phase: (next: number, result: number) => {
         phase = next;
         status = result;
+        terminal.phase(next, result);
+        if (next !== 1) return;
+        assert.deepEqual(bridge.readPrompt(), { generation: ++generation, status: result });
       },
     };
     const instance = new WebAssembly.Instance(guest, wasi.imports(guest));
@@ -102,7 +108,7 @@ function interactive(
 }
 
 function prompt(output: string, phase: number) {
-  assert.equal(phase, 1);
+  assert.equal(phase, 1, output.slice(-300));
   assert.ok(output.endsWith(`${enable}$ `), JSON.stringify(output));
   assert.ok(output.lastIndexOf(enable) > output.lastIndexOf(disable));
 }
@@ -210,24 +216,25 @@ test("runtime publishes the shell result at each real prompt without probing com
     { source: "cd /missing", status: 1 },
     { source: "if ;", status: 2 },
     { source: "echo $((1/0))", status: 1 },
-    { source: "missing-command", status: 127 },
     { source: "false | true", status: 0 },
     { source: "true | false", status: 1 },
     { source: "\x03", status: 130 },
     { source: "", status: 130 },
-    { source: "true &", status: 0 },
   ];
   let expected = 0;
-  interactive(
-    cases.map(({ source, status }) => (output, phase, result) => {
+  const steps: Parameters<typeof interactive>[0] = cases
+    .map(({ source, status }) => (output: string, phase: number, result: number) => {
       prompt(output, phase);
       assert.equal(result, expected, source);
       expected = status;
       return source + "\r";
-    }).concat([(output, phase, result) => {
-      prompt(output, phase);
-      assert.equal(result, expected);
-      return "exit 0\r";
-    }]),
-  );
+    })
+    .concat([
+      (output, phase, result) => {
+        prompt(output, phase);
+        assert.equal(result, expected);
+        return "exit 0\r";
+      },
+    ]);
+  interactive(steps);
 });

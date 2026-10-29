@@ -1,5 +1,12 @@
 export { createShell } from "./shell";
-export type { RuntimeExit, RuntimeProcess, Shell, ShellOptions, ShellPrompt, PromptWaitOptions } from "./shell";
+export type {
+  RuntimeExit,
+  RuntimeProcess,
+  Shell,
+  ShellOptions,
+  ShellPrompt,
+  PromptWaitOptions,
+} from "./shell";
 export { installShellCommands, UtilityConflictError } from "./shell-commands";
 export type { ShellCommandOptions, ShellCommandsInstallation } from "./shell-commands";
 export { SharedBridge, control, INPUT_CAPACITY, OUTPUT_CAPACITY } from "./bridge";
