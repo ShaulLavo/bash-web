@@ -197,7 +197,7 @@ fn multiline_editing_clears_each_row_and_counts_hard_newlines_at_the_margin() {
     assert_eq!(screen.lines[2], b"op      ");
     assert_eq!(screen.lines[3], b"TAIL    ");
     assert_eq!((screen.row, screen.column), (3, 4));
-    type_bytes(&mut editor, &mut screen, b"\x01\x0b");
+    type_bytes(&mut editor, &mut screen, b"\x01\x1b[A\x1b[A\x0b");
     assert_eq!(screen.text(), "$");
     assert_eq!((screen.row, screen.column), (0, 2));
 }
@@ -214,7 +214,11 @@ fn multiline_paste_redraws_once_and_middle_edits_keep_the_cursor() {
     assert_eq!(screen.lines[1], b"second  ");
     assert_eq!(screen.lines[2], b"third   ");
     assert_eq!((screen.row, screen.column), (2, 5));
-    type_bytes(&mut editor, &mut screen, b"\x01\x1b[C\x1b[C\x1b[CX");
+    type_bytes(
+        &mut editor,
+        &mut screen,
+        b"\x01\x1b[A\x1b[A\x1b[C\x1b[C\x1b[CX",
+    );
     assert_eq!(screen.lines[0], b"$ firXst");
     assert_eq!((screen.row, screen.column), (0, 6));
     type_bytes(&mut editor, &mut screen, b"\x0b");
@@ -231,7 +235,7 @@ fn resizing_multiline_text_recounts_the_existing_caret() {
     );
     screen = Screen::new(8);
     screen.write(b"$ abcdefghij\r\nklmnopqrst");
-    type_bytes(&mut editor, &mut screen, b"\x01\x0b");
+    type_bytes(&mut editor, &mut screen, b"\x01\x1b[A\x0b");
     assert_eq!(screen.text(), "$");
     assert_eq!((screen.row, screen.column), (0, 2));
 }

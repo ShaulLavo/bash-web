@@ -164,6 +164,35 @@ fn scalars(bytes: &[u8], mut visit: impl FnMut(usize, usize, char)) {
     }
 }
 
+fn text_advance(column: usize, character: char) -> usize {
+    match character {
+        '\t' => (column / 8 + 1) * 8,
+        '\x00'..='\x1f' | '\x7f' => column + 2,
+        character if character.is_control() => column,
+        character => column + cells(character),
+    }
+}
+
+pub(super) fn text_column(bytes: &[u8]) -> usize {
+    let mut column = 0;
+    scalars(bytes, |_, _, character| {
+        column = text_advance(column, character);
+    });
+    column
+}
+
+pub(super) fn text_cursor(bytes: &[u8], goal: usize) -> usize {
+    let mut column = 0;
+    let mut cursor = 0;
+    scalars(bytes, |_, end, character| {
+        column = text_advance(column, character);
+        if column <= goal {
+            cursor = end;
+        }
+    });
+    cursor
+}
+
 fn position(bytes: &[u8], columns: usize) -> Position {
     let mut walk = Walk::new(columns);
     scalars(bytes, |_, _, character| {

@@ -144,3 +144,24 @@ fn large_markdown_paste_navigates_hard_lines_before_recalling_history() {
         ),
     );
 }
+
+#[test]
+fn multiline_vertical_targets_use_cells_and_keep_scalars_whole() {
+    for (text, expected) in [
+        ("中x\na", "!中x\na"),
+        ("a\u{301}b\nx", "a\u{301}!b\nx"),
+        ("\txy\n12345678", "\t!xy\n12345678"),
+        ("a\x03b\n12", "a!\x03b\n12"),
+    ] {
+        let mut editor = pasted_editor(text);
+        feed(&mut editor, b"\x1b[A!");
+        submit(&mut editor, expected);
+    }
+}
+
+#[test]
+fn multiline_horizontal_movement_resets_the_preferred_column() {
+    let mut editor = pasted_editor("abcde\nx\nABCDE");
+    feed(&mut editor, b"\x1b[A\x1b[D\x1b[A!");
+    submit(&mut editor, "!abcde\nx\nABCDE");
+}
