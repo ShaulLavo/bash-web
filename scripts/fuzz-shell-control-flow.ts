@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { encode, decode } from "./fuzz-shell-results.ts";
+import { encode, decode, parseRecordedCases } from "./fuzz-shell-results.ts";
 // Generator-first differential control-flow gate. Oracle-only recording deliberately
 // does not depend on candidate support; replay is always strict, including UNSUPPORTED.
 import { spawn } from "node:child_process";
@@ -17,6 +17,83 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { drainGroup, killGroup } from "./shell-process-group.ts";
+import type {
+  Classification,
+  Counts,
+  EncodedResult,
+  FuzzOptions,
+  ProcessResult,
+  RecordedCase,
+  ReplayOptions,
+  RunOptions,
+} from "./fuzz-shell-results.ts";
+
+type Options = ReplayOptions;
+type Spec = {
+  family: string;
+  depth: number;
+  condition?: string;
+  elif?: string;
+  value?: string;
+  number?: number;
+  limit?: number;
+  empty?: boolean;
+  terminator?: string;
+  fail?: boolean;
+  omitted?: boolean;
+  verb?: string;
+  loops?: number;
+  level?: string;
+  context?: string;
+  failure?: string;
+  finalFailure?: boolean;
+  control?: string;
+  origins?: string[];
+};
+export type Case = Spec & { id: string; tags: string[]; script: string };
+type PrerequisiteControl = {
+  name: string;
+  family: string;
+  script: string;
+  expected: { status: number; stdout: string };
+  origins: string[];
+  prelude?: string;
+};
+type Coverage = ReturnType<typeof coverage>;
+export type Fixture = {
+  schema: number;
+  sourceHash: string;
+  seed: number;
+  count: number;
+  timeoutMs: number;
+  bash: string;
+  oraclePath: string;
+  oracleArgs: string[];
+  provenance: string;
+  coverage: Coverage;
+  cases: RecordedCase<Case>[];
+};
+type Mismatch = {
+  classification: Classification;
+  case: Case;
+  bash: EncodedResult;
+  candidate: EncodedResult;
+  minimized: null | {
+    case: Case;
+    bash: EncodedResult;
+    candidate: EncodedResult;
+    attempts: number;
+  };
+};
+type Execution = {
+  total: number;
+  counts: Counts;
+  byFamily: Record<string, Counts>;
+  coverage: Coverage;
+  mismatches: Mismatch[];
+  results: RecordedCase<Case>[];
+};
+type Report = Execution & { path?: string; seed?: number; bash?: string };
 
 const root = resolve(import.meta.dirname, "..");
 const sourcePath = fileURLToPath(import.meta.url);
@@ -83,7 +160,7 @@ export const errexitContexts = [
   "subshell",
   "group",
 ];
-const quote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
+const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
 export const fingerprint = () =>
   createHash("sha256")
     .update(readFileSync(sourcePath))
@@ -91,22 +168,22 @@ export const fingerprint = () =>
     .update(readFileSync(new URL("./shell-process-group.ts", import.meta.url)))
     .digest("hex");
 const observe = 'cf_status=$?; printf "status=%s\\n" "$cf_status"; exit "$cf_status"';
-const print = (label) => `printf '${label}=<%s>\\n' "$v"`;
+const print = (label: string) => `printf '${label}=<%s>\\n' "$v"`;
 
-function randomFor(seed) {
+function randomFor(seed: number) {
   let state = seed >>> 0;
   return {
     next() {
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
       return state;
     },
-    pick(items) {
+    pick<T>(items: readonly T[]): T {
       return items[this.next() % items.length];
     },
   };
 }
 
-export function condition(kind) {
+export function condition(kind: string | undefined): string {
   switch (kind) {
     case "true":
       return "true";
@@ -143,7 +220,7 @@ export function condition(kind) {
   }
 }
 
-function nest(body, depth) {
+function nest(body: string, depth: number): string {
   for (let index = 0; index < depth; index++) {
     if (index % 3 === 0) body = `if true; then ${body}; fi`;
     else if (index % 3 === 1) body = `for cf_nest_${index} in 'one'; do ${body}; done`;
@@ -152,7 +229,7 @@ function nest(body, depth) {
   return body;
 }
 
-function errexitBody(spec) {
+function errexitBody(spec: Spec): string {
   const fail = spec.failure === "return7" ? "cf_fail" : "false";
   const inner = `${fail}; printf 'inner\\n'${spec.finalFailure ? "; " + fail : ""}`;
   const group = `{ ${inner}; }`;
@@ -252,8 +329,15 @@ const descriptorControls = [
 // identify cases in docs/evidence/own-shell-oracle.json, never a live upstream.
 // Filesystem examples are relativized to the process-owned sandbox, not /tmp.
 export const prerequisiteControls = (() => {
-  const controls = [];
-  const add = (name, family, script, status, stdout = "", origins = []) => {
+  const controls: PrerequisiteControl[] = [];
+  const add = (
+    name: string,
+    family: string,
+    script: string,
+    status: number,
+    stdout = "",
+    origins: string[] = [],
+  ): PrerequisiteControl => {
     const control = { name, family, script, expected: { status, stdout }, origins };
     controls.push(control);
     return control;
@@ -268,7 +352,7 @@ export const prerequisiteControls = (() => {
       name === "i.j" ? ["oils:parse-errors:93"] : [],
     );
 
-  const newlines = [
+  const newlines: [string, string, number, string?][] = [
     ["after-open", "[[\na == a ]]", 0],
     ["after-and", "[[ a &&\nb ]]", 0],
     ["after-or", "[[ '' ||\nb ]]", 0],
@@ -299,7 +383,7 @@ export const prerequisiteControls = (() => {
   for (const [name, script, status, origin] of newlines)
     add("newline-" + name, "conditional-newline", script, status, "", origin ? [origin] : []);
 
-  const inherited = [
+  const inherited: [string, string, number, string, string][] = [
     [
       "frozen-inherit-off",
       'set -e\nshopt -u inherit_errexit\nresult=$(false; echo "still running")\necho "result: $result"\necho "after"',
@@ -416,7 +500,8 @@ export const prerequisiteControls = (() => {
   for (const enabled of [false, true]) {
     const mode = enabled ? "on" : "off";
     const prefix = `shopt -${enabled ? "s" : "u"} nullglob; `;
-    const loop = (words) => `for f in ${words}; do printf '<%s>\\n' "$f"; done; printf 'done\\n'`;
+    const loop = (words: string) =>
+      `for f in ${words}; do printf '<%s>\\n' "$f"; done; printf 'done\\n'`;
     add(
       "nullglob-" + mode + "-unmatched",
       "nullglob",
@@ -494,7 +579,14 @@ export const prerequisiteControls = (() => {
     );
   }
 
-  const regex = (name, text, pattern, status, mode = "variable", rhs) => {
+  const regex = (
+    name: string,
+    text: string,
+    pattern: string,
+    status: number,
+    mode = "variable",
+    rhs?: string,
+  ) => {
     const spelling =
       rhs ??
       (mode === "literal"
@@ -593,7 +685,7 @@ export function prerequisiteCases() {
   );
 }
 
-export function render(spec) {
+export function render(spec: Spec): string {
   if (spec.control !== undefined) {
     const control = prerequisiteControls.find((control) => control.name === spec.control);
     if (!control || control.family !== spec.family)
@@ -628,7 +720,7 @@ export function render(spec) {
       break;
     case "loop-control": {
       body = `printf 'visit\\n'; ${spec.verb} ${spec.level}; printf 'after-control\\n'`;
-      for (let index = 0; index < spec.loops; index++)
+      for (let index = 0; index < (spec.loops ?? 0); index++)
         body = `for cf_loop_${index} in a b; do ${body}; printf 'tail-${index}\\n'; done`;
       break;
     }
@@ -653,7 +745,7 @@ export function render(spec) {
   return `v=${quote(spec.value ?? "a b")}; number=${spec.number ?? 2}; ${prefix}${body}\n${observe}\n`;
 }
 
-function makeCase(id, spec) {
+function makeCase(id: string, spec: Spec): Case {
   const tags = [spec.family, "depth-" + spec.depth];
   for (const key of [
     "condition",
@@ -664,7 +756,7 @@ function makeCase(id, spec) {
     "context",
     "failure",
     "control",
-  ])
+  ] as const)
     if (spec[key] !== undefined) tags.push(key + "=" + spec[key]);
   if (spec.value !== undefined) tags.push("value=" + spec.value);
   if (spec.limit !== undefined) tags.push("iterations=" + spec.limit);
@@ -676,10 +768,10 @@ function makeCase(id, spec) {
   return { id, ...spec, tags, script: render(spec) };
 }
 
-export function matrixCases() {
-  const result = [];
-  const add = (spec) => result.push(makeCase("matrix-" + result.length, spec));
-  const addDepth = (depth) => {
+export function matrixCases(): Case[] {
+  const result: Case[] = [];
+  const add = (spec: Spec) => result.push(makeCase("matrix-" + result.length, spec));
+  const addDepth = (depth: number) => {
     for (const kind of conditionKinds) {
       for (const [index, value] of values.entries())
         add({ family: "condition", depth, condition: kind, value, number: index % 4 });
@@ -717,12 +809,12 @@ export function matrixCases() {
   return result.concat(prerequisiteCases());
 }
 
-export function generateCases(seed, count = defaultCount) {
+export function generateCases(seed: number, count = defaultCount): Case[] {
   const random = randomFor(seed);
   const result = matrixCases();
   for (let index = 0; index < count; index++) {
     const family = random.pick(families.slice(0, 9));
-    const spec = {
+    const spec: Spec = {
       family,
       depth: random.pick(depths),
       value: random.pick(values),
@@ -751,8 +843,8 @@ export function generateCases(seed, count = defaultCount) {
   return result;
 }
 
-export function coverage(cases) {
-  const unique = (key) =>
+export function coverage(cases: Case[]) {
+  const unique = (key: keyof Spec) =>
     Array.from(
       new Set(cases.flatMap((item) => (item[key] === undefined ? [] : [item[key]]))),
     ).sort();
@@ -768,8 +860,9 @@ export function coverage(cases) {
   };
 }
 
-export function healthy(result) {
+export function healthy(result: ProcessResult | EncodedResult): boolean {
   return (
+    typeof result.status === "number" &&
     Number.isInteger(result.status) &&
     result.status >= 0 &&
     result.status <= 255 &&
@@ -778,7 +871,7 @@ export function healthy(result) {
     result.error === null
   );
 }
-export function matches(bash, candidate) {
+export function matches(bash: ProcessResult, candidate: ProcessResult): boolean {
   return (
     healthy(bash) &&
     healthy(candidate) &&
@@ -786,7 +879,11 @@ export function matches(bash, candidate) {
     bash.stdout.equals(candidate.stdout)
   );
 }
-export function classify(bash, candidate, selfControl = false) {
+export function classify(
+  bash: ProcessResult,
+  candidate: ProcessResult,
+  selfControl = false,
+): Classification {
   if (matches(bash, candidate)) return "MATCH";
   if (
     !selfControl &&
@@ -806,13 +903,12 @@ export function classify(bash, candidate, selfControl = false) {
 // Finite builtin grammar, plus cat in descriptor controls. Own every process
 // group and give each observation a fresh cwd: candidate output files must never
 // be supplied by an earlier oracle/candidate process, even during shrinking.
-const active = new Set();
-/** @param {string} bin
- * @param {string} script
- * @param {import("./fuzz-shell-results.ts").RunOptions} options
- * @returns {Promise<import("./fuzz-shell-results.ts").ProcessResult>}
- */
-export async function run(bin, script, options) {
+const active = new Set<number>();
+export async function run(
+  bin: string,
+  script: string,
+  options: RunOptions,
+): Promise<ProcessResult> {
   if (options.interrupted) throw new Error("interrupted");
   if (!options.cwd) throw new Error("process sandbox parent required");
   const sandbox = mkdtempSync(resolve(options.cwd, "process-"));
@@ -823,11 +919,11 @@ export async function run(bin, script, options) {
     env: { PATH: "/usr/bin:/bin", HOME: sandbox, TMPDIR: sandbox, LC_ALL: "C", LANG: "C" },
   });
   if (child.pid) active.add(child.pid);
-  const chunks = { stdout: [], stderr: [] };
+  const chunks: { stdout: Buffer[]; stderr: Buffer[] } = { stdout: [], stderr: [] };
   let bytes = 0;
   let timedOut = false;
-  let error = null;
-  const stop = (reason) => {
+  let error: string | null = null;
+  const stop = (reason: string) => {
     error ??= reason;
     killGroup(child.pid, "SIGKILL");
   };
@@ -835,19 +931,21 @@ export async function run(bin, script, options) {
     timedOut = true;
     stop("ETIMEDOUT");
   }, options.timeoutMs);
-  for (const name of ["stdout", "stderr"])
-    child[name].on("data", (chunk) => {
+  for (const name of ["stdout", "stderr"] as const)
+    child[name].on("data", (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > outputLimit) stop("ENOBUFS");
       else chunks[name].push(chunk);
     });
   try {
-    const result = await new Promise((done) => {
-      child.once("error", (failure) => {
-        error ??= failure.code ?? "SPAWN_ERROR";
-      });
-      child.once("close", (status, signal) => done({ status, signal: signal ?? null }));
-    });
+    const result = await new Promise<{ status: number | null; signal: NodeJS.Signals | null }>(
+      (done) => {
+        child.once("error", (failure: NodeJS.ErrnoException) => {
+          error ??= failure.code ?? "SPAWN_ERROR";
+        });
+        child.once("close", (status, signal) => done({ status, signal: signal ?? null }));
+      },
+    );
     return {
       ...result,
       timedOut,
@@ -858,15 +956,18 @@ export async function run(bin, script, options) {
   } finally {
     clearTimeout(timer);
     await drainGroup(child.pid);
-    active.delete(child.pid);
+    if (child.pid) active.delete(child.pid);
     rmSync(sandbox, { recursive: true, force: true });
   }
 }
 
-/** @param {string[]} args */
-export function optionsFor(args) {
-  /** @type {{ seed: number, count: number, timeoutMs: number, replays: string[], selfControl?: boolean, help?: boolean, explicitSeed?: boolean, shell?: string, record?: string, recordOracle?: string, output?: string, cwd?: string, interrupted?: boolean }} */
-  const options = { seed: 1, count: defaultCount, timeoutMs: defaultTimeoutMs, replays: [] };
+export function optionsFor(args: string[]): Options {
+  const options: Options = {
+    seed: 1,
+    count: defaultCount,
+    timeoutMs: defaultTimeoutMs,
+    replays: [],
+  };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--queue-active") continue;
@@ -898,8 +999,7 @@ export function optionsFor(args) {
   return options;
 }
 
-/** @param {import("./fuzz-shell-results.ts").FuzzOptions} options */
-function validateOptions(options) {
+function validateOptions(options: FuzzOptions) {
   if (!Number.isInteger(options.seed) || options.seed < 0 || options.seed > 0xffffffff)
     throw new Error("invalid uint32 seed");
   if (!Number.isSafeInteger(options.count) || options.count < 0 || options.count > 10000)
@@ -922,7 +1022,49 @@ function validateOptions(options) {
     throw new Error("oracle-only/self-control cannot select a shell");
 }
 
-export function validateFixture(path, fixture, options) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function parseFixture(path: string, value: unknown, options: FuzzOptions): Fixture {
+  if (!isRecord(value) || !Array.isArray(value.cases) || !Array.isArray(value.oracleArgs))
+    throw new Error("invalid control-flow fixture");
+  if (
+    typeof value.schema !== "number" ||
+    typeof value.sourceHash !== "string" ||
+    typeof value.seed !== "number" ||
+    typeof value.count !== "number" ||
+    typeof value.timeoutMs !== "number" ||
+    typeof value.bash !== "string" ||
+    typeof value.oraclePath !== "string" ||
+    typeof value.provenance !== "string" ||
+    !value.oracleArgs.every((arg) => typeof arg === "string")
+  )
+    throw new Error("invalid control-flow fixture");
+  const rawCases: unknown[] = value.cases;
+  const generated = generateCases(value.seed, value.count);
+  const generatedCoverage = coverage(generated);
+  if (JSON.stringify(value.coverage) !== JSON.stringify(generatedCoverage))
+    throw new Error("fixture coverage differs");
+  const cases = parseRecordedCases(rawCases, generated);
+  const fixture: Fixture = {
+    schema: value.schema,
+    sourceHash: value.sourceHash,
+    seed: value.seed,
+    count: value.count,
+    timeoutMs: value.timeoutMs,
+    bash: value.bash,
+    oraclePath: value.oraclePath,
+    oracleArgs: value.oracleArgs,
+    provenance: value.provenance,
+    coverage: generatedCoverage,
+    cases,
+  };
+  validateFixture(path, fixture, options);
+  return fixture;
+}
+
+export function validateFixture(path: string, fixture: Fixture, options: FuzzOptions): Case[] {
   if (fixture.schema !== 1 || fixture.sourceHash !== fingerprint())
     throw new Error("stale control-flow fixture hash/schema");
   if (
@@ -957,7 +1099,7 @@ export function validateFixture(path, fixture, options) {
     if (!entry?.bash || !healthy(entry.bash))
       throw new Error("invalid fixture process result at " + index);
     let bytes = 0;
-    for (const key of ["stdoutBase64", "stderrBase64"]) {
+    for (const key of ["stdoutBase64", "stderrBase64"] as const) {
       const value = entry.bash[key];
       if (typeof value !== "string" || Buffer.from(value, "base64").toString("base64") !== value)
         throw new Error("invalid fixture bytes at " + index);
@@ -968,16 +1110,17 @@ export function validateFixture(path, fixture, options) {
   return cases;
 }
 
-export function reductions(test) {
+export function reductions(test: Case): Case[] {
   const { id, tags: _tags, script, ...spec } = test;
-  const result = [];
+  const result: Case[] = [];
   if (spec.depth > 0) result.push(makeCase(id, { ...spec, depth: spec.depth - 1 }));
-  if (spec.limit > 1) result.push(makeCase(id, { ...spec, limit: 1 }));
-  if (spec.loops > 1) result.push(makeCase(id, { ...spec, loops: spec.loops - 1 }));
+  if (spec.limit !== undefined && spec.limit > 1) result.push(makeCase(id, { ...spec, limit: 1 }));
+  if (spec.loops !== undefined && spec.loops > 1)
+    result.push(makeCase(id, { ...spec, loops: spec.loops - 1 }));
   if (spec.value?.length) result.push(makeCase(id, { ...spec, value: "" }));
   return result.filter((item) => item.script.length < script.length);
 }
-const signature = (bash, candidate) =>
+const signature = (bash: ProcessResult, candidate: ProcessResult) =>
   JSON.stringify([
     bash.status,
     candidate.status,
@@ -988,7 +1131,13 @@ const signature = (bash, candidate) =>
     bash.error,
     candidate.error,
   ]);
-async function shrink(test, bash, candidate, options, shell) {
+async function shrink(
+  test: Case,
+  bash: ProcessResult,
+  candidate: ProcessResult,
+  options: FuzzOptions,
+  shell: string,
+) {
   const originalSignature = signature(bash, candidate);
   let best = { test, bash, candidate };
   let attempts = 0;
@@ -1011,11 +1160,16 @@ async function shrink(test, bash, candidate, options, shell) {
   }
 }
 
-async function execute(cases, options, shell, recorded) {
-  const counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
-  const byFamily = {};
-  const mismatches = [];
-  const results = [];
+async function execute(
+  cases: Case[],
+  options: Options,
+  shell: string,
+  recorded?: RecordedCase<Case>[],
+): Promise<Execution> {
+  const counts: Counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
+  const byFamily: Record<string, Counts> = {};
+  const mismatches: Mismatch[] = [];
+  const results: RecordedCase<Case>[] = [];
   for (const [index, test] of cases.entries()) {
     if (options.interrupted) throw new Error("interrupted");
     const bash = recorded ? decode(recorded[index].bash) : await run(bashBin, test.script, options);
@@ -1075,7 +1229,7 @@ function ensureQueued() {
   process.exit(child.status ?? 1);
 }
 
-function assertRunning(options) {
+function assertRunning(options: FuzzOptions) {
   if (options.interrupted) throw new Error("interrupted");
 }
 
@@ -1111,11 +1265,11 @@ async function main() {
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
-    const reports = [];
+    const reports: Report[] = [];
     if (options.replays.length) {
       // Validate every fixture before starting any candidate process.
       const inputs = options.replays.map((path) => {
-        const fixture = JSON.parse(readFileSync(path, "utf8"));
+        const fixture = parseFixture(path, JSON.parse(readFileSync(path, "utf8")), options);
         return { path, fixture, cases: validateFixture(path, fixture, options) };
       });
       for (const { path, fixture, cases } of inputs) {

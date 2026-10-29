@@ -27,6 +27,7 @@ import {
   matrixCases,
   optionsFor,
   outputLimit,
+  parseFixture,
   prerequisiteCases,
   prerequisiteControls,
   reductions,
@@ -36,9 +37,11 @@ import {
   validateFixture,
   values,
 } from "./fuzz-shell-control-flow.ts";
+import type { Fixture } from "./fuzz-shell-control-flow.ts";
+import type { ProcessResult } from "./fuzz-shell-results.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
-const observation = (patch = {}) => ({
+const observation = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
   status: 0,
   signal: null,
   timedOut: false,
@@ -47,7 +50,7 @@ const observation = (patch = {}) => ({
   stderr: Buffer.alloc(0),
   ...patch,
 });
-function fixtureFor(count = 0) {
+function fixtureFor(count = 0): Fixture {
   const cases = generateCases(1, count);
   return {
     schema: 1,
@@ -74,6 +77,10 @@ function fixtureFor(count = 0) {
   };
 }
 const path = "shell-control-flow-seed-1.json";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 test("generator is deterministic, count-bounded and independently seeded", () => {
   for (const seed of [0, 1, 42, 0xffffffff]) {
@@ -145,8 +152,10 @@ test("status observation preserves rather than masks failing final commands", ()
     if (item.family === "errexit") assert.ok(item.script.includes("set -e;"));
   }
   const list = matrixCases().find((item) => item.family === "for-list" && !item.empty);
+  assert.ok(list);
   assert.ok(list.script.includes("'' 'a b' '*' \"$v\""));
   const quotedCase = matrixCases().find((item) => item.family === "case");
+  assert.ok(quotedCase);
   assert.ok(quotedCase.script.includes('(a|"a b")'));
   assert.ok(quotedCase.script.includes('("*")'));
   assert.ok(matrixCases().some((item) => item.script.includes('[[ $v == "a*" ]]')));
@@ -224,6 +233,7 @@ test("prerequisite matrix preserves no-loss provenance and bounded semantic scop
   const extglob = prerequisiteCases().find(
     (item) => item.control === "extglob-no-match" && item.depth === 3,
   );
+  assert.ok(extglob);
   assert.ok(
     extglob.script.startsWith("set -e\nshopt -s extglob\n"),
     "parse-affecting option precedes the compound read unit",
@@ -314,7 +324,7 @@ test("structural shrinking keeps the control-flow family and failure context", (
 test("fixture validation regenerates all scripts and rejects altered provenance and bytes", () => {
   const fixture = fixtureFor();
   assert.equal(validateFixture(path, fixture, options).length, fixture.cases.length);
-  const mutations = [
+  const mutations: ((value: Fixture) => void)[] = [
     (value) => {
       value.schema++;
     },
@@ -349,7 +359,7 @@ test("fixture validation regenerates all scripts and rejects altered provenance 
       value.seed = 42;
     },
     (value) => {
-      value.seed = "1";
+      Object.assign(value, { seed: "1" });
     },
     (value) => {
       value.cases.pop();
@@ -446,7 +456,9 @@ test("process runner caps output/time and kills owned descendants before teardow
     "process.stdout.write(JSON.stringify({bash:process.env.BASH_ENV,path:process.env.PATH,home:process.env.HOME,lc:process.env.LC_ALL}))",
     config,
   );
-  const environment = JSON.parse(inherited.stdout.toString());
+  const environment: unknown = JSON.parse(inherited.stdout.toString());
+  assert.ok(isRecord(environment));
+  assert.ok(typeof environment.home === "string");
   assert.ok(environment.home.startsWith(scratch + "/process-"));
   assert.deepEqual(
     { ...environment, home: "SANDBOX" },
@@ -494,7 +506,16 @@ test("process runner caps output/time and kills owned descendants before teardow
 test("checked-in oracles pin the default count, timeout and generator source", () => {
   for (const seed of [1, 42]) {
     const fixturePath = new URL(`./fixtures/shell-control-flow-seed-${seed}.json`, import.meta.url);
-    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const fixture = parseFixture(
+      fileURLToPath(fixturePath),
+      JSON.parse(readFileSync(fixturePath, "utf8")),
+      {
+        seed,
+        count: defaultCount,
+        timeoutMs: defaultTimeoutMs,
+        explicitSeed: true,
+      },
+    );
     const cases = validateFixture(fileURLToPath(fixturePath), fixture, {
       seed,
       count: defaultCount,
@@ -516,6 +537,7 @@ test("checked-in oracles pin the default count, timeout and generator source", (
           entry.case.family,
         )
       ) {
+        assert.ok(typeof entry.bash.status === "number");
         assert.ok(
           [0, 1].includes(entry.bash.status),
           "valid grammar must not accidentally record a parse/flag rejection: " + entry.case.id,

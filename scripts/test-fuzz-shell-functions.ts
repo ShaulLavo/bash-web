@@ -37,8 +37,8 @@ type Fixture = FuzzFixture<Case>;
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-functions-seed-1.json";
 const fixtureHashes: Record<string, string> = {
-  1: "9bce12c9e3a5209b34d77d1f65b9412ceda9d5d42ce81350bdd2279c39012ace",
-  42: "9e43bdc6377898d5e3e76218b4b5ffb23b1333876314edc9273f8d02233da049",
+  1: "99868122df87bd81393604e86756aca10de4ec9bb8cad7ecf80a2ace856ae513",
+  42: "daad5040fdc79585f9997e40d8a3464bc7cf7c40fe14065320646305aa3f133b",
 };
 const observation = (patch = {}) => ({
   status: 0,

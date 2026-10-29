@@ -4,7 +4,47 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fingerprint, run, encode, decode } from "./fuzz-shell-process.ts";
+import {
+  fingerprint,
+  run,
+  encode,
+  decode,
+  parseEncodedResult,
+  type EncodedResult,
+  type ProcessResult,
+} from "./fuzz-shell-process.ts";
+
+type Options = {
+  count: number;
+  seed: number;
+  timeout: number;
+  replays: string[];
+  shell?: string;
+  output?: string;
+  record?: string;
+};
+type Random = { next(): number; pick<T>(items: readonly T[]): T };
+type Case = { id: string; context: string; script: string };
+type RecordedCase = { case: Case; bash: EncodedResult };
+type Fixture = {
+  schema: number;
+  sourceHash: string;
+  seed: number;
+  count: number;
+  timeoutMs: number;
+  bash: string;
+  cases: RecordedCase[];
+};
+type Counts = { MATCH: number; UNSUPPORTED: number; MISMATCH: number };
+type Mismatch = Case & { bash: EncodedResult; ours: EncodedResult };
+type Execution = {
+  total: number;
+  counts: Counts;
+  byContext: Record<string, { MATCH: number; MISMATCH: number }>;
+  mismatches: Mismatch[];
+  results: RecordedCase[];
+};
+type Report = Execution & { path?: string; seed?: number; bash?: string };
 
 const root = resolve(import.meta.dirname, "..");
 const queue = "/work/tmp/wave-heavy/run.sh";
@@ -53,10 +93,10 @@ const numbers = [
   "18446744073709551616",
 ];
 const values = ["", "abcdef", "a b:c", "héllo", "日本語", "a\tb\nc", "don't", "${x}"];
-const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
-function optionsFor(args) {
-  const options = { count: 3000, seed: 7, timeout: 2000, replays: [] };
+function optionsFor(args: string[]): Options {
+  const options: Options = { count: 3000, seed: 7, timeout: 2000, replays: [] };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--queue-active") continue;
@@ -85,7 +125,7 @@ function optionsFor(args) {
   return options;
 }
 
-function randomFor(seed) {
+function randomFor(seed: number): Random {
   let state = seed >>> 0 || 1;
   return {
     next() {
@@ -94,13 +134,13 @@ function randomFor(seed) {
       state ^= state << 5;
       return (state >>>= 0);
     },
-    pick(items) {
+    pick<T>(items: readonly T[]): T {
       return items[this.next() % items.length];
     },
   };
 }
 
-function expression(random, depth) {
+function expression(random: Random, depth: number): string {
   if (depth === 0) return random.pick(numbers.concat(["x", "y", "z", "missing"]));
   const kind = random.next() % 8;
   if (kind === 0) return random.pick(["+", "-", "!", "~"]) + `(${expression(random, depth - 1)})`;
@@ -118,13 +158,13 @@ function expression(random, depth) {
 
 const after = "printf '<%s>\\n' status=$? x=$x y=$y z=$z following";
 function wrapped(
-  context,
-  expr,
+  context: string,
+  expr: string,
   setup = "x=7; y=3; z=0; unset missing",
   value = "abcdef",
-  length = "3",
+  length: string | null = "3",
   quoted = true,
-) {
+): string {
   if (context === "expansion") return `${setup}; printf '<%s>\\n' "$(( ${expr} ))"; ${after}`;
   if (context === "command") return `${setup}; (( ${expr} )); ${after}`;
   if (context === "let") return `${setup}; let ${quote(expr)}; ${after}`;
@@ -132,9 +172,9 @@ function wrapped(
   return `${setup}; v=${quote(value)}; printf '<%s>\\n' ${quoted ? `"${slice}"` : slice} following; ${after}`;
 }
 
-function fixedCases() {
-  const cases = [];
-  const add = (id, context, expr, setup) =>
+function fixedCases(): Case[] {
+  const cases: Case[] = [];
+  const add = (id: string, context: string, expr: string, setup?: string) =>
     cases.push({ id, context, script: wrapped(context, expr, setup) });
   const expressions = [
     "1+2*3",
@@ -241,24 +281,26 @@ function fixedCases() {
     for (const context of ["expansion", "command"])
       add(`textual-${context}-${index}`, context, expr);
   }
-  for (const [index, entry] of [
-    ["0", "-1", "abc"],
-    ["1", "-1", "abc"],
-    ["2", "-2", "abc"],
-    ["99", "1/0", "abc"],
-    [" -99", "-99", "abc"],
-    [" -2", "2", "héllo"],
-    ["1+1", "1+1", "日本語"],
-    ["(x=1)", "(y=2)", "abc"],
-    ["(x=99)", "(y=99)", "abc"],
-    ["0", "-1", ""],
-    ["1/0", "1", ""],
-    ["0", "08", "abc"],
-    ["0", null, "abc"],
-    [" -1", null, "héllo"],
-    ["1/0", null, "abc"],
-    ["(x=1)", null, "日本語"],
-  ].entries()) {
+  for (const [index, entry] of (
+    [
+      ["0", "-1", "abc"],
+      ["1", "-1", "abc"],
+      ["2", "-2", "abc"],
+      ["99", "1/0", "abc"],
+      [" -99", "-99", "abc"],
+      [" -2", "2", "héllo"],
+      ["1+1", "1+1", "日本語"],
+      ["(x=1)", "(y=2)", "abc"],
+      ["(x=99)", "(y=99)", "abc"],
+      ["0", "-1", ""],
+      ["1/0", "1", ""],
+      ["0", "08", "abc"],
+      ["0", null, "abc"],
+      [" -1", null, "héllo"],
+      ["1/0", null, "abc"],
+      ["(x=1)", null, "日本語"],
+    ] satisfies [string, string | null, string][]
+  ).entries()) {
     for (const quoted of [false, true])
       cases.push({
         id: `slice-${index}-${quoted}`,
@@ -332,7 +374,7 @@ function fixedCases() {
   return cases;
 }
 
-function positionalSliceCases(cases, offset, length) {
+function positionalSliceCases(cases: Case[], offset: string, length: string | null) {
   for (const quoted of [true, false]) {
     const token = `\${@:${offset}${length === null ? "" : `:${length}`}}`;
     cases.push({
@@ -345,9 +387,9 @@ function positionalSliceCases(cases, offset, length) {
 
 // A separate stream exercises shell grammar boundaries without depending on
 // the arithmetic expression generator's variable names or parenthesis shape.
-function boundaryCases(seed, count = 256) {
+function boundaryCases(seed: number, count = 256): Case[] {
   const random = randomFor(seed ^ 0xa7614b2d);
-  const cases = [];
+  const cases: Case[] = [];
   for (let index = 0; index < count; index++) {
     const name = random.pick(["alpha", "_item", "counter42", "result"]);
     const other = random.pick(["beta", "_rhs", "n17"]);
@@ -396,7 +438,7 @@ function boundaryCases(seed, count = 256) {
       "unused-function",
       "earlier-line",
     ]);
-    let script;
+    let script = "";
     if (context === "earlier-line")
       script = `${setup}; printf '<%s>\\n' before\n printf '<%s>\\n' ${operand}; echo after`;
     if (context === "assignment")
@@ -421,7 +463,7 @@ function boundaryCases(seed, count = 256) {
   return cases;
 }
 
-function generate(seed, count) {
+function generate(seed: number, count: number): Case[] {
   const random = randomFor(seed);
   const cases = fixedCases();
   for (let index = 0; index < count; index++) {
@@ -444,7 +486,7 @@ function generate(seed, count) {
   return cases.concat(boundaryCases(seed));
 }
 
-const equal = (a, b) =>
+const equal = (a: ProcessResult, b: ProcessResult) =>
   !a.timedOut &&
   !b.timedOut &&
   Number.isInteger(a.status) &&
@@ -453,15 +495,52 @@ const equal = (a, b) =>
   b.signal === null &&
   a.stdout.equals(b.stdout);
 
-function replay(path, options, shell) {
-  const fixture = JSON.parse(readFileSync(path, "utf8"));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseFixture(value: unknown): Fixture {
+  if (!isRecord(value) || !Array.isArray(value.cases))
+    throw new Error("invalid arithmetic fixture");
+  if (
+    typeof value.schema !== "number" ||
+    typeof value.sourceHash !== "string" ||
+    typeof value.seed !== "number" ||
+    typeof value.count !== "number" ||
+    typeof value.timeoutMs !== "number" ||
+    typeof value.bash !== "string"
+  )
+    throw new Error("invalid arithmetic fixture");
+  const cases = value.cases.map((entry: unknown): RecordedCase => {
+    if (!isRecord(entry) || !isRecord(entry.case)) throw new Error("invalid fixture case");
+    if (
+      typeof entry.case.id !== "string" ||
+      typeof entry.case.context !== "string" ||
+      typeof entry.case.script !== "string"
+    )
+      throw new Error("invalid fixture case");
+    return {
+      case: { id: entry.case.id, context: entry.case.context, script: entry.case.script },
+      bash: parseEncodedResult(entry.bash),
+    };
+  });
+  return {
+    schema: value.schema,
+    sourceHash: value.sourceHash,
+    seed: value.seed,
+    count: value.count,
+    timeoutMs: value.timeoutMs,
+    bash: value.bash,
+    cases,
+  };
+}
+
+function replay(path: string, options: Options, shell: string): Execution {
+  const fixture = parseFixture(JSON.parse(readFileSync(path, "utf8")));
   if (fixture.schema !== 1 || fixture.sourceHash !== fingerprint())
     throw new Error("stale arithmetic fixture");
   if (fixture.count !== options.count) throw new Error("fixture count differs");
-  if (
-    fixture.timeoutMs !== options.timeout ||
-    !fixture.bash?.startsWith("GNU bash, version 5.3.15")
-  )
+  if (fixture.timeoutMs !== options.timeout || !fixture.bash.startsWith("GNU bash, version 5.3.15"))
     throw new Error("fixture oracle/timeout differs");
   const filenameSeed = /seed-(\d+)\.json$/.exec(path);
   if (filenameSeed && Number(filenameSeed[1]) !== fixture.seed)
@@ -480,11 +559,16 @@ function replay(path, options, shell) {
   );
 }
 
-function execute(cases, options, shell, oracle) {
-  const results = [];
-  const mismatches = [];
+function execute(
+  cases: Case[],
+  options: Options,
+  shell: string,
+  oracle?: ProcessResult[],
+): Execution {
+  const results: RecordedCase[] = [];
+  const mismatches: Mismatch[] = [];
   let mismatchCount = 0;
-  const byContext = {};
+  const byContext: Execution["byContext"] = {};
   for (const [index, test] of cases.entries()) {
     const bash =
       oracle?.[index] ??
@@ -539,7 +623,7 @@ function main() {
     resolve(root, ".build/shell/release/shell-engine");
   if (!existsSync(shell))
     throw new Error(`Build a native shell-engine first, or pass --shell PATH: ${shell}`);
-  let reports;
+  let reports: Report[];
   if (options.replays.length)
     reports = options.replays.map((path) => ({ path, ...replay(path, options, shell) }));
   else {

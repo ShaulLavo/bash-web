@@ -7,6 +7,82 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+type Options = {
+  count: number;
+  seed: number;
+  timeoutMs: number;
+  shell?: string;
+  replays: string[];
+  output?: string;
+  record?: string;
+};
+type Random = {
+  next(): number;
+  pick<T>(items: readonly T[]): T;
+  chance(numerator: number, denominator?: number): boolean;
+};
+type Expression = { source: string; tags: string[] };
+type WordCase = {
+  id: string;
+  operator: string;
+  quote: string;
+  valueState: string;
+  operandState: string;
+  expression: Expression;
+  featureTags: string[];
+  label?: string;
+  value?: string;
+  operandValue?: string;
+  expectedUnsupported?: boolean;
+  fixedScript?: string;
+};
+type CaseIdentity = ReturnType<typeof caseIdentity>;
+type Coverage = ReturnType<typeof coverage>;
+type WordResult = {
+  status: number | null;
+  signal?: string;
+  timedOut?: boolean;
+  stdout: Buffer;
+  stderr: Buffer;
+};
+type EncodedWordResult = {
+  status: number | null;
+  signal?: string;
+  timedOut?: boolean;
+  stdoutBase64: string;
+  stderrBase64: string;
+};
+type RecordedWordCase = { case: CaseIdentity; script: string; bash: EncodedWordResult };
+type Fixture = {
+  schema: number;
+  sourceHash: string;
+  seed: number;
+  count: number;
+  timeoutMs: number;
+  bash: string;
+  operators: string[];
+  coverage: Coverage;
+  cases: RecordedWordCase[];
+};
+type Classification = "MATCH" | "UNSUPPORTED" | "MISMATCH";
+type Counts = Record<Classification, number>;
+type Execution = {
+  script: string;
+  bash: WordResult;
+  ours: WordResult;
+  classification: Classification;
+};
+type ResultView = ReturnType<typeof resultView>;
+type MismatchView = {
+  id: string;
+  operator: string;
+  quote: string;
+  featureTags?: string[];
+  script: string;
+  bash: ResultView;
+  ours: ResultView;
+};
+
 const root = resolve(import.meta.dirname, "..");
 const queue = "/work/tmp/wave-heavy/run.sh";
 const operators = [
@@ -74,8 +150,8 @@ If --shell is omitted, shell-engine is built in a temporary target directory thr
 /work/tmp/wave-heavy/run.sh and removed when this command exits.`);
 }
 
-function parseArgs(argv) {
-  const options = {
+function parseArgs(argv: string[]): Options {
+  const options: Options = {
     count: 3000,
     seed: 1,
     timeoutMs: 2000,
@@ -108,7 +184,7 @@ function parseArgs(argv) {
   return options;
 }
 
-function rng(seed) {
+function rng(seed: number): Random {
   let state = seed >>> 0;
   return {
     next() {
@@ -118,16 +194,16 @@ function rng(seed) {
       state >>>= 0;
       return state;
     },
-    pick(items) {
+    pick<T>(items: readonly T[]): T {
       return items[this.next() % items.length];
     },
-    chance(numerator, denominator = 2) {
+    chance(numerator: number, denominator = 2) {
       return this.next() % denominator < numerator;
     },
   };
 }
 
-function shellQuote(value) {
+function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
@@ -162,11 +238,13 @@ const patternPool = atomPool.filter(
 const states = ["unset", "empty", "value"];
 const values = ["b", "abc", "a b", "don't", "'", "${", "$(", "a/b", "a*?", "foo"];
 
-function combineTags(...parts) {
-  return Array.from(new Set(parts.flatMap((part) => part.tags ?? part))).toSorted();
+function combineTags(...parts: (Expression | readonly string[])[]): string[] {
+  return Array.from(
+    new Set(parts.flatMap((part) => ("tags" in part ? part.tags : part))),
+  ).toSorted();
 }
 
-function buildOperand(random, depth) {
+function buildOperand(random: Random, depth: number): Expression {
   if (depth > 0 && random.chance(2, 5)) {
     const nestedTarget = random.chance(1, 2) ? "u" : "v";
     const nested = expressionFor(random.pick(operators), random, depth - 1, nestedTarget);
@@ -180,12 +258,12 @@ function buildOperand(random, depth) {
   return { source: atom.source, tags: atom.tags };
 }
 
-function buildPattern(random, depth) {
+function buildPattern(random: Random, depth: number): Expression {
   if (depth > 0 && random.chance(1, 5)) return buildOperand(random, depth);
   return random.pick(patternPool);
 }
 
-function expressionFor(operator, random, depth, target = "v") {
+function expressionFor(operator: string, random: Random, depth: number, target = "v"): Expression {
   if (operator === "!") return { source: "${!pointer}", tags: ["indirection"] };
   if (operator === "#name") return { source: `\${#${target}}`, tags: ["length"] };
   if (operator === "^" || operator === "^^" || operator === "," || operator === ",,") {
@@ -206,19 +284,21 @@ function expressionFor(operator, random, depth, target = "v") {
     };
   }
   const operand = buildOperand(random, depth);
+  const group = operatorGroups.get(operator);
+  if (group === undefined) throw new Error("unknown operator " + operator);
   return {
     source: `\${${target}${operator}${operand.source}}`,
-    tags: combineTags(operand, [operatorGroups.get(operator)]),
+    tags: combineTags(operand, [group]),
   };
 }
 
-function stateAssignment(name, state, value) {
+function stateAssignment(name: string, state: string, value?: string): string {
   if (state === "unset") return `unset ${name}`;
   if (state === "empty") return `${name}=''`;
-  return `${name}=${shellQuote(value)}`;
+  return `${name}=${shellQuote(value ?? "")}`;
 }
 
-function renderCase(testCase) {
+function renderCase(testCase: WordCase): string {
   if (testCase.fixedScript) return testCase.fixedScript;
   const assignments = [
     "unset v u pointer",
@@ -232,7 +312,7 @@ function renderCase(testCase) {
   return `${assignments.join("; ")}; printf '<%s>\\n' ${printed} following`;
 }
 
-function generatedCase(random, index, requestedQuote) {
+function generatedCase(random: Random, index: number, requestedQuote?: string): WordCase {
   const operator = operators[index % operators.length];
   const expression = expressionFor(operator, random, random.next() % 4);
   const valueState = random.pick(states);
@@ -251,12 +331,19 @@ function generatedCase(random, index, requestedQuote) {
   };
 }
 
-function testCaseQuoteTag(expression) {
+function testCaseQuoteTag(expression: Expression): string {
   return expression.tags?.includes("double-quoted") ? "inner-double-quote" : "word";
 }
 
-function fixedCases() {
-  const expressions = [
+function fixedCases(): WordCase[] {
+  const expressions: {
+    label: string;
+    operator: string;
+    source: string;
+    tags: string[];
+    valueState?: string;
+    expectedUnsupported?: boolean;
+  }[] = [
     {
       label: "nested-default-dont",
       operator: "/",
@@ -316,7 +403,7 @@ function fixedCases() {
   );
 }
 
-function generateCases(seed, count) {
+function generateCases(seed: number, count: number): WordCase[] {
   const random = rng(seed);
   const cases = fixedCases();
   let generated = 0;
@@ -345,7 +432,7 @@ function sourceHash() {
   return createHash("sha256").update(readFileSync(process.argv[1])).digest("hex");
 }
 
-function caseIdentity(testCase) {
+function caseIdentity(testCase: WordCase) {
   return {
     id: testCase.id,
     label: testCase.label,
@@ -362,7 +449,7 @@ function caseIdentity(testCase) {
   };
 }
 
-function coverage(cases) {
+function coverage(cases: WordCase[]) {
   return {
     operators: cases
       .map((testCase) => testCase.operator)
@@ -375,7 +462,7 @@ function coverage(cases) {
   };
 }
 
-function encodeResult(result) {
+function encodeResult(result: WordResult): EncodedWordResult {
   return {
     status: result.status,
     signal: result.signal,
@@ -385,7 +472,7 @@ function encodeResult(result) {
   };
 }
 
-function decodeResult(result) {
+function decodeResult(result: EncodedWordResult): WordResult {
   return {
     status: result.status,
     signal: result.signal,
@@ -395,7 +482,91 @@ function decodeResult(result) {
   };
 }
 
-function validateFixture(fixturePath, fixture, expectedCases, expectedSeed, expectedCount) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseEncodedResult(value: unknown, index: number): EncodedWordResult {
+  if (!isRecord(value)) throw new Error("invalid fixture process result at " + index);
+  if (
+    (typeof value.status !== "number" && value.status !== null) ||
+    (value.signal !== undefined && typeof value.signal !== "string") ||
+    (value.timedOut !== undefined && typeof value.timedOut !== "boolean") ||
+    typeof value.stdoutBase64 !== "string" ||
+    typeof value.stderrBase64 !== "string"
+  )
+    throw new Error("invalid fixture process result at " + index);
+  return {
+    status: value.status,
+    signal: value.signal,
+    timedOut: value.timedOut,
+    stdoutBase64: value.stdoutBase64,
+    stderrBase64: value.stderrBase64,
+  };
+}
+
+function parseFixture(
+  path: string,
+  value: unknown,
+  expectedCount: number,
+): { fixture: Fixture; cases: WordCase[] } {
+  if (!isRecord(value) || !Array.isArray(value.cases) || !Array.isArray(value.operators))
+    throw new Error("invalid shell-word fixture");
+  if (
+    typeof value.schema !== "number" ||
+    typeof value.sourceHash !== "string" ||
+    typeof value.seed !== "number" ||
+    typeof value.count !== "number" ||
+    typeof value.timeoutMs !== "number" ||
+    typeof value.bash !== "string" ||
+    !value.operators.every((operator) => typeof operator === "string")
+  )
+    throw new Error("invalid shell-word fixture");
+  if (value.count !== expectedCount)
+    throw new Error(`fixture count ${value.count} does not match requested count ${expectedCount}`);
+  const cases = generateCases(value.seed, value.count);
+  const generatedCoverage = coverage(cases);
+  if (JSON.stringify(value.coverage) !== JSON.stringify(generatedCoverage))
+    throw new Error("fixture operator/quote coverage is incomplete or stale");
+  if (value.cases.length !== cases.length)
+    throw new Error("fixture case count does not match generated coverage");
+  const rawCases: unknown[] = value.cases;
+  const recorded = cases.map((testCase, index): RecordedWordCase => {
+    const entry: unknown = rawCases[index];
+    if (!isRecord(entry) || typeof entry.script !== "string")
+      throw new Error(`fixture Bash result is missing at case ${testCase.id}`);
+    if (entry.script !== renderCase(testCase))
+      throw new Error(`fixture script differs at case ${testCase.id}`);
+    if (JSON.stringify(entry.case) !== JSON.stringify(caseIdentity(testCase)))
+      throw new Error(`fixture case identity differs at case ${testCase.id}`);
+    return {
+      case: caseIdentity(testCase),
+      script: entry.script,
+      bash: parseEncodedResult(entry.bash, index),
+    };
+  });
+  const fixture: Fixture = {
+    schema: value.schema,
+    sourceHash: value.sourceHash,
+    seed: value.seed,
+    count: value.count,
+    timeoutMs: value.timeoutMs,
+    bash: value.bash,
+    operators: value.operators,
+    coverage: generatedCoverage,
+    cases: recorded,
+  };
+  validateFixture(path, fixture, cases, value.seed, expectedCount);
+  return { fixture, cases };
+}
+
+function validateFixture(
+  fixturePath: string,
+  fixture: Fixture,
+  expectedCases: WordCase[],
+  expectedSeed: number,
+  expectedCount: number,
+) {
   if (fixture.schema !== 1) throw new Error("unsupported shell-word fixture schema");
   if (fixture.sourceHash !== sourceHash())
     throw new Error("fixture source hash does not match this fuzzer");
@@ -425,8 +596,13 @@ function validateFixture(fixturePath, fixture, expectedCases, expectedSeed, expe
   }
 }
 
-function runProcess(command, args, script, timeoutMs) {
-  const env = { ...process.env, LC_ALL: "C.UTF-8", LANG: "C.UTF-8" };
+function runProcess(
+  command: string,
+  args: string[],
+  script: string,
+  timeoutMs: number,
+): WordResult {
+  const env: NodeJS.ProcessEnv = { ...process.env, LC_ALL: "C.UTF-8", LANG: "C.UTF-8" };
   delete env.BASH_ENV;
   delete env.ENV;
   const result = spawnSync(command, args, {
@@ -438,8 +614,12 @@ function runProcess(command, args, script, timeoutMs) {
   });
   if (result.error) {
     return {
-      status: result.error.code === "ETIMEDOUT" ? null : 1,
-      timedOut: result.error.code === "ETIMEDOUT",
+      status:
+        result.error !== undefined && "code" in result.error && result.error.code === "ETIMEDOUT"
+          ? null
+          : 1,
+      timedOut:
+        result.error !== undefined && "code" in result.error && result.error.code === "ETIMEDOUT",
       stdout: Buffer.from(result.stdout ?? ""),
       stderr: Buffer.from(result.stderr ?? String(result.error.message)),
     };
@@ -452,24 +632,24 @@ function runProcess(command, args, script, timeoutMs) {
   };
 }
 
-function equalBytes(left, right) {
+function equalBytes(left: Buffer, right: Buffer): boolean {
   return left.equals(right);
 }
 
-function isAllowedUnsupported(testCase, ours, bash) {
+function isAllowedUnsupported(testCase: WordCase, ours: WordResult, bash: WordResult): boolean {
   if (bash.status !== 0 || ours.status !== 2) return false;
   if (!/unsupported|parse|syntax/i.test(ours.stderr.toString())) return false;
   return testCase.expectedUnsupported === true || knownUnsupportedOperators.has(testCase.operator);
 }
 
-function classify(testCase, bash, ours) {
+function classify(testCase: WordCase, bash: WordResult, ours: WordResult): Classification {
   if (bash.timedOut || ours.timedOut) return "MISMATCH";
   if (isAllowedUnsupported(testCase, ours, bash)) return "UNSUPPORTED";
   if (bash.status !== ours.status || !equalBytes(bash.stdout, ours.stdout)) return "MISMATCH";
   return "MATCH";
 }
 
-function resultView(result) {
+function resultView(result: WordResult) {
   return {
     status: result.status,
     signal: result.signal,
@@ -480,7 +660,12 @@ function resultView(result) {
   };
 }
 
-function execute(testCase, bashBin, shellBin, timeoutMs) {
+function execute(
+  testCase: WordCase,
+  bashBin: string,
+  shellBin: string,
+  timeoutMs: number,
+): Execution {
   const script = renderCase(testCase);
   const bash = runProcess(
     bashBin,
@@ -492,12 +677,18 @@ function execute(testCase, bashBin, shellBin, timeoutMs) {
   return { script, bash, ours, classification: classify(testCase, bash, ours) };
 }
 
-function recordFixture(path, options, cases, bashBin, shellBin) {
+function recordFixture(
+  path: string,
+  options: Options,
+  cases: WordCase[],
+  bashBin: string,
+  shellBin: string,
+): Fixture {
   const bash = bashVersion(bashBin);
   if (!bash.startsWith("GNU bash, version 5.3.15"))
     throw new Error(`recording requires GNU Bash 5.3.15, got ${bash}`);
-  const recorded = [];
-  let mismatch = null;
+  const recorded: RecordedWordCase[] = [];
+  let mismatch: { testCase: WordCase; result: Execution } | null = null;
   for (const testCase of cases) {
     const result = execute(testCase, bashBin, shellBin, options.timeoutMs);
     if (result.classification !== "MATCH" && !mismatch) mismatch = { testCase, result };
@@ -527,16 +718,14 @@ function recordFixture(path, options, cases, bashBin, shellBin) {
   return fixture;
 }
 
-function replayFixture(path, shellBin, expectedCount) {
-  const fixture = JSON.parse(readFileSync(path, "utf8"));
-  if (fixture.count !== expectedCount)
-    throw new Error(
-      `fixture count ${fixture.count} does not match requested count ${expectedCount}`,
-    );
-  const cases = generateCases(fixture.seed, fixture.count);
-  validateFixture(path, fixture, cases, fixture.seed, expectedCount);
-  const counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
-  const mismatches = [];
+function replayFixture(path: string, shellBin: string, expectedCount: number) {
+  const { fixture, cases } = parseFixture(
+    path,
+    JSON.parse(readFileSync(path, "utf8")),
+    expectedCount,
+  );
+  const counts: Counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
+  const mismatches: MismatchView[] = [];
   for (let index = 0; index < cases.length; index++) {
     const testCase = cases[index];
     const expected = decodeResult(fixture.cases[index].bash);
@@ -563,10 +752,16 @@ function replayFixture(path, shellBin, expectedCount) {
   return { path, seed: fixture.seed, total: cases.length, counts, mismatches };
 }
 
-function shrinkCase(testCase, bashBin, shellBin, timeoutMs, original) {
+function shrinkCase(
+  testCase: WordCase,
+  bashBin: string,
+  shellBin: string,
+  timeoutMs: number,
+  original: Execution & { case: WordCase },
+): Execution & { case: WordCase } {
   if (testCase.fixedScript) return original;
-  const candidates = [];
-  const simplify = (patch) => candidates.push({ ...testCase, ...patch });
+  const candidates: WordCase[] = [];
+  const simplify = (patch: Partial<WordCase>) => candidates.push({ ...testCase, ...patch });
   simplify({ quote: "top-level" });
   simplify({ valueState: "empty" });
   simplify({ operandState: "empty" });
@@ -587,12 +782,12 @@ function shrinkCase(testCase, bashBin, shellBin, timeoutMs, original) {
   return original;
 }
 
-function incrementCount(map, key, classification) {
+function incrementCount(map: Record<string, Counts>, key: string, classification: Classification) {
   const bucket = (map[key] ??= { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 });
   bucket[classification]++;
 }
 
-function bashVersion(bashBin) {
+function bashVersion(bashBin: string): string {
   return execFileSync(bashBin, ["--version"], { encoding: "utf8" }).split("\n", 1)[0];
 }
 
@@ -610,8 +805,9 @@ function ensureQueued() {
   process.exit(result.status ?? 1);
 }
 
-function buildShell(options, scratch) {
+function buildShell(options: Options, scratch: string | null): string {
   if (options.shell) return options.shell;
+  if (!scratch) throw new Error("scratch directory required");
   const target = resolve(scratch, "target");
   execFileSync(
     "/work/cache/cargo/bin/cargo",
@@ -668,10 +864,10 @@ function main() {
       console.log(`seed=${fixture.seed} cases=${fixture.cases.length} bash=${fixture.bash}`);
       return;
     }
-    const counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
-    const byOperator = {};
-    const byFeature = {};
-    const mismatches = [];
+    const counts: Counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
+    const byOperator: Record<string, Counts> = {};
+    const byFeature: Record<string, Counts> = {};
+    const mismatches: MismatchView[] = [];
     let mismatchTotal = 0;
     for (const testCase of cases) {
       const result = execute(testCase, bashBin, shellBin, options.timeoutMs);

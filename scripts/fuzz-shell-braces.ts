@@ -15,6 +15,92 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  parseRecordedCases,
+  encode,
+  decode,
+  matchesProcessResults,
+  runSync,
+} from "./fuzz-shell-results.ts";
+import type {
+  BasicFixture,
+  Counts,
+  EncodedResult,
+  FuzzOptions,
+  ReplayOptions,
+  ProcessResult,
+  RecordedCase,
+} from "./fuzz-shell-results.ts";
+
+type Options = ReplayOptions;
+type Random = {
+  next(): number;
+  pick<T>(items: { readonly length: number; readonly [index: number]: T }): T;
+};
+type Mode = "unquoted" | "double" | "single";
+type Protection = "escaped" | "single" | "double";
+type BoundaryOpener = "brace" | "command" | "arithmetic";
+type BoundaryBody = "case" | "subshell" | "case-subshell" | "comment-open" | "comment-close";
+type BoundaryNode =
+  | {
+      kind: "boundary";
+      form: "ambiguity";
+      opener: "fused" | "spaced";
+      body: BoundaryBody;
+      closings: number;
+    }
+  | {
+      kind: "boundary";
+      form: "protected";
+      protection: Protection;
+      opener: BoundaryOpener;
+      open?: boolean;
+      literal?: boolean;
+    }
+  | { kind: "boundary"; form: "arithmetic"; opener: "arithmetic"; shift: number };
+export type Node =
+  | { kind: "atom"; text: string; tag?: string; fields?: number }
+  | { kind: "list"; children: Node[] }
+  | { kind: "concat"; children: Node[] }
+  | BoundaryNode
+  | { kind: "boundary-nest"; child: Node }
+  | { kind: "boundary-guard"; child: Node }
+  | { kind: "boundary-context"; context: string; child: Node };
+export type Case = {
+  id: string;
+  context: string;
+  mode: Mode;
+  node: Node;
+  tags: string[];
+  script: string;
+};
+type Coverage = ReturnType<typeof coverage>;
+export type Fixture = BasicFixture<Case, Coverage>;
+type OutcomeCounts = { MATCH: number; MISMATCH: number };
+type Mismatch = {
+  case: Case;
+  bash: EncodedResult;
+  ours: EncodedResult;
+  minimized?: {
+    case: Case;
+    bash: EncodedResult;
+    ours: EncodedResult;
+    attempts: number;
+  };
+};
+type Execution = {
+  total: number;
+  counts: Counts;
+  coverage: Coverage;
+  byContext: Record<string, OutcomeCounts>;
+  byFeature: Record<string, OutcomeCounts>;
+  oracleStatuses: Record<string, number>;
+  candidateStatuses: Record<string, number>;
+  mismatches: Mismatch[];
+  results: RecordedCase<Case>[];
+};
+type Report = Execution & { path?: string; seed?: number; bash?: string };
+type RunConfig = { cwd?: string; timeoutMs: number };
 
 const root = resolve(import.meta.dirname, "..");
 const queue = "/work/tmp/wave-heavy/run.sh";
@@ -22,12 +108,16 @@ const sourcePath = fileURLToPath(import.meta.url);
 const oracleVersion = /^GNU bash, version 5\.3\.15(?:\(|\s)/;
 const fieldLimit = 128;
 const outputLimit = 4 * 1024 * 1024;
-const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
-const fingerprint = () => createHash("sha256").update(readFileSync(sourcePath)).digest("hex");
-const modes = ["unquoted", "double"];
+const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+const fingerprint = () =>
+  createHash("sha256")
+    .update(readFileSync(sourcePath))
+    .update(readFileSync(new URL("./fuzz-shell-results.ts", import.meta.url)))
+    .digest("hex");
+const modes: Mode[] = ["unquoted", "double"];
 
-function optionsFor(args) {
-  const options = { count: 3000, seed: 1, timeoutMs: 2000, replays: [] };
+function optionsFor(args: string[]): Options {
+  const options: Options = { count: 3000, seed: 1, timeoutMs: 2000, replays: [] };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--queue-active") continue;
@@ -78,7 +168,7 @@ No unsupported exemptions: baseline arithmetic failures are MISMATCH too.`);
   return options;
 }
 
-function randomFor(seed) {
+function randomFor(seed: number): Random {
   let state = seed >>> 0 || 0x9e3779b9;
   return {
     next() {
@@ -87,7 +177,7 @@ function randomFor(seed) {
       state ^= state << 5;
       return (state >>>= 0);
     },
-    pick(items) {
+    pick<T>(items: { readonly length: number; readonly [index: number]: T }): T {
       return items[this.next() % items.length];
     },
   };
@@ -104,19 +194,23 @@ export const boundaryContexts = [
   "command",
   "quoted-command",
 ];
-export const boundaryProtections = ["escaped", "single", "double"];
-export const boundaryOpeners = ["brace", "command", "arithmetic"];
-export const boundaryBodies = [
+export const boundaryProtections: Protection[] = ["escaped", "single", "double"];
+export const boundaryOpeners: BoundaryOpener[] = ["brace", "command", "arithmetic"];
+export const boundaryBodies: BoundaryBody[] = [
   "case",
   "subshell",
   "case-subshell",
   "comment-open",
   "comment-close",
 ];
-export const boundarySpellings = ["fused", "spaced"];
+export const boundarySpellings: ("fused" | "spaced")[] = ["fused", "spaced"];
 export const boundaryClosings = [1, 2, 3];
-const boundarySuffixes = { brace: "{x,y}", command: "(x)", arithmetic: "((1+2))" };
-const boundaryCommands = {
+const boundarySuffixes: Record<BoundaryOpener, string> = {
+  brace: "{x,y}",
+  command: "(x)",
+  arithmetic: "((1+2))",
+};
+const boundaryCommands: Record<BoundaryBody, string> = {
   case: "case x in x) :;; esac",
   subshell: "(printf x)",
   "case-subshell": "case x in x) (printf x);; esac",
@@ -124,7 +218,7 @@ const boundaryCommands = {
   "comment-close": "# )\nprintf x",
 };
 
-export function spelling(node) {
+export function spelling(node: Node): string {
   if (node.kind === "list") return `{${node.children.map(spelling).join(",")}}`;
   if (node.kind === "concat") return node.children.map(spelling).join("");
   if (node.kind === "boundary") {
@@ -149,7 +243,7 @@ export function spelling(node) {
   return node.text;
 }
 
-export function bound(node) {
+export function bound(node: Node): number {
   if (node.kind === "list") return node.children.reduce((sum, child) => sum + bound(child), 0);
   if (node.kind === "concat")
     return node.children.reduce((product, child) => product * bound(child), 1);
@@ -163,38 +257,45 @@ export function bound(node) {
   return node.fields ?? 1;
 }
 
-function atom(text, tag = "literal", fields = 1) {
+function atom(text: string, tag = "literal", fields = 1): Node {
   return { kind: "atom", text, tag, fields };
 }
 
-function tagsFor(node) {
+function tagsFor(node: Node): string[] {
   if (node.kind === "boundary")
     return ["boundary", `boundary-${node.form}`, `boundary-opener-${node.opener}`].concat(
-      node.protection ? [`boundary-protection-${node.protection}`] : [],
-      node.body ? [`boundary-body-${node.body}`, `boundary-closings-${node.closings}`] : [],
-      node.literal ? ["boundary-selected-literal"] : [],
+      "protection" in node && node.protection ? [`boundary-protection-${node.protection}`] : [],
+      "body" in node && node.body
+        ? [`boundary-body-${node.body}`, `boundary-closings-${node.closings}`]
+        : [],
+      "literal" in node && node.literal ? ["boundary-selected-literal"] : [],
       node.form === "protected" && node.opener === "brace"
         ? [`boundary-brace-${node.open ? "open" : "closed"}`]
         : [],
     );
-  if (node.child) {
+  if ("child" in node) {
     let depth = 0;
     for (let child = node.child; child.kind === "boundary-nest"; child = child.child) depth++;
-    return [node.kind].concat(
-      node.context ? [`boundary-context-${node.context}`, `boundary-depth-${depth}`] : [],
+    const tags: string[] = [node.kind];
+    return tags.concat(
+      "context" in node ? [`boundary-context-${node.context}`, `boundary-depth-${depth}`] : [],
       tagsFor(node.child),
     );
   }
-  return node.children ? [node.kind].concat(node.children.flatMap(tagsFor)) : [node.tag];
+  if ("children" in node) {
+    const tags: string[] = [node.kind];
+    return tags.concat(node.children.flatMap(tagsFor));
+  }
+  return [node.tag ?? "literal"];
 }
 
-function range(random) {
+function range(random: Random): Node {
   const numeric = random.next() % 2 === 0;
   const start = (random.next() % 13) - 6;
   const end = (random.next() % 13) - 6;
   const pad = random.next() % 3 === 0;
   const signed = random.next() % 4 === 0;
-  const number = (n) =>
+  const number = (n: number) =>
     `${n < 0 ? "-" : signed ? "+" : ""}${String(Math.abs(n)).padStart(pad ? 3 : 1, "0")}`;
   const letters = random.pick(["abcde", "VWXYZ"]);
   const left = numeric ? number(start) : random.pick(letters);
@@ -229,20 +330,20 @@ const atoms = [
   atom("${empty}", "zero-field"),
 ];
 
-function tree(random, depth) {
+function tree(random: Random, depth: number): Node {
   if (depth === 0) return random.pick(atoms);
   const kind = random.next() % 5;
   if (kind === 0) return range(random);
   if (kind === 1) return random.pick(atoms);
   const children = Array.from({ length: kind === 2 ? 3 : 2 }, () => tree(random, depth - 1));
-  const result = { kind: kind === 4 ? "concat" : "list", children };
+  const result: Node = { kind: kind === 4 ? "concat" : "list", children };
   return bound(result) <= fieldLimit ? result : atom("{a,b}", "bounded-list", 2);
 }
 
 const setup = "n=0; v='{p,q}'; va=A; vb=B; v1=one; v2=two; empty=''; unset u";
-const observe = (word) => `printf '<%s>\\n' 'fields' ${word}`;
+const observe = (word: string) => `printf '<%s>\\n' 'fields' ${word}`;
 const after = "printf 'state=<%s>\\n' status=$? n=$n v=\"$v\"";
-function render(node, mode, context) {
+function render(node: Node, mode: Mode, context: string): string {
   const raw = spelling(node);
   const word = mode === "double" ? `"${raw}"` : mode === "single" ? quote(raw) : raw;
   if (context === "assignment") return `${setup}; v=${word}; ${observe('"$v"')}; ${after}`;
@@ -251,7 +352,13 @@ function render(node, mode, context) {
   return `${setup}; ${observe(word)}; ${after}`;
 }
 
-function makeCase(id, node, mode = "unquoted", context = "word", extraTags = []) {
+function makeCase(
+  id: string,
+  node: Node,
+  mode: Mode = "unquoted",
+  context = "word",
+  extraTags: string[] = [],
+): Case {
   return {
     id,
     context,
@@ -262,7 +369,7 @@ function makeCase(id, node, mode = "unquoted", context = "word", extraTags = [])
   };
 }
 
-export function fixedCases() {
+export function fixedCases(): Case[] {
   const words = [
     ["{a,b}", "comma-list"],
     ["$((1 << 2\n)){a,b}", "arithmetic-shift-boundary"],
@@ -373,11 +480,17 @@ export function fixedCases() {
   return cases;
 }
 
-export function boundaryCases(seed) {
+function boundaryName(node: BoundaryNode): string {
+  if ("protection" in node) return node.protection;
+  if ("body" in node) return node.body;
+  return "arithmetic";
+}
+
+export function boundaryCases(seed: number): Case[] {
   const random = randomFor(seed);
-  const features = boundarySpellings
+  const features: BoundaryNode[] = boundarySpellings
     .flatMap((opener) =>
-      boundaryBodies.map((body) => ({
+      boundaryBodies.map((body): BoundaryNode => ({
         kind: "boundary",
         form: "ambiguity",
         opener,
@@ -388,7 +501,7 @@ export function boundaryCases(seed) {
     .concat(
       boundaryProtections.flatMap((protection) =>
         boundaryOpeners.flatMap((opener) =>
-          (opener === "brace" ? [false, true] : [false]).map((open) => ({
+          (opener === "brace" ? [false, true] : [false]).map((open): BoundaryNode => ({
             kind: "boundary",
             form: "protected",
             protection,
@@ -403,7 +516,7 @@ export function boundaryCases(seed) {
         .filter((closings) => closings !== 2)
         .flatMap((closings) =>
           boundarySpellings.flatMap((opener) =>
-            boundaryBodies.map((body) => ({
+            boundaryBodies.map((body): BoundaryNode => ({
               kind: "boundary",
               form: "ambiguity",
               opener,
@@ -413,8 +526,8 @@ export function boundaryCases(seed) {
           ),
         ),
     );
-  const cases = [];
-  const selected = [];
+  const cases: Case[] = [];
+  const selected: { id: string; child: Node; reversed: number }[] = [];
   // Complete cross product, independent of random sampling and --count. Keep
   // this separate from the original seeded stream so no old case is displaced.
   const combinations = features.flatMap((feature) =>
@@ -422,33 +535,33 @@ export function boundaryCases(seed) {
   );
   for (const { feature, context } of combinations)
     for (let depth = 0; depth <= 3; depth++) {
-      let child = feature;
+      let child: Node = feature;
       for (let level = 0; level < depth; level++) child = { kind: "boundary-nest", child };
       child = { kind: "boundary-context", context, child };
-      const guarded = { kind: "boundary-guard", child };
-      const children = [guarded, { kind: "list", children: [atom("a"), atom("b")] }];
+      const guarded: Node = { kind: "boundary-guard", child };
+      const children: Node[] = [guarded, { kind: "list", children: [atom("a"), atom("b")] }];
       const reversed = random.next() % 2;
       if (reversed) children.reverse();
-      const node = { kind: "concat", children };
+      const node: Node = { kind: "concat", children };
       const closingId =
-        feature.closings && feature.closings !== 2 ? `-closings-${feature.closings}` : "";
-      const id = `boundary-${feature.form}-${feature.protection ?? feature.body}-${feature.opener}-${feature.open ? "open" : "closed"}-${context}-${depth}${closingId}`;
+        "closings" in feature && feature.closings !== 2 ? `-closings-${feature.closings}` : "";
+      const id = `boundary-${feature.form}-${boundaryName(feature)}-${feature.opener}-${"open" in feature && feature.open ? "open" : "closed"}-${context}-${depth}${closingId}`;
       for (const mode of modes) cases.push(makeCase(`${id}-${mode}`, node, mode));
       selected.push({ id, child, reversed });
     }
   // The same exercises without the guard, after every guarded case so the
   // original stream keeps its order: command bodies now run in each context.
   for (const { id, child, reversed } of selected) {
-    const children = [child, { kind: "list", children: [atom("a"), atom("b")] }];
+    const children: Node[] = [child, { kind: "list", children: [atom("a"), atom("b")] }];
     if (reversed) children.reverse();
-    const node = { kind: "concat", children };
+    const node: Node = { kind: "concat", children };
     for (const mode of modes) cases.push(makeCase(`${id}-selected-${mode}`, node, mode));
   }
   // Selected controls distinguish literal dollars and real arithmetic from the
   // inactive scanner exercises. Parentheses remain protected shell-word text.
   for (const protection of boundaryProtections)
     for (const opener of boundaryOpeners) {
-      const node = {
+      const node: Node = {
         kind: "concat",
         children: [
           { kind: "boundary", form: "protected", protection, opener, literal: true },
@@ -475,7 +588,7 @@ export function boundaryCases(seed) {
   return cases;
 }
 
-export function generateCases(seed, count) {
+export function generateCases(seed: number, count: number): Case[] {
   const random = randomFor(seed);
   const cases = fixedCases();
   for (let index = 0; index < count; index += 2) {
@@ -491,61 +604,15 @@ export function generateCases(seed, count) {
   return cases.concat(boundaryCases(seed));
 }
 
-const encode = (result) => ({
-  status: result.status,
-  signal: result.signal,
-  timedOut: result.timedOut,
-  error: result.error,
-  stdoutBase64: result.stdout.toString("base64"),
-  stderrBase64: result.stderr.toString("base64"),
-});
-const decode = (result) => ({
-  ...result,
-  stdout: Buffer.from(result.stdoutBase64, "base64"),
-  stderr: Buffer.from(result.stderrBase64, "base64"),
-});
-export function matches(a, b) {
-  return (
-    !a.timedOut &&
-    !b.timedOut &&
-    !a.error &&
-    !b.error &&
-    Number.isInteger(a.status) &&
-    a.status === b.status &&
-    a.signal === null &&
-    b.signal === null &&
-    a.stdout.equals(b.stdout)
-  );
+export function matches(a: ProcessResult, b: ProcessResult): boolean {
+  return matchesProcessResults(a, b);
 }
 
-function run(bin, script, options) {
-  const result = spawnSync(bin, ["-c", `set -f\n${script}`], {
-    cwd: options.cwd,
-    // No inherited startup hooks, shell options, owner HOME or open stdin.
-    env: {
-      PATH: "/usr/bin:/bin",
-      HOME: options.cwd,
-      TMPDIR: options.cwd,
-      LC_ALL: "C.UTF-8",
-      LANG: "C.UTF-8",
-    },
-    input: Buffer.alloc(0),
-    encoding: null,
-    timeout: options.timeoutMs,
-    killSignal: "SIGKILL",
-    maxBuffer: outputLimit,
-  });
-  return {
-    status: result.status,
-    signal: result.signal ?? null,
-    timedOut: result.error?.code === "ETIMEDOUT",
-    error: result.error?.code ?? null,
-    stdout: Buffer.from(result.stdout ?? ""),
-    stderr: Buffer.from(result.stderr ?? result.error?.message ?? ""),
-  };
+function run(bin: string, script: string, options: RunConfig): ProcessResult {
+  return runSync(bin, script, options, true, outputLimit);
 }
 
-function coverage(cases) {
+function coverage(cases: Case[]) {
   return {
     contexts: Array.from(new Set(cases.map((test) => test.context))).sort(),
     modes: Array.from(new Set(cases.map((test) => test.mode))).sort(),
@@ -553,7 +620,42 @@ function coverage(cases) {
   };
 }
 
-function validateFixtureIdentity(path, fixture, options) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseFixture(path: string, value: unknown, options: FuzzOptions): Fixture {
+  if (!isRecord(value) || !Array.isArray(value.cases)) throw new Error("invalid brace fixture");
+  if (
+    typeof value.schema !== "number" ||
+    typeof value.sourceHash !== "string" ||
+    typeof value.seed !== "number" ||
+    typeof value.count !== "number" ||
+    typeof value.timeoutMs !== "number" ||
+    typeof value.bash !== "string"
+  )
+    throw new Error("invalid brace fixture");
+  const rawCases: unknown[] = value.cases;
+  const generated = generateCases(value.seed, value.count);
+  const generatedCoverage = coverage(generated);
+  if (JSON.stringify(value.coverage) !== JSON.stringify(generatedCoverage))
+    throw new Error("fixture coverage differs");
+  const cases = parseRecordedCases(rawCases, generated);
+  const fixture: Fixture = {
+    schema: value.schema,
+    sourceHash: value.sourceHash,
+    seed: value.seed,
+    count: value.count,
+    timeoutMs: value.timeoutMs,
+    bash: value.bash,
+    coverage: generatedCoverage,
+    cases,
+  };
+  validateFixture(path, fixture, options);
+  return fixture;
+}
+
+function validateFixtureIdentity(path: string, fixture: Fixture, options: FuzzOptions) {
   if (fixture.schema !== 1 || fixture.sourceHash !== fingerprint())
     throw new Error("stale brace fixture hash/schema");
   if (!oracleVersion.test(fixture.bash ?? "")) throw new Error("fixture Bash version differs");
@@ -571,7 +673,7 @@ function validateFixtureIdentity(path, fixture, options) {
     throw new Error("fixture filename seed differs");
 }
 
-export function validateFixture(path, fixture, options) {
+export function validateFixture(path: string, fixture: Fixture, options: FuzzOptions): Case[] {
   validateFixtureIdentity(path, fixture, options);
   const cases = generateCases(fixture.seed, fixture.count);
   if (JSON.stringify(fixture.coverage) !== JSON.stringify(coverage(cases)))
@@ -585,6 +687,7 @@ export function validateFixture(path, fixture, options) {
     const result = entry.bash;
     if (
       !result ||
+      typeof result.status !== "number" ||
       !Number.isInteger(result.status) ||
       result.status < 0 ||
       result.status > 255 ||
@@ -593,7 +696,7 @@ export function validateFixture(path, fixture, options) {
       result.error !== null
     )
       throw new Error(`invalid fixture process result at ${index}`);
-    for (const key of ["stdoutBase64", "stderrBase64"])
+    for (const key of ["stdoutBase64", "stderrBase64"] as const)
       if (
         typeof result[key] !== "string" ||
         Buffer.from(result[key], "base64").toString("base64") !== result[key] ||
@@ -604,7 +707,7 @@ export function validateFixture(path, fixture, options) {
   return cases;
 }
 
-function mismatchSignature(bash, ours) {
+function mismatchSignature(bash: ProcessResult, ours: ProcessResult): string {
   return JSON.stringify([
     bash.status,
     ours.status,
@@ -618,13 +721,13 @@ function mismatchSignature(bash, ours) {
   ]);
 }
 
-function containsBoundary(node) {
+function containsBoundary(node: Node): boolean {
   if (node.kind === "boundary") return true;
-  if (node.child) return containsBoundary(node.child);
-  return node.children?.some(containsBoundary) ?? false;
+  if ("child" in node) return containsBoundary(node.child);
+  return "children" in node ? node.children.some(containsBoundary) : false;
 }
 
-export function reductions(node) {
+export function reductions(node: Node): Node[] {
   if (node.kind === "boundary") {
     if (node.form === "ambiguity" && node.body === "case-subshell")
       return [
@@ -634,13 +737,13 @@ export function reductions(node) {
     if (node.form === "arithmetic" && node.shift) return [{ ...node, shift: 0 }];
     return [];
   }
-  if (node.child) {
+  if ("child" in node) {
     const candidates = reductions(node.child).map((child) => ({ ...node, child }));
     // A nesting wrapper can disappear, but not a guard or context wrapper:
     // shrinking must never turn inactive command syntax into selected execution.
     return node.kind === "boundary-nest" ? [node.child].concat(candidates) : candidates;
   }
-  if (!node.children) return node.text === "x" ? [] : [atom("x")];
+  if (!("children" in node)) return node.text === "x" ? [] : [atom("x")];
   const candidates = containsBoundary(node)
     ? node.children.filter(containsBoundary)
     : node.children.slice();
@@ -655,7 +758,13 @@ export function reductions(node) {
   return candidates;
 }
 
-function shrink(test, original, options, bashBin, shell) {
+function shrink(
+  test: Case,
+  original: { bash: ProcessResult; ours: ProcessResult },
+  options: RunConfig,
+  bashBin: string,
+  shell: string,
+) {
   // Keep context, quoting AND exact process-failure signature. A stdout mismatch
   // must not shrink into a syntax error, timeout, spawn failure or status mismatch.
   const signature = mismatchSignature(original.bash, original.ours);
@@ -679,37 +788,48 @@ function shrink(test, original, options, bashBin, shell) {
   }
 }
 
-function execute(cases, options, shell, bashBin, oracle) {
-  const counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
-  const byContext = {};
-  const byFeature = {};
-  const oracleStatuses = {};
-  const candidateStatuses = {};
-  const mismatches = [];
-  const results = [];
+function addStatus(map: Record<string, number>, result: ProcessResult) {
+  const key = JSON.stringify([result.status, result.signal, result.error]);
+  map[key] = (map[key] ?? 0) + 1;
+}
+
+function addOutcomes(
+  map: Record<string, OutcomeCounts>,
+  keys: string[],
+  classification: "MATCH" | "MISMATCH",
+) {
+  for (const key of keys) (map[key] ??= { MATCH: 0, MISMATCH: 0 })[classification]++;
+}
+
+function execute(
+  cases: Case[],
+  options: Options,
+  shell: string,
+  bashBin: string | null,
+  oracle?: RecordedCase<Case>[],
+): Execution {
+  const counts: Counts = { MATCH: 0, UNSUPPORTED: 0, MISMATCH: 0 };
+  const byContext: Record<string, OutcomeCounts> = {};
+  const byFeature: Record<string, OutcomeCounts> = {};
+  const oracleStatuses: Record<string, number> = {};
+  const candidateStatuses: Record<string, number> = {};
+  const mismatches: Mismatch[] = [];
+  const results: RecordedCase<Case>[] = [];
   for (const [index, test] of cases.entries()) {
-    const bash = oracle ? decode(oracle[index].bash) : run(bashBin, test.script, options);
+    const bash = oracle ? decode(oracle[index].bash) : run(bashBin ?? "", test.script, options);
     const ours = run(shell, test.script, options);
-    const classification = matches(bash, ours) ? "MATCH" : "MISMATCH";
+    const classification: "MATCH" | "MISMATCH" = matches(bash, ours) ? "MATCH" : "MISMATCH";
     counts[classification]++;
-    for (const [map, result] of [
-      [oracleStatuses, bash],
-      [candidateStatuses, ours],
-    ]) {
-      const key = JSON.stringify([result.status, result.signal, result.error]);
-      map[key] = (map[key] ?? 0) + 1;
-    }
-    for (const [map, keys] of [
-      [byContext, [test.context]],
-      [byFeature, test.tags],
-    ])
-      for (const key of keys) (map[key] ??= { MATCH: 0, MISMATCH: 0 })[classification]++;
+    addStatus(oracleStatuses, bash);
+    addStatus(candidateStatuses, ours);
+    addOutcomes(byContext, [test.context], classification);
+    addOutcomes(byFeature, test.tags, classification);
     if (classification === "MISMATCH" && mismatches.length < 40) {
       const original = { case: test, bash: encode(bash), ours: encode(ours) };
       // Recorded replay never invokes Bash, including during shrinking.
       const minimal =
         !oracle && mismatches.length < 10
-          ? shrink(test, { bash, ours }, options, bashBin, shell)
+          ? shrink(test, { bash, ours }, options, bashBin ?? "", shell)
           : null;
       mismatches.push({
         ...original,
@@ -778,11 +898,11 @@ function main() {
   process.once("SIGINT", interrupted);
   process.once("SIGTERM", interrupted);
   try {
-    let reports;
+    let reports: Report[];
     if (options.replays.length) {
       // Validate every fixture before running any candidate case.
       const fixtures = options.replays.map((path) => {
-        const fixture = JSON.parse(readFileSync(path, "utf8"));
+        const fixture = parseFixture(path, JSON.parse(readFileSync(path, "utf8")), options);
         return { path, fixture, cases: validateFixture(path, fixture, options) };
       });
       reports = fixtures.map(({ path, fixture, cases }) => ({
