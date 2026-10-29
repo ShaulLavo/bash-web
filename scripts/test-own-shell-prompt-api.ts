@@ -114,15 +114,17 @@ test("runtime disposal rejects the public prompt wait", { timeout: 15000 }, asyn
   await assert.rejects(shell.waitForPrompt(), /Shell closed/);
 });
 
-for (const { mode, status } of [
-  { mode: "handled", status: 0 },
-  { mode: "handled", status: 7 },
-  { mode: "default", status: 0 },
-  { mode: "removed", status: 0 },
-  { mode: "once", status: 0 },
+for (const { mode, status, source, expected } of [
+  { mode: "handled", status: 0, source: "signal-status", expected: 0 },
+  { mode: "handled", status: 7, source: "signal-status", expected: 7 },
+  { mode: "default", status: 0, source: "signal-status", expected: 130 },
+  { mode: "removed", status: 0, source: "signal-status", expected: 130 },
+  { mode: "once", status: 0, source: "signal-status", expected: 130 },
+  { mode: "handled", status: 0, source: "while :; do :; done | signal-status", expected: 0 },
+  { mode: "handled", status: 0, source: "signal-status 1>&2 | while :; do :; done", expected: 130 },
 ] as const) {
   test(
-    `public prompt preserves ${mode} SIGINT guest result ${status}`,
+    `public prompt preserves ${mode} SIGINT guest result ${status}: ${source}`,
     { timeout: 15000 },
     async (context) => {
       const { runtime, shell } = await fixture(context);
@@ -149,7 +151,7 @@ for (const { mode, status } of [
         ],
         { launcher: api.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory)) },
       );
-      await send(shell, "signal-status");
+      await send(shell, source);
       while (!output.includes("SIGNAL_READY\n")) {
         context.signal.throwIfAborted();
         assert.equal(shell.terminal.readPrompt()?.generation, initial.generation, output);
@@ -161,7 +163,7 @@ for (const { mode, status } of [
         signal: context.signal,
       });
       output += decoder.decode(shell.terminal.drain(), { stream: true });
-      assert.equal(prompt.status, mode === "handled" ? status : 130, output);
+      assert.equal(prompt.status, expected, output);
       if (mode === "handled") assert.ok(output.includes("SIGNAL_HANDLED\n"), output);
     },
   );
