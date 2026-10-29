@@ -23,6 +23,7 @@ import {
 } from "./shell-scoreboard-main.mjs";
 import { digest } from "./shell-scoreboard.mjs";
 import { prepareCandidate, foldCandidate } from "./shell-scoreboard-accepted-gains.mjs";
+import { terminalRecoveryTarget } from "./shell-scoreboard-terminal-recovery.mjs";
 
 function json(path) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -133,7 +134,8 @@ export async function prepareQualification({ root, client, output }) {
   let floor = null;
   if (
     bound.selected.kind === "pull-request" ||
-    target === "f6e3a9e67d56332b0476f3608e198bf74e8e12f3"
+    target === "f6e3a9e67d56332b0476f3608e198bf74e8e12f3" ||
+    terminalRecoveryTarget(root, target)
   ) {
     const prepared = await prepareCandidate({ root, client, ...bound, sourceSha });
     floor = prepared.floor.kind === "MainObservedFloor" ? prepared.floor.floor : prepared.floor;
@@ -245,14 +247,7 @@ export async function foldQualification({ root, client, rawPath, output }) {
       ),
     ),
   };
-  write(resolve(output, "floor.json"), {
-    ...floor,
-    run: bound.run,
-    beforeSha: bound.selected.beforeSha,
-    lostIds: Object.values(result.corpora)
-      .flatMap((row) => row.lost)
-      .sort(),
-  });
+  writeMainFloor(output, floor, bound, result);
   write(resolve(output, "qualification.json"), result);
   return result;
 }
@@ -264,7 +259,7 @@ async function foldAcceptedCandidate({ root, client, raw, bound, oracle, output 
     sourceSha: raw.sourceSha,
     run: raw.run,
   });
-  const result = {
+  let result = {
     ...(await foldCandidate(prepared, raw)),
     observedMainAfter: bound.observedMainAfter,
   };
@@ -291,18 +286,25 @@ async function foldAcceptedCandidate({ root, client, raw, bound, oracle, output 
           landedMerge: accepted.landedMerge,
           recordDigest: accepted.acceptedRecordDigest,
           base: accepted.base.evidence,
+          ...(accepted.evidence ? { evidence: accepted.evidence } : {}),
         },
       ].concat(current.evidence),
     });
-    write(resolve(output, "floor.json"), {
-      ...floor,
-      run: bound.run,
-      beforeSha: bound.selected.beforeSha,
-      lostIds: [],
-    });
+    result = { ...result, ...qualification(oracle, floor, raw.score, bound.selected) };
+    writeMainFloor(output, floor, bound, result);
   }
   write(resolve(output, "qualification.json"), result);
   return result;
+}
+function writeMainFloor(output, floor, bound, result) {
+  write(resolve(output, "floor.json"), {
+    ...floor,
+    run: bound.run,
+    beforeSha: bound.selected.beforeSha,
+    lostIds: Object.values(result.corpora)
+      .flatMap((row) => row.lost)
+      .sort(),
+  });
 }
 async function main() {
   const [command, ...args] = process.argv.slice(2);

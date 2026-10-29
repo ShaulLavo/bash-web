@@ -1,0 +1,43 @@
+{
+  "status": "Implemented; independent review and hosted gates remain parent-owned",
+  "base": "c442e234405e00dcb25e7503cbd930185fbfd63f",
+  "branch": "fix/cumulative-main-score-floor",
+  "recordDigest": "ce9ea1108674599cc30734efc58f711f2c145e455468852f9be4078694de3dec",
+  "acceptedIds": 4764,
+  "membershipSha256": "7a3c095c51e768f6773dbebec637674e5450c6519f6f4b257015fddbceaceb55",
+  "freshMainCanHealWithoutRepair": false,
+  "freshWorkflowLaunched": false,
+  "historicalWorkflowRebuilds": 0,
+  "failingBefore": "cancelled-parent fixture rejects missing-non-equivalent-main-score for 69ed868e4d5cf1274993ed32feb717423c5582fd",
+  "focusedScoreboardTests": {
+    "passed": 54,
+    "failed": 0
+  },
+  "ciTests": {
+    "passed": 131,
+    "failed": 0
+  },
+  "checks": [
+    "format:check",
+    "lint",
+    "typecheck:ci",
+    "check:duplicates exact and rust-structural with no new clones",
+    "check:unused with exact npm lockfile dependencies"
+  ],
+  "newCoverage": [
+    "authentic cancelled-parent fixture and all three accepted PRs",
+    "fresh-source preparation, raw sealing, host admission and main-floor publication",
+    "both PR178 IDs remain required",
+    "prior same-source attempt gain is retained and makes a later regression fail",
+    "changed records, foreign PRs, unrelated trees, altered uploaders and expiry reject",
+    "tested PR merge binding remains distinct from its head and never publishes a main-floor artifact",
+    "original PR run sets and attempts cannot change underneath the fixed receipt"
+  ],
+  "testEvidence": "scripts/test-data/terminal-floor-host.json.gz and terminal-floor-sources.pack are offline test inputs only; production reconstructs host authority",
+  "generalCollector": {
+    "status": "Approved, deferred beyond this wave",
+    "estimateHours": "4-8",
+    "plan": "/work/reports/wave-20261029/terminal-design-split.md#deferred-infrastructure-cumulative-floors-after-fast-ci-cancellation"
+  },
+  "scope": "No layer selector, engine, frozen oracle, source pins, package version or workflow gate changed"
+}

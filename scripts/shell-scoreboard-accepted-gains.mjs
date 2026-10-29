@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { parse } from "yaml";
 import {
   admitQualificationRaw,
+  assertAcceptedRecordCheckout,
+  assertJobBinding,
+  assertLandedPullRequest,
+  assertObservationSequence,
   artifactJson,
   assertMainRun,
   assertUploader,
@@ -20,6 +24,11 @@ import {
   validateOwnScore,
 } from "./shell-scoreboard-floor.mjs";
 import { digest } from "./shell-scoreboard.mjs";
+import {
+  terminalGap,
+  prepareTerminalRecovery,
+  assertTerminalFreshObservation,
+} from "./shell-scoreboard-terminal-recovery.mjs";
 
 const merge = "f6e3a9e67d56332b0476f3608e198bf74e8e12f3";
 const recordPath = `scoreboard/accepted-gains/${merge}.json`;
@@ -88,17 +97,7 @@ function records(root, ref) {
     });
 }
 function candidateRecord(root, selected, sourceSha) {
-  assert.equal(git(root, ["rev-parse", "HEAD"]), sourceSha, "candidate checkout changed");
-  assert.equal(
-    git(root, ["diff", "--name-only", sourceSha, "--", "scoreboard/accepted-gains"]),
-    "",
-    "mutable accepted records",
-  );
-  assert.equal(
-    git(root, ["ls-files", "--others", "--exclude-standard", "--", "scoreboard/accepted-gains"]),
-    "",
-    "unbound accepted records",
-  );
+  assertAcceptedRecordCheckout(root, sourceSha);
   assertRecordAppend(records(root, merge), records(root, sourceSha), recordPath);
   if (selected.kind === "pull-request") {
     assert.equal(selected.testedMergeSha, sourceSha);
@@ -140,10 +139,10 @@ export function assertTerminalBlock(run, jobs, artifacts, logs) {
     const job = unique(jobs, (item) => item.name === name, name);
     assert.equal(job.status, "completed", "nonterminal producer");
     assert.equal(job.conclusion, "skipped", "producer was not skipped");
-    assertJobIdentity(job, run);
+    assertJobBinding(job, run);
   }
   const native = unique(jobs, (item) => item.name === "native", "native");
-  assertJobIdentity(native, run);
+  assertJobBinding(native, run);
   assert.equal(native.status, "completed");
   assert.equal(native.conclusion, "failure");
   const failed = native.steps.filter((item) => item.conclusion === "failure");
@@ -166,11 +165,6 @@ export function assertTerminalBlock(run, jobs, artifacts, logs) {
   assert.equal((text.match(/test result: FAILED\./g) ?? []).length, 1, "additional native failure");
   assert.match(text, /test result: FAILED\. 442 passed; 1 failed; 0 ignored;/);
 }
-function assertJobIdentity(job, run) {
-  assert.equal(job.run_id, run.id, "wrong job run");
-  assert.equal(job.run_attempt, run.run_attempt, "wrong job attempt");
-  assert.equal(job.head_sha, run.head_sha, "wrong job source");
-}
 export function assertHistoricalJobs(run, jobs, workflow, mergedAt) {
   const names = Object.keys(parse(workflow).jobs).sort();
   assert.equal(names.length, 10, "reviewed historical Shell job set");
@@ -178,7 +172,7 @@ export function assertHistoricalJobs(run, jobs, workflow, mergedAt) {
   assert.equal(run.status, "completed");
   assert.equal(run.conclusion, "success");
   for (const job of jobs) {
-    assertJobIdentity(job, run);
+    assertJobBinding(job, run);
     assert.equal(job.status, "completed", "unfinished historical job");
     assert.equal(job.conclusion, "success", "failed historical job");
     assert.ok(
@@ -200,12 +194,7 @@ function assertRun(run, record) {
 }
 export function assertLandedIdentity(record, pr, facts) {
   const { landed, original } = record;
-  assert.equal(pr.number, landed.pr);
-  assert.equal(pr.merged, true, "unmerged record cannot certify candidate");
-  assert.equal(pr.base.ref, "main");
-  assert.equal(pr.base.repo.id, authority.repositoryId);
-  assert.equal(pr.head.repo.id, authority.repositoryId);
-  assert.equal(pr.head.sha, original.binding.headSha);
+  assertLandedPullRequest(pr, record);
   assert.equal(pr.merge_commit_sha, merge);
   assert.equal(landed.mergeCommit, merge);
   assert.deepEqual(facts.parents, [landed.firstParent], "wrong landed parent");
@@ -404,18 +393,35 @@ async function acceptedFloor(root, client, oracle, record, lifetime) {
   return recomputeAcceptedGains(oracle, record, raw, receipt, base);
 }
 
+async function observedOrTerminalFloor(context) {
+  const { root, client, target } = context;
+  try {
+    return {
+      kind: "MainObservedFloor",
+      floor: (await resolveMainFloor({ root, sourceSha: target, client })).floor,
+    };
+  } catch (error) {
+    if (!terminalGap(error)) throw error;
+    return prepareTerminalRecovery(context);
+  }
+}
 /** Resolves only the captured candidate's requirement, never a replacement main observation. */
 export async function prepareCandidate({ root, client, selected, sourceSha, run }) {
   const target = selected.kind === "pull-request" ? selected.mainSha : selected.beforeSha;
   const oracle = oracleAt(root, bootstrap.sourceSha);
   let floor;
   const lifetime = { expires: Infinity };
-  if (target !== merge)
-    floor = {
-      kind: "MainObservedFloor",
-      floor: (await resolveMainFloor({ root, sourceSha: target, client })).floor,
-    };
-  else {
+  if (target !== merge) {
+    floor = await observedOrTerminalFloor({
+      root,
+      client,
+      target,
+      oracle,
+      sourceSha,
+      selected,
+      lifetime,
+    });
+  } else {
     const found = await mainEvidence({ root, oracle, client }).collect(target);
     if (found.floors.length || found.scores.length)
       floor = {
@@ -457,12 +463,7 @@ export function assertFreshObservation(raw, producer) {
       time(raw.capturedAt) <= time(bound.completed_at) + 1000,
     "preparation time outside bound job",
   );
-  assert.ok(
-    time(observed.started_at) >= time(bound.completed_at) &&
-      time(observed.completed_at) > time(raw.capturedAt) &&
-      time(observed.completed_at) <= time(sealed.started_at),
-    "stale Waffle observation",
-  );
+  assertObservationSequence(raw, bound, observed, sealed);
 }
 async function freshObservation(prepared, raw, context) {
   assert.deepEqual(raw.selected, prepared.selected, "observation binding");
@@ -486,7 +487,8 @@ async function freshObservation(prepared, raw, context) {
     (item) => item.name === "own-shell-compatibility",
     "fresh Waffle producer",
   );
-  assertFreshObservation(raw, producer);
+  if (prepared.floor.recovery === "terminal-2026-10-29") assertTerminalFreshObservation(raw, jobs);
+  else assertFreshObservation(raw, producer);
   assert.equal(context.oracle.environment.runner, "waffle-node", "real Waffle instrument required");
   const observation = Object.freeze({});
   observations.set(observation, structuredClone(raw));
