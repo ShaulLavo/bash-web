@@ -44,3 +44,17 @@ A1 #173 merged as `b8d7d16b600968523ac6165275852c2a552014db`. A2 merged `origin/
 ## Real-display correction
 
 The first Chromium run passed paste submission and Shift+Enter, then caught a multiline edge the ASCII model missed. With a hard newline immediately after the right margin, `EL0` erased the last printed cell because the native cursor still addressed that cell while wrap was pending. A2 now emits CRLF directly at the margin and uses `EL0` before CRLF only when a row has an unpainted tail. The existing margin/multiline display case now models EL0's native cursor clamp. This is within L3's hard-newline redraw, not A3's earlier-row submission or viewport-height work.
+
+## Verification outcome
+
+`verification.json` records the commands and outcomes. The final real Chromium run passes all three cases, including the right-margin newline, wraps, resize, truncation and cursor check. The real WASI runtime tests pass all four cases. Rust passes 1,951 tests across 26 targets; the focused byte/display target passes 29. The admitted frozen compatibility run has 4,762 passing cases, no losses and no newly failing cases. Layers and JavaScript quality pass. The final display-only correction was followed by a fresh guest build, runtime proof, focused native proof, duplicate scan and Chromium run.
+
+`red-rust.log`, `red-display.log`, `red-runtime.log` and `red-utf8.log` retain failing-first evidence. The browser initially passed two cases and failed the exact-margin hard newline by one missing cell; the following source commit fixes that root cause, and `browser.log` records the final green run. `held-multiline-paste.png` shows the actual prompt holding both commands and the trailing newline before Enter.
+
+No version, guest release, pin, or hosted playground changed. Independent review and merge belong to the coordinator. The A3 display fixes remain separate.
+
+## Cleanup and handoff
+
+The installed worktree process checker reports zero live cwd processes on the PC, and the task's test-server port 4243 is closed. The Waffle libc scratch directory and the UTF-8 probe files are gone. Task-created build trees, dependency install, fetched terminal sources, generated guest/browser assets, browser report/profile consumers and disposable test outputs were removed after verification. `cleanup.json` records 5,692,996,234 removed bytes and the preserved tracked notice file. Shared Cargo, npm, uv and Playwright caches and pre-existing services were preserved.
+
+The author source checkout remains available for coordinator-requested fixes until the coordinator releases it. Only small receipts and the reviewed screenshot remain under `.internal/terminal-a2/`; there is no running process, server, preview, route, container, remote copy, or deployment to release.

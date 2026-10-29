@@ -23,6 +23,15 @@ impl Screen {
             self.lines.push(vec![b' '; self.columns]);
         }
     }
+    fn erase_line(&mut self, mode: usize) {
+        assert!(mode == 0 || mode == 2);
+        let start = if mode == 2 {
+            0
+        } else {
+            self.column.min(self.columns - 1)
+        };
+        self.lines[self.row][start..].fill(b' ');
+    }
     fn write(&mut self, bytes: &[u8]) {
         let mut at = 0;
         while at < bytes.len() {
@@ -52,15 +61,7 @@ impl Screen {
                             self.lines[self.row][self.column.min(self.columns)..].fill(b' ');
                             self.lines.truncate(self.row + 1);
                         }
-                        b'K' => {
-                            assert!(number == 0 || number == 2);
-                            let start = if number == 2 {
-                                0
-                            } else {
-                                self.column.min(self.columns - 1)
-                            };
-                            self.lines[self.row][start..].fill(b' ');
-                        }
+                        b'K' => self.erase_line(number),
                         other => panic!("unsupported editor CSI {}", char::from(other)),
                     }
                 }

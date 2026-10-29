@@ -1,0 +1,30 @@
+{
+  "identity": {
+    "schema": 1,
+    "caseSet": "3c38e4fb351a85ad936d1d324fcd80d75321d20089535b947d23c406ab2b7c5a",
+    "oracle": "ebc3234245249f0e0292f9362c0ad63a71de36c7e1279886a038e747159ddc5d",
+    "environment": "6ed3e700fcfca7d03ae94ae372480a00ca737d3baa211cea90659f91c6e94c60",
+    "sources": "6da342fee1380a0932f51e9cbcd306595dee8b77ffda024c591486365372345d"
+  },
+  "counts": {
+    "oils": {
+      "total": 2492,
+      "passed": 1395,
+      "skipped": 810
+    },
+    "brush-suite": {
+      "total": 2894,
+      "passed": 1492,
+      "skipped": 1006
+    },
+    "bashkit-suite": {
+      "total": 3835,
+      "passed": 1875,
+      "skipped": 1613
+    }
+  },
+  "lost": [],
+  "newlyFailing": [],
+  "exitCode": 0,
+  "receiptSha256": "e68c65cf127d3ac2eea1213b15b795ffce4e4ba11d8ef63473fd72150d67677a"
+}

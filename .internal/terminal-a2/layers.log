@@ -1,0 +1,5 @@
+
+> bash-web@0.0.109 check:layers
+> node scripts/check-layers.ts
+
+Engine layers: 0 production + 0 test-only violations; 43 production + 33 test-only unique edges. Capability matrix and Full/Lite sizes: not measured.
