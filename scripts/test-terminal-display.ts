@@ -295,14 +295,14 @@ test("multiline commands repaint hard rows and leave output below them", () => {
 });
 
 test("a host interrupt or end of input after a resize finishes below the reflowed command", () => {
-  const typed = [
+  const typed: Step[] = [
     { prompt: "$ " },
     { keys: "echo abcdefghijklmnop\x01" },
     { resize: [8, 6] },
-  ] as const;
-  const cancelled = replay(12, 6, [...typed, { cancel: true }, { prompt: "$ " }]);
+  ];
+  const cancelled = replay(12, 6, typed.concat([{ cancel: true }, { prompt: "$ " }]));
   assert.deepEqual(cancelled.lines, ["$ echo a", "bcdefghi", "jklmnop^", "C", "$"]);
-  const ended = replay(12, 6, [...typed, { eof: true }]);
+  const ended = replay(12, 6, typed.concat([{ eof: true }]));
   assert.deepEqual(ended.lines, ["$ echo a", "bcdefghi", "jklmnop"]);
   assert.deepEqual(ended.cursor, { row: 3, column: 0 });
 });
