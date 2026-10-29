@@ -4,13 +4,52 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fingerprint, run as runProcess, encode, decode } from "./fuzz-shell-process.mjs";
+import {
+  fingerprint,
+  run as runProcess,
+  encode,
+  decode,
+  parseEncodedResult,
+  type EncodedResult,
+  type ProcessResult,
+} from "./fuzz-shell-process.ts";
+
+type Options = {
+  count: number;
+  seed: number;
+  timeout: number;
+  replays: string[];
+  shell?: string;
+  output?: string;
+  record?: string;
+};
+type Random = { next(): number; pick<T>(items: readonly T[]): T };
+type Case = { id: string; script: string };
+type RecordedCase = { case: Case; bash: EncodedResult };
+type Fixture = {
+  schema: number;
+  sourceHash: string;
+  seed: number;
+  count: number;
+  timeoutMs: number;
+  bash: string;
+  cases: RecordedCase[];
+};
+type Counts = { MATCH: number; UNSUPPORTED: number; MISMATCH: number };
+type Mismatch = Case & { bash: EncodedResult; ours: EncodedResult };
+type Execution = {
+  total: number;
+  counts: Counts;
+  mismatches: Mismatch[];
+  results: RecordedCase[];
+};
+type Report = Execution & { path?: string; seed?: number; bash?: string };
 
 const root = resolve(import.meta.dirname, "..");
 const queue = "/work/tmp/wave-heavy/run.sh";
 
-function optionsFor(args) {
-  const options = { count: 256, seed: 17, timeout: 2000, replays: [] };
+function optionsFor(args: string[]): Options {
+  const options: Options = { count: 256, seed: 17, timeout: 2000, replays: [] };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--queue-active") continue;
@@ -39,7 +78,7 @@ function optionsFor(args) {
   return options;
 }
 
-function randomFor(seed) {
+function randomFor(seed: number): Random {
   let state = seed >>> 0 || 1;
   return {
     next() {
@@ -48,17 +87,17 @@ function randomFor(seed) {
       state ^= state << 5;
       return (state >>>= 0);
     },
-    pick(items) {
+    pick<T>(items: readonly T[]): T {
       return items[this.next() % items.length];
     },
   };
 }
 
-const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const values = ["", "1", "2", "7"];
 const names = ["x", "counter42", "_item", "result"];
 
-function fixedCases() {
+function fixedCases(): Case[] {
   const scripts = [
     "f() { readonly y; local x=1 y=$(( x )); echo y=$y; }; f; echo y=$y",
     "readonly x=1; ((x=2)); printf '<%s>\\n' status=$? x=$x",
@@ -75,7 +114,7 @@ function fixedCases() {
   return scripts.map((script, index) => ({ id: `fixed-${index}`, script }));
 }
 
-function generatedCase(random, index) {
+function generatedCase(random: Random, index: number): string {
   const name = random.pick(names);
   const value = random.pick(values);
   const expression = `${1 + (random.next() % 8)}+${random.next() % 5}`;
@@ -114,7 +153,7 @@ function generatedCase(random, index) {
   return `text='a b'; readonly ${name}=$text; readonly ${name}=changed other=$text; ${observe}; export ${name}=changed final=$text; ${observe}; printf '<%s>\\n' "$other" "$final"`;
 }
 
-function generate(seed, count) {
+function generate(seed: number, count: number): Case[] {
   const random = randomFor(seed);
   const cases = fixedCases();
   for (let index = 0; index < count; index++) {
@@ -123,12 +162,12 @@ function generate(seed, count) {
   return cases;
 }
 
-function run(bin, script, timeout, bash = false) {
+function run(bin: string, script: string, timeout: number, bash = false): ProcessResult {
   const args = bash ? ["--noprofile", "--norc", "-c", `set -f\n${script}`] : ["-c", script];
   return runProcess(bin, args, timeout);
 }
 
-const equal = (left, right) =>
+const equal = (left: ProcessResult, right: ProcessResult) =>
   !left.timedOut &&
   !right.timedOut &&
   Number.isInteger(left.status) &&
@@ -137,13 +176,48 @@ const equal = (left, right) =>
   right.signal === null &&
   left.stdout.equals(right.stdout);
 
-function replay(path, options, shell) {
-  const fixture = JSON.parse(readFileSync(path, "utf8"));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseFixture(value: unknown): Fixture {
+  if (!isRecord(value) || !Array.isArray(value.cases)) throw new Error("invalid readonly fixture");
+  if (
+    typeof value.schema !== "number" ||
+    typeof value.sourceHash !== "string" ||
+    typeof value.seed !== "number" ||
+    typeof value.count !== "number" ||
+    typeof value.timeoutMs !== "number" ||
+    typeof value.bash !== "string"
+  )
+    throw new Error("invalid readonly fixture");
+  const cases = value.cases.map((entry: unknown): RecordedCase => {
+    if (!isRecord(entry) || !isRecord(entry.case)) throw new Error("invalid readonly fixture case");
+    if (typeof entry.case.id !== "string" || typeof entry.case.script !== "string")
+      throw new Error("invalid readonly fixture case");
+    return {
+      case: { id: entry.case.id, script: entry.case.script },
+      bash: parseEncodedResult(entry.bash),
+    };
+  });
+  return {
+    schema: value.schema,
+    sourceHash: value.sourceHash,
+    seed: value.seed,
+    count: value.count,
+    timeoutMs: value.timeoutMs,
+    bash: value.bash,
+    cases,
+  };
+}
+
+function replay(path: string, options: Options, shell: string): Execution {
+  const fixture = parseFixture(JSON.parse(readFileSync(path, "utf8")));
   if (fixture.schema !== 1 || fixture.sourceHash !== fingerprint())
     throw new Error("stale readonly fixture");
   if (fixture.count !== options.count || fixture.timeoutMs !== options.timeout)
     throw new Error("fixture options differ");
-  if (!fixture.bash?.startsWith("GNU bash, version 5.3.15"))
+  if (!fixture.bash.startsWith("GNU bash, version 5.3.15"))
     throw new Error("fixture oracle differs");
   if (fixture.seed !== options.seed) throw new Error("fixture seed differs");
   const cases = generate(fixture.seed, fixture.count);
@@ -160,9 +234,14 @@ function replay(path, options, shell) {
   );
 }
 
-function execute(cases, options, shell, oracle) {
-  const results = [];
-  const mismatches = [];
+function execute(
+  cases: Case[],
+  options: Options,
+  shell: string,
+  oracle?: ProcessResult[],
+): Execution {
+  const results: RecordedCase[] = [];
+  const mismatches: Mismatch[] = [];
   let mismatchCount = 0;
   for (const [index, test] of cases.entries()) {
     const bash =
@@ -208,7 +287,7 @@ function main() {
     process.env.FUZZ_SHELL_BIN ??
     resolve(root, ".build/shell/release/shell-engine");
   if (!existsSync(shell)) throw new Error(`missing shell-engine: ${shell}`);
-  let reports;
+  let reports: Report[];
   if (options.replays.length) {
     reports = options.replays.map((path) => ({ path, ...replay(path, options, shell) }));
   } else {

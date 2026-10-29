@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { encode, decode, validateResultBytes } from "./fuzz-shell-results.ts";
+import { encode, decode, validateResultBytes, parseRecordedCases } from "./fuzz-shell-results.ts";
 // Original bounded builtin-only job observation grammar. External inherited
 // descendants are exercised by RuntimeAbi controls, not simulated by this gate.
 import { execFileSync, spawnSync } from "node:child_process";
@@ -21,7 +21,33 @@ import {
   optionsFor as sharedOptionsFor,
   outputLimit,
   run,
-} from "./fuzz-shell-control-flow.mjs";
+} from "./fuzz-shell-control-flow.ts";
+import type {
+  EncodedResult,
+  FuzzFixture,
+  FuzzOptions,
+  RecordedCase,
+} from "./fuzz-shell-results.ts";
+
+type Options = ReturnType<typeof sharedOptionsFor>;
+type Spec = { family: string; scope: string; status: number | undefined };
+export type Case = Omit<Spec, "status"> & {
+  status: number;
+  id: string;
+  tags: string[];
+  script: string;
+};
+type Fixture = FuzzFixture<Case>;
+type Counts = { MATCH: number; MISMATCH: number };
+type Mismatch = { case: Case; bash: EncodedResult; candidate: EncodedResult };
+type Execution = {
+  total: number;
+  counts: Counts;
+  byFamily: Record<string, Counts>;
+  mismatches: Mismatch[];
+  results: RecordedCase<Case>[];
+};
+type Report = Execution & { path?: string; seed?: number; bash?: string };
 
 export { healthy, matches, outputLimit, run };
 export const defaultCount = 96;
@@ -61,8 +87,8 @@ const bashBin = "/usr/bin/bash";
 const oracleVersion = /^GNU bash, version 5\.3\.15(?:\(|\s)/;
 const queue = "/work/tmp/wave-heavy/run.sh";
 export const sourceFiles = [
-  "fuzz-shell-job-lifetime.mjs",
-  "fuzz-shell-control-flow.mjs",
+  "fuzz-shell-job-lifetime.ts",
+  "fuzz-shell-control-flow.ts",
   "fuzz-shell-results.ts",
   "shell-process-group.ts",
 ];
@@ -79,15 +105,16 @@ export const fingerprint = () =>
   createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex");
 const observe = 'jl_status=$?; printf "status=%s\\n" "$jl_status"; exit "$jl_status"';
 const completionBarrier = 'while kill -0 "$jl_pid" 2>/dev/null; do :; done';
-const printStatus = (name) => `printf '${name}=%s\\n' "$?"`;
-const snapshot = (name) =>
+const printStatus = (name: string) => `printf '${name}=%s\\n' "$?"`;
+const snapshot = (name: string) =>
   `jobs >jl_${name}; ${printStatus("jobs-" + name)}; ` +
   `while read -r jl_line; do case "$jl_line" in *Done*) printf '${name}=Done\\n';; *Exit*) printf '${name}=Exit\\n';; *Running*) printf '${name}=Running\\n';; esac; done <jl_${name}`;
 
-export function render(spec) {
+export function render(spec: Spec): string {
   if (
     !families.includes(spec.family) ||
     !scopes.includes(spec.scope) ||
+    typeof spec.status !== "number" ||
     !Number.isInteger(spec.status) ||
     spec.status < 0 ||
     spec.status > 255
@@ -138,23 +165,26 @@ export function render(spec) {
   else if (spec.scope === "subshell") body = `( ${body} )`;
   return `${body}\n${observe}\n`;
 }
-function makeCase(id, spec) {
+function makeCase(id: string, spec: Spec): Case {
+  const script = render(spec);
+  if (typeof spec.status !== "number") throw new Error("invalid job-lifetime specification");
   return {
     id,
     ...spec,
+    status: spec.status,
     tags: [spec.family, "scope=" + spec.scope, "status=" + spec.status],
-    script: render(spec),
+    script,
   };
 }
-export function matrixCases() {
-  const result = [];
+export function matrixCases(): Case[] {
+  const result: Case[] = [];
   for (const family of families)
     for (const scope of scopes)
       for (const status of statuses)
         result.push(makeCase("matrix-" + result.length, { family, scope, status }));
   return result;
 }
-export function generateCases(seed, count = defaultCount) {
+export function generateCases(seed: number, count = defaultCount): Case[] {
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff)
     throw new Error("invalid uint32 seed");
   if (!Number.isSafeInteger(count) || count < 0 || count > maxGeneratedCount)
@@ -180,17 +210,68 @@ export function generateCases(seed, count = defaultCount) {
   }
   return result;
 }
-export function coverage(cases) {
-  const unique = (key) => Array.from(new Set(cases.map((item) => item[key]))).sort();
+export function coverage(cases: Case[]) {
+  const unique = (key: "family" | "scope" | "status") =>
+    Array.from(new Set(cases.map((item) => item[key]))).sort();
   return { families: unique("family"), scopes: unique("scope"), statuses: unique("status") };
 }
-export function optionsFor(args) {
+export function optionsFor(args: string[]): Options {
   const options = sharedOptionsFor(["--count", String(defaultCount)].concat(args));
   if (options.count > maxGeneratedCount) throw new Error(`invalid count (0..${maxGeneratedCount})`);
   return options;
 }
 
-export function validateFixture(path, fixture, options) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseStringRecord(value: unknown): Record<string, string> {
+  if (!isRecord(value)) throw new Error("invalid source hashes");
+  const entries = Object.entries(value).map(([key, hash]) => {
+    if (typeof hash !== "string") throw new Error("invalid source hash");
+    return [key, hash];
+  });
+  return Object.fromEntries(entries);
+}
+
+export function parseFixture(path: string, value: unknown, options: FuzzOptions): Fixture {
+  if (!isRecord(value) || !Array.isArray(value.cases)) throw new Error("invalid job fixture");
+  if (
+    typeof value.schema !== "number" ||
+    typeof value.sourceHash !== "string" ||
+    typeof value.seed !== "number" ||
+    typeof value.count !== "number" ||
+    typeof value.timeoutMs !== "number" ||
+    typeof value.bash !== "string" ||
+    typeof value.oraclePath !== "string" ||
+    typeof value.provenance !== "string"
+  )
+    throw new Error("invalid job fixture");
+  const rawCases: unknown[] = value.cases;
+  const generated = generateCases(value.seed, value.count);
+  const generatedCoverage = coverage(generated);
+  if (JSON.stringify(value.coverage) !== JSON.stringify(generatedCoverage))
+    throw new Error("fixture coverage differs");
+  const cases = parseRecordedCases(rawCases, generated);
+  const fixture: Fixture = {
+    schema: value.schema,
+    sourceHash: value.sourceHash,
+    sourceHashes: parseStringRecord(value.sourceHashes),
+    seed: value.seed,
+    count: value.count,
+    timeoutMs: value.timeoutMs,
+    bash: value.bash,
+    oraclePath: value.oraclePath,
+    environment: value.environment,
+    provenance: value.provenance,
+    coverage: generatedCoverage,
+    cases,
+  };
+  validateFixture(path, fixture, options);
+  return fixture;
+}
+
+export function validateFixture(path: string, fixture: Fixture, options: FuzzOptions): Case[] {
   if (
     fixture.schema !== 1 ||
     fixture.sourceHash !== fingerprint() ||
@@ -232,11 +313,16 @@ export function validateFixture(path, fixture, options) {
   }
   return cases;
 }
-export async function execute(cases, options, shell, recorded) {
-  const counts = { MATCH: 0, MISMATCH: 0 };
-  const byFamily = {};
-  const mismatches = [];
-  const results = [];
+export async function execute(
+  cases: Case[],
+  options: Options,
+  shell: string,
+  recorded?: RecordedCase<Case>[],
+): Promise<Execution> {
+  const counts: Counts = { MATCH: 0, MISMATCH: 0 };
+  const byFamily: Record<string, Counts> = {};
+  const mismatches: Mismatch[] = [];
+  const results: RecordedCase<Case>[] = [];
   for (const [index, item] of cases.entries()) {
     if (options.interrupted) throw new Error("interrupted");
     const bash = recorded ? decode(recorded[index].bash) : await run(bashBin, item.script, options);
@@ -275,7 +361,7 @@ async function main() {
   const options = optionsFor(process.argv.slice(2));
   if (options.help) {
     console.log(
-      "Usage: node scripts/fuzz-shell-job-lifetime.mjs [--shell PATH] [--seed N] [--count 96]\n  --record-oracle PATH  Bash-only recording\n  --record PATH         Record only a strict candidate match\n  --replay PATH         Strict stdout/status replay; repeatable; never invokes Bash\n  --self-control        Independent Bash 5.3.15 observations\n  --output PATH         Bounded diagnostics\nBuiltin-only wait/status/one-shot jobs; external descendants require RuntimeAbi tests.\nNo automatic build. Self-queues through wave-heavy --class light.",
+      "Usage: node scripts/fuzz-shell-job-lifetime.ts [--shell PATH] [--seed N] [--count 96]\n  --record-oracle PATH  Bash-only recording\n  --record PATH         Record only a strict candidate match\n  --replay PATH         Strict stdout/status replay; repeatable; never invokes Bash\n  --self-control        Independent Bash 5.3.15 observations\n  --output PATH         Bounded diagnostics\nBuiltin-only wait/status/one-shot jobs; external descendants require RuntimeAbi tests.\nNo automatic build. Self-queues through wave-heavy --class light.",
     );
     return;
   }
@@ -301,10 +387,10 @@ async function main() {
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
   try {
-    const reports = [];
+    const reports: Report[] = [];
     if (options.replays.length) {
       const inputs = options.replays.map((path) => {
-        const fixture = JSON.parse(readFileSync(path, "utf8"));
+        const fixture = parseFixture(path, JSON.parse(readFileSync(path, "utf8")), options);
         return { path, fixture, cases: validateFixture(path, fixture, options) };
       });
       for (const { path, fixture, cases } of inputs)

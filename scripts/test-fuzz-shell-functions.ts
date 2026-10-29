@@ -37,8 +37,8 @@ type Fixture = FuzzFixture<Case>;
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-functions-seed-1.json";
 const fixtureHashes: Record<string, string> = {
-  1: "9bce12c9e3a5209b34d77d1f65b9412ceda9d5d42ce81350bdd2279c39012ace",
-  42: "9e43bdc6377898d5e3e76218b4b5ffb23b1333876314edc9273f8d02233da049",
+  1: "99868122df87bd81393604e86756aca10de4ec9bb8cad7ecf80a2ace856ae513",
+  42: "daad5040fdc79585f9997e40d8a3464bc7cf7c40fe14065320646305aa3f133b",
 };
 const observation = (patch = {}) => ({
   status: 0,
@@ -185,7 +185,7 @@ test("fixed matrix covers every scalar unit dimension without inert value paddin
 });
 
 test("all transitive process-runner sources participate in fixture identity", () => {
-  const expected = ["fuzz-shell-functions.ts", "fuzz-shell-control-flow.mjs"].concat([
+  const expected = ["fuzz-shell-functions.ts", "fuzz-shell-control-flow.ts"].concat([
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
@@ -237,7 +237,7 @@ test("fixture validation rejects every identity and unhealthy-observation mutati
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-functions.ts"] = "stale"),
-    (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-control-flow.ts"] = "stale"),
     (f) => (f.sourceHashes[sourceFiles[3]] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),

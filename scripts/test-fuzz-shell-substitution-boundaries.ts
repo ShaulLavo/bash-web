@@ -18,10 +18,11 @@ import {
   reductions,
   spelling,
   validateFixture,
-} from "./fuzz-shell-substitution-boundaries.mjs";
+} from "./fuzz-shell-substitution-boundaries.ts";
+import type { ProcessResult } from "./fuzz-shell-results.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: 2000 };
-const processResult = (patch = {}) => ({
+const processResult = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
   status: 0,
   signal: null,
   timedOut: false,
@@ -84,6 +85,7 @@ test("spelling preserves fused and spaced opener families", () => {
       opener,
     );
     for (const item of variants.slice(0, 8)) {
+      assert.ok("child" in item.node);
       const raw = spelling(item.node.child);
       assert.ok(raw.length > 0);
       if (item.closings !== null && opener !== "backtick")
@@ -183,7 +185,8 @@ test("strict fixture validation accepts regenerated synthetic observations", () 
   const fixture = {
     schema: 1,
     sourceHash: createHash("sha256")
-      .update(readFileSync(new URL("./fuzz-shell-substitution-boundaries.mjs", import.meta.url)))
+      .update(readFileSync(new URL("./fuzz-shell-substitution-boundaries.ts", import.meta.url)))
+      .update(readFileSync(new URL("./fuzz-shell-results.ts", import.meta.url)))
       .digest("hex"),
     seed: 1,
     count: 0,

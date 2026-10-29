@@ -60,8 +60,8 @@ type Fixture = FuzzFixture<Case>;
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const fixturePath = "shell-path-seed-1.json";
 const fixtureHashes: Record<string, string> = {
-  "shell-path-seed-1.json": "8d427c71c96852f0123565ef77f3fe30ff0c588af594fc80307e715781e9c1f4",
-  "shell-path-seed-42.json": "970fc448e5504053fc677afcacc9fdc2c2d57a6c3716d86b503107f9f4c40304",
+  "shell-path-seed-1.json": "2bda03e4886d8952ad5ce875fd1d7bd765f761e65cf57a4064e9933948c90d14",
+  "shell-path-seed-42.json": "b7c8cae2d78ec1dfbadc74eb85338d907fd2dd5232f10cc6d77d238256df127e",
 };
 // Frozen before the manifest validator changed any harness source identity.
 // These independently pin every case and Bash observation, excluding metadata.
@@ -416,7 +416,7 @@ test("manifest schema and limits reject the whole input before filesystem mutati
 
 test("all transitive harness sources are pinned and raw bytes/status stay strict", () => {
   const expected = ["fuzz-shell-path.ts"].concat([
-    "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
@@ -464,7 +464,7 @@ test("fixture identity rejects schema, grammar, oracle, environment, subset and 
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-path.ts"] = "stale"),
-    (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-control-flow.ts"] = "stale"),
     (f) => (f.sourceHashes["shell-process-group.ts"] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),

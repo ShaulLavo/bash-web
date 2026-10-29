@@ -17,15 +17,18 @@ import {
   reductions,
   spelling,
   validateFixture,
-} from "./fuzz-shell-braces.mjs";
+} from "./fuzz-shell-braces.ts";
+import type { Fixture, Node } from "./fuzz-shell-braces.ts";
+import type { ProcessResult } from "./fuzz-shell-results.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: 2000 };
-function fixtureFor(seed = 1) {
+function fixtureFor(seed = 1): Fixture {
   const cases = generateCases(seed, 0);
   return {
     schema: 1,
     sourceHash: createHash("sha256")
-      .update(readFileSync(new URL("./fuzz-shell-braces.mjs", import.meta.url)))
+      .update(readFileSync(new URL("./fuzz-shell-braces.ts", import.meta.url)))
+      .update(readFileSync(new URL("./fuzz-shell-results.ts", import.meta.url)))
       .digest("hex"),
     seed,
     count: 0,
@@ -50,12 +53,13 @@ function fixtureFor(seed = 1) {
     })),
   };
 }
-const result = (patch = {}) => ({
+const result = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
   status: 0,
   signal: null,
   timedOut: false,
   error: null,
   stdout: Buffer.from("ok\n"),
+  stderr: Buffer.alloc(0),
   ...patch,
 });
 
@@ -80,10 +84,12 @@ test("default seeds retain 3000 original paired cases and append the complete bo
       assert.ok(!/\$\((?!\()/.test(left.script));
       assert.ok(!left.script.includes("~"));
       assert.ok(!left.script.includes("`"));
-      const inspect = (node) => {
-        if (node.children) return node.children.forEach(inspect);
-        if (node.tag === "ascii-range") {
-          const [, first, last] = /^\{([A-Za-z])\.\.([A-Za-z])/.exec(node.text);
+      const inspect = (node: Node) => {
+        if ("children" in node) return node.children.forEach(inspect);
+        if ("tag" in node && node.tag === "ascii-range") {
+          const match = /^\{([A-Za-z])\.\.([A-Za-z])/.exec(node.text);
+          assert.ok(match);
+          const [, first, last] = match;
           assert.equal(first === first.toUpperCase(), last === last.toUpperCase());
         }
       };
@@ -97,11 +103,30 @@ test("odd count preserves the requested generated count", () => {
   assert.equal(generateCases(1, 0).length, fixedCases().length + boundaryCases(1).length);
 });
 
-function nodesIn(node) {
+function nodesIn(node: Node): Node[] {
   return [node].concat(
-    node.child ? nodesIn(node.child) : [],
-    node.children ? node.children.flatMap(nodesIn) : [],
+    "child" in node ? nodesIn(node.child) : [],
+    "children" in node ? node.children.flatMap(nodesIn) : [],
   );
+}
+
+function featureVariant(node: Node): string | undefined {
+  if (node.kind !== "boundary") return undefined;
+  if ("protection" in node) return node.protection;
+  if ("body" in node) return node.body;
+  return undefined;
+}
+
+function featureProtection(node: Node): string | undefined {
+  return "protection" in node ? node.protection : undefined;
+}
+
+function featureOpen(node: Node): boolean {
+  return "open" in node && Boolean(node.open);
+}
+
+function featureClosings(node: Node): number {
+  return "closings" in node ? node.closings : 0;
 }
 
 for (const seed of [1, 42]) {
@@ -116,7 +141,10 @@ for (const seed of [1, 42]) {
     for (const item of matrix) {
       const nodes = nodesIn(item.node);
       const feature = nodes.find((node) => node.kind === "boundary");
-      const context = nodes.find((node) => node.kind === "boundary-context").context;
+      assert.ok(feature);
+      const contextNode = nodes.find((node) => node.kind === "boundary-context");
+      assert.ok(contextNode && "context" in contextNode);
+      const context = contextNode.context;
       const depth = nodes.filter((node) => node.kind === "boundary-nest").length;
       assert.ok(item.tags.includes(`boundary-depth-${depth}`));
       assert.ok(item.tags.includes(`boundary-context-${context}`));
@@ -126,9 +154,9 @@ for (const seed of [1, 42]) {
         [
           feature.form,
           feature.opener,
-          feature.protection ?? feature.body,
-          Boolean(feature.open),
-          feature.closings ?? 0,
+          featureVariant(feature),
+          featureOpen(feature),
+          featureClosings(feature),
           context,
           depth,
           item.mode,
@@ -142,8 +170,10 @@ for (const seed of [1, 42]) {
       if (feature.form === "ambiguity") {
         assert.ok(spelling(feature).startsWith(feature.opener === "fused" ? "$((" : "$( ("));
         assert.ok(item.tags.includes(`boundary-closings-${feature.closings}`));
+        const closingMatch = /\)(?: \))*$/.exec(spelling(feature));
+        assert.ok(closingMatch);
         assert.equal(
-          /\)(?: \))*$/.exec(spelling(feature))[0],
+          closingMatch[0],
           Array.from({ length: feature.closings }, () => ")").join(" "),
         );
         if (feature.body.includes("case")) {
@@ -158,6 +188,7 @@ for (const seed of [1, 42]) {
             ),
           );
       } else {
+        assert.ok("protection" in feature);
         const dollar = { escaped: "\\$", single: "'$'", double: '"$"' }[feature.protection];
         const opener = { brace: "{", command: "(", arithmetic: "((" }[feature.opener];
         assert.ok(spelling(feature).startsWith(dollar + opener));
@@ -200,7 +231,9 @@ for (const seed of [1, 42]) {
       twins.map((item) => item.id.replace("-selected-", "-")).sort(),
       matrix.map((item) => item.id).sort(),
     );
-    assert.ok(cases.indexOf(twins[0]) > cases.indexOf(matrix.at(-1)));
+    const lastMatrix = matrix.at(-1);
+    assert.ok(lastMatrix);
+    assert.ok(cases.indexOf(twins[0]) > cases.indexOf(lastMatrix));
     assert.equal(
       selected.filter((item) => item.tags.includes("boundary-selected-literal")).length,
       9,
@@ -214,6 +247,7 @@ test("boundary reductions preserve guards, context and protected/ambiguous opene
   for (const item of boundaryCases(1)) {
     const original = nodesIn(item.node);
     const feature = original.find((node) => node.kind === "boundary");
+    assert.ok(feature);
     const guard = original.some((node) => node.kind === "boundary-guard");
     const context = original.find((node) => node.kind === "boundary-context")?.context;
     for (const candidate of reductions(item.node)) {
@@ -224,9 +258,9 @@ test("boundary reductions preserve guards, context and protected/ambiguous opene
       assert.ok(smaller);
       assert.equal(smaller.form, feature.form);
       assert.equal(smaller.opener, feature.opener);
-      assert.equal(smaller.protection, feature.protection);
-      assert.equal(smaller.open, feature.open);
-      assert.equal(smaller.closings, feature.closings);
+      assert.equal(featureProtection(smaller), featureProtection(feature));
+      assert.equal(featureOpen(smaller), featureOpen(feature));
+      assert.equal(featureClosings(smaller), featureClosings(feature));
       assert.equal(
         nodes.some((node) => node.kind === "boundary-guard"),
         guard,
@@ -312,19 +346,20 @@ test("exact stdout and status decide matches, not stderr", () => {
   assert.ok(matches(result({ status: 2 }), result({ status: 2 })));
 });
 
-for (const [label, patch] of [
+const failurePatches: [string, Partial<ProcessResult>][] = [
   ["timeout", { timedOut: true }],
   ["signal", { signal: "SIGKILL", status: null }],
   ["spawn error", { error: "ENOENT", status: null }],
   ["output limit", { error: "ENOBUFS" }],
   ["missing status", { status: null }],
-])
+];
+for (const [label, patch] of failurePatches)
   test(`even identical ${label} failures are never MATCH`, () => {
     assert.ok(!matches(result(patch), result(patch)));
   });
 
 test("structural reductions preserve brace trees and lower spelling length", () => {
-  const node = {
+  const node: Node = {
     kind: "concat",
     children: [
       {
@@ -356,7 +391,7 @@ test("strict fixture validator accepts complete synthetic in-memory observations
   );
 });
 
-const mutations = [
+const mutations: [string, (fixture: Fixture) => void][] = [
   [
     "schema",
     (fixture) => {
@@ -432,7 +467,7 @@ const mutations = [
   [
     "missing status",
     (fixture) => {
-      delete fixture.cases[0].bash.status;
+      Object.assign(fixture.cases[0].bash, { status: undefined });
     },
   ],
   [
@@ -444,7 +479,7 @@ const mutations = [
   [
     "string status",
     (fixture) => {
-      fixture.cases[0].bash.status = "0";
+      Object.assign(fixture.cases[0].bash, { status: "0" });
     },
   ],
   [
@@ -468,7 +503,7 @@ const mutations = [
   [
     "absent bytes",
     (fixture) => {
-      delete fixture.cases[0].bash.stdoutBase64;
+      Object.assign(fixture.cases[0].bash, { stdoutBase64: undefined });
     },
   ],
   [

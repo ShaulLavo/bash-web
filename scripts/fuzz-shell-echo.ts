@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { boundaryEscapes, originalEscapes, utf8Escapes, execute } from "./fuzz-shell-printf.ts";
-import { run, healthy, matches, outputLimit } from "./fuzz-shell-control-flow.mjs";
+import { run, healthy, matches, outputLimit } from "./fuzz-shell-control-flow.ts";
 import {
   decode,
   encode,
@@ -72,7 +72,7 @@ export function fingerprint() {
   for (const name of [
     "fuzz-shell-echo.ts",
     "fuzz-shell-printf.ts",
-    "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
   ])
     hash.update(readFileSync(new URL(name, import.meta.url)));

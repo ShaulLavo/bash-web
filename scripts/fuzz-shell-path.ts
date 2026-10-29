@@ -23,7 +23,7 @@ import {
   matches,
   optionsFor as sharedOptionsFor,
   outputLimit,
-} from "./fuzz-shell-control-flow.mjs";
+} from "./fuzz-shell-control-flow.ts";
 import { drainGroup, killGroup } from "./shell-process-group.ts";
 export { healthy, matches, outputLimit };
 
@@ -666,7 +666,7 @@ export function scratchParent(env = process.env) {
 const processGroupSource = "shell-process-group.ts";
 export const sourceFiles = [
   "fuzz-shell-path.ts",
-  "fuzz-shell-control-flow.mjs",
+  "fuzz-shell-control-flow.ts",
   "fuzz-shell-results.ts",
   processGroupSource,
 ];

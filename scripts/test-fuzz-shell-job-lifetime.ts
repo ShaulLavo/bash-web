@@ -17,25 +17,29 @@ import {
   maxGeneratedCount,
   optionsFor,
   outputLimit,
+  parseFixture,
   render,
   scopes,
   sourceFiles,
   sourceHashes,
   statuses,
   validateFixture,
-} from "./fuzz-shell-job-lifetime.mjs";
+} from "./fuzz-shell-job-lifetime.ts";
+import type { FuzzFixture as Fixture, ProcessResult } from "./fuzz-shell-results.ts";
+import type { Case } from "./fuzz-shell-job-lifetime.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-job-lifetime-seed-1.json";
-const observation = (patch = {}) => ({
+const observation = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
   status: 0,
   signal: null,
   timedOut: false,
   error: null,
   stdout: Buffer.from("ok\n"),
+  stderr: Buffer.alloc(0),
   ...patch,
 });
-function fixtureFor() {
+function fixtureFor(): Fixture<Case> {
   const cases = generateCases(1, 0);
   return {
     schema: 1,
@@ -99,7 +103,7 @@ test("generation is deterministic, independently seeded, finite and builtin-only
 });
 
 test("generated stream has substantive cross-seed diversity and a finite unique capacity", () => {
-  const stream = (seed) => generateCases(seed).slice(matrixCases().length);
+  const stream = (seed: number) => generateCases(seed).slice(matrixCases().length);
   const first = stream(1);
   const second = stream(42);
   const firstScripts = new Set(first.map((item) => item.script));
@@ -157,8 +161,8 @@ test("own source and every imported process runner source participate in identit
   const hashes = sourceHashes();
   assert.deepEqual(Object.keys(hashes), sourceFiles);
   assert.deepEqual(sourceFiles, [
-    "fuzz-shell-job-lifetime.mjs",
-    "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-job-lifetime.ts",
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
@@ -203,76 +207,76 @@ test("strict byte/status comparison never grants unsupported exemptions", () => 
 test("fixture validation rejects source, oracle, environment, grammar and process mutations", () => {
   assert.deepEqual(validateFixture(path, fixtureFor(), options), matrixCases());
   for (const change of [
-    (f) => {
+    (f: Fixture<Case>) => {
       f.schema = 2;
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.sourceHash = "changed";
     },
-    (f) => {
-      f.sourceHashes["fuzz-shell-control-flow.mjs"] = "changed";
+    (f: Fixture<Case>) => {
+      f.sourceHashes["fuzz-shell-control-flow.ts"] = "changed";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.sourceHashes["shell-process-group.ts"] = "changed";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.bash = "GNU bash, version 5.2.0";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.oraclePath = "/bin/bash";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.environment = { ...environment, jobControl: "on" };
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.environment = { ...environment, locale: "C.UTF-8" };
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.provenance = "candidate-implied";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.seed = 42;
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.count = 1;
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.timeoutMs = 1;
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.coverage = {};
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases.pop();
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].case.script += "true\n";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].case.tags.push("skip");
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].case.status = 256;
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[1] = structuredClone(f.cases[0]);
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].bash.status = null;
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].bash.signal = "SIGKILL";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].bash.timedOut = true;
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].bash.error = "ENOBUFS";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].bash.stdoutBase64 = "not base64";
     },
-    (f) => {
+    (f: Fixture<Case>) => {
       f.cases[0].bash.stderrBase64 = Buffer.alloc(outputLimit + 1).toString("base64");
     },
   ]) {
@@ -310,7 +314,11 @@ test("CLI retains strict bounded options and mutually exclusive modes", () => {
 for (const seed of [1, 42])
   test(`committed seed ${seed} pins source and stable wait/Done observations`, () => {
     const fixturePath = new URL(`./fixtures/shell-job-lifetime-seed-${seed}.json`, import.meta.url);
-    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    const fixture = parseFixture(
+      fixturePath.pathname,
+      JSON.parse(readFileSync(fixturePath, "utf8")),
+      { ...options, count: defaultCount },
+    );
     validateFixture(fixturePath.pathname, fixture, { ...options, count: defaultCount });
     assert.equal(fixture.provenance, "oracle-only");
     assert.equal(new Set(fixture.cases.map((entry) => entry.case.script)).size, 240);
