@@ -16,4 +16,4 @@ PR qualification records the head, tested merge, tested base and resolved main s
 
 Compact floor artifacts expire after 90 days. Retained complete scores need only a cheap fold. A genuinely missing non-equivalent score needs an explicit exact-source qualification, and older workflows may make that unavailable. Parent landing reports own retained run and digest references; CI owns uploaded evidence. No evidence writer branch or extra credential is required.
 
-See [Accepted-gain recovery](accepted-gain-recovery.md) for the single landed-PR gap supported by candidate qualification.
+See [Accepted-gain recovery](accepted-gain-recovery.md) for the reviewed PR102 gap and the fixed terminal receipt chain covering two cancelled intermediate main runs. These are accepted requirements, not replacement main observations.
