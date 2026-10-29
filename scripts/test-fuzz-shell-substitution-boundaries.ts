@@ -18,7 +18,7 @@ import {
   reductions,
   spelling,
   validateFixture,
-} from "./fuzz-shell-substitution-boundaries.mjs";
+} from "./fuzz-shell-substitution-boundaries.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: 2000 };
 const processResult = (patch = {}) => ({
@@ -183,7 +183,7 @@ test("strict fixture validation accepts regenerated synthetic observations", () 
   const fixture = {
     schema: 1,
     sourceHash: createHash("sha256")
-      .update(readFileSync(new URL("./fuzz-shell-substitution-boundaries.mjs", import.meta.url)))
+      .update(readFileSync(new URL("./fuzz-shell-substitution-boundaries.ts", import.meta.url)))
       .digest("hex"),
     seed: 1,
     count: 0,

@@ -66,7 +66,7 @@ Bash version, and every regenerated script. Stderr is recorded for diagnosis.
 
 ## Whole-script parser compatibility
 
-`node scripts/fuzz-shell-parse-boundaries.mjs --shell /path/to/shell-engine`
+`node scripts/fuzz-shell-parse-boundaries.ts --shell /path/to/shell-engine`
 compares 27 generated empty-alias arithmetic scripts with GNU Bash 5.3.15.
 Names, arithmetic assignments, whitespace, continuations and read-unit newlines vary.
 The check compares stdout and status. Alias and shopt diagnostics remain outside the

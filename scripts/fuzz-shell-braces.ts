@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Original bounded brace grammar and runner, following fuzz-shell-words.mjs and
-// fuzz-shell-arithmetic.mjs. No upstream brace implementation is copied here.
+// Original bounded brace grammar and runner, following fuzz-shell-words.ts and
+// fuzz-shell-arithmetic.ts. No upstream brace implementation is copied here.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {

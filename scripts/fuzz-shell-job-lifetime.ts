@@ -21,7 +21,7 @@ import {
   optionsFor as sharedOptionsFor,
   outputLimit,
   run,
-} from "./fuzz-shell-control-flow.mjs";
+} from "./fuzz-shell-control-flow.ts";
 
 export { healthy, matches, outputLimit, run };
 export const defaultCount = 96;
@@ -61,8 +61,8 @@ const bashBin = "/usr/bin/bash";
 const oracleVersion = /^GNU bash, version 5\.3\.15(?:\(|\s)/;
 const queue = "/work/tmp/wave-heavy/run.sh";
 export const sourceFiles = [
-  "fuzz-shell-job-lifetime.mjs",
-  "fuzz-shell-control-flow.mjs",
+  "fuzz-shell-job-lifetime.ts",
+  "fuzz-shell-control-flow.ts",
   "fuzz-shell-results.ts",
   "shell-process-group.ts",
 ];
@@ -275,7 +275,7 @@ async function main() {
   const options = optionsFor(process.argv.slice(2));
   if (options.help) {
     console.log(
-      "Usage: node scripts/fuzz-shell-job-lifetime.mjs [--shell PATH] [--seed N] [--count 96]\n  --record-oracle PATH  Bash-only recording\n  --record PATH         Record only a strict candidate match\n  --replay PATH         Strict stdout/status replay; repeatable; never invokes Bash\n  --self-control        Independent Bash 5.3.15 observations\n  --output PATH         Bounded diagnostics\nBuiltin-only wait/status/one-shot jobs; external descendants require RuntimeAbi tests.\nNo automatic build. Self-queues through wave-heavy --class light.",
+      "Usage: node scripts/fuzz-shell-job-lifetime.ts [--shell PATH] [--seed N] [--count 96]\n  --record-oracle PATH  Bash-only recording\n  --record PATH         Record only a strict candidate match\n  --replay PATH         Strict stdout/status replay; repeatable; never invokes Bash\n  --self-control        Independent Bash 5.3.15 observations\n  --output PATH         Bounded diagnostics\nBuiltin-only wait/status/one-shot jobs; external descendants require RuntimeAbi tests.\nNo automatic build. Self-queues through wave-heavy --class light.",
     );
     return;
   }

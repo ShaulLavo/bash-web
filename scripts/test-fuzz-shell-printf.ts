@@ -171,7 +171,7 @@ test("every transitive raw runner source participates in fixture identity", () =
   const hashes = sourceHashes();
   assert.deepEqual(sourceFiles, [
     "fuzz-shell-printf.ts",
-    "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
@@ -224,7 +224,7 @@ test("fixture validation rejects identity, grammar, encoding and process mutatio
       f.sourceHash = "changed";
     },
     (f: Fixture) => {
-      f.sourceHashes["fuzz-shell-control-flow.mjs"] = "changed";
+      f.sourceHashes["fuzz-shell-control-flow.ts"] = "changed";
     },
     (f: Fixture) => {
       f.sourceHashes["shell-process-group.ts"] = "changed";

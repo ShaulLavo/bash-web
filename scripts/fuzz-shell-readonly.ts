@@ -4,7 +4,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fingerprint, run as runProcess, encode, decode } from "./fuzz-shell-process.mjs";
+import { fingerprint, run as runProcess, encode, decode } from "./fuzz-shell-process.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const queue = "/work/tmp/wave-heavy/run.sh";

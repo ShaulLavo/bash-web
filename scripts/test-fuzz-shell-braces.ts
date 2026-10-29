@@ -17,7 +17,7 @@ import {
   reductions,
   spelling,
   validateFixture,
-} from "./fuzz-shell-braces.mjs";
+} from "./fuzz-shell-braces.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: 2000 };
 function fixtureFor(seed = 1) {
@@ -25,7 +25,7 @@ function fixtureFor(seed = 1) {
   return {
     schema: 1,
     sourceHash: createHash("sha256")
-      .update(readFileSync(new URL("./fuzz-shell-braces.mjs", import.meta.url)))
+      .update(readFileSync(new URL("./fuzz-shell-braces.ts", import.meta.url)))
       .digest("hex"),
     seed,
     count: 0,

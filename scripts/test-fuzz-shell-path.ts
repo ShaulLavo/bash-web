@@ -416,7 +416,7 @@ test("manifest schema and limits reject the whole input before filesystem mutati
 
 test("all transitive harness sources are pinned and raw bytes/status stay strict", () => {
   const expected = ["fuzz-shell-path.ts"].concat([
-    "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
@@ -464,7 +464,7 @@ test("fixture identity rejects schema, grammar, oracle, environment, subset and 
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-path.ts"] = "stale"),
-    (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-control-flow.ts"] = "stale"),
     (f) => (f.sourceHashes["shell-process-group.ts"] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),

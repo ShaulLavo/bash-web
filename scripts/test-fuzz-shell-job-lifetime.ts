@@ -23,7 +23,7 @@ import {
   sourceHashes,
   statuses,
   validateFixture,
-} from "./fuzz-shell-job-lifetime.mjs";
+} from "./fuzz-shell-job-lifetime.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-job-lifetime-seed-1.json";
@@ -157,8 +157,8 @@ test("own source and every imported process runner source participate in identit
   const hashes = sourceHashes();
   assert.deepEqual(Object.keys(hashes), sourceFiles);
   assert.deepEqual(sourceFiles, [
-    "fuzz-shell-job-lifetime.mjs",
-    "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-job-lifetime.ts",
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
@@ -210,7 +210,7 @@ test("fixture validation rejects source, oracle, environment, grammar and proces
       f.sourceHash = "changed";
     },
     (f) => {
-      f.sourceHashes["fuzz-shell-control-flow.mjs"] = "changed";
+      f.sourceHashes["fuzz-shell-control-flow.ts"] = "changed";
     },
     (f) => {
       f.sourceHashes["shell-process-group.ts"] = "changed";

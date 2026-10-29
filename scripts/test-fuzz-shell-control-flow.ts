@@ -35,7 +35,7 @@ import {
   terminators,
   validateFixture,
   values,
-} from "./fuzz-shell-control-flow.mjs";
+} from "./fuzz-shell-control-flow.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const observation = (patch = {}) => ({

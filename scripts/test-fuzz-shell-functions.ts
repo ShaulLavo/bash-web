@@ -185,7 +185,7 @@ test("fixed matrix covers every scalar unit dimension without inert value paddin
 });
 
 test("all transitive process-runner sources participate in fixture identity", () => {
-  const expected = ["fuzz-shell-functions.ts", "fuzz-shell-control-flow.mjs"].concat([
+  const expected = ["fuzz-shell-functions.ts", "fuzz-shell-control-flow.ts"].concat([
     "fuzz-shell-results.ts",
     "shell-process-group.ts",
   ]);
@@ -237,7 +237,7 @@ test("fixture validation rejects every identity and unhealthy-observation mutati
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-functions.ts"] = "stale"),
-    (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-control-flow.ts"] = "stale"),
     (f) => (f.sourceHashes[sourceFiles[3]] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),

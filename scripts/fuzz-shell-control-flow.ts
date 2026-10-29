@@ -1083,7 +1083,7 @@ async function main() {
   const options = optionsFor(process.argv.slice(2));
   if (options.help) {
     console.log(
-      "Usage: node scripts/fuzz-shell-control-flow.mjs [--shell PATH] [--seed N] [--count 600] [--timeout-ms 2000]\n  --record PATH        Record only after a strict candidate match\n  --record-oracle PATH Generator-first Bash-only capture; no candidate implied\n  --replay PATH        Strict fixture replay, repeatable; never invokes Bash\n  --self-control       Compare two independent Bash 5.3.15 processes\n  --output PATH        Save bounded mismatch diagnostics\n\nOracle: /usr/bin/bash 5.3.15 -c SCRIPT; no shell flags or inherited startup environment.\nFinite builtin-only grammar, private cwd, bounded output/time, process-group teardown.\nHost execution self-queues through wave-heavy --class light. No automatic build.",
+      "Usage: node scripts/fuzz-shell-control-flow.ts [--shell PATH] [--seed N] [--count 600] [--timeout-ms 2000]\n  --record PATH        Record only after a strict candidate match\n  --record-oracle PATH Generator-first Bash-only capture; no candidate implied\n  --replay PATH        Strict fixture replay, repeatable; never invokes Bash\n  --self-control       Compare two independent Bash 5.3.15 processes\n  --output PATH        Save bounded mismatch diagnostics\n\nOracle: /usr/bin/bash 5.3.15 -c SCRIPT; no shell flags or inherited startup environment.\nFinite builtin-only grammar, private cwd, bounded output/time, process-group teardown.\nHost execution self-queues through wave-heavy --class light. No automatic build.",
     );
     return;
   }
