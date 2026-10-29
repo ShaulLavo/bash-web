@@ -120,7 +120,7 @@ for (const { mode, status, source, expected } of [
   { mode: "default", status: 0, source: "signal-status", expected: 130 },
   { mode: "removed", status: 0, source: "signal-status", expected: 130 },
   { mode: "once", status: 0, source: "signal-status", expected: 130 },
-  { mode: "handled", status: 0, source: "while :; do :; done | signal-status", expected: 0 },
+  { mode: "handled", status: 0, source: "while :; do :; done | signal-status", expected: 130 },
   { mode: "handled", status: 0, source: "signal-status 1>&2 | while :; do :; done", expected: 130 },
 ] as const) {
   test(

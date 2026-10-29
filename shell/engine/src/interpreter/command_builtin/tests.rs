@@ -63,8 +63,14 @@ impl ProcessHost for Host {
     ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
         self.inner.wait_start(pid)
     }
-    fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
+    fn wait(
+        &self,
+        pid: ProcessId,
+    ) -> LocalBoxFuture<'static, Result<crate::process::ChildExit, ProcessError>> {
         self.inner.wait(pid)
+    }
+    fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
+        self.inner.signal_child(pid, signal)
     }
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         self.inner.kill(pid, signal)
@@ -191,6 +197,7 @@ impl Rig {
             signal: signal.clone(),
             lifetime: (cancel.clone(), signal),
             cancel,
+            strand: super::super::Strand::untracked(),
             parameter_error_status: 127,
             loop_depth: 0,
             ignore_errexit: false,

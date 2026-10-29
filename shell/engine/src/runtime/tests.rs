@@ -939,7 +939,7 @@ fn child_start_readiness_is_non_consuming_and_precedes_terminal_cleanup() {
         );
         cleanup.cancel();
         let expected = match outcome {
-            WaitResult::Exited(code) => Ok(code),
+            WaitResult::Exited(code) => Ok(crate::process::ChildExit::Exited(code)),
             WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno)),
             _ => unreachable!(),
         };
@@ -1010,7 +1010,7 @@ fn cancelled_pending_start_preserves_terminal_signal_without_diagnostic() {
     );
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(130)
+        Ok(crate::process::ChildExit::Signaled(2))
     );
     finish(
         &executor,
@@ -1417,7 +1417,7 @@ fn spawn_forwards_resolved_executable_separately_from_original_argv_zero() {
     assert_eq!(fake.requests.borrow().last().unwrap().argv, ["done", "ARG"]);
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(0)
+        Ok(crate::process::ChildExit::Exited(0))
     );
     assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
@@ -1902,7 +1902,10 @@ fn dropping_detached_wait_observer_preserves_runtime_reaper() {
     let group = runtime.allocate_group();
     let parent = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
     executor.drive(64);
-    assert_eq!(runtime.wait(parent).now_or_never(), Some(Ok(0)));
+    assert_eq!(
+        runtime.wait(parent).now_or_never(),
+        Some(Ok(crate::process::ChildExit::Exited(0)))
+    );
     drop(runtime.detach_group(group));
     fake.descendant_gate.cancel();
     for _ in 0..10 {
@@ -2038,7 +2041,7 @@ fn group_wait_includes_later_children_and_every_descendant_confirmation() {
     fake.held_jobs.borrow_mut().insert(first_job);
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(first))),
-        Ok(0)
+        Ok(crate::process::ChildExit::Exited(0))
     );
     let done = executor.spawn(runtime.wait_group(group));
     executor.drive(64);
@@ -2075,7 +2078,7 @@ fn killing_dynamic_background_group_rejects_new_members_and_isolates_siblings() 
     fake.held_jobs.borrow_mut().insert(first_job);
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(first))),
-        Ok(0)
+        Ok(crate::process::ChildExit::Exited(0))
     );
     let later = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
     let later_job = fake.job_of(later as u32).unwrap();
@@ -2136,7 +2139,7 @@ fn group_fanout_continues_after_errors_and_invalid_signal_does_not_close_admissi
     fake.wait_job_errors.borrow_mut().insert(first_job, 63);
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(first))),
-        Ok(0)
+        Ok(crate::process::ChildExit::Exited(0))
     );
     let later = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
     let later_job = fake.job_of(later as u32).unwrap();
@@ -3209,7 +3212,10 @@ fn completed_inherited_jobs_release_admission_during_one_foreground_group() {
     for _ in 0..MAX_RETAINED_PROCESSES + 1 {
         let direct = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
         executor.drive(64);
-        assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+        assert_eq!(
+            runtime.wait(direct).now_or_never(),
+            Some(Ok(crate::process::ChildExit::Exited(0)))
+        );
         let member = direct as u32 + 1;
         assert_eq!(fake.wait(member), Err(AGAIN));
         fake.descendant_gates.borrow()[&member].cancel();
@@ -3231,8 +3237,14 @@ fn group_reaps_later_inherited_job_while_earlier_member_stays_live() {
     let first = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
     let later = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
     executor.drive(64);
-    assert_eq!(runtime.wait(first).now_or_never(), Some(Ok(0)));
-    assert_eq!(runtime.wait(later).now_or_never(), Some(Ok(0)));
+    assert_eq!(
+        runtime.wait(first).now_or_never(),
+        Some(Ok(crate::process::ChildExit::Exited(0)))
+    );
+    assert_eq!(
+        runtime.wait(later).now_or_never(),
+        Some(Ok(crate::process::ChildExit::Exited(0)))
+    );
     let first_job = fake.job_of(first as u32).unwrap();
     let later_job = fake.job_of(later as u32).unwrap();
     let done = executor.spawn(runtime.wait_group(group));
@@ -3283,7 +3295,10 @@ fn admission_sweep_preserves_unconsumed_direct_status_and_failed_job_handles() {
     assert!(fake.reaped_jobs.borrow().is_empty());
     assert_eq!(runtime.retained_count(), 2);
     fake.wait_job_errors.borrow_mut().insert(first_job, 63);
-    assert_eq!(runtime.wait(first).now_or_never(), Some(Ok(0)));
+    assert_eq!(
+        runtime.wait(first).now_or_never(),
+        Some(Ok(crate::process::ChildExit::Exited(0)))
+    );
     let third = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
     assert!(
         runtime.0.groups.borrow()[&group]
@@ -3309,7 +3324,7 @@ fn admission_sweep_preserves_unconsumed_direct_status_and_failed_job_handles() {
     assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(0)
+        Ok(crate::process::ChildExit::Exited(0))
     );
     assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
@@ -3326,7 +3341,10 @@ fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
     spec.fds.insert(0, source.clone());
     let direct = runtime.spawn(spec).unwrap();
     executor.drive(64);
-    assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+    assert_eq!(
+        runtime.wait(direct).now_or_never(),
+        Some(Ok(crate::process::ChildExit::Exited(0)))
+    );
     let job = fake.job_of(direct as u32).unwrap();
     let done = executor.spawn(runtime.wait_group(group));
     executor.drive(64);
@@ -3367,7 +3385,7 @@ fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
     runtime.kill_group(sibling, 15).unwrap();
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(143)
+        Ok(crate::process::ChildExit::Signaled(15))
     );
     assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
@@ -3391,7 +3409,10 @@ fn healed_wait_errors_keep_logical_cleanup_bounded_until_successful_retry() {
         }
         let direct = direct.unwrap();
         executor.drive(64);
-        assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+        assert_eq!(
+            runtime.wait(direct).now_or_never(),
+            Some(Ok(crate::process::ChildExit::Exited(0)))
+        );
         let job = fake.job_of(direct as u32).unwrap();
         fake.wait_job_errors.borrow_mut().insert(job, 63);
         assert_eq!(
@@ -3416,7 +3437,7 @@ fn healed_wait_errors_keep_logical_cleanup_bounded_until_successful_retry() {
     let pid = runtime.spawn(request(&runtime, "done", group)).unwrap();
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(0)
+        Ok(crate::process::ChildExit::Exited(0))
     );
     assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
@@ -3435,7 +3456,10 @@ fn healed_wait_error_keeps_input_ownership_charged_until_retry_completes() {
     spec.fds.insert(0, source.clone());
     let direct = runtime.spawn(spec).unwrap();
     executor.drive(64);
-    assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+    assert_eq!(
+        runtime.wait(direct).now_or_never(),
+        Some(Ok(crate::process::ChildExit::Exited(0)))
+    );
     let job = fake.job_of(direct as u32).unwrap();
     fake.wait_job_errors.borrow_mut().insert(job, 63);
     assert_eq!(
@@ -3469,7 +3493,7 @@ fn healed_wait_error_keeps_input_ownership_charged_until_retry_completes() {
     runtime.kill_group(sibling, 15).unwrap();
     assert_eq!(
         finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(143)
+        Ok(crate::process::ChildExit::Signaled(15))
     );
     assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
@@ -3487,7 +3511,10 @@ fn runtime_job_retention_is_bounded_and_empty_jobs_do_not_accumulate() {
     for _ in 0..MAX_RETAINED_PROCESSES + 1 {
         let pid = runtime.spawn(request(&runtime, "done", group)).unwrap();
         executor.drive(64);
-        assert_eq!(runtime.wait(pid).now_or_never(), Some(Ok(0)));
+        assert_eq!(
+            runtime.wait(pid).now_or_never(),
+            Some(Ok(crate::process::ChildExit::Exited(0)))
+        );
         assert!(runtime.0.groups.borrow()[&group].runtime_jobs.is_empty());
     }
     // Residual jobs, not just direct pid records, occupy the shared admission
@@ -4051,19 +4078,20 @@ mod inherited;
 mod read_exact;
 
 #[test]
-fn handled_interrupt_preserves_child_status_and_stops_the_read_unit() {
+fn handled_interrupt_preserves_child_status_after_cleanup() {
     for code in [0, 7] {
-        for source in [
-            format!("handled-int {code}; echo UNREACHABLE"),
-            format!("{{ handled-int {code}; echo UNREACHABLE; }}"),
-            format!("while :; do :; done | handled-int {code}"),
-        ] {
-            handled_interrupt_result(&source, code);
-        }
+        handled_interrupt_result(&format!("handled-int {code}"), code, b"");
+        handled_interrupt_result(&format!("handled-int {code}; echo AFTER"), 0, b"AFTER\n");
+        handled_interrupt_result(&format!("{{ handled-int {code}; }}"), code, b"");
+        handled_interrupt_result(
+            &format!("while :; do :; done | handled-int {code}"),
+            130,
+            b"",
+        );
     }
 }
 
-fn handled_interrupt_result(source: &str, expected: i32) {
+fn handled_interrupt_result(source: &str, expected: i32, expected_output: &[u8]) {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
     let command = session.start(source).unwrap();
@@ -4073,6 +4101,6 @@ fn handled_interrupt_result(source: &str, expected: i32) {
     let actual = finish(&executor, &runtime, command);
     let output = fake.output.bytes();
     shutdown_session(&executor, &runtime, &fake, session);
-    assert!(output.is_empty(), "cancelled reader continued: {source}");
+    assert_eq!(output, expected_output, "{source}");
     assert_eq!(actual, expected, "{source}");
 }

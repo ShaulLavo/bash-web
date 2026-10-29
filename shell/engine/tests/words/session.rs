@@ -72,8 +72,14 @@ impl ProcessHost for ParseInterruptHost {
     fn wait(
         &self,
         pid: ProcessId,
-    ) -> futures::future::LocalBoxFuture<'static, Result<i32, ProcessError>> {
+    ) -> futures::future::LocalBoxFuture<
+        'static,
+        Result<shell_engine::process::ChildExit, ProcessError>,
+    > {
         self.inner.wait(pid)
+    }
+    fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
+        self.inner.signal_child(pid, signal)
     }
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         self.inner.kill(pid, signal)

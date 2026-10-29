@@ -51,7 +51,7 @@ Default environment: `HOME=/home/guest`, `USER=guest`, `PATH=/bin`, `TERM=xterm-
 | `process` | `RuntimeProcess` | The shell's process handle. |
 | `done` | `Promise<RuntimeExit>` | Settles when the shell exits. |
 | `waitForPrompt(options?)` | `Promise<ShellPrompt>` | Wait for startup or a later prompt generation and its actual shell status. |
-| `interrupt()` | `void` | Send SIGINT to the shell. It stops the foreground job and leaves background jobs and other shells running. |
+| `interrupt()` | `void` | Send SIGINT to the foreground job. Handled programs choose their result or keep running; background jobs and other shells keep running. |
 | `dispose()` | `Promise<void>` | Stop this shell and join its locally observed worker cleanup. Does not dispose the runtime. |
 | `diagnostics()` | `ReturnType<typeof runtimeSnapshot>` | `runtimeSnapshot(runtime)` for this shell's runtime. |
 
@@ -189,8 +189,10 @@ waiting. It remains the last published receipt while another command runs.
 Aborting `signal` rejects with `signal.reason` and leaves the shell running.
 A closed bridge, shell exit, disposal or terminal failure rejects pending and
 future waits with `Error("Shell closed before the next prompt")`, even if an
-older receipt remains stored. `shell.interrupt()` keeps the shell alive and
-resolves the next prompt with status 130. A noninteractive `script` has no prompt;
+older receipt remains stored. `shell.interrupt()` keeps the shell alive. Default SIGINT termination and
+interrupted shell code report 130. A program that handles SIGINT reports its
+actual normal exit, including 0, 7 or 130, and may keep running instead of
+producing a prompt. Each call delivers a new interrupt. A noninteractive `script` has no prompt;
 use `shell.done` for its result. Negative `after` rejects with `RangeError`.
 
 The guest import is `shell_terminal.phase(value: i32, status: i32)`. Only the

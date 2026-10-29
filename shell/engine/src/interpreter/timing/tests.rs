@@ -20,6 +20,7 @@ fn context(bytes: usize) -> (Session, Context) {
         evaluation,
         Cancel::new(),
         group,
+        Strand::untracked(),
     );
     (session, context)
 }

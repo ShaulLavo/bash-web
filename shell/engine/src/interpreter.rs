@@ -7,7 +7,7 @@ use crate::{
     expand,
     io::{self, Endpoint, FdTable, FileSystem, OpenOptions},
     parse::{self, ParseFailure},
-    process::{GroupId, ProcessError, ProcessGroup, ProcessHost, SpawnRequest},
+    process::{ChildExit, GroupId, ProcessError, ProcessGroup, ProcessHost, SpawnRequest},
     state::{FunctionFrame, PrefixFrame, SharedState, State, StoredFunction, absolute},
 };
 use futures::{FutureExt, future::join_all};
@@ -27,6 +27,8 @@ mod file_substitution;
 mod function_names;
 mod hash_builtin;
 mod indexed;
+mod interrupts;
+use interrupts::{Interrupts, Strand};
 mod reader;
 mod select;
 mod source;
@@ -257,6 +259,7 @@ struct Job {
     cancel: Cancel,
     signal: Rc<Cell<Option<i32>>>,
     join: JoinHandle<i32>,
+    interrupts: Rc<Interrupts>,
     _allocation: Option<crate::exec::Allocation>,
 }
 struct Residual {
@@ -286,6 +289,7 @@ pub(crate) struct Context {
     source: crate::exec::Source,
     reader: crate::exec::ReaderLocation,
     pub cancel: Cancel,
+    strand: Rc<Strand>,
     // The invoking foreground/background command, independent of nested scopes.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
     signal: Rc<Cell<Option<i32>>>,
@@ -312,6 +316,7 @@ impl Context {
         evaluation: crate::exec::Scope,
         cancel: Cancel,
         group: GroupId,
+        strand: Rc<Strand>,
     ) -> Self {
         let signal = Rc::new(Cell::new(None));
         Self {
@@ -320,6 +325,7 @@ impl Context {
             reader: crate::exec::ReaderLocation::default(),
             lifetime: (cancel.clone(), signal.clone()),
             cancel,
+            strand,
             signal,
             group,
             invocation_group: group,
@@ -335,6 +341,7 @@ impl Context {
     }
     fn substitution(&self, cancel: Cancel, signal: Rc<Cell<Option<i32>>>, group: GroupId) -> Self {
         Self {
+            strand: Strand::untracked(),
             cancel,
             signal,
             group,
@@ -855,7 +862,18 @@ impl Session {
             .count()
     }
     pub fn interrupt(&self) {
+        if let Some(job) = self.core.foreground.borrow().as_ref()
+            && job.interrupts.deliver(&*self.core.host)
+        {
+            if job.signal.get().is_none() {
+                job.signal.set(Some(2));
+            }
+            job.cancel.cancel();
+        }
+    }
+    fn cancel_foreground(&self) {
         if let Some(job) = self.core.foreground.borrow().as_ref() {
+            job.interrupts.force();
             if job.signal.get().is_none() {
                 job.signal.set(Some(2));
             }
@@ -884,7 +902,11 @@ impl Session {
             return Err(StartError::Invalid("shell source limit exceeded".into()));
         }
         let host = self.core.host.clone();
-        let cancel = Cancel::with_probe(Rc::new(move || host.interrupted()));
+        let interrupts = Rc::new(Interrupts::default());
+        let routing = interrupts.clone();
+        let cancel = Cancel::with_probe(Rc::new(move || {
+            host.interrupted() && routing.deliver(&*host)
+        }));
         let parser_cancel = cancel.clone();
         let evaluation = crate::exec::Scope::new(
             self.core.limits.source_bytes,
@@ -918,6 +940,7 @@ impl Session {
             evaluation,
             cancel,
             group,
+            interrupts.strand(),
         );
         let read = reader::run(
             reader::Reader::new(script, failure, aliases, parser),
@@ -927,7 +950,7 @@ impl Session {
             self.core.descriptors.clone(),
             context.clone(),
         );
-        Ok(self.foreground(context, read))
+        Ok(self.foreground(context, read, interrupts))
     }
     /// Start a named script in the current cwd, with its literal invocation arguments.
     /// Loading belongs to the foreground job and shares its interrupt/shutdown lifecycle.
@@ -955,13 +978,18 @@ impl Session {
             state.command_string = false;
         }
         let host = self.core.host.clone();
-        let cancel = Cancel::with_probe(Rc::new(move || host.interrupted()));
+        let interrupts = Rc::new(Interrupts::default());
+        let routing = interrupts.clone();
+        let cancel = Cancel::with_probe(Rc::new(move || {
+            host.interrupted() && routing.deliver(&*host)
+        }));
         let mut context = Context::root(
             self.core.clone(),
             crate::exec::Source::root(""),
             evaluation,
             cancel,
             self.core.host.allocate_group(),
+            interrupts.strand(),
         );
         context.reader = reader;
         let read = source::script(
@@ -969,12 +997,13 @@ impl Session {
             self.core.descriptors.clone(),
             context.clone(),
         );
-        Ok(self.foreground(context, read))
+        Ok(self.foreground(context, read, interrupts))
     }
     fn foreground(
         &self,
         context: Context,
         run: impl std::future::Future<Output = Outcome> + 'static,
+        interrupts: Rc<Interrupts>,
     ) -> JoinHandle<i32> {
         let group = context.group;
         let foreground_cancel = context.cancel.clone();
@@ -1001,12 +1030,13 @@ impl Session {
             cancel: foreground_cancel,
             signal: foreground_signal,
             join: join.clone(),
+            interrupts,
             _allocation: None,
         });
         join
     }
     pub async fn shutdown(&self) {
-        self.interrupt();
+        self.cancel_foreground();
         let jobs: Vec<_> = self
             .core
             .jobs
@@ -1051,7 +1081,7 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        self.interrupt();
+        self.cancel_foreground();
         for &group in self.core.residuals.borrow().keys() {
             self.core.host.abandon_group(group, 2);
         }
@@ -1476,7 +1506,7 @@ async fn pipeline_command(
             children.next().expect("all pipeline state was prepared")
         };
         let shared_stage = count == 1 || (share_last && index + 1 == count);
-        let stage_context = if shared_stage {
+        let mut stage_context = if shared_stage {
             if pipeline.negated {
                 last_context.condition()
             } else {
@@ -1490,6 +1520,9 @@ async fn pipeline_command(
                 child
             }
         };
+        if count > 1 {
+            stage_context.strand = context.strand.fork();
+        }
         let stage_fds = if count == 1 {
             fds.clone()
         } else {
@@ -1507,7 +1540,9 @@ async fn pipeline_command(
     }
     drop(fds);
     drop(previous);
+    let parked = (count > 1).then(|| context.strand.park());
     let results = join_all(tasks).await;
+    drop(parked);
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
     let mut code = if pipefail {
         codes.iter().rev().copied().find(|&n| n != 0).unwrap_or(0)
@@ -2450,6 +2485,7 @@ async fn launch_background(
         reader: context.reader.clone(),
         lifetime: (cancel.clone(), signal.clone()),
         cancel: cancel.clone(),
+        strand: Strand::untracked(),
         signal: signal.clone(),
         group,
         invocation_group: group,
@@ -2482,6 +2518,7 @@ async fn launch_background(
             cancel,
             signal,
             join,
+            interrupts: Rc::new(Interrupts::default()),
             _allocation: Some(allocation),
         },
     );
@@ -2695,6 +2732,7 @@ impl Substitutions {
                 cancel: cancel.clone(),
                 signal: signal.clone(),
                 join: join.clone(),
+                interrupts: Rc::new(Interrupts::default()),
                 _allocation: Some(allocation),
             },
         );
@@ -2814,6 +2852,7 @@ impl Substitutions {
                 cancel,
                 signal,
                 join,
+                interrupts: Rc::new(Interrupts::default()),
                 _allocation: Some(allocation),
             },
         );
@@ -3840,6 +3879,7 @@ async fn dispatch_arguments(
     // or job teardown: a running producer can close output and await downstream EOF.
     let mut stderr = fds.borrow().get(2);
     drop(fds);
+    let wait = context.strand.wait(pid);
     let startup = context.cancel.run(context.core.host.wait_start(pid)).await;
     let failure = match startup {
         Ok(Err(error @ ProcessError::StartFailed(_))) => {
@@ -3861,26 +3901,40 @@ async fn dispatch_arguments(
         }
     }
     match context.cancel.run(context.core.host.wait(pid)).await {
-        Ok(Ok(status)) => Ok(Outcome::status(status)),
+        Ok(Ok(exit)) => {
+            if wait.delivered() && exit == ChildExit::Signaled(2) {
+                if context.lifetime.1.get().is_none() {
+                    context.lifetime.1.set(Some(2));
+                }
+                context.lifetime.0.cancel();
+            }
+            Ok(Outcome::status(exit.status()))
+        }
         Ok(Err(_)) => Err(1),
         Err(_) => {
             // Signal inherited members before waiting/reaping the direct child;
             // it may be the last live direct stage but not the last group member.
-            if context.group != context.invocation_group || context.lifetime.0.is_cancelled() {
-                let _ = context
-                    .core
-                    .host
-                    .kill_group(context.group, context.stop_signal());
+            if !wait.delivered() {
+                signal_cancelled_child(context, pid)?;
             }
-            context
-                .core
-                .host
-                .kill(pid, context.stop_signal())
-                .map_err(|_| 1)?;
-            context.core.host.wait(pid).await.map_err(|_| 1)?;
-            Err(context.cancel_status())
+            let exit = context.core.host.wait(pid).await.map_err(|_| 1)?;
+            Ok(Outcome::status(exit.status()))
         }
     }
+}
+
+fn signal_cancelled_child(context: &Context, pid: u64) -> Result<(), i32> {
+    if context.group != context.invocation_group || context.lifetime.0.is_cancelled() {
+        let _ = context
+            .core
+            .host
+            .kill_group(context.group, context.stop_signal());
+    }
+    context
+        .core
+        .host
+        .kill(pid, context.stop_signal())
+        .map_err(|_| 1)
 }
 
 // Only consumers that retain argv need a separate last-argument copy. Its live
@@ -4474,6 +4528,7 @@ mod scope_tests {
             reader: crate::exec::ReaderLocation::default(),
             lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
             cancel: Cancel::new(),
+            strand: Strand::untracked(),
             signal: Rc::new(Cell::new(None)),
             group,
             invocation_group: group,
@@ -4889,8 +4944,11 @@ mod residual_review_tests {
         ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
             self.inner.wait_start(pid)
         }
-        fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
+        fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<ChildExit, ProcessError>> {
             self.inner.wait(pid)
+        }
+        fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
+            self.inner.signal_child(pid, signal)
         }
         fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
             self.inner.kill(pid, signal)
@@ -5033,6 +5091,7 @@ mod residual_review_tests {
                 evaluation,
                 Cancel::new(),
                 self.host.allocate_group(),
+                Strand::untracked(),
             )
         }
         fn shutdown(mut self) {
@@ -5303,6 +5362,7 @@ mod residual_review_tests {
                     cancel: Cancel::new(),
                     signal: Rc::new(Cell::new(None)),
                     join,
+                    interrupts: Rc::new(Interrupts::default()),
                     _allocation: None,
                 },
             );
