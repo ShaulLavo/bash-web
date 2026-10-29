@@ -53,8 +53,13 @@ impl Screen {
                             self.lines.truncate(self.row + 1);
                         }
                         b'K' => {
-                            assert_eq!(number, 2);
-                            self.lines[self.row].fill(b' ');
+                            assert!(number == 0 || number == 2);
+                            let start = if number == 2 {
+                                0
+                            } else {
+                                self.column.min(self.columns)
+                            };
+                            self.lines[self.row][start..].fill(b' ');
                         }
                         other => panic!("unsupported editor CSI {}", char::from(other)),
                     }

@@ -2,16 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import type * as Api from "./waffle-node-api.ts";
-
-const {
-  Wasi,
-  MemFS,
-  ProcessABI,
-  PipeController,
-  ExecutableRegistry,
-  ProcessSupervisor,
-}: typeof Api = await import(new URL("../.build/node/api.mjs", import.meta.url).href);
+const api: typeof import("./waffle-node-api.ts") = await import(
+  new URL("../.build/node/api.mjs", import.meta.url).href
+);
 const guest = await WebAssembly.compile(
   await readFile(
     resolve(
@@ -24,13 +17,13 @@ const encoder = new TextEncoder();
 const enable = "\x1b[?2004h";
 const disable = "\x1b[?2004l";
 
-function interactive(steps: readonly ((output: string, phase: number) => string)[]) {
-  const input = new PipeController({ relay: "manual" });
+function interactive(steps: readonly ((output: string, phase: number) => string | null)[]) {
+  const input = new api.PipeController({ relay: "manual" });
   const output: Uint8Array[] = [];
   const errors: Uint8Array[] = [];
   const namespaces: WebAssembly.Imports = {};
-  const fs = new MemFS();
-  const wasi = new Wasi({
+  const fs = new api.MemFS();
+  const wasi = new api.Wasi({
     namespaces,
     args: ["shell-runtime"],
     env: { PWD: "/" },
@@ -43,23 +36,23 @@ function interactive(steps: readonly ((output: string, phase: number) => string)
       throw new Error("editor must use runtime input");
     },
   });
-  const supervisor = new ProcessSupervisor({
-    registry: new ExecutableRegistry(),
+  const supervisor = new api.ProcessSupervisor({
+    registry: new api.ExecutableRegistry(),
     launch() {
       throw new Error("test uses builtins only");
     },
   });
   try {
     const pid = supervisor.createRoot({ descriptors: wasi.descriptors });
-    const signals = supervisor.get(pid);
-    assert.ok(signals);
     const feed = input.retain(pid + 1, "write");
     wasi.descriptors.close(0);
     wasi.descriptors.openAt(0, input.retain(pid, "read"), (1n << 29n) - 1n, 0n);
     let memory: WebAssembly.Memory | undefined;
     let phase = 0;
     let pauses = 0;
-    const abi = new ProcessABI({
+    const signals = supervisor.get(pid);
+    assert.ok(signals);
+    const abi = new api.ProcessABI({
       memory: () => {
         assert.ok(memory);
         return memory;
@@ -72,7 +65,12 @@ function interactive(steps: readonly ((output: string, phase: number) => string)
       wait() {
         const step = steps[pauses++];
         assert.ok(step, "unexpected extra read from the interactive guest");
-        const bytes = encoder.encode(step(Buffer.concat(output).toString(), phase));
+        const next = step(Buffer.concat(output).toString(), phase);
+        if (next === null) {
+          feed.close();
+          return;
+        }
+        const bytes = encoder.encode(next);
         assert.equal(feed.tryWrite([bytes]), bytes.length);
       },
     });
@@ -152,6 +150,49 @@ test("runtime prompt rearms paste after cancellation and empty input, and disabl
     (output, phase) => {
       prompt(output, phase);
       return "exit 0\r";
+    },
+  ]);
+  assert.ok(output.endsWith(`${disable}\r\n`));
+});
+
+test("runtime disables bracketed paste on input EOF, including an unfinished paste", () => {
+  const output = interactive([
+    (output, phase) => {
+      prompt(output, phase);
+      return "\x1b[200~unfinished\r\n";
+    },
+    (_output, phase) => {
+      assert.equal(phase, 1);
+      return null;
+    },
+  ]);
+  assert.ok(output.endsWith(`${disable}\r\n`));
+});
+
+test("runtime accepts a capped paste ending at a UTF-8 boundary", () => {
+  const output = interactive([
+    (output, phase) => {
+      prompt(output, phase);
+      return "\x1b[200~#" + "a".repeat(65529);
+    },
+    (_output, phase) => {
+      assert.equal(phase, 1);
+      return "aaaaaé\r\nignored\x1b[201~";
+    },
+    (_output, phase) => {
+      assert.equal(phase, 1);
+      return "\r";
+    },
+    (output, phase) => {
+      prompt(output, phase);
+      assert.equal(output.split("\x07").length - 1, 1);
+      assert.ok(!output.includes("command is not UTF-8"));
+      return "echo AFTER_CAP\r";
+    },
+    (output, phase) => {
+      prompt(output, phase);
+      assert.ok(output.includes("AFTER_CAP\n"));
+      return "\x04";
     },
   ]);
   assert.ok(output.endsWith(`${disable}\r\n`));

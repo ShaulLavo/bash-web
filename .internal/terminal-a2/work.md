@@ -28,3 +28,11 @@ Paste is a separate bounded state with a short possible closing-delimiter prefix
 - Build the Lever and Prove It Works use discovered Rust, runtime and browser tests as rerunnable evidence.
 - Sequence Verifiable Units retains a failing-first test commit before the fix.
 - Architect parallel exploration is skipped because the design is approved and this task forbids agents. Independent review belongs to the coordinator.
+
+## Scope coordination
+
+The coordinator assigned Enter/interrupt from an earlier wrapped row, lines taller than the viewport, and the incomplete scalar width table to Opus. A2 does not implement those fixes. Its browser case submits from the buffer end and verifies multiline hard breaks, wraps, width resize, shortening, and the caret within the viewport. A2 extracts the byte-reading loop into `PromptRead` and centralizes mode cleanup in `finish_prompt`, which is the runtime integration point for a later display finish operation. Editor adds `Action::Bell` and a third CSI parameter for the two approved Shift+Enter encodings. These are the only changed internal contracts.
+
+The UTF-8 cap regression reproduces on A1 with `valid_up_to: 65535, error_len: None`. Both ordinary insertion and paste now reserve a full scalar's bytes when seeing its leading byte. A scalar that cannot fit is dropped, including later continuation bytes. Paste overflow remains latched until its end delimiter and rings once.
+
+The first WASI build failed because cmake and ninja were not on PATH. They are supplied through `uv run --no-project --with cmake --with ninja`, using the shared `/work/cache/uv`, without changing system configuration. The actual build still uses the pinned Waffle builder and WASI SDK 34.0. The Mac was checked twice and was reserved by another agent before A2 could acquire its lock. No Mac files or processes were created.

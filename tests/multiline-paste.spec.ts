@@ -1,23 +1,34 @@
 import { test, expect, type Page } from "./helpers/browser-test";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
-async function open(page: Page) {
+test.beforeEach(async ({ page }) => {
   await page.goto("/?test=1&renderer=canvas");
   await startupReady(page);
   await page.locator("textarea").focus();
-}
+  await expect.poll(() => lines(page)).toEqual(["$"]);
+});
 
 async function lines(page: Page) {
-  return page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trimEnd()));
+  return page.evaluate(() => {
+    const terminal = window.bashWeb!.terminal!;
+    const text = window.bashWeb!.readLines().map((line) => line.trimEnd());
+    const cursor =
+      terminal.lineCount() - terminal.appearance.grid.rows + terminal.geometry().cursor.y;
+    const content = text.findLastIndex((line) => line.length > 0);
+    return text.slice(0, Math.max(cursor, content) + 1);
+  });
 }
 
 test("actual terminal paste holds multiple commands until one explicit submission", async ({
   page,
 }) => {
-  await open(page);
   await page.evaluate(() => window.bashWeb!.terminal!.paste("echo PASTE_A\r\necho PASTE_B\r"));
   await expect.poll(() => lines(page)).toEqual(["$ echo PASTE_A", "echo PASTE_B", ""]);
   expect(await page.evaluate(() => window.bashWeb!.snapshot().state)).toBe("ready");
+  await test.info().attach("held-multiline-paste", {
+    body: await page.screenshot(),
+    contentType: "image/png",
+  });
   await page.keyboard.press("Enter");
   await ready(page);
   await expect
@@ -39,12 +50,11 @@ test("actual terminal paste holds multiple commands until one explicit submissio
 });
 
 test("Shift+Enter edits a multiline prompt and submits below its tail", async ({ page }) => {
-  await open(page);
   await page.keyboard.insertText("echo SHIFT_A");
   await page.keyboard.press("Shift+Enter");
   await page.keyboard.insertText("echo SHIFT_B");
   await expect.poll(() => lines(page)).toEqual(["$ echo SHIFT_A", "echo SHIFT_B"]);
-  await page.keyboard.press("Home");
+  await page.keyboard.press("End");
   await page.keyboard.press("Enter");
   await ready(page);
   await expect
@@ -53,7 +63,6 @@ test("Shift+Enter edits a multiline prompt and submits below its tail", async ({
 });
 
 test("multiline wrapped editing and resize preserve rows and the caret", async ({ page }) => {
-  await open(page);
   const columns = await page.evaluate(() => window.bashWeb!.snapshot().cols);
   const first = "a".repeat(columns - 2);
   const second = "b".repeat(columns + 5);

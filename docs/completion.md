@@ -22,6 +22,6 @@ File and directory candidates use the runtime's directory reader. Command candid
 
 ## Remaining limits
 
-Completion callbacks supplied by `-F` and `-C` can be registered and printed, but `compgen` cannot execute them yet. Alias generation has no candidates until alias state exists. Readline binding and job-command generators return an unsupported status. No interactive line editing is implemented.
+Completion callbacks supplied by `-F` and `-C` can be registered and printed, but `compgen` cannot execute them yet. Alias generation has no candidates until alias state exists. Readline binding and job-command generators return an unsupported status. No interactive completion is implemented.
 
 The recorded Bash controls and runtime-backed filesystem checks run with `node --test scripts/test-own-shell-completion.ts` after the normal shell and Node-harness builds. The fixture records GNU Bash 5.3.15 output and does not invoke the CI host's Bash.

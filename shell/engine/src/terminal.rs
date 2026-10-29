@@ -1,10 +1,11 @@
-//! Original bounded single-line terminal editor. The guest owns echo; the browser
+//! Original bounded multiline terminal editor. The guest owns echo; the browser
 //! forwards raw bytes, including ANSI arrows, without maintaining shell state.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Action {
     Redraw,
     /// Appending at the painted end needs only byte echo, not a whole-line redraw.
     Echo(u8),
+    Bell,
     Submit(Vec<u8>),
     Eof,
     Interrupt,
@@ -25,6 +26,7 @@ enum Parameters {
     Empty,
     First(u32),
     Modified(u32, u32),
+    Third(u32, u32, u32),
     Unsupported,
 }
 impl Parameters {
@@ -35,6 +37,10 @@ impl Parameters {
             (Self::First(value), b'0'..=b'9') => append_digit(value, byte)
                 .map(Self::First)
                 .unwrap_or(Self::Unsupported),
+            (Self::Modified(first, second), b';') => Self::Third(first, second, 0),
+            (Self::Third(first, second, value), b'0'..=b'9') => append_digit(value, byte)
+                .map(|value| Self::Third(first, second, value))
+                .unwrap_or(Self::Unsupported),
             (Self::Modified(first, value), b'0'..=b'9') => append_digit(value, byte)
                 .map(|value| Self::Modified(first, value))
                 .unwrap_or(Self::Unsupported),
@@ -44,6 +50,66 @@ impl Parameters {
 }
 fn append_digit(value: u32, byte: u8) -> Option<u32> {
     value.checked_mul(10)?.checked_add(u32::from(byte - b'0'))
+}
+const LINE_LIMIT: usize = 64 * 1024;
+const PASTE_END: &[u8] = b"\x1b[201~";
+
+#[derive(Default)]
+struct Paste {
+    bytes: Vec<u8>,
+    delimiter: usize,
+    cr: bool,
+    overflow: bool,
+}
+impl Paste {
+    fn push(&mut self, byte: u8, capacity: usize) {
+        if self.overflow {
+            return;
+        }
+        if byte == b'\n' && self.cr {
+            self.cr = false;
+            return;
+        }
+        self.cr = byte == b'\r';
+        let byte = if self.cr { b'\n' } else { byte };
+        if utf8_length(byte) > capacity - self.bytes.len() {
+            self.overflow = true;
+            return;
+        }
+        self.bytes.push(byte);
+    }
+    fn feed(&mut self, byte: u8, capacity: usize) -> bool {
+        if byte == PASTE_END[self.delimiter] {
+            self.delimiter += 1;
+            return self.delimiter == PASTE_END.len();
+        }
+        for &pending in &PASTE_END[..self.delimiter] {
+            self.push(pending, capacity);
+        }
+        self.delimiter = usize::from(byte == PASTE_END[0]);
+        if self.delimiter == 0 {
+            self.push(byte, capacity);
+        }
+        false
+    }
+}
+fn utf8_length(byte: u8) -> usize {
+    match byte {
+        0xc2..=0xdf => 2,
+        0xe0..=0xef => 3,
+        0xf0..=0xf4 => 4,
+        _ => 1,
+    }
+}
+fn paint_line(bytes: &mut Vec<u8>, line: &[u8]) {
+    for &byte in line {
+        match byte {
+            b'\n' => bytes.extend_from_slice(b"\x1b[K\r\n"),
+            b'\t' => bytes.push(byte),
+            0..=31 | 127 => bytes.extend_from_slice(&[b'^', byte ^ 0x40]),
+            _ => bytes.push(byte),
+        }
+    }
 }
 #[derive(Default)]
 pub struct Editor {
@@ -56,6 +122,8 @@ pub struct Editor {
     painted: Position,
     columns: usize,
     pending_utf8: Vec<u8>,
+    paste: Option<Paste>,
+    discard_utf8: usize,
 }
 #[derive(Clone, Copy, Default)]
 struct Position {
@@ -118,7 +186,7 @@ fn position(prompt: &str, line: &[u8], columns: usize) -> Position {
     // Prompt SGR/OSC controls occupy no cells. Their interpretation stays with
     // the terminal; only printing scalars contribute to the editor's row count.
     let mut escape = 0;
-    for character in prompt.chars().chain(String::from_utf8_lossy(line).chars()) {
+    for character in prompt.chars() {
         match (escape, character) {
             (0, '\x1b') => escape = 1,
             (1, '[') => escape = 2,
@@ -130,6 +198,14 @@ fn position(prompt: &str, line: &[u8], columns: usize) -> Position {
             _ => {}
         }
     }
+    for character in String::from_utf8_lossy(line).chars() {
+        if character.is_ascii_control() && !matches!(character, '\n' | '\t') {
+            point.advance('^', columns);
+            point.advance('?', columns);
+            continue;
+        }
+        point.advance(character, columns);
+    }
     point
 }
 impl Editor {
@@ -137,6 +213,8 @@ impl Editor {
         self.line.clear();
         self.cursor = 0;
         self.escape = Escape::None;
+        self.paste = None;
+        self.discard_utf8 = 0;
         self.history_at = None;
         self.draft.clear();
         self.pending_utf8.clear();
@@ -181,7 +259,7 @@ impl Editor {
         // after returning to the prompt origin, including a now-shorter tail.
         bytes.extend_from_slice(b"\r\x1b[J");
         bytes.extend_from_slice(prompt.as_bytes());
-        bytes.extend_from_slice(&self.line);
+        paint_line(&mut bytes, &self.line);
         bytes.push(b' ');
         let mut end = position(prompt, &self.line, columns);
         end.advance(' ', columns);
@@ -248,8 +326,15 @@ impl Editor {
         Action::Redraw
     }
     fn csi(&mut self, parameters: Parameters, byte: u8) -> Action {
-        use Parameters::{Empty, First, Modified};
+        use Parameters::{Empty, First, Modified, Third};
         match (parameters, byte) {
+            (Third(27, 2, 13), b'~') | (Modified(13, 2), b'u') => {
+                return self.insert(b'\n');
+            }
+            (First(200), b'~') => {
+                self.paste = Some(Paste::default());
+                return Action::None;
+            }
             (Empty, b'A') => self.history(true),
             (Empty, b'B') => self.history(false),
             (Empty, b'D') if self.cursor > 0 => self.cursor = self.previous(),
@@ -308,7 +393,44 @@ impl Editor {
             .unwrap_or_else(|| self.draft.clone());
         self.cursor = self.line.len();
     }
+    fn insert(&mut self, byte: u8) -> Action {
+        if self.discard_utf8 > 0 && byte & 0xc0 == 0x80 {
+            self.discard_utf8 -= 1;
+            return Action::None;
+        }
+        self.discard_utf8 = 0;
+        let width = utf8_length(byte);
+        if width > LINE_LIMIT - self.line.len() {
+            self.discard_utf8 = width - 1;
+            return Action::Bell;
+        }
+        let append = self.cursor == self.line.len();
+        self.line.insert(self.cursor, byte);
+        self.cursor += 1;
+        if append && byte != b'\n' {
+            return Action::Echo(byte);
+        }
+        Action::Redraw
+    }
+    fn feed_paste(&mut self, byte: u8) -> Action {
+        let Some(mut paste) = self.paste.take() else {
+            unreachable!("paste bytes require an active paste");
+        };
+        let overflow = paste.overflow;
+        if paste.feed(byte, LINE_LIMIT - self.line.len()) {
+            let length = paste.bytes.len();
+            self.line.splice(self.cursor..self.cursor, paste.bytes);
+            self.cursor += length;
+            return Action::Redraw;
+        }
+        let bell = !overflow && paste.overflow;
+        self.paste = Some(paste);
+        if bell { Action::Bell } else { Action::None }
+    }
     pub fn feed(&mut self, byte: u8) -> Action {
+        if self.paste.is_some() {
+            return self.feed_paste(byte);
+        }
         if byte == 0x1b {
             self.escape = Escape::Start;
             return Action::None;
@@ -375,16 +497,7 @@ impl Editor {
                 Action::Redraw
             }
             12 => Action::Redraw,
-            b'\t' | 32..=126 | 128..=255 if self.line.len() < 64 * 1024 => {
-                let append = self.cursor == self.line.len();
-                self.line.insert(self.cursor, byte);
-                self.cursor += 1;
-                if append {
-                    Action::Echo(byte)
-                } else {
-                    Action::Redraw
-                }
-            }
+            b'\t' | 32..=126 | 128..=255 => self.insert(byte),
             _ => Action::None,
         }
     }
@@ -400,6 +513,57 @@ mod tests {
         for &byte in bytes {
             editor.feed(byte);
         }
+    }
+
+    fn assert_utf8_limit(text: &str, room: usize) {
+        let mut editor = Editor::default();
+        feed(&mut editor, &vec![b'a'; LINE_LIMIT - room]);
+        feed(&mut editor, text.as_bytes());
+        let Action::Submit(line) = editor.feed(b'\r') else {
+            panic!("expected submit")
+        };
+        let line = std::str::from_utf8(&line).expect("cap must retain valid UTF-8");
+        let retained = if room == text.len() { text } else { "" };
+        assert_eq!(line, format!("{}{retained}", "a".repeat(LINE_LIMIT - room)));
+    }
+
+    #[test]
+    fn utf8_at_the_line_limit_is_kept_or_dropped_as_a_whole_scalar() {
+        for text in ["é", "中", "😀"] {
+            for room in 0..=text.len() {
+                assert_utf8_limit(text, room);
+            }
+        }
+    }
+
+    #[test]
+    fn split_paste_utf8_at_the_cap_does_not_invalidate_the_command() {
+        for text in ["é", "中", "😀"] {
+            let mut editor = Editor::default();
+            feed(&mut editor, &vec![b'a'; LINE_LIMIT - 1]);
+            feed(&mut editor, b"\x1b[200~");
+            assert_eq!(editor.feed(text.as_bytes()[0]), Action::Bell);
+            feed(&mut editor, &text.as_bytes()[1..]);
+            feed(&mut editor, b"\r\nignored\x1b[20");
+            assert_eq!(editor.feed(b'1'), Action::None);
+            assert_eq!(editor.feed(b'~'), Action::Redraw);
+            assert_eq!(editor.line.len(), LINE_LIMIT - 1);
+            assert!(std::str::from_utf8(&editor.line).is_ok());
+            assert_eq!(editor.feed(b'!'), Action::Echo(b'!'));
+            let Action::Submit(line) = editor.feed(b'\r') else {
+                panic!("expected submit")
+            };
+            assert_eq!(line.len(), LINE_LIMIT);
+            assert_eq!(line.last(), Some(&b'!'));
+        }
+    }
+
+    #[test]
+    fn pasted_control_bytes_are_painted_as_text_instead_of_terminal_controls() {
+        let mut editor = Editor::default();
+        editor.begin("$ ", 80);
+        feed(&mut editor, b"\x1b[200~a\x1b[2J\x03\x7f\x1b[201~");
+        assert_eq!(editor.redraw("$ "), b"\r\x1b[J$ a^[[2J^C^? \r\x1b[12C");
     }
 
     #[test]
@@ -451,7 +615,7 @@ mod tests {
         let mut bells = 0;
         for _ in 0..(64 * 1024 + 100) {
             let action = editor.feed(b'x');
-            bells += usize::from(format!("{action:?}") == "Bell");
+            bells += usize::from(action == Action::Bell);
             assert!(!matches!(action, Action::Submit(_)));
         }
         for byte in b"\r\nignored\x1b[201~" {
