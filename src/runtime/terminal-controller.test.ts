@@ -29,7 +29,7 @@ import {
 } from "waffle/proc/worker-client";
 import { SharedBridge, control } from "../bridge";
 import { createTerminalController } from "./terminal-controller";
-import { terminalValue } from "./terminal-producer";
+import { TerminalOperationError, terminalValue } from "./terminal-producer";
 import { createShellTerminals } from "./terminal-endpoints";
 import { createTerminalAdmission } from "./terminal-admission";
 
@@ -402,6 +402,124 @@ test("nested child exit restores the live ancestor selection through an owned tu
   assert.equal(byte[0], 66);
 });
 
+async function selectedTerminal(f: Awaited<ReturnType<typeof fixture>>) {
+  const result = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.ok(result.receipt.state?.kind === "open");
+  assert.ok(result.receipt.state.selection);
+  return result.receipt.state.selection;
+}
+
+function exitOnRestoreTransfer(
+  context: TestContext,
+  f: Awaited<ReturnType<typeof fixture>>,
+  ancestor: WorkerProcessTransport,
+) {
+  const transfer = f.authority.transfer.bind(f.authority);
+  let transfers = 0;
+  context.mock.method(f.authority, "transfer", (...args: Parameters<typeof transfer>) => {
+    if (++transfers === 1) {
+      claimOutcome(workerProcessState(ancestor).signals.outcome, { kind: "exited", code: 0 });
+      assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
+    }
+    return transfer(...args);
+  });
+  return () => transfers;
+}
+
+async function exitChild(
+  f: Awaited<ReturnType<typeof fixture>>,
+  child: ReturnType<Awaited<ReturnType<typeof fixture>>["reserve"]>,
+) {
+  f.supervisor.exit(child.pid, 0);
+  await f.supervisor.waitForExit(child.parent.pid, child.pid);
+  await f.flush();
+  assert.deepEqual(f.failures, []);
+}
+
+test("a restore ancestor exiting between the liveness check and transfer restores the editor", async (context) => {
+  const f = await fixture(context);
+  const parent = f.reserve();
+  await f.start(parent);
+  const parentSelection = await selectedTerminal(f);
+  const child = f.reserve(0, parent.transport);
+  await f.start(child);
+  const childSelection = await selectedTerminal(f);
+  const transfers = exitOnRestoreTransfer(context, f, parent.transport);
+  await exitChild(f, child);
+  assert.equal(transfers(), 2, "the rejected ancestor is followed by one editor selection");
+  const restored = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.equal(restored.receipt.phase, "committed");
+  assert.ok(["retired", "stale"].includes(restored.receipt.group(childSelection.group)));
+  assert.equal(restored.receipt.group(parentSelection.group), "active");
+  assert.equal(f.bridge.send(Uint8Array.of(65)), 1);
+  assert.equal(f.attachment.resolve(0).tryRead!([new Uint8Array(1)]), 1);
+  f.supervisor.exit(parent.pid, 0);
+  await f.supervisor.waitForExit(f.root.pid, parent.pid);
+  await f.flush();
+  const retired = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.ok(["retired", "stale"].includes(retired.receipt.group(parentSelection.group)));
+  assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
+});
+
+test("a departed restore ancestor preserves a live outer group and its sibling", async (context) => {
+  const f = await fixture(context);
+  const outer = f.reserve();
+  await f.start(outer);
+  const sibling = f.reserve(workerProcessState(outer.transport).job);
+  await f.start(sibling);
+  const outerSelection = await selectedTerminal(f);
+  const parent = f.reserve(0, outer.transport);
+  await f.start(parent);
+  const child = f.reserve(0, parent.transport);
+  await f.start(child);
+  const transfers = exitOnRestoreTransfer(context, f, parent.transport);
+  const terminal = attachTerminal({
+    context: f.controller.metadata.terminalContext,
+    process: outer.transport,
+    policy: createTerminalInputPolicy({ input: f.input }),
+    checkActive() {},
+  });
+  context.after(() => terminal.dispose());
+  await exitChild(f, child);
+  assert.equal(transfers(), 2, "restoration advances once to the live outer group");
+  const restored = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.equal(restored.receipt.phase, "committed");
+  assert.equal(restored.receipt.group(outerSelection.group), "active");
+  assert.equal(f.bridge.send(Uint8Array.of(66)), 1);
+  const byte = new Uint8Array(1);
+  assert.equal(terminal.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], 66);
+  assert.equal(readOutcome(workerProcessState(outer.transport).signals.outcome), null);
+  assert.equal(readOutcome(workerProcessState(sibling.transport).signals.outcome), null);
+  f.supervisor.exit(parent.pid, 0);
+  await f.supervisor.waitForExit(outer.pid, parent.pid);
+  await f.flush();
+  f.supervisor.exit(outer.pid, 0);
+  f.supervisor.exit(sibling.pid, 0);
+  await f.supervisor.waitForExit(f.root.pid, outer.pid);
+  await f.supervisor.waitForExit(f.root.pid, sibling.pid);
+  await f.flush();
+  assert.equal(f.bridge.send(Uint8Array.of(67)), 1);
+  assert.equal(f.attachment.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], 67);
+});
+
+test("a PROCESS_GONE control failure outside ancestor selection still fails a live root", async (context) => {
+  await liveControlFailure(context, new TerminalOperationError("PROCESS_GONE"));
+});
+
+async function liveControlFailure(context: TestContext, failure: Error) {
+  const f = await fixture(context, { expectedFailures: [failure] });
+  context.mock.method(f.authority, "control", async () => {
+    throw failure;
+  });
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
+  assert.deepEqual(f.failures, [failure]);
+}
+
 async function barrier(bridge: SharedBridge) {
   while (Atomics.load(bridge.state, control.cancel) === 2) {
     const sequence = Atomics.load(bridge.state, control.wake);
@@ -641,16 +759,7 @@ for (const operation of ["cleanup", "discard"] as const) {
 }
 
 test("an unexpected task failure while the root is live still reaches the root failure boundary", async (context) => {
-  const failure = new Error("Unexpected live control failure");
-  const f = await fixture(context, { expectedFailures: [failure] });
-  context.mock.method(f.authority, "control", async () => {
-    throw failure;
-  });
-  f.bridge.interrupt();
-  f.bridge.discardInput();
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
-  assert.deepEqual(f.failures, [failure]);
+  await liveControlFailure(context, new Error("Unexpected live control failure"));
 });
 
 test("runtime disposal before task completion is shutdown rather than a new root failure", async (context) => {
