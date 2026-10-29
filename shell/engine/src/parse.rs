@@ -161,6 +161,11 @@ pub(crate) fn lazy_variable(token: &str) -> Word {
     Parser::parse_word_string_with_limits(token, OPERAND_DEPTH, OPERAND_TOKEN_BYTES * 16)
 }
 
+/// Decode an already-admitted ANSI-C quote body, including its closing quote.
+pub(crate) fn ansi_c_quote(body: &str) -> Option<(String, usize)> {
+    Lexer::decode_ansi_c_body(body)
+}
+
 // Keep synchronous parser frames out of recursive expansion futures. Callers
 // retain their admission, checkpoint ordering and context-specific error mapping.
 #[inline(never)]

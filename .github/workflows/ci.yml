@@ -286,9 +286,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - run: node --test scripts/test-diagnose-compat.ts
-      - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
+      - name: Observe bounded Waffle echo cases
+        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/echo-diagnostics" -- timeout --signal=TERM --kill-after=5s 5m npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}
+          BASH_WEB_WAFFLE_TRACE: "1"
       - name: Observe compatibility with the shared node build
         run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
@@ -303,6 +305,7 @@ jobs:
           path: |
             ${{ runner.temp }}/scoreboard-input.json
             ${{ runner.temp }}/own-shell-current.json
+            ${{ runner.temp }}/echo-diagnostics/
             ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
   own-shell-compatibility:
