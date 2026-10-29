@@ -1,0 +1,18 @@
+
+running 1 test
+test cap_regression::utf8_at_the_line_limit_is_kept_or_dropped_as_a_whole_scalar ... FAILED
+
+failures:
+
+---- cap_regression::utf8_at_the_line_limit_is_kept_or_dropped_as_a_whole_scalar stdout ----
+
+thread 'cap_regression::utf8_at_the_line_limit_is_kept_or_dropped_as_a_whole_scalar' (115321) panicked at /work/tmp/terminal-a2-utf8-red.rs:677:55:
+cap must retain valid UTF-8: Utf8Error { valid_up_to: 65535, error_len: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    cap_regression::utf8_at_the_line_limit_is_kept_or_dropped_as_a_whole_scalar
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+

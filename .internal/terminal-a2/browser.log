@@ -1,0 +1,12 @@
+[WebServer] (node:400750) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:401017) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/multiline-paste.spec.ts:22:1 › actual terminal paste holds multiple commands until one explicit submission (1.5s)
+  ✓  2 [chromium] › tests/multiline-paste.spec.ts:52:1 › Shift+Enter edits a multiline prompt and submits below its tail (562ms)
+  ✓  3 [chromium] › tests/multiline-paste.spec.ts:65:1 › multiline wrapped editing and resize preserve rows and the caret (632ms)
+
+  3 passed (4.2s)
