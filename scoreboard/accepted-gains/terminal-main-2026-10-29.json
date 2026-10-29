@@ -1,0 +1,208 @@
+{
+  "schema": 1,
+  "kind": "accepted-main-requirement-chain",
+  "base": {
+    "sourceSha": "b8d7d16b600968523ac6165275852c2a552014db",
+    "run": {
+      "runId": 40829164351,
+      "attempt": 2
+    },
+    "floorSha256": "98320866fc3c17ffde2141f9f1aaa427d2f84650989fee3204b229dde60e1b8b",
+    "artifact": {
+      "artifactId": 12881800299,
+      "archiveSha256": "0ecdc9e66712d2ecf2a3c0a2366f286c5cbab270821200cec667004c524571ed",
+      "payloadSha256": "7dd74d74cfa2ebb9ee7523cbfff93f642d731d9ab16fa9092627e1539ef797bc",
+      "uploader": {
+        "runId": 40829164351,
+        "attempt": 2,
+        "jobId": 123325932131,
+        "artifactId": 12881800299,
+        "archiveSha256": "0ecdc9e66712d2ecf2a3c0a2366f286c5cbab270821200cec667004c524571ed",
+        "uploaderLogsSha256": "790c8ece93ad42c8ad7fee7676e90bc4e79aee57aab29f63a1ebbec6f32584ae"
+      }
+    }
+  },
+  "cancelled": [
+    {
+      "sourceSha": "d9e52b8c4ba80145039e5c28e337c0300de6cf34",
+      "runId": 40841645539,
+      "attempt": 1
+    },
+    {
+      "sourceSha": "69ed868e4d5cf1274993ed32feb717423c5582fd",
+      "runId": 40841838807,
+      "attempt": 1
+    }
+  ],
+  "landed": [
+    {
+      "landed": {
+        "pr": 174,
+        "mergeCommit": "d9e52b8c4ba80145039e5c28e337c0300de6cf34",
+        "firstParent": "b8d7d16b600968523ac6165275852c2a552014db",
+        "tree": "80550b8bfd106ba5424dbd9e53a8795cbb302fac"
+      },
+      "original": {
+        "binding": {
+          "kind": "pull-request",
+          "headSha": "a8fb39dcdc8a89f957b7390044b4793fda177f72",
+          "testedMergeSha": "be326288194239b48191a1ba0596c4a848d6c631",
+          "baseSha": "b8d7d16b600968523ac6165275852c2a552014db",
+          "mainSha": "b8d7d16b600968523ac6165275852c2a552014db"
+        },
+        "run": {
+          "runId": 40830668776,
+          "attempt": 2
+        },
+        "tree": "80550b8bfd106ba5424dbd9e53a8795cbb302fac",
+        "inputsSha256": "1406bc55b02e9fc541c78e2366368c39f892c6b8d0342a622c0c6b1df88da1a7",
+        "resultSha256": "a6450858eb88f727ba7a2beae4e889cfa93d035a5399c909d53d7092ae172b16",
+        "capturedFloorSha256": "98320866fc3c17ffde2141f9f1aaa427d2f84650989fee3204b229dde60e1b8b"
+      },
+      "artifacts": {
+        "raw": {
+          "artifactId": 12881529580,
+          "archiveSha256": "e55819ccce76d0813e8751b8ffe40182a4582869ee3993ffa0be4eeedd5da04c",
+          "payloadSha256": "467742416b16ad422510d960603800b607619a34c6aad3d4788ac896cef685b7",
+          "uploader": {
+            "runId": 40830668776,
+            "attempt": 2,
+            "jobId": 123333708627,
+            "artifactId": 12881529580,
+            "archiveSha256": "e55819ccce76d0813e8751b8ffe40182a4582869ee3993ffa0be4eeedd5da04c",
+            "uploaderLogsSha256": "939c4d3caa1c6e0d1762f59f8ba098b204ae14133610ba2b5463299fb936faea"
+          }
+        },
+        "qualification": {
+          "artifactId": 12882018570,
+          "archiveSha256": "630cfd05071a70145335a8432b1cd8a083f4b101a7c20d52fcf8b5c5478d5a67",
+          "payloadSha256": "f984e6554af07ea9e3b78e649dbf0fe1b02c5dd6e7f37dd3f526fd7c68b992f5",
+          "uploader": {
+            "runId": 40830668776,
+            "attempt": 2,
+            "jobId": 123333860163,
+            "artifactId": 12882018570,
+            "archiveSha256": "630cfd05071a70145335a8432b1cd8a083f4b101a7c20d52fcf8b5c5478d5a67",
+            "uploaderLogsSha256": "13b91a617edd3677b116dbc90db87b268ef22f505f0aa93e1324a04b78913e75"
+          }
+        }
+      },
+      "gains": [],
+      "gainsSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "landed": {
+        "pr": 178,
+        "mergeCommit": "69ed868e4d5cf1274993ed32feb717423c5582fd",
+        "firstParent": "d9e52b8c4ba80145039e5c28e337c0300de6cf34",
+        "tree": "40663e82017d81f53b5baa8d34c97a232b940b20"
+      },
+      "original": {
+        "binding": {
+          "kind": "pull-request",
+          "headSha": "0cf834fd20fc48d683be8851439ba44b282157b2",
+          "testedMergeSha": "b63922da83a882c82e05b2eabe5f5c7d960c8867",
+          "baseSha": "b8d7d16b600968523ac6165275852c2a552014db",
+          "mainSha": "b8d7d16b600968523ac6165275852c2a552014db"
+        },
+        "run": {
+          "runId": 40832924721,
+          "attempt": 2
+        },
+        "tree": "be331629fb71e53557542aac8f2945449df6c57d",
+        "inputsSha256": "f16449cc603f7e597708d669e70fe5d062818097f3d8d0586d48c94147f960d5",
+        "resultSha256": "78a81564f5f15ed568d1ee028f0b6190a9c6e72446800bc2fa88a6951be7baf6",
+        "capturedFloorSha256": "98320866fc3c17ffde2141f9f1aaa427d2f84650989fee3204b229dde60e1b8b"
+      },
+      "artifacts": {
+        "raw": {
+          "artifactId": 12882357078,
+          "archiveSha256": "e6451ba78cc53ce58448ac13428c884337411c8aa25bc370eed17675b92f5dd4",
+          "payloadSha256": "96edd733e4ef01a2bb7dcecf24e29cae64d2df6d48cde203ae422211c125414e",
+          "uploader": {
+            "runId": 40832924721,
+            "attempt": 2,
+            "jobId": 123333893573,
+            "artifactId": 12882357078,
+            "archiveSha256": "e6451ba78cc53ce58448ac13428c884337411c8aa25bc370eed17675b92f5dd4",
+            "uploaderLogsSha256": "c1276638a716d2c446a2724ddbe613bfa2c83dc21e37122262dfa068c7808cbb"
+          }
+        },
+        "qualification": {
+          "artifactId": 12882895238,
+          "archiveSha256": "1c345408fc17480eefdfd2fbaf740969118b1fd0b3fe626d85e8892553d60b8e",
+          "payloadSha256": "79f9458947426966cda888980d88f83a1e3a3446cce8d23ae5d1ec40c1189258",
+          "uploader": {
+            "runId": 40832924721,
+            "attempt": 2,
+            "jobId": 123334064596,
+            "artifactId": 12882895238,
+            "archiveSha256": "1c345408fc17480eefdfd2fbaf740969118b1fd0b3fe626d85e8892553d60b8e",
+            "uploaderLogsSha256": "0b39b65ae904b878df562f3fdd7e95be1e29fb62fa2b943183d12d3b241914ed"
+          }
+        }
+      },
+      "gains": ["bashkit-suite:blackbox-edge-cases:232", "brush-suite:ifs:1"],
+      "gainsSha256": "db4306bd1671ba3c209125d384f428386267e1f1bad78941dbc13a894e083dc4"
+    },
+    {
+      "landed": {
+        "pr": 179,
+        "mergeCommit": "c442e234405e00dcb25e7503cbd930185fbfd63f",
+        "firstParent": "69ed868e4d5cf1274993ed32feb717423c5582fd",
+        "tree": "443441e315ddee81aebbd0ca3636e45a0be0c777"
+      },
+      "original": {
+        "binding": {
+          "kind": "pull-request",
+          "headSha": "35693c3c7b28823654042aa06b63de93e06587f2",
+          "testedMergeSha": "643d4dc9344e382d5ac945e9127e741176734809",
+          "baseSha": "b8d7d16b600968523ac6165275852c2a552014db",
+          "mainSha": "b8d7d16b600968523ac6165275852c2a552014db"
+        },
+        "run": {
+          "runId": 40833689939,
+          "attempt": 2
+        },
+        "tree": "8c0f7a7384095f3b85dedcfce708926900ea3901",
+        "inputsSha256": "873b7f24690f6b9ea5e25a47efd5d48758e2e3de15360663e68d0b4aad262e29",
+        "resultSha256": "90125f8b4c288788aa8f8cf41882d33ebc64e71982f84227eae3aad57e348d29",
+        "capturedFloorSha256": "98320866fc3c17ffde2141f9f1aaa427d2f84650989fee3204b229dde60e1b8b"
+      },
+      "artifacts": {
+        "raw": {
+          "artifactId": 12882217572,
+          "archiveSha256": "77e4848ad4ccf03daf5577f9e8b66eed3a8c87dcb775dbc6caf434ffcb4bd18b",
+          "payloadSha256": "a0f9e41c9e5f36bc89e0ea0a1c5c6714fbac62913dbeff8f33ccfe730ffc7fd6",
+          "uploader": {
+            "runId": 40833689939,
+            "attempt": 2,
+            "jobId": 123334074433,
+            "artifactId": 12882217572,
+            "archiveSha256": "77e4848ad4ccf03daf5577f9e8b66eed3a8c87dcb775dbc6caf434ffcb4bd18b",
+            "uploaderLogsSha256": "fc93b6a2e999abe5f5ced09baaaee4357cd794a8bddd2f3ee2c69248cf848242"
+          }
+        },
+        "qualification": {
+          "artifactId": 12882447049,
+          "archiveSha256": "e28fd8289fdc28b310be09685f8ed7dbacb06b1fa4c206aa344f9bfd993d285f",
+          "payloadSha256": "70f8b3dc621b9f70840d473fab4380014ff3d03a1d118d6d8f1996a05267beda",
+          "uploader": {
+            "runId": 40833689939,
+            "attempt": 2,
+            "jobId": 123334237594,
+            "artifactId": 12882447049,
+            "archiveSha256": "e28fd8289fdc28b310be09685f8ed7dbacb06b1fa4c206aa344f9bfd993d285f",
+            "uploaderLogsSha256": "d8463faa2d44d889751b34be0d394fad8df6508083f18bc7b1e9915f29c54618"
+          }
+        }
+      },
+      "gains": [],
+      "gainsSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  ],
+  "requirement": {
+    "count": 4764,
+    "floorSha256": "7a3c095c51e768f6773dbebec637674e5450c6519f6f4b257015fddbceaceb55"
+  }
+}
