@@ -72,13 +72,13 @@ function browserInputs(consumer: string) {
   put(consumer, "node_modules/waffle-ripgrep/dist/rg.NOTICES.txt", "Ripgrep license notice\n");
   put(consumer, "scripts/placeholder", "");
   copyFileSync(
-    resolve(root, "scripts/browser-notices.mjs"),
-    resolve(consumer, "scripts/browser-notices.mjs"),
+    resolve(root, "scripts/browser-notices.ts"),
+    resolve(consumer, "scripts/browser-notices.ts"),
   );
 }
 
 function aggregate(consumer: string) {
-  execFileSync(process.execPath, ["scripts/browser-notices.mjs"], { cwd: consumer });
+  execFileSync(process.execPath, ["scripts/browser-notices.ts"], { cwd: consumer });
   return readFileSync(resolve(consumer, "public/THIRD_PARTY_NOTICES.txt"));
 }
 

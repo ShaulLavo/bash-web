@@ -1,7 +1,7 @@
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-async function noticeNames(directory) {
+async function noticeNames(directory: string): Promise<string[]> {
   const entries = await readdir(resolve(root, directory), { withFileTypes: true });
   let names = entries
     .filter((entry) => entry.isFile() && /license|notice/i.test(entry.name))

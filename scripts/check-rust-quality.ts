@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptions } from "node:child_process";
 import { resolve } from "node:path";
 import { wasiBuildEnvironment } from "./wasi-build.ts";
 
 const root = resolve(import.meta.dirname, "..");
-function run(command, args, options = {}) {
+function run(command: string, args: readonly string[], options: SpawnSyncOptions = {}) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", ...options });
   if (result.error) throw result.error;
   assert.equal(result.status, 0, `${command} ${args.join(" ")} failed`);
@@ -18,7 +18,7 @@ assert.equal(
 );
 assert.equal(version.status, 0);
 assert.equal(version.stdout.trim(), "0.9.2", "Use the pinned cargo-machete version");
-run("node", ["scripts/check-shell-parser.mjs"]);
+run("node", ["scripts/check-shell-parser.ts"]);
 run("cargo", ["fmt", "--manifest-path", "shell/Cargo.toml", "--all", "--check"]);
 for (const target of [[], ["--target", "wasm32-wasip1"]]) {
   run(

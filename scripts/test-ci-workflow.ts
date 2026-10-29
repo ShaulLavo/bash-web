@@ -317,19 +317,18 @@ function expanded(command: string, ancestors: readonly string[] = []): string {
 
 test("shell notices have exactly one native producer and a Cargo-free browser consumer", () => {
   const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
-    Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.mjs/g), () => owner),
+    Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.ts/g), () => owner),
   );
   assert.deepEqual(owners, ["native"]);
   const browser = expanded(commands(jobs().browser));
-  assert.equal(browser.match(/node scripts\/browser-notices\.mjs/g)?.length, 1);
+  assert.equal(browser.match(/node scripts\/browser-notices\.ts/g)?.length, 1);
   assert.match(browser, /node scripts\/ci-artifacts\.ts notices \.build\/ci-native/);
-  assert.doesNotMatch(browser, /\b(cargo|rustup)\b|scripts\/notices\.mjs/);
+  assert.doesNotMatch(browser, /\b(cargo|rustup)\b|scripts\/notices\.ts/);
   const native = expanded(commands(jobs().native));
   assert.ok(
-    native.indexOf("node scripts/notices.mjs") <
-      native.indexOf("node scripts/ci-artifacts.ts pack"),
+    native.indexOf("node scripts/notices.ts") < native.indexOf("node scripts/ci-artifacts.ts pack"),
   );
-  assert.match(expanded("npm run build:browser:assets"), /node scripts\/notices\.mjs/);
+  assert.match(expanded("npm run build:browser:assets"), /node scripts\/notices\.ts/);
   assert.equal(browser.match(/vite build/g)?.length, 1);
 });
 
@@ -508,7 +507,7 @@ test("npm prepare is the only worker build and Git consumes the family backend",
   const lifecycle = String(recipes().prepare);
   assert.equal(lifecycle, "npm run build:worker");
   const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
-    Array.from(expanded(commands(job)).matchAll(/node scripts\/build-worker\.mjs/g), () => owner),
+    Array.from(expanded(commands(job)).matchAll(/node scripts\/build-worker\.ts/g), () => owner),
   );
   assert.deepEqual(owners, ["prepare"]);
   const driver = readFileSync(new URL("./test-git-browser.ts", import.meta.url), "utf8");
