@@ -65,7 +65,9 @@ export function createShellTerminals(
     if (root && Atomics.load(root.state, control.cancel) === 2) return;
     const phase = root ? Atomics.load(root.state, control.phase) : 2;
     if (root?.cancelled() && phase !== 1) return;
-    if (root && phase === 1) pendingMode = "raw";
+    // phase(1) already requests raw mode once per prompt. Every host call runs this,
+    // so repeat the request only while an interrupt waits for the prompt to acknowledge it.
+    if (root?.cancelled() && phase === 1) pendingMode = "raw";
     if (!pendingMode) return;
     const snapshot = controller.snapshot();
     if (snapshot.kind === "error") return;

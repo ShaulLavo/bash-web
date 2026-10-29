@@ -7,6 +7,7 @@ import {
   createTerminalInputPolicy,
   createTerminalSession,
   pushTerminalInput,
+  terminalControls,
   type TerminalResult,
 } from "waffle/browser/runtime-terminals";
 import { DescriptorTable } from "waffle/core/descriptors";
@@ -17,7 +18,7 @@ import {
   WorkerProcessClient,
   type WorkerProcessTransport,
 } from "waffle/proc/worker-client";
-import { SharedBridge } from "../bridge";
+import { SharedBridge, control } from "../bridge";
 import { createShellTerminals } from "./terminal-endpoints";
 import { createTerminalAdmission, quiesceTerminal } from "./terminal-admission";
 import { terminalGuest } from "../../tests/helpers/terminal-wasi-guest";
@@ -54,8 +55,48 @@ function terminalSession(context: TestContext) {
     policy,
   });
   context.after(() => attachment.dispose());
-  return { root, input, display, authority, editor, attachment };
+  return { root, input, display, authority, editor, member, attachment };
 }
+
+test("an idle prompt requests raw mode once instead of on every host call", (context) => {
+  const { root, input, member } = terminalSession(context);
+  root.data = { terminalContext: member.context, terminalInput: input.buffer };
+  const bridge = new SharedBridge();
+  Atomics.store(bridge.state, control.phase, 1);
+  const terminals = createShellTerminals(
+    { runtimeProcess: root },
+    bridge.buffer,
+    createTerminalAdmission(),
+    bridge,
+    () => {},
+  );
+  assert.ok(terminals);
+  context.after(() => terminals.dispose());
+  terminals.ready();
+  terminals.phase(1);
+  const wakes = () => Atomics.load(bridge.state, control.wake);
+  const idle = wakes();
+  // The editor reads one byte per call, and every host import runs prepare first.
+  for (let call = 0; call < 32; call++) terminals.prepare();
+  assert.equal(wakes(), idle, "an idle prompt must not wake the page on every host call");
+
+  Atomics.store(bridge.state, control.cancel, 2);
+  terminals.prepare();
+  assert.equal(Atomics.load(bridge.state, control.cancel), 2, "discard still in progress");
+  Atomics.store(bridge.state, control.cancel, 1);
+  terminals.prepare();
+  assert.equal(
+    Atomics.load(bridge.state, control.cancel),
+    0,
+    "the prompt acknowledges the discard",
+  );
+
+  const controls = terminalControls(terminals.resolve(0))!;
+  terminals.phase(2);
+  assert.equal(must(controls.snapshot()).mode, "cooked");
+  terminals.phase(1);
+  assert.equal(must(controls.snapshot()).mode, "raw", "each new prompt requests raw mode");
+});
 
 for (const target of [1, 2] as const) {
   test(`session terminal target ${target} preserves FD_READ and the shared fd0 input cursor`, (context) => {
