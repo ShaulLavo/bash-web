@@ -20,10 +20,12 @@ function validateTerminalPin(pin: unknown): asserts pin is TerminalPin {
 }
 
 const root = resolve(import.meta.dirname, "..");
-const lock: unknown = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
+const lock: unknown = JSON.parse(
+  await readFile(new URL("../sources.lock.json", import.meta.url), "utf8"),
+);
 assert.ok(isRecord(lock));
-const terminal: unknown = lock.terminal;
-validateTerminalPin(terminal);
+validateTerminalPin(lock.terminal);
+const { terminal } = lock;
 const destination = resolve(root, ".sources/ghostty-webgpu");
 const marker = resolve(destination, ".revision");
 let revision: string | undefined;
