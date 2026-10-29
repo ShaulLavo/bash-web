@@ -47,14 +47,24 @@ export interface Shell {
 export async function createShell(options: ShellOptions): Promise<Shell> {
   const terminal = options.terminal ?? new SharedBridge();
   const process = await startShell(options, terminal);
+  const lifetime = new AbortController();
+  const stopWaiting = () => lifetime.abort(new Error("Shell closed before the next prompt"));
+  void process.done.then(stopWaiting, stopWaiting);
   return {
     terminal,
     process,
     done: process.done,
-    waitForPrompt: (options) => waitForPrompt(terminal, options),
+    waitForPrompt: ({ signal, after }: PromptWaitOptions = {}) =>
+      waitForPrompt(terminal, {
+        after,
+        signal: signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal,
+      }),
     // The shell handles SIGINT and forwards only its foreground job.
     interrupt: () => process.signal(2),
-    dispose: () => process.dispose(),
+    dispose: () => {
+      stopWaiting();
+      return process.dispose();
+    },
     diagnostics: () => runtimeSnapshot(options.runtime),
   };
 }

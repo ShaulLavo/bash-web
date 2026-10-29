@@ -102,3 +102,21 @@ test(
     assert.equal((await shell.done).code, 23);
   },
 );
+
+test("runtime disposal rejects the public prompt wait", { timeout: 15000 }, async (context) => {
+  const { runtime } = await waffleFixture(context);
+  const shell = await api.createShell({
+    runtime,
+    wasmUrl,
+    workerUrl: new URL("shell.mjs", nodeDirectory),
+  });
+  context.after(() => shell.dispose());
+  const prompt = await shell.waitForPrompt();
+  const rejected = assert.rejects(
+    shell.waitForPrompt({ after: prompt.generation }),
+    /Shell closed/,
+  );
+  await runtime.dispose();
+  await rejected;
+  await assert.rejects(shell.waitForPrompt(), /Shell closed/);
+});
