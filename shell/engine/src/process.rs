@@ -214,6 +214,38 @@ impl ChildExit {
     }
 }
 
+pub type ChildWait = LocalBoxFuture<'static, Result<ChildExit, ProcessError>>;
+
+/// Forward unchanged process waits in a host wrapper that customizes other operations.
+#[macro_export]
+macro_rules! forward_process_waits {
+    ($inner:ident) => {
+        fn wait_start(
+            &self,
+            pid: $crate::process::ProcessId,
+        ) -> futures::future::LocalBoxFuture<'static, Result<(), $crate::process::ProcessError>> {
+            self.$inner.wait_start(pid)
+        }
+        fn wait(&self, pid: $crate::process::ProcessId) -> $crate::process::ChildWait {
+            self.$inner.wait(pid)
+        }
+        fn kill(
+            &self,
+            pid: $crate::process::ProcessId,
+            signal: i32,
+        ) -> Result<(), $crate::process::ProcessError> {
+            self.$inner.kill(pid, signal)
+        }
+        fn wait_direct_group(
+            &self,
+            group: $crate::process::GroupId,
+        ) -> futures::future::LocalBoxFuture<'static, Result<(), $crate::process::ProcessError>> {
+            self.$inner.wait_direct_group(group)
+        }
+    };
+}
+pub use forward_process_waits;
+
 pub trait ProcessHost {
     /// Allocate a group ID synchronously, without running command work. IDs are
     /// unique for the lifetime of this host, including through shared handles and
@@ -240,8 +272,10 @@ pub trait ProcessHost {
     /// StartFailed carries the exec/fork errno; Runtime(11) means cancellation
     /// prevented entry and the terminal wait still owns its actual outcome.
     fn wait_start(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
-    fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<ChildExit, ProcessError>>;
-    fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError>;
+    fn wait(&self, pid: ProcessId) -> ChildWait;
+    fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
+        self.kill(pid, signal)
+    }
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError>;
     /// Wait only for shell-owned direct processes, never inherited descendants.
     /// The caller must first join its shell execution tasks so admission is done.
@@ -518,7 +552,7 @@ impl ProcessHost for InProcessHost {
             .ok_or(ProcessError::UnknownProcess(pid));
         futures::future::ready(result).boxed_local()
     }
-    fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<ChildExit, ProcessError>> {
+    fn wait(&self, pid: ProcessId) -> ChildWait {
         let exit = self
             .0
             .children
@@ -531,9 +565,6 @@ impl ProcessHost for InProcessHost {
             host.reap(pid);
             Ok(status)
         })
-    }
-    fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
-        self.kill(pid, signal)
     }
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         Self::signal_valid(signal)?;

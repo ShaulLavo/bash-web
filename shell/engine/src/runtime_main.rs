@@ -120,6 +120,9 @@ mod guest {
                 editor_cancel.borrow().cancel();
             }
             let turn = executor.drive(64);
+            if session.take_delegated_interrupt() {
+                set_phase(-1, 0);
+            }
             if root.is_finished() {
                 break;
             }

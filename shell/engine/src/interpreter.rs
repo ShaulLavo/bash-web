@@ -18,6 +18,9 @@ use std::{
     rc::Rc,
 };
 
+#[cfg(test)]
+use crate::process::forward_process_waits;
+
 mod builtin_wrapper;
 mod command_builtin;
 mod conditional;
@@ -871,6 +874,11 @@ impl Session {
             job.cancel.cancel();
         }
     }
+    pub fn take_delegated_interrupt(&self) -> bool {
+        self.core.foreground.borrow().as_ref().is_some_and(|job| {
+            job.interrupts.take_delegated() && !job.cancel.without_probe().is_cancelled()
+        })
+    }
     fn cancel_foreground(&self) {
         if let Some(job) = self.core.foreground.borrow().as_ref() {
             job.interrupts.force();
@@ -892,6 +900,16 @@ impl Session {
         *self.core.descriptors.borrow_mut() = fds;
         Ok(())
     }
+    fn foreground_cancellation(&self) -> (Rc<Interrupts>, Rc<Strand>, Cancel) {
+        let host = self.core.host.clone();
+        let interrupts = Rc::new(Interrupts::default());
+        let strand = interrupts.strand();
+        let routing = interrupts.clone();
+        let cancel = Cancel::with_probe(Rc::new(move || {
+            host.interrupted() && routing.deliver(&*host)
+        }));
+        (interrupts, strand, cancel)
+    }
     pub fn start(&self, source: &str) -> Result<JoinHandle<i32>, StartError> {
         if self.core.foreground.borrow().is_some() {
             return Err(StartError::Invalid(
@@ -901,12 +919,7 @@ impl Session {
         if source.len() > self.core.limits.source_bytes {
             return Err(StartError::Invalid("shell source limit exceeded".into()));
         }
-        let host = self.core.host.clone();
-        let interrupts = Rc::new(Interrupts::default());
-        let routing = interrupts.clone();
-        let cancel = Cancel::with_probe(Rc::new(move || {
-            host.interrupted() && routing.deliver(&*host)
-        }));
+        let (interrupts, strand, cancel) = self.foreground_cancellation();
         let parser_cancel = cancel.clone();
         let evaluation = crate::exec::Scope::new(
             self.core.limits.source_bytes,
@@ -940,7 +953,7 @@ impl Session {
             evaluation,
             cancel,
             group,
-            interrupts.strand(),
+            strand,
         );
         let read = reader::run(
             reader::Reader::new(script, failure, aliases, parser),
@@ -977,19 +990,14 @@ impl Session {
             state.interactive = false;
             state.command_string = false;
         }
-        let host = self.core.host.clone();
-        let interrupts = Rc::new(Interrupts::default());
-        let routing = interrupts.clone();
-        let cancel = Cancel::with_probe(Rc::new(move || {
-            host.interrupted() && routing.deliver(&*host)
-        }));
+        let (interrupts, strand, cancel) = self.foreground_cancellation();
         let mut context = Context::root(
             self.core.clone(),
             crate::exec::Source::root(""),
             evaluation,
             cancel,
             self.core.host.allocate_group(),
-            interrupts.strand(),
+            strand,
         );
         context.reader = reader;
         let read = source::script(
@@ -4938,27 +4946,7 @@ mod residual_review_tests {
             }
             Ok(pid)
         }
-        fn wait_start(
-            &self,
-            pid: ProcessId,
-        ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
-            self.inner.wait_start(pid)
-        }
-        fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<ChildExit, ProcessError>> {
-            self.inner.wait(pid)
-        }
-        fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
-            self.inner.signal_child(pid, signal)
-        }
-        fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
-            self.inner.kill(pid, signal)
-        }
-        fn wait_direct_group(
-            &self,
-            group: GroupId,
-        ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
-            self.inner.wait_direct_group(group)
-        }
+        forward_process_waits!(inner);
         fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
             if self.cleanup_error.get() {
                 JoinHandle::ready(Err(ProcessError::Runtime(8)))

@@ -7,6 +7,7 @@ use std::{
 #[derive(Default)]
 pub(crate) struct Interrupts {
     strands: RefCell<Vec<Weak<Strand>>>,
+    delegated: Cell<bool>,
 }
 pub(crate) struct Strand {
     job: Option<Rc<Interrupts>>,
@@ -33,11 +34,21 @@ impl Interrupts {
         strands.iter().filter_map(Weak::upgrade).collect()
     }
     pub(crate) fn deliver(&self, host: &dyn ProcessHost) -> bool {
-        self.live()
-            .iter()
-            .fold(false, |running, strand| strand.deliver(host) || running)
+        let mut running = false;
+        let mut signalled = false;
+        for strand in self.live() {
+            let (shell, child) = strand.deliver(host);
+            running |= shell;
+            signalled |= child;
+        }
+        self.delegated.set(signalled && !running);
+        running
+    }
+    pub(crate) fn take_delegated(&self) -> bool {
+        self.delegated.replace(false)
     }
     pub(crate) fn force(&self) {
+        self.delegated.set(false);
         for strand in self.live() {
             strand.force();
         }
@@ -55,17 +66,17 @@ impl Strand {
             .as_ref()
             .map_or_else(Self::untracked, Interrupts::strand)
     }
-    fn deliver(&self, host: &dyn ProcessHost) -> bool {
+    fn deliver(&self, host: &dyn ProcessHost) -> (bool, bool) {
         match self.state.get() {
-            StrandState::Running => true,
-            StrandState::Parked => false,
+            StrandState::Running => (true, false),
+            StrandState::Parked => (false, false),
             StrandState::Waiting { pid, .. } => {
                 let _ = host.signal_child(pid, 2);
                 self.state.set(StrandState::Waiting {
                     pid,
                     delivered: true,
                 });
-                false
+                (false, true)
             }
         }
     }
@@ -105,5 +116,38 @@ impl WaitGuard {
                 ..
             }
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{executor::Executor, process::InProcessHost};
+
+    #[test]
+    fn running_and_parked_strands_never_acknowledge_an_undelivered_event() {
+        let host = InProcessHost::new(Executor::new());
+        let routing = Rc::new(Interrupts::default());
+        assert!(!routing.deliver(&host));
+        assert!(!routing.take_delegated());
+        let strand = routing.strand();
+        assert!(routing.deliver(&host));
+        assert!(!routing.take_delegated());
+        let _parked = strand.park();
+        assert!(!routing.deliver(&host));
+        assert!(!routing.take_delegated());
+    }
+
+    #[test]
+    fn forced_cancellation_clears_delegation_and_rearms_the_wait() {
+        let host = InProcessHost::new(Executor::new());
+        let routing = Rc::new(Interrupts::default());
+        let strand = routing.strand();
+        let wait = strand.wait(42);
+        assert!(!routing.deliver(&host));
+        assert!(wait.delivered());
+        routing.force();
+        assert!(!routing.take_delegated());
+        assert!(!wait.delivered());
     }
 }

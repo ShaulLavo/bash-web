@@ -774,3 +774,73 @@ test("runtime disposal before task completion is shutdown rather than a new root
   assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
   assert.deepEqual(f.failures, []);
 });
+
+test("stale delegated acknowledgement does not change the current interrupt barrier", async (context) => {
+  const f = await fixture(context);
+  f.bridge.publishPrompt(0);
+  Atomics.store(f.bridge.state, control.cancel, 1);
+  const transfer = context.mock.method(
+    f.authority,
+    "transfer",
+    f.authority.transfer.bind(f.authority),
+  );
+  f.controller.interruptDelegated(0n);
+  await f.flush();
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
+  assert.equal(transfer.mock.calls.length, 0);
+  f.bridge.acknowledgeInputDiscard();
+});
+
+test("delegated acknowledgement waits for discard and clears only the completed barrier", async (context) => {
+  const f = await fixture(context);
+  f.bridge.publishPrompt(0);
+  const child = f.reserve();
+  await f.start(child);
+  const childTerminal = createShellTerminals(
+    { runtimeProcess: child.transport },
+    f.bridge.buffer,
+    createTerminalAdmission(),
+    undefined,
+    () => {},
+  );
+  assert.ok(childTerminal);
+  context.after(() => childTerminal.dispose());
+  childTerminal.ready();
+  const states: number[] = [];
+  const acknowledge = f.bridge.acknowledgeInputDiscard.bind(f.bridge);
+  context.mock.method(f.bridge, "acknowledgeInputDiscard", () => {
+    states.push(Atomics.load(f.bridge.state, control.cancel));
+    acknowledge();
+  });
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  f.controller.interruptDelegated(1n);
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 2);
+  await barrier(f.bridge);
+  await f.flush();
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
+  assert.ok(states.includes(1));
+  assert.ok(!states.includes(2));
+  assert.equal(f.bridge.send(Uint8Array.of(120)), 1);
+  const byte = new Uint8Array(1);
+  assert.equal(childTerminal.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], 120);
+});
+
+test("delegated acknowledgement after target exit preserves the editor", async (context) => {
+  const f = await fixture(context);
+  f.bridge.publishPrompt(0);
+  const child = f.reserve();
+  await f.start(child);
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await barrier(f.bridge);
+  await exitChild(f, child);
+  f.controller.interruptDelegated(1n);
+  await f.flush();
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
+  assert.equal(f.bridge.send(Uint8Array.of(121)), 1);
+  const byte = new Uint8Array(1);
+  assert.equal(f.attachment.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], 121);
+});

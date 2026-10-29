@@ -20,11 +20,28 @@ async function fixture(context: TestContext, script?: string) {
   return { runtime, shell };
 }
 
-async function send(shell: Awaited<ReturnType<typeof api.createShell>>, source: string) {
-  const input = encoder.encode(source + "\r");
+async function send(
+  shell: Awaited<ReturnType<typeof api.createShell>>,
+  source: string,
+  signal?: AbortSignal,
+) {
+  const abort = () => shell.terminal.signal();
+  signal?.addEventListener("abort", abort, { once: true });
+  try {
+    await sendBytes(shell, encoder.encode(source + "\r"), signal);
+  } finally {
+    signal?.removeEventListener("abort", abort);
+  }
+}
+async function sendBytes(
+  shell: Awaited<ReturnType<typeof api.createShell>>,
+  input: Uint8Array,
+  signal?: AbortSignal,
+) {
   let offset = 0;
   while (offset < input.length) {
     const wake = Atomics.load(shell.terminal.state, api.control.wake);
+    signal?.throwIfAborted();
     offset += shell.terminal.send(input.subarray(offset));
     if (offset < input.length)
       await Atomics.waitAsync(shell.terminal.state, api.control.wake, wake).value;
@@ -114,57 +131,182 @@ test("runtime disposal rejects the public prompt wait", { timeout: 15000 }, asyn
   await assert.rejects(shell.waitForPrompt(), /Shell closed/);
 });
 
-for (const { mode, status, source, expected } of [
-  { mode: "handled", status: 0, source: "signal-status", expected: 0 },
-  { mode: "handled", status: 7, source: "signal-status", expected: 7 },
-  { mode: "default", status: 0, source: "signal-status", expected: 130 },
-  { mode: "removed", status: 0, source: "signal-status", expected: 130 },
-  { mode: "once", status: 0, source: "signal-status", expected: 130 },
-  { mode: "handled", status: 0, source: "while :; do :; done | signal-status", expected: 130 },
-  { mode: "handled", status: 0, source: "signal-status 1>&2 | while :; do :; done", expected: 130 },
-] as const) {
-  test(
-    `public prompt preserves ${mode} SIGINT guest result ${status}: ${source}`,
-    { timeout: 15000 },
-    async (context) => {
-      const { runtime, shell } = await fixture(context);
-      let output = "";
-      const decoder = new TextDecoder();
-      const drain = setInterval(() => {
-        output += decoder.decode(shell.terminal.drain(), { stream: true });
-      }, 1);
-      context.after(() => clearInterval(drain));
-      context.after(() => context.diagnostic(JSON.stringify(output)));
-      const initial = await shell.waitForPrompt({ signal: context.signal });
-      await api.installPrograms(
-        runtime,
-        [
+async function until(context: TestContext, ready: () => boolean) {
+  while (!ready()) {
+    context.signal.throwIfAborted();
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
+
+async function signalFixture(
+  context: TestContext,
+  mode: Parameters<typeof api.signalStatusGuest>[0],
+  status = 0,
+) {
+  const { runtime, shell } = await fixture(context);
+  const decoder = new TextDecoder();
+  let captured = "";
+  const output = () => {
+    captured += decoder.decode(shell.terminal.drain(), { stream: true });
+    return captured;
+  };
+  const drain = setInterval(output, 1);
+  context.after(() => clearInterval(drain));
+  const initial = await shell.waitForPrompt({ signal: context.signal });
+  await api.installPrograms(
+    runtime,
+    [
+      {
+        name: "signal-status",
+        programs: [
           {
-            name: "signal-status",
-            programs: [
-              {
-                path: "/bin/signal-status",
-                source: async () => api.signalStatusGuest(mode, status),
-              },
-            ],
+            path: "/bin/signal-status",
+            source: async () => api.signalStatusGuest(mode, status),
           },
         ],
-        { launcher: api.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory)) },
-      );
-      await send(shell, source);
-      while (!output.includes("SIGNAL_READY\n")) {
-        context.signal.throwIfAborted();
-        assert.equal(shell.terminal.readPrompt()?.generation, initial.generation, output);
-        await new Promise((resolve) => setTimeout(resolve, 1));
-      }
+      },
+    ],
+    { launcher: api.guestLauncher(runtime, new URL("shell.mjs", nodeDirectory).href) },
+  );
+  const ready = () => until(context, () => output().includes("SIGNAL_READY\n"));
+  return { runtime, shell, initial, output, ready };
+}
+
+for (const { mode, status, source, expected, after } of [
+  { mode: "handled", status: 0, source: "signal-status", expected: 0, after: false },
+  { mode: "handled", status: 7, source: "signal-status", expected: 7, after: false },
+  { mode: "handled", status: 130, source: "signal-status; printf AFTER", expected: 0, after: true },
+  {
+    mode: "default",
+    status: 0,
+    source: "signal-status; printf AFTER",
+    expected: 130,
+    after: false,
+  },
+  { mode: "removed", status: 0, source: "signal-status", expected: 130, after: false },
+  { mode: "once", status: 0, source: "signal-status", expected: 130, after: false },
+  { mode: "handled", status: 0, source: "signal-status; printf AFTER", expected: 0, after: true },
+  {
+    mode: "default",
+    status: 0,
+    source: "while :; do signal-status; done",
+    expected: 130,
+    after: false,
+  },
+  {
+    mode: "handled",
+    status: 0,
+    source: "( signal-status ); printf AFTER",
+    expected: 0,
+    after: true,
+  },
+  { mode: "handled", status: 0, source: "f() { signal-status; }; f", expected: 0, after: false },
+  { mode: "handled", status: 0, source: "x=$(signal-status 1>&2)", expected: 130, after: false },
+  {
+    mode: "handled",
+    status: 0,
+    source: "while :; do :; done | signal-status",
+    expected: 130,
+    after: false,
+  },
+  {
+    mode: "handled",
+    status: 0,
+    source: "signal-status 1>&2 | while :; do :; done",
+    expected: 130,
+    after: false,
+  },
+  {
+    mode: "handled",
+    status: 0,
+    source: "signal-status 1>&2 | signal-status",
+    expected: 0,
+    after: false,
+  },
+] as const) {
+  test(`public prompt SIGINT ${mode}/${status}: ${source}`, { timeout: 15000 }, async (context) => {
+    const { shell, initial, output, ready } = await signalFixture(context, mode, status);
+    context.after(() => context.diagnostic(output()));
+    await send(shell, source);
+    await ready();
+    if (source === "signal-status 1>&2 | signal-status")
+      await until(context, () => output().split("SIGNAL_READY\n").length > 2);
+    shell.interrupt();
+    const prompt = await shell.waitForPrompt({ after: initial.generation, signal: context.signal });
+    assert.equal(prompt.status, expected, output());
+    assert.equal(output().includes("AFTER\x1b[?2004h"), after, output());
+    if (mode === "handled") assert.ok(output().includes("SIGNAL_HANDLED 1\n"), output());
+  });
+}
+
+test("second Ctrl-C reaches a continuing guest", { timeout: 15000 }, async (context) => {
+  const { shell, initial, output, ready } = await signalFixture(context, "continue");
+  await send(shell, "signal-status");
+  await ready();
+  shell.interrupt();
+  await until(context, () => output().includes("SIGNAL_HANDLED 1\n"));
+  assert.equal(shell.terminal.readPrompt()?.generation, initial.generation);
+  shell.interrupt();
+  const prompt = await shell
+    .waitForPrompt({ after: initial.generation, signal: context.signal })
+    .catch(async (error) => {
+      context.diagnostic(JSON.stringify(await shell.done));
+      throw error;
+    });
+  assert.equal(prompt.status, 12, output());
+  assert.equal(output().split("SIGNAL_HANDLED 1\n").length - 1, 1);
+  assert.equal(output().split("SIGNAL_HANDLED 2\n").length - 1, 1);
+});
+
+for (const typeahead of [false, true]) {
+  test(
+    `handled foreground reader resumes after Ctrl-C, typeahead=${typeahead}`,
+    { timeout: 5000 },
+    async (context) => {
+      const { shell, initial, output, ready } = await signalFixture(context, "reader");
+      await send(shell, "signal-status");
+      await ready();
+      if (typeahead) await sendBytes(shell, encoder.encode("s"), context.signal);
       shell.interrupt();
+      await until(context, () => output().includes("SIGNAL_HANDLED 1\n"));
+      await sendBytes(shell, encoder.encode("x"), context.signal);
       const prompt = await shell.waitForPrompt({
         after: initial.generation,
         signal: context.signal,
       });
-      output += decoder.decode(shell.terminal.drain(), { stream: true });
-      assert.equal(prompt.status, expected, output);
-      if (mode === "handled") assert.ok(output.includes("SIGNAL_HANDLED\n"), output);
+      assert.deepEqual(prompt, { generation: initial.generation + 1n, status: 0 }, output());
+      assert.ok(output().includes("READER_INPUT x\n"), output());
+      assert.ok(!output().includes("READER_INPUT s\n"), output());
     },
   );
 }
+
+test(
+  "handled exit resumes a following shell read without a new prompt",
+  { timeout: 5000 },
+  async (context) => {
+    const { shell, initial, output, ready } = await signalFixture(context, "handled");
+    await send(shell, 'signal-status; read x; printf "[%s]" "$x"');
+    await ready();
+    shell.interrupt();
+    await until(context, () => output().includes("SIGNAL_HANDLED 1\n"));
+    await send(shell, "y", context.signal);
+    const prompt = await shell.waitForPrompt({ after: initial.generation, signal: context.signal });
+    assert.equal(prompt.status, 0, output());
+    assert.ok(output().includes("[y]"), output());
+  },
+);
+
+test(
+  "external exit preserves cooked input for a following shell read",
+  { timeout: 4000 },
+  async (context) => {
+    const { shell, initial, output, ready } = await signalFixture(context, "exit");
+    await send(shell, 'signal-status; read x; printf "[%s]" "$x"');
+    await ready();
+    await send(shell, "y", context.signal);
+    const prompt = await shell.waitForPrompt({ after: initial.generation, signal: context.signal });
+    assert.equal(prompt.status, 0, output());
+    assert.ok(output().includes("[y]"), output());
+  },
+);

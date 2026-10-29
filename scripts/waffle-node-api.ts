@@ -14,7 +14,7 @@ export { claimOutcome, readOutcome } from "waffle/proc/outcome";
 export { waitStatus } from "waffle/proc/wait-status";
 export { installPrograms } from "waffle/programs";
 export { basePackages, installBase } from "waffle-base";
-export { launchTerminalWorker } from "../src/runtime/worker-launcher";
+export { launchTerminalWorker, guestLauncher } from "../src/runtime/worker-launcher";
 export { genericProgramLauncher } from "../src/runtime/program-launcher";
 export { createShell } from "../src/shell";
 export { SharedBridge, control } from "../src/bridge";

@@ -11,7 +11,6 @@ import {
   workerProcessSlots,
   workerProcessState,
 } from "waffle/proc/worker-client";
-import type { RuntimeWorkerMessage } from "waffle/browser/worker";
 import { SharedBridge, control } from "../bridge";
 import type { RuntimeExit, RuntimeProcess, ShellOptions } from "../shell";
 import {
@@ -28,7 +27,7 @@ import {
   revokeTerminal,
 } from "./terminal-admission";
 import { guestLauncher, waitForShellWorkers } from "./worker-launcher";
-import type { ShellWorkerRequest } from "./worker";
+import type { ShellWorkerRequest, ShellWorkerMessage } from "./worker";
 import { createTerminalController } from "./terminal-controller";
 
 const executable = "/programs/shell-engine.wasm";
@@ -369,7 +368,7 @@ export async function startShell(
       throw new Error("Shell stopped before worker startup");
     }
     worker = service.takeWorker(registration.workerUrl);
-    worker.onmessage = ({ data: message }: MessageEvent<RuntimeWorkerMessage>) => {
+    worker.onmessage = ({ data: message }: MessageEvent<ShellWorkerMessage>) => {
       if (runtime.disposed) return;
       if (finished) {
         if (message.type === "runtime-proc") service!.rejectRuntimeMessage(message, state.pid);
@@ -393,6 +392,8 @@ export async function startShell(
         finish({ code: 128 + message.signal }, false, message.signal);
       else if (selected?.kind === "signaled")
         finish({ code: selected.status }, false, selected.code);
+      else if (message.type === "interrupt-delegated")
+        terminalController?.interruptDelegated(message.generation);
       else if (message.type === "phase" && message.name === "instantiate") resolveStarted();
       else if (message.type === "stdout" || message.type === "stderr")
         writeTerminal(message.type === "stderr" ? 2 : 1, message.data);

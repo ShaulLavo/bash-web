@@ -219,7 +219,7 @@ test("UI discard drains the shared cursor under a real raw lease without treatin
   assert.equal(byte[0], 65);
   await run((journal) =>
     terminalResult(() => {
-      must(journal.raw());
+      must(journal.mode("raw"));
       assert.equal(journal.read([new Uint8Array(4096)]), 2);
     }),
   );
@@ -233,7 +233,7 @@ test("UI discard drains the shared cursor under a real raw lease without treatin
 test("restoring an editor creates an actual raw group instead of restoring its saved cooked mode", async (context) => {
   const { producer, stream, run } = fixture(context, undefined, "cooked");
   const controls = terminalControls(stream)!;
-  await run((journal) => journal.restoreEditor());
+  await run((journal) => journal.restoreEditor("raw"));
   assert.equal(must(controls.snapshot()).mode, "raw");
   producer.pushKeyboard(Uint8Array.of(68));
   assert.equal(stream.tryRead!([new Uint8Array(1)]), 1);
@@ -250,7 +250,7 @@ for (const failure of ["quota", "cancel"] as const) {
     const result = await producer.authority.control(
       (turn) => {
         const journal = producer.begin(turn);
-        const restored = journal.restoreEditor();
+        const restored = journal.restoreEditor("raw");
         if (restored.kind === "error") return restored;
         provisional = journal.editor;
         assert.equal(producer.editor, editor, "working handles are not published early");

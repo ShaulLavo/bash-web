@@ -7,6 +7,7 @@ import {
   preview1Executor,
   type WorkerExecutor,
   type RuntimeWorkerRequest,
+  type RuntimeWorkerMessage,
 } from "waffle/browser/worker";
 import { SharedBridge, control } from "../bridge";
 import { createExecutableQuery } from "./executable-query";
@@ -22,6 +23,9 @@ export interface ShellWorkerRequest extends RuntimeWorkerRequest {
   memoryUsage?: SharedArrayBuffer;
   shellOutput?: SharedArrayBuffer;
 }
+export type ShellWorkerMessage =
+  | RuntimeWorkerMessage
+  | { type: "interrupt-delegated"; generation: bigint };
 function wrapNamespace(namespace: WebAssembly.ModuleImports, before: () => void) {
   for (const [name, value] of Object.entries(namespace)) {
     if (typeof value !== "function") continue;
@@ -79,6 +83,14 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
           },
           phase(phase: number, status: number) {
             checkActive();
+            if (phase === -1) {
+              if (bridge && !bridge.closed())
+                globalThis.postMessage({
+                  type: "interrupt-delegated",
+                  generation: bridge.readPrompt()?.generation ?? 0n,
+                } satisfies ShellWorkerMessage);
+              return;
+            }
             shell.phase(phase, status);
             terminals?.phase(phase);
           },
