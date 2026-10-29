@@ -4,7 +4,12 @@ use terminal::{Action, Editor};
 
 fn feed(editor: &mut Editor, bytes: &[u8]) {
     for &byte in bytes {
-        editor.feed(byte);
+        editor.resize("$ ", 80);
+        match editor.feed(byte) {
+            Action::Echo(byte) => editor.echoed(byte),
+            Action::Redraw => drop(editor.redraw("$ ")),
+            _ => (),
+        }
     }
 }
 
