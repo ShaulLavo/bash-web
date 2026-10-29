@@ -128,6 +128,17 @@ fn long_appended_commands_echo_each_byte_once_without_duplicate_prefixes() {
     }
 }
 #[test]
+fn finishing_from_an_earlier_wrapped_row_moves_below_the_command() {
+    for interrupted in [false, true] {
+        let (mut editor, mut screen) = start(12);
+        type_bytes(&mut editor, &mut screen, b"echo abcdefghijklmnop\x01");
+        assert_eq!((screen.row, screen.column), (0, 2));
+        editor.clear();
+        screen.write(&editor.finish(interrupted));
+        assert_eq!((screen.row, screen.column), (2, 0));
+    }
+}
+#[test]
 fn editing_a_wrapped_command_clears_from_the_first_row_and_removes_old_tail() {
     let (mut editor, mut screen) = start(12);
     type_bytes(&mut editor, &mut screen, b"echo abcdefghijklmnopqrstuvwxyz");
@@ -223,15 +234,4 @@ fn resizing_multiline_text_recounts_the_existing_caret() {
     type_bytes(&mut editor, &mut screen, b"\x01\x0b");
     assert_eq!(screen.text(), "$");
     assert_eq!((screen.row, screen.column), (0, 2));
-}
-#[test]
-fn finishing_from_an_earlier_wrapped_row_moves_below_the_command() {
-    for interrupted in [false, true] {
-        let (mut editor, mut screen) = start(12);
-        type_bytes(&mut editor, &mut screen, b"echo abcdefghijklmnop\x01");
-        assert_eq!((screen.row, screen.column), (0, 2));
-        editor.clear();
-        screen.write(&editor.finish(interrupted));
-        assert_eq!((screen.row, screen.column), (2, 0));
-    }
 }
