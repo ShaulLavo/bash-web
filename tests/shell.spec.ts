@@ -62,6 +62,57 @@ test("native cursor, Home/End, deletion and history", async ({ page }) => {
   await page.keyboard.press("Control+c");
 });
 
+test("editing wrapped commands preserves every screen row and the cursor", async ({ page }) => {
+  await open(page);
+  const columns = await page.evaluate(() => window.bashWeb!.snapshot().cols);
+  expect(columns).toBeGreaterThan(20);
+  for (const rows of [2, 3]) {
+    const before = await page.evaluate(() => ({
+      lines: window.bashWeb!.readLines(),
+      cursor: window.bashWeb!.terminal!.geometry().cursor,
+    }));
+    const source = `echo ${"a".repeat(columns * (rows - 1) + 11)}TAIL`;
+    const insertion = rows === 2 ? 10 : columns + 7;
+    await page.keyboard.insertText(source);
+    await page.keyboard.press("Home");
+    for (let index = 0; index < insertion; index++) await page.keyboard.press("ArrowRight");
+    await page.keyboard.insertText("MID");
+    const edited = `${source.slice(0, insertion)}MID${source.slice(insertion)}`;
+    const painted = `$ ${edited}`;
+    const expected = Array.from({ length: rows }, (_, row) =>
+      painted.slice(row * columns, (row + 1) * columns),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          lines: window.bashWeb!.readLines().filter((line) => line.length > 0),
+          cursor: window.bashWeb!.terminal!.geometry().cursor,
+        })),
+      )
+      .toEqual({
+        lines: before.lines.slice(0, before.cursor.y).concat(expected),
+        cursor: {
+          x: (insertion + 5) % columns,
+          y: before.cursor.y + Math.floor((insertion + 5) / columns),
+          pendingWrap: false,
+          visible: true,
+        },
+      });
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await ready(page);
+    const result = edited.slice(5);
+    const outputRows = Array.from({ length: Math.ceil(result.length / columns) }, (_, row) =>
+      result.slice(row * columns, (row + 1) * columns),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.bashWeb!.readLines().filter((line) => line.length > 0)),
+      )
+      .toEqual(before.lines.slice(0, before.cursor.y).concat(expected, outputRows, ["$"]));
+  }
+});
+
 test("Ctrl+C interrupts tight loops and stdin while retaining shell state", async ({ page }) => {
   await open(page);
   // Prove this invocation owns the running state before interrupting it.
