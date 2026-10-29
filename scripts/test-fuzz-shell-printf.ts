@@ -387,8 +387,8 @@ for (const seed of [1, 42])
     assert.equal(
       hash(bytes),
       seed === 1
-        ? "b68a255fd1c48247c198221167a032d8d970ee7f6d028f03d08ca18df1113d34"
-        : "a4184f7afa4bc94ea36e2663cf762492d996b6b935c057e2822b92daf169b77c",
+        ? "0df90290982ea5a68dc59602bdcd5126c0b45e84e2a1fec49cc2bad3530cb4c0"
+        : "44c654eb696b5cbf1ee814c9e471a4b50b2e72926773e3711fe8955aad72866c",
     );
     const fixture: Fixture = JSON.parse(bytes.toString("utf8"));
     const cases = validateFixture(url.pathname, fixture, {
