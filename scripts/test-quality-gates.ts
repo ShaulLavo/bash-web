@@ -3,12 +3,18 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
-import { duplicateArgs, duplicateModes } from "./check-duplicates.mjs";
+import type { ProgramPackage } from "waffle/programs";
+import { duplicateArgs, duplicateModes } from "./check-duplicates.ts";
 import { compatibilityPrograms } from "./compat-programs.ts";
 import { selectBasePackages } from "./waffle-compat.ts";
 
+interface ToolResult {
+  status: number | null;
+  output: string;
+}
+
 const root = resolve(import.meta.dirname, "..");
-function fixture(run) {
+function fixture(run: (directory: string) => void) {
   const parent = resolve(root, ".scratch");
   mkdirSync(parent, { recursive: true });
   const directory = mkdtempSync(resolve(parent, "quality-probe-"));
@@ -18,7 +24,7 @@ function fixture(run) {
     rmSync(directory, { recursive: true, force: true });
   }
 }
-function tool(name, args, cwd = root) {
+function tool(name: string, args: readonly string[], cwd = root): ToolResult {
   const result = spawnSync(resolve(root, "node_modules/.bin", name), args, {
     cwd,
     encoding: "utf8",
@@ -27,10 +33,10 @@ function tool(name, args, cwd = root) {
   if (result.error) throw result.error;
   return { status: result.status, output: result.stdout + result.stderr };
 }
-function passed(result) {
+function passed(result: ToolResult) {
   assert.equal(result.status, 0, result.output);
 }
-function rejected(result, diagnostic) {
+function rejected(result: ToolResult, diagnostic: RegExp) {
   assert.notEqual(result.status, 0, result.output);
   assert.match(result.output, diagnostic);
 }
@@ -38,20 +44,24 @@ function rejected(result, diagnostic) {
 test("compatibility admits exactly the historical ten published programs", () => {
   const expected = ["cat", "find", "grep", "head", "mkdir", "seq", "sort", "tail", "uniq", "wc"];
   assert.deepEqual(compatibilityPrograms, expected);
-  const programs = expected.concat(["touch", "sed", "which", "ls", "env"]).map((name) => ({
-    path: `/usr/bin/${name}`,
-  }));
-  const selected = selectBasePackages([{ programs }], compatibilityPrograms);
+  const programs: ProgramPackage["programs"] = expected
+    .concat(["touch", "sed", "which", "ls", "env"])
+    .map((name) => ({
+      path: `/usr/bin/${name}`,
+      source: async () => new Uint8Array(),
+    }));
+  const selected = selectBasePackages([{ name: "base", programs }], compatibilityPrograms);
   assert.deepEqual(
     selected.flatMap((family) => family.programs.map((program) => program.path)),
     expected.map((name) => `/usr/bin/${name}`),
   );
 });
 
-for (const [label, source, diagnostic] of [
+const lintCases: [string, string, RegExp][] = [
   ["debugger", "debugger;\n", /no-debugger/],
   ["ambient browser name", "console.log(name);\n", /no-restricted-globals/],
-]) {
+];
+for (const [label, source, diagnostic] of lintCases) {
   test(`lint rejects ${label}`, () =>
     fixture((directory) => {
       const file = resolve(directory, "probe.ts");
@@ -104,7 +114,10 @@ test("Knip rejects an unreferenced authored file", () =>
     rejected(tool("knip", args, directory), /Unused files[\s\S]*src\/unreachable\.ts/);
   }));
 
-const rustFunction = (functionName, parameter) => `fn ${functionName}(${parameter}: i32) -> i32 {
+const rustFunction = (
+  functionName: string,
+  parameter: string,
+) => `fn ${functionName}(${parameter}: i32) -> i32 {
   let mut answer = 0;
   for counter in 0..${parameter} {
     if counter % 2 == 0 { answer += counter * 3; }

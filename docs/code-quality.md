@@ -90,7 +90,7 @@ To review a deliberate baseline change:
 
 ```sh
 npm run check:duplicates                 # inspect failures first
-node scripts/check-duplicates.mjs --record
+node scripts/check-duplicates.ts --record
 npm run check:duplicates                 # both scans must pass unchanged
 ```
 

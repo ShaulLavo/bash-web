@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 const root = import.meta.dirname;
 const port = Number(process.env.PORT ?? 4187);
-const types = {
+const types: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -37,4 +37,4 @@ const server = createServer(async (request, response) => {
   }
 });
 server.listen(port, "127.0.0.1");
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => server.close());
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => server.close());

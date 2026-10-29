@@ -1,16 +1,19 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { stripTypeScriptTypes } from "node:module";
 import { test, type TestContext } from "node:test";
 import {
   pythonCases,
@@ -49,7 +52,8 @@ async function prepareBrowser() {
     target: "esnext",
   });
   assert.ok(existsSync("dist/program-worker.js"), "Missing generated dist/program-worker.js");
-  copyFileSync("scripts/serve.mjs", "dist/serve.mjs");
+  writeFileSync("dist/serve.mjs", stripTypeScriptTypes(readFileSync("scripts/serve.ts", "utf8")));
+  chmodSync("dist/serve.mjs", 0o644);
   writeFileSync(
     "dist/python-tests.html",
     '<!doctype html><meta charset="utf-8"><script type="module" src="/python-tests.js"></script>',

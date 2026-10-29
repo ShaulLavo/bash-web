@@ -3,9 +3,15 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const root = resolve(import.meta.dirname, "..");
-export const duplicateModes = ["exact", "rust-structural"];
+export const duplicateModes = ["exact", "rust-structural"] as const;
+type DuplicateMode = (typeof duplicateModes)[number];
 
-export function duplicateArgs(mode, baseline, paths, update = false) {
+export function duplicateArgs(
+  mode: DuplicateMode,
+  baseline: string,
+  paths: readonly string[],
+  update = false,
+): string[] {
   if (!duplicateModes.includes(mode)) throw new Error(`Unknown duplicate scan: ${mode}`);
   const common = [
     "--mode",
