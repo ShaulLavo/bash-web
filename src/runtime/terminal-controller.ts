@@ -234,6 +234,17 @@ export function createTerminalController(
       target = target.restore ?? editor;
     return target;
   };
+  const selectRestoreTarget = (journal: TerminalProducerTurn, record: Group): Group => {
+    let target = resumeTarget(record);
+    while (target !== editor) {
+      const result = journal.select(target.group);
+      if (result.kind === "ok") return target;
+      if (result.code !== "PROCESS_GONE" || !liveState(state)) terminalValue(result);
+      // A rejected ancestor can have exited since resumeTarget sampled it.
+      target = resumeTarget(target.restore ?? editor);
+    }
+    return target;
+  };
   const retireOne = (record: Group) =>
     execute((journal) =>
       terminalResult(() => {
@@ -242,9 +253,9 @@ export function createTerminalController(
         let target: Group | undefined;
         let restoredEditor = false;
         if (selected === record) {
-          target = resumeTarget(record.restore ?? editor);
+          target = selectRestoreTarget(journal, record.restore ?? editor);
           restoredEditor = target === editor;
-          terminalValue(restoredEditor ? journal.restoreEditor() : journal.select(target.group));
+          if (restoredEditor) terminalValue(journal.restoreEditor());
         }
         if (record.rootMember) terminalValue(journal.removeMember(record.rootMember));
         terminalValue(journal.retireGroup(record.group, "completed"));
@@ -324,13 +335,12 @@ export function createTerminalController(
   const restoreDiscard = (cursor: Drain) =>
     execute((journal) =>
       terminalResult(() => {
-        const target = resumeTarget(cursor.restore);
+        const target = selectRestoreTarget(journal, cursor.restore);
         const replacing = target === editor;
         const removed = replacing
           ? { group: journal.editor, member: journal.rootMember }
           : { group: cursor.group, member: cursor.member };
         if (replacing) journal.replaceEditor(cursor.group, cursor.member);
-        else terminalValue(journal.select(target.group));
         terminalValue(journal.removeMember(removed.member));
         terminalValue(journal.retireGroup(removed.group, "cancelled"));
         const next = deferred?.active ? deferred : undefined;
