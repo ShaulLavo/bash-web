@@ -303,6 +303,118 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn feed(editor: &mut Editor, bytes: &[u8]) {
+        for &byte in bytes {
+            editor.feed(byte);
+        }
+    }
+
+    #[test]
+    fn long_csi_is_consumed_through_its_final_byte() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"before\x1b[27;2;13~after");
+        assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
+    }
+
+    #[test]
+    fn unknown_escape_sequences_do_not_insert_text_or_run_commands() {
+        let sequences: &[&[u8]] = &[
+            b"\x1b[123456789012~",
+            b"\x1b[?123;456;789z",
+            b"\x1b[1;3 D",
+            b"\x1b[ !~",
+            b"\x1bOZ",
+            b"\x1bq",
+        ];
+        for sequence in sequences {
+            let mut editor = Editor::default();
+            feed(&mut editor, b"before");
+            feed(&mut editor, sequence);
+            assert_eq!(editor.line, b"before", "{sequence:?}");
+            assert_eq!(editor.cursor, 6, "{sequence:?}");
+            feed(&mut editor, b"after");
+            assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
+        }
+    }
+
+    #[test]
+    fn meta_word_movement_skips_punctuation_and_preserves_utf8() {
+        let mut editor = Editor::default();
+        feed(&mut editor, "one,two  café中!".as_bytes());
+        feed(&mut editor, b"\x1bb");
+        assert_eq!(editor.cursor, b"one,two  ".len());
+        feed(&mut editor, b"\x1bb");
+        assert_eq!(editor.cursor, b"one,".len());
+        feed(&mut editor, b"\x1bf");
+        assert_eq!(editor.cursor, b"one,two".len());
+        feed(&mut editor, b"\x1bf");
+        assert_eq!(editor.cursor, "one,two  café中".len());
+        feed(&mut editor, b"\x1bf\x1bf");
+        assert_eq!(editor.cursor, editor.line.len());
+        feed(&mut editor, b"\x01\x1bb");
+        assert_eq!(editor.cursor, 0);
+    }
+
+    #[test]
+    fn meta_d_deletes_the_next_word_and_keeps_the_cursor() {
+        let mut editor = Editor::default();
+        feed(&mut editor, "one, café中! tail".as_bytes());
+        feed(&mut editor, b"\x01\x1bf\x1bd");
+        assert_eq!(editor.line, b"one! tail");
+        assert_eq!(editor.cursor, 3);
+        feed(&mut editor, b"\x1bd\x1bd");
+        assert_eq!(editor.line, b"one");
+        assert_eq!(editor.cursor, 3);
+    }
+
+    #[test]
+    fn meta_backspace_deletes_the_previous_word_and_keeps_utf8_whole() {
+        for sequence in [b"\x1b\x7f", b"\x1b\x08"] {
+            let mut editor = Editor::default();
+            feed(&mut editor, "zero, café中!! tail".as_bytes());
+            feed(&mut editor, b"\x1bb");
+            feed(&mut editor, sequence);
+            assert_eq!(editor.line, b"zero, tail");
+            assert_eq!(editor.cursor, 6);
+            feed(&mut editor, sequence);
+            assert_eq!(editor.line, b"tail");
+            assert_eq!(editor.cursor, 0);
+            feed(&mut editor, sequence);
+            assert_eq!(editor.line, b"tail");
+        }
+    }
+
+    #[test]
+    fn alt_and_ctrl_arrows_move_by_word() {
+        for modifier in [3, 5] {
+            let mut editor = Editor::default();
+            feed(&mut editor, b"one,two  three!");
+            feed(&mut editor, format!("\x1b[1;{modifier}D").as_bytes());
+            assert_eq!(editor.cursor, 9);
+            feed(&mut editor, format!("\x1b[1;{modifier}D").as_bytes());
+            assert_eq!(editor.cursor, 4);
+            feed(&mut editor, format!("\x1b[1;{modifier}C").as_bytes());
+            assert_eq!(editor.cursor, 7);
+            feed(&mut editor, format!("\x1b[1;{modifier}C").as_bytes());
+            assert_eq!(editor.cursor, 14);
+        }
+    }
+
+    #[test]
+    fn ss3_keys_share_csi_navigation() {
+        let mut editor = Editor::default();
+        feed(&mut editor, b"saved\rnext\x1bOA");
+        assert_eq!(editor.line, b"saved");
+        feed(&mut editor, b"\x1bOB\x1bOD");
+        assert_eq!(editor.line, b"next");
+        assert_eq!(editor.cursor, 3);
+        feed(&mut editor, b"\x1bOH\x1bOC");
+        assert_eq!(editor.cursor, 1);
+        feed(&mut editor, b"\x1bOF");
+        assert_eq!(editor.cursor, 4);
+    }
+
     #[test]
     fn editing_and_history_keep_byte_exact_commands() {
         let mut editor = Editor::default();
