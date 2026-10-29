@@ -21,7 +21,7 @@ import {
   verifyOracle,
 } from "./shell-scoreboard.mjs";
 import { wasiCargoEnvironment, wasiSysrootCommand } from "./wasi-build.ts";
-import { drainGroup, killGroup } from "./shell-process-group.mjs";
+import { drainGroup, killGroup } from "./shell-process-group.ts";
 
 const root = resolve(process.argv[2] ?? ".");
 const ref = process.argv[3];
@@ -181,7 +181,7 @@ async function rescoreUnderCandidateInstrument(candidate) {
     await run(process.execPath, ["scripts/build-node-harness.ts"], root);
     const binaryHash = bytesDigest(await readFile(wasm));
     const output = resolve(scratch, "target-under-candidate-instrument.json");
-    await run(process.execPath, ["scripts/bash-compat.mjs"], root, {
+    await run(process.execPath, ["scripts/bash-compat.ts"], root, {
       BASH_COMPAT_MODE: "frozen",
       BASH_COMPAT_ENGINES: "own-shell",
       BASH_COMPAT_JOBS: process.env.BASH_COMPAT_JOBS ?? "4",

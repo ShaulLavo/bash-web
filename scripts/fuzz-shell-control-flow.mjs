@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { drainGroup, killGroup } from "./shell-process-group.mjs";
+import { drainGroup, killGroup } from "./shell-process-group.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const sourcePath = fileURLToPath(import.meta.url);
@@ -87,7 +87,7 @@ export const fingerprint = () =>
   createHash("sha256")
     .update(readFileSync(sourcePath))
     .update(readFileSync(new URL("./fuzz-shell-results.ts", import.meta.url)))
-    .update(readFileSync(new URL("./shell-process-group.mjs", import.meta.url)))
+    .update(readFileSync(new URL("./shell-process-group.ts", import.meta.url)))
     .digest("hex");
 const observe = 'cf_status=$?; printf "status=%s\\n" "$cf_status"; exit "$cf_status"';
 const print = (label) => `printf '${label}=<%s>\\n' "$v"`;

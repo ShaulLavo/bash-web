@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
-import { drainGroup, killGroup } from "./shell-process-group.mjs";
+import { drainGroup, killGroup } from "./shell-process-group.ts";
 
 const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
@@ -45,7 +45,7 @@ function fixtureOwner(t) {
       (async () => {
         try {
           ${body}
-          await import(${JSON.stringify(new URL("./bash-compat.mjs", import.meta.url).href)});
+          await import(${JSON.stringify(new URL("./bash-compat.ts", import.meta.url).href)});
         } finally {
           process.disconnect?.();
         }

@@ -19,7 +19,7 @@ async function runFixture(outputSize) {
   try {
     const modulePath = resolve(scratch, "fixture.wasm");
     await writeFile(modulePath, fixture(outputSize));
-    worker = new Worker(new URL("./bash-compat-worker.mjs", import.meta.url), {
+    worker = new Worker(new URL("./bash-compat-worker.ts", import.meta.url), {
       workerData: {
         engine: "own-shell",
         modulePath,

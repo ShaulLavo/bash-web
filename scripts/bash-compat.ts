@@ -8,13 +8,13 @@ import { basename, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import { buildWasiShell } from "./wasi-build.ts";
 import { compatibilityPrograms } from "./compat-programs.ts";
-import { pythonHelpers } from "./bash-compat-helpers.mjs";
+import { pythonHelpers } from "./bash-compat-helpers.ts";
 import {
   bashStderrTransport,
   bashStdoutTransport,
   createShellRunner,
   normalize,
-} from "./bash-compat-runner.mjs";
+} from "./bash-compat-runner.ts";
 import { cancelTargetMigrations, targetBranchBaseline } from "./shell-scoreboard-base.mjs";
 import {
   bytesDigest,
@@ -738,7 +738,7 @@ class Pool {
 
   async spawn() {
     if (this.closed) return null;
-    const worker = new Worker(resolve(import.meta.dirname, "bash-compat-worker.mjs"), {
+    const worker = new Worker(resolve(import.meta.dirname, "bash-compat-worker.ts"), {
       workerData: {
         engine: this.engine.startsWith("bashkit") ? "bashkit" : this.engine,
         modulePath: engines[this.engine].modulePath,
@@ -1153,7 +1153,7 @@ async function captureOracle(cases, helperDirectory, bashVersion) {
       classificationSha256: bytesDigest(
         await readFile(resolve(root, "docs/evidence/bash-compatibility.json")),
       ),
-      helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.mjs"))),
+      helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.ts"))),
     },
     environment: runtimeEnvironment(),
     sources: {

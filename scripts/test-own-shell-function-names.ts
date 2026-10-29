@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
-import { createShellRunner } from "./bash-compat-runner.mjs";
+import { createShellRunner } from "./bash-compat-runner.ts";
 import { decode, encode, type EncodedResult, type ProcessResult } from "./fuzz-shell-results.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 

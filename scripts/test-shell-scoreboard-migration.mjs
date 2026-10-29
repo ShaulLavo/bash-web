@@ -26,7 +26,7 @@ import {
   targetBranchBaseline,
 } from "./shell-scoreboard-base.mjs";
 import { bytesDigest, compareScores, sealOracle, validateScore } from "./shell-scoreboard.mjs";
-import { killGroup } from "./shell-process-group.mjs";
+import { killGroup } from "./shell-process-group.ts";
 
 // Original fake compiler/scorer: no Cargo, WASI execution, network, or installed dependencies.
 const cargoFixture = `#!${process.execPath}
@@ -605,20 +605,20 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
         // Only the compiler and archived target scorer are stand-ins. The candidate entrypoint,
         // trusted baseline launcher, migration supervisor and group draining are shipped code.
         for (const name of [
-          "bash-compat.mjs",
+          "bash-compat.ts",
           "compat-programs.ts",
-          "bash-compat-helpers.mjs",
-          "bash-compat-runner.mjs",
+          "bash-compat-helpers.ts",
+          "bash-compat-runner.ts",
           "shell-scoreboard.mjs",
           "shell-scoreboard-base.mjs",
           "shell-scoreboard-migration.mjs",
-          "shell-process-group.mjs",
+          "shell-process-group.ts",
           "wasi-build.ts",
           "waffle-release-inputs.ts",
           "verify-wasi-guests.ts",
         ])
           put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
-        const child = spawn(process.execPath, [resolve(repo, "scripts/bash-compat.mjs")], {
+        const child = spawn(process.execPath, [resolve(repo, "scripts/bash-compat.ts")], {
           env: {
             ...process.env,
             BASH_COMPAT_MODE: "frozen",

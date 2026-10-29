@@ -64,7 +64,7 @@ export const sourceFiles = [
   "fuzz-shell-job-lifetime.mjs",
   "fuzz-shell-control-flow.mjs",
   "fuzz-shell-results.ts",
-  "shell-process-group.mjs",
+  "shell-process-group.ts",
 ];
 export const sourceHashes = () =>
   Object.fromEntries(

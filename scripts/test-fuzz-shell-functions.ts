@@ -189,7 +189,7 @@ test("all transitive process-runner sources participate in fixture identity", ()
     "fuzz-shell-functions.ts",
     "fuzz-shell-control-flow.mjs",
     "fuzz-shell-results.ts",
-    "shell-process-group.mjs",
+    "shell-process-group.ts",
   ]);
   for (const [name, hash] of Object.entries(sourceHashes()))
     assert.equal(
@@ -238,7 +238,7 @@ test("fixture validation rejects every identity and unhealthy-observation mutati
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-functions.ts"] = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
-    (f) => (f.sourceHashes["shell-process-group.mjs"] = "stale"),
+    (f) => (f.sourceHashes["shell-process-group.ts"] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),
     (f) => (f.environment = { ...environment, locale: "C.UTF-8" }),

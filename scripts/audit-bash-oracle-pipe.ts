@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { pythonHelpers } from "./bash-compat-helpers.mjs";
+import { pythonHelpers } from "./bash-compat-helpers.ts";
 import {
   bashStderrTransport,
   bashStdoutTransport,
   createShellRunner,
-} from "./bash-compat-runner.mjs";
+} from "./bash-compat-runner.ts";
 import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -153,7 +153,7 @@ try {
       stdoutTransport: bashStdoutTransport,
       stderrTransport: bashStderrTransport,
       sandbox: oracle.oracle.sandbox,
-      helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.mjs"))),
+      helpersSha256: bytesDigest(await readFile(resolve(root, "scripts/bash-compat-helpers.ts"))),
     },
     environment: oracle.environment,
     sourceIdentity: oracle.identity.sources,

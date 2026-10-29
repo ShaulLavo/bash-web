@@ -24,7 +24,7 @@ import {
   optionsFor as sharedOptionsFor,
   outputLimit,
 } from "./fuzz-shell-control-flow.mjs";
-import { drainGroup, killGroup } from "./shell-process-group.mjs";
+import { drainGroup, killGroup } from "./shell-process-group.ts";
 export { healthy, matches, outputLimit };
 
 import {
@@ -667,7 +667,7 @@ export const sourceFiles = [
   "fuzz-shell-path.ts",
   "fuzz-shell-control-flow.mjs",
   "fuzz-shell-results.ts",
-  "shell-process-group.mjs",
+  "shell-process-group.ts",
 ];
 export const sourceHashes = () =>
   Object.fromEntries(

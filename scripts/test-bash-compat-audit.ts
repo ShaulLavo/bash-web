@@ -48,7 +48,7 @@ test("read-only transport audit preserves input and reports incomplete controls"
     new Promise((done, fail) => {
       const child = spawn(
         process.execPath,
-        [resolve(import.meta.dirname, "audit-bash-oracle-pipe.mjs")],
+        [resolve(import.meta.dirname, "audit-bash-oracle-pipe.ts")],
         {
           env: {
             ...process.env,
@@ -182,7 +182,7 @@ test("read-only transport audit preserves input and reports incomplete controls"
           };
           process.on('message', release);
           try {
-            await import(${JSON.stringify(new URL("./audit-bash-oracle-pipe.mjs", import.meta.url).href)});
+            await import(${JSON.stringify(new URL("./audit-bash-oracle-pipe.ts", import.meta.url).href)});
           } finally {
             release();
             process.disconnect();

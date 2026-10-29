@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { createShellRunner } from "./bash-compat-runner.mjs";
+import { createShellRunner } from "./bash-compat-runner.ts";
 
 const root = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
 await mkdir(root, { recursive: true });
@@ -167,7 +167,7 @@ test("Bash capture uses real stdout pipe without changing shell input or status"
       import { execFileSync } from 'node:child_process';
       import { mkdir, readFile, readdir, readlink } from 'node:fs/promises';
       import { setTimeout as delay } from 'node:timers/promises';
-      import { createShellRunner } from ${JSON.stringify(new URL("./bash-compat-runner.mjs", import.meta.url).href)};
+      import { createShellRunner } from ${JSON.stringify(new URL("./bash-compat-runner.ts", import.meta.url).href)};
       const scratch = ${JSON.stringify(workerScratch)};
       const activeChildren = new Map();
       process.on('SIGTERM', () => process.exit(143));

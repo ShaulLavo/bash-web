@@ -335,14 +335,14 @@ test("shell notices have exactly one native producer and a Cargo-free browser co
 test("compatibility reuses the shared node build while standalone commands still build fresh", () => {
   const observation = expanded(commands(jobs()["own-shell-observation"]));
   assert.doesNotMatch(observation, /node scripts\/build-node-harness\.ts/);
-  assert.equal(observation.match(/node scripts\/bash-compat\.mjs/g)?.length, 1);
+  assert.equal(observation.match(/node scripts\/bash-compat\.ts/g)?.length, 1);
   const run = commands(jobs()["own-shell-observation"]);
   assert.ok(
     run.indexOf("npm run fuzz:shell-echo:ci") < run.indexOf("npm run compat:shell:prebuilt"),
   );
   assert.equal(
     expanded("npm run compat:shell"),
-    "node scripts/build-node-harness.ts && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
+    "node scripts/build-node-harness.ts && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.ts",
   );
   for (const name of ["test:shell:scoreboard", "compat:shell"])
     assert.equal(
@@ -425,7 +425,7 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
   );
   assert.match(commands(floor), /scoreboard-ci\.mjs fold/);
   assert.match(commands(floor), /scoreboard-ci\.mjs enforce/);
-  const producer = readFileSync(new URL("./bash-compat.mjs", import.meta.url), "utf8");
+  const producer = readFileSync(new URL("./bash-compat.ts", import.meta.url), "utf8");
   assert.match(producer, /BASH_COMPAT_RAW !== "1"/);
   assert.doesNotMatch(producer, /requireMembership: true/);
 });

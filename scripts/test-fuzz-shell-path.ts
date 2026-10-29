@@ -419,7 +419,7 @@ test("all transitive harness sources are pinned and raw bytes/status stay strict
     "fuzz-shell-path.ts",
     "fuzz-shell-control-flow.mjs",
     "fuzz-shell-results.ts",
-    "shell-process-group.mjs",
+    "shell-process-group.ts",
   ]);
   for (const [name, hash] of Object.entries(sourceHashes()))
     assert.equal(
@@ -465,7 +465,7 @@ test("fixture identity rejects schema, grammar, oracle, environment, subset and 
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-path.ts"] = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
-    (f) => (f.sourceHashes["shell-process-group.mjs"] = "stale"),
+    (f) => (f.sourceHashes["shell-process-group.ts"] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),
     (f) => (f.environment = { ...environment, filesystem: { schema: 1, nodes: [] } }),

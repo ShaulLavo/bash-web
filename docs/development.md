@@ -15,7 +15,7 @@ CI builds the WASM guests on `ubuntu-latest`. The WASI and browser steps are ver
 
 ## Prerequisites
 
-- Node `>=26.12.1` and npm. `package.json` sets `engines` and CI uses 26.12.1. The compatibility replay is stricter: `scripts/bash-compat.mjs` refuses to run unless `process.version` equals the oracle's recorded `v26.12.1`.
+- Node `>=26.12.1` and npm. `package.json` sets `engines` and CI uses 26.12.1. The compatibility replay is stricter: `scripts/bash-compat.ts` refuses to run unless `process.version` equals the oracle's recorded `v26.12.1`.
 
   Check what you have with `node -v`. If it prints a lower version, install 26.12.1 with a version manager, or download it from [nodejs.org](https://nodejs.org/dist/v26.12.1/):
 
