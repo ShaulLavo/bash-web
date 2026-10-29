@@ -239,24 +239,47 @@ for (const { mode, status, source, expected, after } of [
   });
 }
 
-test("second Ctrl-C reaches a continuing guest", { timeout: 15000 }, async (context) => {
-  const { shell, initial, output, ready } = await signalFixture(context, "continue");
-  await send(shell, "signal-status");
-  await ready();
-  shell.interrupt();
-  await until(context, () => output().includes("SIGNAL_HANDLED 1\n"));
-  assert.equal(shell.terminal.readPrompt()?.generation, initial.generation);
-  shell.interrupt();
-  const prompt = await shell
-    .waitForPrompt({ after: initial.generation, signal: context.signal })
-    .catch(async (error) => {
-      context.diagnostic(JSON.stringify(await shell.done));
-      throw error;
-    });
-  assert.equal(prompt.status, 12, output());
-  assert.equal(output().split("SIGNAL_HANDLED 1\n").length - 1, 1);
-  assert.equal(output().split("SIGNAL_HANDLED 2\n").length - 1, 1);
-});
+for (const { source, expected } of [
+  { source: "signal-status", expected: 12 },
+  { source: "signal-status 1>&2 | while :; do :; done", expected: 130 },
+]) {
+  test(
+    `second Ctrl-C reaches a continuing guest: ${source}`,
+    { timeout: 10000 },
+    async (context) => {
+      const { shell, initial, output, ready } = await signalFixture(context, "continue");
+      await send(shell, source);
+      await ready();
+      shell.interrupt();
+      await until(context, () => output().includes("SIGNAL_HANDLED 1\n"));
+      assert.equal(shell.terminal.readPrompt()?.generation, initial.generation);
+      shell.interrupt();
+      const prompt = await shell.waitForPrompt({
+        after: initial.generation,
+        signal: context.signal,
+      });
+      assert.equal(prompt.status, expected, output());
+      assert.equal(output().split("SIGNAL_HANDLED 1\n").length - 1, 1);
+      assert.equal(output().split("SIGNAL_HANDLED 2\n").length - 1, 1);
+    },
+  );
+}
+
+test(
+  "disposing a continuing foreground guest rejects its prompt wait",
+  { timeout: 5000 },
+  async (context) => {
+    const { shell, initial, ready } = await signalFixture(context, "continue");
+    await send(shell, "signal-status");
+    await ready();
+    const rejected = assert.rejects(
+      shell.waitForPrompt({ after: initial.generation }),
+      /Shell closed/,
+    );
+    await shell.dispose();
+    await rejected;
+  },
+);
 
 for (const typeahead of [false, true]) {
   test(

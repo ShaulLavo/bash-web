@@ -1,4 +1,4 @@
-import { leb, name, section } from "./terminal-wasi-guest";
+import { leb, name, section } from "./wasm-binary";
 
 type SignalMode = "handled" | "default" | "removed" | "once" | "continue" | "reader" | "exit";
 function integer(value: number): number[] {

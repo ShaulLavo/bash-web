@@ -45,3 +45,18 @@ The minimal reader fixture uses the existing interactive guest launcher. Waffle'
 Current-main integration uses A2 squash tree equivalence (`a8fb39dc` and `d9e52b8c` have identical trees), then merges `origin/main` at `c442e234405e00dcb25e7503cbd930185fbfd63f` without force-push. The two squash-history conflicts retained A5's prompt/runtime and real-guest test files; the actual source difference of the merge is only main's ANSI-C quoting and bounded CI diagnostics. PR176 is retargeted to main. Final combined checks are recorded after this checkpoint.
 
 Clippy's visit-all routing is an explicit loop, preserving all delivery side effects. Repeated host-wrapper forwarding and native cleanup assertions share helpers; no duplicate baseline or pin was changed. The pre-integration full native/WASI all-target clippy and cargo-machete gate passed. Combined verification repeats required checks for the merged parser/build contracts.
+
+## Final combined acceptance
+
+All checks below passed on the combined source after merging main at `c442e234`.
+
+- `npm run check:rust`: parser provenance, rustfmt, native and WASI Clippy across the whole workspace and all targets with `-D warnings`, plus pinned cargo-machete0.9.2.
+- `RUST_TEST_THREADS=2 npm run test:rust`: 1,959 native tests across26 targets. The initial-parse interruption regression passes.
+- Full JavaScript CI chain: `quality:js`, `test:runtime:terminal` (225 passed), `test:ci` (131 passed), `test:guest-build` (21 passed), `typecheck:guest-build` and `typecheck:ci`.
+- Layer job chain at immutable main `c442e234405e00dcb25e7503cbd930185fbfd63f`: 25 scanner tests, zero violations, and layer typecheck.
+- Matching source-built WASI guest and bundled worker. Public API and guest TAP tests: 29 passed, including handled0/7/130, default/removed/once, normal continuation, functions/subshells, mixed/all-external pipelines, two Ctrl-Cs after shell cancellation, disposal, exact reader byte `x`, typeahead `s` discarded, shell read with Enter/CR, and ordinary external-exit mode preservation.
+- Chromium: actual public API, worker, guest and interactive reader passed, including a receipt consumed after completion and generation/status delivery after handled Ctrl-C.
+- `BASH_COMPAT_BASE_REF=c442e234405e00dcb25e7503cbd930185fbfd63f BASH_COMPAT_JOBS=1 npm run compat:shell`: 4,764 frozen passing cases, zero lost passes and zero newly failing cases. `compat-summary.json` records the counts and comparisons.
+- Duplicate gates: zero new clones in exact and structural scans. No baseline, pin, version or gate suppression changed.
+
+The accepted design limitation remains: an in-shell process-substitution loop beside a delegated external is interrupted only when that command finishes. Bun's final integrated consumer acceptance, independent review, CI follow-up and merge remain coordinator-owned. Task-generated dependency/build/browser payloads are removed after verification; the clean author checkout stays for fixes.

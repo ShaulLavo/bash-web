@@ -1,0 +1,59 @@
+[
+  {
+    "counts": {
+      "oils": {
+        "total": 2492,
+        "passed": 1395
+      },
+      "brush-suite": {
+        "total": 2894,
+        "passed": 1493
+      },
+      "bashkit-suite": {
+        "total": 3835,
+        "passed": 1876
+      }
+    },
+    "passed": 4764
+  },
+  {
+    "keys": ["baseline", "ok", "corpora"],
+    "comparisons": [
+      {
+        "gained": 80,
+        "lost": 0,
+        "newlyFailing": 0
+      },
+      {
+        "gained": 102,
+        "lost": 0,
+        "newlyFailing": 0
+      },
+      {
+        "gained": 113,
+        "lost": 0,
+        "newlyFailing": 0
+      }
+    ]
+  },
+  {
+    "keys": ["baseline", "ok", "corpora"],
+    "comparisons": [
+      {
+        "gained": 80,
+        "lost": 0,
+        "newlyFailing": 0
+      },
+      {
+        "gained": 102,
+        "lost": 0,
+        "newlyFailing": 0
+      },
+      {
+        "gained": 113,
+        "lost": 0,
+        "newlyFailing": 0
+      }
+    ]
+  }
+]
