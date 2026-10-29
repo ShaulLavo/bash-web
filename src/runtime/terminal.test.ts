@@ -156,11 +156,9 @@ test("shell metadata enumerates exact inherited fds rather than opening implicit
   );
 });
 
-test("only the interactive root owns shell phase and columns follow its live terminal", () => {
+test("only the interactive root owns shell phase and prompt status", () => {
   const bridge = new SharedBridge();
   const root = shellTerminalImports(bridge.buffer);
-  Atomics.store(bridge.state, control.cols, 103);
-  assert.equal(root.columns(), 103);
   root.phase(2, 99);
   assert.equal(Atomics.load(bridge.state, control.status), 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);

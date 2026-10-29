@@ -8,6 +8,17 @@ const bytes = await readFile(`${directory}/shell-runtime.wasm`);
 const wasmUrl = `data:application/wasm;base64,${bytes.toString("base64")}`;
 const encoder = new TextEncoder();
 
+async function send(shell: Awaited<ReturnType<typeof api.createShell>>, source: string) {
+  const input = encoder.encode(source + "\r");
+  let offset = 0;
+  while (offset < input.length) {
+    const wake = Atomics.load(shell.terminal.state, api.control.wake);
+    offset += shell.terminal.send(input.subarray(offset));
+    if (offset < input.length)
+      await Atomics.waitAsync(shell.terminal.state, api.control.wake, wake).value;
+  }
+}
+
 test(
   "public prompt API waits for guest startup, commands, interrupts and disposal",
   { timeout: 30000 },
@@ -25,16 +36,10 @@ test(
     assert.deepEqual(receipt, { generation: 1n, status: 0 });
     const submit = async (source: string, status: number) => {
       const after = receipt.generation;
-      const input = encoder.encode(source + "\r");
-      let offset = 0;
-      while (offset < input.length) {
-        const wake = Atomics.load(shell.terminal.state, api.control.wake);
-        offset += shell.terminal.send(input.subarray(offset));
-        if (offset < input.length)
-          await Atomics.waitAsync(shell.terminal.state, api.control.wake, wake).value;
-      }
+      await send(shell, source);
       receipt = await shell.waitForPrompt({ after });
       assert.deepEqual(receipt, { generation: after + 1n, status });
+      assert.deepEqual(await shell.waitForPrompt({ after }), receipt);
     };
     await submit("false", 1);
     await submit("true", 0);
@@ -60,8 +65,7 @@ test(
     await submit("printf data >value; cat value", 0);
     await submit("cat /missing", 1);
     await submit("true", 0);
-    const running = encoder.encode("cat\r");
-    assert.equal(shell.terminal.send(running), running.length);
+    await send(shell, "cat");
     while (!shell.diagnostics().roots.some((root) => root.liveProcesses > 1))
       await new Promise((resolve) => setTimeout(resolve, 1));
     const foreground = receipt.generation;
