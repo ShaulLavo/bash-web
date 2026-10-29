@@ -18,6 +18,20 @@ fn conditional_equality_keeps_rhs_quote_protection() {
 }
 
 #[test]
+fn conditional_ansi_c_quoted_patterns_match_literal_text() {
+    for (source, expected) in [
+        (r#"v='a[bc'; [[ "$v" == $'a[bc' ]]; echo $?"#, "0\n"),
+        (r#"[[ abc == $'a*' ]]; echo $?"#, "1\n"),
+        (r#"[[ 'a*' == $'a\x2a' ]]; echo $?"#, "0\n"),
+        (r#"[[ 'a?tail' == $'a?'* ]]; echo $?"#, "0\n"),
+        (r#"[[ abc != $'a*' ]]; echo $?"#, "0\n"),
+        (r#"[[ '$v' == $'$v' ]]; echo $?"#, "0\n"),
+    ] {
+        check_output(source, expected);
+    }
+}
+
+#[test]
 fn conditional_operands_do_not_split_glob_or_expand_braces() {
     check_output(
         r#"IFS=:; v='one:two'; [[ $v == 'one:two' ]]; echo $?; [[ '*' == '*' ]]; echo $?; [[ {a,b} == '{a,b}' ]]; echo $?; [[ 'a b' == a\ b ]]; echo $?"#,
