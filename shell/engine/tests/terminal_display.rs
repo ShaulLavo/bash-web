@@ -131,7 +131,7 @@ fn long_appended_commands_echo_each_byte_once_without_duplicate_prefixes() {
 fn finishing_from_an_earlier_wrapped_row_moves_below_the_command() {
     for interrupted in [false, true] {
         let (mut editor, mut screen) = start(12);
-        type_bytes(&mut editor, &mut screen, b"echo abcdefghijklmnop\x01");
+        type_bytes(&mut editor, &mut screen, b"echo abcdefghij\x01");
         assert_eq!((screen.row, screen.column), (0, 2));
         editor.clear();
         screen.write(&editor.finish(interrupted));
