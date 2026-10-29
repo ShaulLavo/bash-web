@@ -15,7 +15,7 @@ import {
   createShellRunner,
   normalize,
 } from "./bash-compat-runner.ts";
-import { cancelTargetMigrations, targetBranchBaseline } from "./shell-scoreboard-base.mjs";
+import { cancelTargetMigrations, targetBranchBaseline } from "./shell-scoreboard-base.ts";
 import {
   bytesDigest,
   compactResult,
@@ -25,7 +25,7 @@ import {
   summarize,
   compareScores,
   validateScore,
-} from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard.ts";
 import type { ActiveChildren, BufferedResult, ShellResult } from "./bash-compat-runner.ts";
 
 type Corpus = "oils" | "brush-suite" | "bashkit-suite";

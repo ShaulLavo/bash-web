@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { compareScores, digest, summarize, validateScore } from "./shell-scoreboard.mjs";
+import { compareScores, digest, summarize, validateScore } from "./shell-scoreboard.ts";
 
 export const bootstrap = Object.freeze({
   sourceSha: "9fc1cdbd907ab376e61039331b43b379addea754",

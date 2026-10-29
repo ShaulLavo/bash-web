@@ -12,14 +12,14 @@ import {
   migrationEnvironment,
   migrationEvidence,
   oraclePath,
-} from "./shell-scoreboard-base.mjs";
+} from "./shell-scoreboard-base.ts";
 import {
   bytesDigest,
   compareScores,
   summarize,
   validateScore,
   verifyOracle,
-} from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard.ts";
 import { wasiCargoEnvironment, wasiSysrootCommand } from "./wasi-build.ts";
 import { drainGroup, killGroup } from "./shell-process-group.ts";
 

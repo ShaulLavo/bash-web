@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSy
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 import test from "node:test";
-import { discoverScoreboardTests, runScoreboardTests } from "./scoreboard-tests.mjs";
+import { discoverScoreboardTests, runScoreboardTests } from "./scoreboard-tests.ts";
 
 function fixture(body) {
   const directory = mkdtempSync(resolve(process.env.TMPDIR || tmpdir(), "scoreboard-discovery-"));

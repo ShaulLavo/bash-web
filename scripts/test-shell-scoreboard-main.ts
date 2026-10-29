@@ -25,17 +25,17 @@ import {
   resolveFloor,
   scoringInputs,
   sourceEquivalent,
-} from "./shell-scoreboard-main.mjs";
-import { bootstrap } from "./shell-scoreboard-floor.mjs";
-import { bytesDigest, digest, summarize } from "./shell-scoreboard.mjs";
-import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
+} from "./shell-scoreboard-main.ts";
+import { bootstrap } from "./shell-scoreboard-floor.ts";
+import { bytesDigest, digest, summarize } from "./shell-scoreboard.ts";
+import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
 import {
   foldQualification,
   prepareQualification,
   sealRaw,
   selectBaseline,
   verifyBinding,
-} from "./scoreboard-ci.mjs";
+} from "./scoreboard-ci.ts";
 
 const sha = (n) => n.toString(16).padStart(40, "0");
 const fixture = scoreboardFixture("oils");
@@ -1232,12 +1232,12 @@ test("workflow baseline commands select the tested main parent for both gates an
 });
 function assertBaselineCommands({ root, put }, input) {
   for (const file of [
-    "scoreboard-ci.mjs",
-    "shell-scoreboard-main.mjs",
-    "shell-scoreboard-floor.mjs",
-    "shell-scoreboard.mjs",
-    "shell-scoreboard-accepted-gains.mjs",
-    "shell-scoreboard-terminal-recovery.mjs",
+    "scoreboard-ci.ts",
+    "shell-scoreboard-main.ts",
+    "shell-scoreboard-floor.ts",
+    "shell-scoreboard.ts",
+    "shell-scoreboard-accepted-gains.ts",
+    "shell-scoreboard-terminal-recovery.ts",
   ])
     put(`scripts/${file}`, readFileSync(new URL(file, import.meta.url)));
   symlinkSync(resolve(import.meta.dirname, "../node_modules"), resolve(root, "node_modules"));
@@ -1245,7 +1245,7 @@ function assertBaselineCommands({ root, put }, input) {
   const output = resolve(root, "github-env");
   const env = { ...process.env, GITHUB_ENV: output };
   const execute = (name) =>
-    execFileSync(process.execPath, [resolve(root, "scripts/scoreboard-ci.mjs"), "baseline", name], {
+    execFileSync(process.execPath, [resolve(root, "scripts/scoreboard-ci.ts"), "baseline", name], {
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });

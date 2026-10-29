@@ -24,8 +24,8 @@ import {
   instrumentReceiptPath,
   oraclePath,
   targetBranchBaseline,
-} from "./shell-scoreboard-base.mjs";
-import { bytesDigest, compareScores, sealOracle, validateScore } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-base.ts";
+import { bytesDigest, compareScores, sealOracle, validateScore } from "./shell-scoreboard.ts";
 import { killGroup } from "./shell-process-group.ts";
 
 // Original fake compiler/scorer: no Cargo, WASI execution, network, or installed dependencies.
@@ -555,7 +555,7 @@ for (const descendant of [false, true]) {
       await fixture(
         async ({ repo, ref, runner }) => {
           const launcher = fileURLToPath(
-            new URL("./shell-scoreboard-migration.mjs", import.meta.url),
+            new URL("./shell-scoreboard-migration.ts", import.meta.url),
           );
           const child =
             cancellation === "TERM"
@@ -609,9 +609,9 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           "compat-programs.ts",
           "bash-compat-helpers.ts",
           "bash-compat-runner.ts",
-          "shell-scoreboard.mjs",
-          "shell-scoreboard-base.mjs",
-          "shell-scoreboard-migration.mjs",
+          "shell-scoreboard.ts",
+          "shell-scoreboard-base.ts",
+          "shell-scoreboard-migration.ts",
           "shell-process-group.ts",
           "wasi-build.ts",
           "waffle-release-inputs.ts",
@@ -713,7 +713,7 @@ async function cleanupSetupConsumer(consumer) {
 }
 
 async function interruptSetup({ repo, ref, runner }, cancellation) {
-  const launcher = fileURLToPath(new URL("./shell-scoreboard-migration.mjs", import.meta.url));
+  const launcher = fileURLToPath(new URL("./shell-scoreboard-migration.ts", import.meta.url));
   const child = fork(launcher, [repo, ref], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
   const exited = new Promise((accept) => child.once("exit", accept));
   const watchdog = setTimeout(() => child.kill("SIGKILL"), 8000).unref();

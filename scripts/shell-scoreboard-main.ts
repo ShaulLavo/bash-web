@@ -7,8 +7,8 @@ import {
   bootstrapFloor,
   validateFloor,
   validateOwnScore,
-} from "./shell-scoreboard-floor.mjs";
-import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-floor.ts";
+import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.ts";
 
 export const authority = Object.freeze({
   repository: "ShaulLavo/bash-web",

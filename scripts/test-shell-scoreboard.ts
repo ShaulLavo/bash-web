@@ -6,7 +6,7 @@ import {
   summarize,
   compareScores,
   verifyOracle,
-} from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard.ts";
 
 function fixture() {
   return sealOracle({
@@ -132,7 +132,7 @@ test("category counts and unchanged skips are explicit", () => {
 
 test("corpus notices retain the pinned revisions and license bytes", async () => {
   const { readFile } = await import("node:fs/promises");
-  const { bytesDigest } = await import("./shell-scoreboard.mjs");
+  const { bytesDigest } = await import("./shell-scoreboard.ts");
   const pins = JSON.parse(await readFile(new URL("../sources.lock.json", import.meta.url), "utf8"));
   const revisions = {
     oils: pins.oils.revision,
@@ -160,7 +160,7 @@ test("a gained pass requires updating the candidate baseline", () => {
 });
 
 test("score diagnostics bound prefixes while retaining long stream identity", async () => {
-  const { compactResult, bytesDigest } = await import("./shell-scoreboard.mjs");
+  const { compactResult, bytesDigest } = await import("./shell-scoreboard.ts");
   const stdout = Buffer.alloc(4096, 255);
   const diagnostic = compactResult({ status: 7, stdout, stderr: Buffer.from([0, 255]) });
   assert.equal(diagnostic.status, 7);
@@ -172,7 +172,7 @@ test("score diagnostics bound prefixes while retaining long stream identity", as
 
 test("committed oracle and baseline preserve exact identities, skips and counts", async () => {
   const { readFile } = await import("node:fs/promises");
-  const { bytesDigest, validateScore } = await import("./shell-scoreboard.mjs");
+  const { bytesDigest, validateScore } = await import("./shell-scoreboard.ts");
   const pins = JSON.parse(await readFile(new URL("../sources.lock.json", import.meta.url), "utf8"));
   const bytes = await readFile(new URL(`../${pins.shellScoreboard.oracleFile}`, import.meta.url));
   assert.equal(bytesDigest(bytes), pins.shellScoreboard.oracleSha256);

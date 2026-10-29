@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
-import { prepareCandidate, foldCandidate } from "./shell-scoreboard-accepted-gains.mjs";
+import { prepareCandidate, foldCandidate } from "./shell-scoreboard-accepted-gains.ts";
 import {
   terminalCut,
   terminalRecord,
@@ -14,7 +14,7 @@ import {
   assertTerminalLanded,
   recomputeTerminalRequirement,
   assertTerminalFreshObservation,
-} from "./shell-scoreboard-terminal-recovery.mjs";
+} from "./shell-scoreboard-terminal-recovery.ts";
 import {
   authority,
   git,
@@ -22,11 +22,11 @@ import {
   resolveMainFloor,
   artifactJson,
   scoringInputs,
-} from "./shell-scoreboard-main.mjs";
-import { bootstrap, qualification, compareFloor } from "./shell-scoreboard-floor.mjs";
-import { digest, bytesDigest, summarize } from "./shell-scoreboard.mjs";
-import { prepareQualification, sealRaw, foldQualification } from "./scoreboard-ci.mjs";
-import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
+} from "./shell-scoreboard-main.ts";
+import { bootstrap, qualification, compareFloor } from "./shell-scoreboard-floor.ts";
+import { digest, bytesDigest, summarize } from "./shell-scoreboard.ts";
+import { prepareQualification, sealRaw, foldQualification } from "./scoreboard-ci.ts";
+import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
 const project = resolve(import.meta.dirname, "..");
 const record = JSON.parse(readFileSync(resolve(project, terminalCut.recordPath), "utf8"));
 const sha = (number) => number.toString(16).padStart(40, "0");

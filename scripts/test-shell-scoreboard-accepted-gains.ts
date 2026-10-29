@@ -14,11 +14,11 @@ import {
   foldCandidate,
   prepareCandidate,
   recomputeAcceptedGains,
-} from "./shell-scoreboard-accepted-gains.mjs";
-import { authority } from "./shell-scoreboard-main.mjs";
-import { qualification } from "./shell-scoreboard-floor.mjs";
-import { digest } from "./shell-scoreboard.mjs";
-import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
+} from "./shell-scoreboard-accepted-gains.ts";
+import { authority } from "./shell-scoreboard-main.ts";
+import { qualification } from "./shell-scoreboard-floor.ts";
+import { digest } from "./shell-scoreboard.ts";
+import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
 
 const merge = "f6e3a9e67d56332b0476f3608e198bf74e8e12f3";
 const historicalTestedMergeSha = "aaa853b275c27b9609918260f0e8cade3276d552";

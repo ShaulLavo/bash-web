@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { bytesDigest, digest, verifyOracle, validateScore } from "./shell-scoreboard.mjs";
+import { bytesDigest, digest, verifyOracle, validateScore } from "./shell-scoreboard.ts";
 
 export const oraclePath = "docs/evidence/own-shell-oracle.json";
 export const baselinePath = "docs/evidence/own-shell-baseline.json";
@@ -211,7 +211,7 @@ export async function targetBranchBaseline(root, ref, oracle) {
   for (const name of ["BASH_COMPAT_SHELL_WASM", "BASH_COMPAT_BASELINE", "BASH_COMPAT_ORACLE"])
     assert.equal(process.env[name], undefined, `oracle migration rejects supplied ${name}`);
   return new Promise((resolve, reject) => {
-    const child = fork(new URL("./shell-scoreboard-migration.mjs", import.meta.url), [root, ref], {
+    const child = fork(new URL("./shell-scoreboard-migration.ts", import.meta.url), [root, ref], {
       stdio: ["ignore", "inherit", "inherit", "ipc"],
       env: migrationEnvironment(),
       execArgv: [],

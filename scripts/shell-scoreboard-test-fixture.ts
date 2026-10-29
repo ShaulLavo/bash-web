@@ -1,4 +1,4 @@
-import { digest, sealOracle, summarize } from "./shell-scoreboard.mjs";
+import { digest, sealOracle, summarize } from "./shell-scoreboard.ts";
 
 export function scoreboardFixture(corpus) {
   const oracle = sealOracle({

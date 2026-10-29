@@ -16,19 +16,19 @@ import {
   oracleAt,
   resolveMainFloor,
   scoringInputs,
-} from "./shell-scoreboard-main.mjs";
+} from "./shell-scoreboard-main.ts";
 import {
   bootstrap,
   qualification,
   validateFloor,
   validateOwnScore,
-} from "./shell-scoreboard-floor.mjs";
-import { digest } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-floor.ts";
+import { digest } from "./shell-scoreboard.ts";
 import {
   terminalGap,
   prepareTerminalRecovery,
   assertTerminalFreshObservation,
-} from "./shell-scoreboard-terminal-recovery.mjs";
+} from "./shell-scoreboard-terminal-recovery.ts";
 
 const merge = "f6e3a9e67d56332b0476f3608e198bf74e8e12f3";
 const recordPath = `scoreboard/accepted-gains/${merge}.json`;

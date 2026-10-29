@@ -351,7 +351,7 @@ test("compatibility reuses the shared node build while standalone commands still
     );
   assert.equal(
     expanded("npm run test:shell:scoreboard:prebuilt"),
-    "node scripts/scoreboard-tests.mjs",
+    "node scripts/scoreboard-tests.ts",
   );
 });
 
@@ -581,7 +581,7 @@ test("scoreboard and observation run independently using one shared node build",
   );
   assert.match(String(object(upload.with).path), /\$\{\{ runner.temp \}\}\/scoreboard-input\.json/);
   const observe = commands(observation);
-  assert.ok(observe.indexOf("scoreboard-ci.mjs prepare") < observe.indexOf("diagnose-compat.ts"));
+  assert.ok(observe.indexOf("scoreboard-ci.ts prepare") < observe.indexOf("diagnose-compat.ts"));
   assert.doesNotMatch(commands(publisher), /scoreboard-ci\.mjs prepare/);
 });
 
@@ -596,7 +596,7 @@ test("layer and split compatibility producers select immutable baselines after J
     {
       id: "own-shell-observation",
       variable: "BASH_COMPAT_BASE_REF",
-      consumer: "scoreboard-ci.mjs prepare",
+      consumer: "scoreboard-ci.ts prepare",
     },
   ]) {
     const job = object(jobs()[id]);
@@ -604,7 +604,7 @@ test("layer and split compatibility producers select immutable baselines after J
     assert.ok(Array.isArray(job.steps));
     const steps = job.steps.map(object);
     const restore = steps.findIndex((step) => step.uses === "./.github/actions/javascript");
-    const command = `node scripts/scoreboard-ci.mjs baseline ${variable}`;
+    const command = `node scripts/scoreboard-ci.ts baseline ${variable}`;
     const baseline = steps.findIndex((step) => step.run === command);
     assert.equal(steps.filter((step) => step.run === command).length, 1);
     assert.ok(restore >= 0 && restore < baseline, `${id} restores dependencies before selection`);

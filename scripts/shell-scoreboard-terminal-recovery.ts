@@ -15,14 +15,14 @@ import {
   oracleAt,
   scoringInputs,
   sourceEquivalent,
-} from "./shell-scoreboard-main.mjs";
+} from "./shell-scoreboard-main.ts";
 import {
   accumulateFloor,
   qualification,
   validateFloor,
   validateOwnScore,
-} from "./shell-scoreboard-floor.mjs";
-import { digest } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-floor.ts";
+import { digest } from "./shell-scoreboard.ts";
 
 export const terminalCut = Object.freeze({
   sourceSha: "c442e234405e00dcb25e7503cbd930185fbfd63f",

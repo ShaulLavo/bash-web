@@ -8,7 +8,7 @@ import {
   qualification,
   validateFloor,
   validateOwnScore,
-} from "./shell-scoreboard-floor.mjs";
+} from "./shell-scoreboard-floor.ts";
 import {
   admitQualificationRaw,
   authority,
@@ -20,10 +20,10 @@ import {
   resolveMainFloor,
   scoringInputs,
   sourceEquivalent,
-} from "./shell-scoreboard-main.mjs";
-import { digest } from "./shell-scoreboard.mjs";
-import { prepareCandidate, foldCandidate } from "./shell-scoreboard-accepted-gains.mjs";
-import { terminalRecoveryTarget } from "./shell-scoreboard-terminal-recovery.mjs";
+} from "./shell-scoreboard-main.ts";
+import { digest } from "./shell-scoreboard.ts";
+import { prepareCandidate, foldCandidate } from "./shell-scoreboard-accepted-gains.ts";
+import { terminalRecoveryTarget } from "./shell-scoreboard-terminal-recovery.ts";
 
 function json(path) {
   return JSON.parse(readFileSync(path, "utf8"));

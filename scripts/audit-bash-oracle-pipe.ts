@@ -11,7 +11,7 @@ import {
   createShellRunner,
 } from "./bash-compat-runner.ts";
 import type { ActiveChildren, ShellResult } from "./bash-compat-runner.ts";
-import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.mjs";
+import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.ts";
 
 interface PackedResult {
   status: number;

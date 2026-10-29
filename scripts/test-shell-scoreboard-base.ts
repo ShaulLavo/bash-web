@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { baseBranchBaseline } from "./shell-scoreboard-base.mjs";
-import { compareScores } from "./shell-scoreboard.mjs";
+import { baseBranchBaseline } from "./shell-scoreboard-base.ts";
+import { compareScores } from "./shell-scoreboard.ts";
 
 test("lowering the candidate baseline cannot bypass the target branch", () => {
   const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
