@@ -15,6 +15,9 @@ export function shellTerminalImports(
     columns() {
       return buffer ? Math.max(2, Atomics.load(new SharedBridge(buffer).state, control.cols)) : 80;
     },
+    rows() {
+      return buffer ? Math.max(2, Atomics.load(new SharedBridge(buffer).state, control.rows)) : 24;
+    },
     phase(phase: number) {
       if (!buffer) return;
       const bridge = new SharedBridge(buffer);

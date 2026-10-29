@@ -63,6 +63,8 @@
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.mjs",
+    "test:terminal:display": "node --test scripts/test-terminal-display.ts",
+    "terminal:widths": "node scripts/terminal-widths.ts",
     "notices:browser": "npm run notices:shell && node scripts/browser-notices.mjs",
     "serve": "node dist/serve.mjs",
     "verify:browser": "npm run test:browser:package && npm run build:browser && npm run typecheck:browser && npm run test:runtime:terminal && npm run test:browser",
