@@ -5,7 +5,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { ghosttyRevision, ghosttyRuntime } from "./ghostty-vt.ts";
 
-const table = resolve(import.meta.dirname, "../shell/engine/src/terminal_width.rs");
+const table = resolve(import.meta.dirname, "../shell/engine/src/terminal/width.rs");
 
 function measured(width: (code: number) => number | undefined) {
   const runs = new Map<number, [number, number][]>([
@@ -65,7 +65,7 @@ if (import.meta.main) {
   const generated = await generatedWidthTable();
   if (process.argv.includes("--check")) {
     if ((await readFile(table, "utf8")) !== generated)
-      throw new Error("terminal_width.rs is stale; run node scripts/terminal-widths.ts");
+      throw new Error("terminal/width.rs is stale; run node scripts/terminal-widths.ts");
   } else {
     await writeFile(table, generated);
   }

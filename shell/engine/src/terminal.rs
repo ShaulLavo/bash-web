@@ -1,7 +1,7 @@
 //! Original bounded multiline terminal editor. The guest owns echo; the browser
 //! forwards raw bytes, including ANSI arrows, without maintaining shell state.
-#[path = "terminal_display.rs"]
 mod display;
+mod width;
 use display::Display;
 pub use display::Geometry;
 #[derive(Debug, PartialEq, Eq)]

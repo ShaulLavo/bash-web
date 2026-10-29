@@ -3,8 +3,7 @@
 //! The region is the prompt plus the rendered command, laid out from column 0 with
 //! libghostty-vt's widths. Rows that scroll above the screen are out of reach of
 //! cursor movement, so the model tracks which region rows are still on screen.
-#[path = "terminal_width.rs"]
-mod width;
+use super::width;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Geometry {
@@ -75,7 +74,7 @@ enum Escape {
     Start,
     Csi,
     Osc,
-    OscEscape,
+    OscTerminator,
 }
 
 /// One pass over region bytes, placing glyphs as the terminal does.
@@ -103,11 +102,11 @@ impl Walk {
             (Escape::None, '\x1b') => self.escape = Escape::Start,
             (Escape::Start, '[') => self.escape = Escape::Csi,
             (Escape::Start, ']') => self.escape = Escape::Osc,
-            (Escape::Csi, '\x40'..='\x7e') | (Escape::Osc, '\x07') | (Escape::OscEscape, '\\') => {
-                self.escape = Escape::None
-            }
-            (Escape::Osc | Escape::OscEscape, '\x1b') => self.escape = Escape::OscEscape,
-            (Escape::Start, _) | (Escape::OscEscape, _) => self.escape = Escape::None,
+            (Escape::Csi, '\x40'..='\x7e')
+            | (Escape::Osc, '\x07')
+            | (Escape::OscTerminator, '\\') => self.escape = Escape::None,
+            (Escape::Osc | Escape::OscTerminator, '\x1b') => self.escape = Escape::OscTerminator,
+            (Escape::Start, _) | (Escape::OscTerminator, _) => self.escape = Escape::None,
             (Escape::None, character) => return self.print(character),
             _ => {}
         }

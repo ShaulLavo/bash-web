@@ -4,8 +4,11 @@
 //! `output HEX` (command output) and `cancel` (a host interrupt while reading).
 //! Output lines: `W HEX` (terminal bytes), `S HEX` (a submitted command),
 //! `R COLUMNS ROWS` (resize the terminal now) and `E` (end of input).
-#[path = "../src/terminal.rs"]
-mod terminal;
+#[path = "../src"]
+mod source {
+    pub mod terminal;
+}
+use source::terminal;
 use std::io::{self, BufRead};
 use terminal::{Action, Editor, Geometry};
 

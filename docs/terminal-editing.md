@@ -20,7 +20,7 @@ Enter, Ctrl+C, Ctrl+D and a host interrupt first move the cursor below the comma
 
 When the caret moves into rows that have scrolled into history, the editor repaints from the caret's row at the top of the screen. History keeps the earlier copy of those rows, because a terminal cannot edit its scrollback.
 
-Cell widths come from `shell/engine/src/terminal_width.rs`, generated from the pinned libghostty-vt by `npm run terminal:widths` with grapheme clustering (mode 2027) off, which is the terminal's default. A test fails when the table no longer matches the pinned terminal. The prompt is assumed to start at column 0. A resize recounts the reflowed command before the next edit, assuming the terminal keeps the command's end at the bottom of the screen.
+Cell widths come from `shell/engine/src/terminal/width.rs`, generated from the pinned libghostty-vt by `npm run terminal:widths` with grapheme clustering (mode 2027) off, which is the terminal's default. A test fails when the table no longer matches the pinned terminal. The prompt is assumed to start at column 0. A resize recounts the reflowed command before the next edit, assuming the terminal keeps the command's end at the bottom of the screen.
 
 ## Limits
 

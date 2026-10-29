@@ -89,7 +89,7 @@ function direct(columns: number, rows: number, text: string, caret = text) {
 const prompts = (lines: readonly string[]) => lines.filter((line) => line.startsWith("$ ")).length;
 
 test("the checked-in width table matches the pinned terminal", async () => {
-  const table = await readFile(resolve(root, "shell/engine/src/terminal_width.rs"), "utf8");
+  const table = await readFile(resolve(root, "shell/engine/src/terminal/width.rs"), "utf8");
   assert.equal(table, await generatedWidthTable(), "run node scripts/terminal-widths.ts");
 });
 
