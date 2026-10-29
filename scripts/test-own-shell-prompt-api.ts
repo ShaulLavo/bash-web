@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { api, directory, nodeDirectory, waffleFixture } from "./own-shell-waffle-fixture.ts";
 import { familyWasmPath } from "./family-assets.ts";
 
 const bytes = await readFile(`${directory}/shell-runtime.wasm`);
 const wasmUrl = `data:application/wasm;base64,${bytes.toString("base64")}`;
 const encoder = new TextEncoder();
+
+async function fixture(context: TestContext, script?: string) {
+  const { runtime } = await waffleFixture(context);
+  const shell = await api.createShell({
+    runtime,
+    wasmUrl,
+    workerUrl: new URL("shell.mjs", nodeDirectory),
+    script,
+  });
+  context.after(() => shell.dispose());
+  return { runtime, shell };
+}
 
 async function send(shell: Awaited<ReturnType<typeof api.createShell>>, source: string) {
   const input = encoder.encode(source + "\r");
@@ -23,13 +35,7 @@ test(
   "public prompt API waits for guest startup, commands, interrupts and disposal",
   { timeout: 30000 },
   async (context) => {
-    const { runtime } = await waffleFixture(context);
-    const shell = await api.createShell({
-      runtime,
-      wasmUrl,
-      workerUrl: new URL("shell.mjs", nodeDirectory),
-    });
-    context.after(() => shell.dispose());
+    const { runtime, shell } = await fixture(context);
     const drain = setInterval(() => shell.terminal.drain(), 1);
     context.after(() => clearInterval(drain));
     let receipt = await shell.waitForPrompt();
@@ -90,27 +96,14 @@ test(
   "public prompt wait rejects when a script exits without any prompt",
   { timeout: 15000 },
   async (context) => {
-    const { runtime } = await waffleFixture(context);
-    const shell = await api.createShell({
-      runtime,
-      wasmUrl,
-      workerUrl: new URL("shell.mjs", nodeDirectory),
-      script: "exit 23",
-    });
-    context.after(() => shell.dispose());
+    const { shell } = await fixture(context, "exit 23");
     await assert.rejects(shell.waitForPrompt(), /Shell closed/);
     assert.equal((await shell.done).code, 23);
   },
 );
 
 test("runtime disposal rejects the public prompt wait", { timeout: 15000 }, async (context) => {
-  const { runtime } = await waffleFixture(context);
-  const shell = await api.createShell({
-    runtime,
-    wasmUrl,
-    workerUrl: new URL("shell.mjs", nodeDirectory),
-  });
-  context.after(() => shell.dispose());
+  const { runtime, shell } = await fixture(context);
   const prompt = await shell.waitForPrompt();
   const rejected = assert.rejects(
     shell.waitForPrompt({ after: prompt.generation }),
