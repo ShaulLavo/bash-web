@@ -138,6 +138,42 @@ Indexes into `SharedBridge.state`:
 
 To resize, store `cols` and `rows`, add 1 to `resize`, then call `signal()`. The demo host (`src/browser/session.ts`) reads `phase` as 0 starting, 1 ready, 2 running, 3 exited, and 4 shared terminal failed.
 
+### Interactive command status
+
+For an interactive shell, `control.status` is the shell's actual `$?` at the
+latest ready prompt. The guest publishes it before storing `control.phase = 1`
+and signaling `control.wake`. The initial prompt publishes 0. Builtins,
+functions, pipelines, parse errors, runtime errors, and interrupted foreground
+commands publish their shell result. Cancelling prompt input publishes 130;
+empty input preserves the previous result. Background child exits do not
+replace it. During phase 2 it retains the preceding prompt's status. On shell
+exit, phase 3 carries the final process status; phase 4 carries terminal failure.
+
+Use the bridge returned by `createShell`; no terminal options or custom prompt
+are required. For example, Bun's public shell host can sample in its existing
+bridge drain/wake callback:
+
+```ts
+import { control } from "bash-web";
+
+const state = shell.terminal.state;
+if (Atomics.load(state, control.phase) === 1) {
+  lastExit = Atomics.load(state, control.status);
+}
+```
+
+Drain output normally and resample after bridge activity, including a wake that
+leaves phase at 1. `createShell()` resolving only means startup has been admitted;
+wait for phase 1 for the first prompt. Neither output text nor a child process
+exit is a command completion signal. This is a latest-state snapshot, not an
+event log: a host that submits more input before sampling may skip prompts.
+
+The guest import is `shell_terminal.phase(value: i32, status: i32)`. Only the
+interactive root publishes to the page bridge. A ready call stores status
+before phase and always wakes, even after empty input or prompt cancellation.
+Other phase calls preserve the last prompt result. Ship the rebuilt guest and
+worker together.
+
 ## `TerminalNewlines`
 
 ```ts
