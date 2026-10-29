@@ -267,7 +267,10 @@ impl Editor {
     }
     fn feed_escape(&mut self, byte: u8) -> Action {
         match (std::mem::take(&mut self.escape), byte) {
-            (state @ (Escape::Csi(_) | Escape::Discard | Escape::Ss3), 0 | 127) => {
+            (
+                state @ (Escape::Csi(_) | Escape::Discard | Escape::Ss3),
+                0x00..=0x17 | 0x19 | 0x1c..=0x1f | 0x7f,
+            ) => {
                 self.escape = state;
             }
             (Escape::Start, b'[') => self.escape = Escape::Csi(Parameters::Empty),
@@ -461,8 +464,8 @@ mod tests {
     }
 
     #[test]
-    fn nul_and_del_inside_csi_do_not_release_its_tail_as_text() {
-        for control in [0, 127] {
+    fn non_cancelling_controls_inside_csi_do_not_release_its_tail_as_text() {
+        for control in [0, 7, 9, 127] {
             let mut editor = Editor::default();
             feed(&mut editor, b"before\x1b[27;2;");
             assert_eq!(editor.feed(control), Action::None);
@@ -472,6 +475,17 @@ mod tests {
             assert_eq!(editor.feed(control), Action::None);
             feed(&mut editor, b"~after");
             assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforeafter".to_vec()));
+        }
+    }
+
+    #[test]
+    fn can_and_sub_cancel_partial_sequences() {
+        for control in [0x18, 0x1a] {
+            let mut editor = Editor::default();
+            feed(&mut editor, b"before\x1b[27;2;");
+            assert_eq!(editor.feed(control), Action::None);
+            assert_eq!(editor.feed(b'x'), Action::Echo(b'x'));
+            assert_eq!(editor.feed(b'\r'), Action::Submit(b"beforex".to_vec()));
         }
     }
 
