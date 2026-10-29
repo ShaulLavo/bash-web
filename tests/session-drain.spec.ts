@@ -77,7 +77,7 @@ onmessage = ({data}) => {
   if(data.kind === "init") {bridge = new SharedBridge(data.buffer); postMessage({}); return;}
   if(data.kind === "write") bridge.write(new Uint8Array(data.bytes));
   if(data.kind === "burst") for(let i=0;i<1000;i++) bridge.tryWrite([Uint8Array.of(i%256)]);
-  if(data.kind === "phase") shellTerminalImports(bridge.buffer).phase(data.bytes[0]);
+  if(data.kind === "phase") shellTerminalImports(bridge.buffer).phase(data.bytes[0], 0);
   if(data.kind === "consume") {const bytes = new Uint8Array(65536);const count = bridge.tryRead([bytes]);postMessage({bytes:Array.from(bytes.subarray(0,Math.max(0,count)))});return;}
   if(data.kind === "receive") {postMessage({bytes:Array.from(bridge.receive(65536))}); return;}
   if(data.kind === "lock") Atomics.store(bridge.state,control.inputLock,1);

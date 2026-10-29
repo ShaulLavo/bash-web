@@ -25,13 +25,13 @@ mod guest {
     use std::{cell::RefCell, rc::Rc};
     #[link(wasm_import_module = "shell_terminal")]
     unsafe extern "C" {
-        fn phase(value: i32);
+        fn phase(value: i32, status: i32);
         fn columns() -> i32;
         fn rows() -> i32;
     }
-    fn set_phase(value: i32) {
+    fn set_phase(value: i32, status: i32) {
         unsafe {
-            phase(value);
+            phase(value, status);
         }
     }
     fn geometry() -> Geometry {
@@ -115,7 +115,7 @@ mod guest {
         let input_cancel = editor_cancel.clone();
         let root = executor.spawn(async move {
             let result = run(shell.clone(), startup, input_cancel).await;
-            set_phase(0);
+            set_phase(0, result);
             shell.shutdown().await;
             result
         });
@@ -125,6 +125,9 @@ mod guest {
                 editor_cancel.borrow().cancel();
             }
             let turn = executor.drive(64);
+            if session.take_delegated_interrupt() {
+                set_phase(-1, 0);
+            }
             if root.is_finished() {
                 break;
             }
@@ -170,13 +173,13 @@ mod guest {
         let job = match startup {
             Startup::Interactive => return interactive(session, input_cancel).await,
             Startup::Command { source, name, args } => {
-                set_phase(2);
+                set_phase(2, session.state().borrow().status());
                 session
                     .set_arguments(name, args)
                     .and_then(|()| session.start(&source))
             }
             Startup::File { name, args } => {
-                set_phase(2);
+                set_phase(2, session.state().borrow().status());
                 session.start_file(name, args)
             }
         };
@@ -285,7 +288,7 @@ mod guest {
                 let _ = write(&output, b"\x1b[?2004l").await;
                 return 1;
             }
-            set_phase(1);
+            set_phase(1, session.state().borrow().status());
             let action = PromptRead {
                 editor: &mut editor,
                 input: &input,
@@ -306,13 +309,14 @@ mod guest {
                 Ok(source) => source,
                 Err(_) => {
                     diagnostic(&session, b"shell: command is not UTF-8\n").await;
+                    session.state().borrow_mut().publish_status(2);
                     continue;
                 }
             };
             if source.trim().is_empty() {
                 continue;
             }
-            set_phase(2);
+            set_phase(2, session.state().borrow().status());
             match session.start(&source) {
                 Ok(job) => {
                     let code = job.await;

@@ -2,7 +2,7 @@
 use super::*;
 use shell_engine::{
     interpreter::StartError,
-    process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
+    process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest, forward_process_waits},
 };
 use std::cell::Cell;
 
@@ -63,27 +63,7 @@ impl ProcessHost for ParseInterruptHost {
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
         self.inner.spawn(request)
     }
-    fn wait_start(
-        &self,
-        pid: ProcessId,
-    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
-        self.inner.wait_start(pid)
-    }
-    fn wait(
-        &self,
-        pid: ProcessId,
-    ) -> futures::future::LocalBoxFuture<'static, Result<i32, ProcessError>> {
-        self.inner.wait(pid)
-    }
-    fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
-        self.inner.kill(pid, signal)
-    }
-    fn wait_direct_group(
-        &self,
-        group: GroupId,
-    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
-        self.inner.wait_direct_group(group)
-    }
+    forward_process_waits!(inner);
     fn detach_group(
         &self,
         group: GroupId,

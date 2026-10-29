@@ -2,21 +2,8 @@ import assert from "node:assert/strict";
 import { Wasi, type Stream } from "waffle/core";
 import { MemFS } from "waffle/fs/memory";
 
-function leb(value: number): number[] {
-  const bytes: number[] = [];
-  do {
-    const byte = value & 127;
-    value >>>= 7;
-    bytes.push(byte | (value ? 128 : 0));
-  } while (value);
-  return bytes;
-}
-function name(value: string): number[] {
-  return leb(value.length).concat(Array.from(new TextEncoder().encode(value)));
-}
-function section(id: number, bytes: number[]): number[] {
-  return [id].concat(leb(bytes.length), bytes);
-}
+import { leb, name, section } from "./wasm-binary";
+
 // Tiny original guest. Each exported four-i32 function calls its actual WASI import.
 // No SDK, utility artifact, runtime instance, or guest fixture rebuild is needed.
 export function terminalGuest(stdio?: Partial<Record<0 | 1 | 2, Stream>>) {

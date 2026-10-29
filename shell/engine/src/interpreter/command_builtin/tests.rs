@@ -2,7 +2,7 @@
 use super::*;
 use crate::{
     io::{Capture, Endpoint, MemoryFs},
-    process::{InProcessHost, ProcessId},
+    process::{InProcessHost, ProcessId, forward_process_waits},
 };
 use futures::future::LocalBoxFuture;
 
@@ -57,24 +57,7 @@ impl ProcessHost for Host {
         self.spawns.set(self.spawns.get() + 1);
         self.inner.spawn(request)
     }
-    fn wait_start(
-        &self,
-        pid: ProcessId,
-    ) -> futures::future::LocalBoxFuture<'static, Result<(), ProcessError>> {
-        self.inner.wait_start(pid)
-    }
-    fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
-        self.inner.wait(pid)
-    }
-    fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
-        self.inner.kill(pid, signal)
-    }
-    fn wait_direct_group(
-        &self,
-        group: GroupId,
-    ) -> LocalBoxFuture<'static, Result<(), ProcessError>> {
-        self.inner.wait_direct_group(group)
-    }
+    forward_process_waits!(inner);
     fn detach_group(&self, group: GroupId) -> JoinHandle<Result<(), ProcessError>> {
         self.inner.detach_group(group)
     }
@@ -191,6 +174,7 @@ impl Rig {
             signal: signal.clone(),
             lifetime: (cancel.clone(), signal),
             cancel,
+            strand: super::super::Strand::untracked(),
             parameter_error_status: 127,
             loop_depth: 0,
             ignore_errexit: false,

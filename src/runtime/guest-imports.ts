@@ -18,10 +18,11 @@ export function shellTerminalImports(
     rows() {
       return buffer ? Math.max(2, Atomics.load(new SharedBridge(buffer).state, control.rows)) : 24;
     },
-    phase(phase: number) {
+    phase(phase: number, status: number) {
       if (!buffer) return;
       const bridge = new SharedBridge(buffer);
       if (bridge.closed() || (phase !== 1 && phase !== 2)) return;
+      if (phase === 1) return bridge.publishPrompt(status);
       if (Atomics.exchange(bridge.state, control.phase, phase) !== phase) bridge.signal();
     },
   };

@@ -200,6 +200,52 @@ const WASI_ERRNO_MESSAGES: [&str; 77] = [
 /// Completion means the host observed actual exits and released process-owned
 /// descriptors. EPIPE is an I/O error,
 /// NOT a reason for the host to overwrite a guest's chosen exit status with 141.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChildExit {
+    Exited(i32),
+    Signaled(i32),
+}
+impl ChildExit {
+    pub fn status(self) -> i32 {
+        match self {
+            Self::Exited(code) => code,
+            Self::Signaled(signal) => 128 + signal,
+        }
+    }
+}
+
+pub type ChildWait = LocalBoxFuture<'static, Result<ChildExit, ProcessError>>;
+
+/// Forward unchanged process waits in a host wrapper that customizes other operations.
+#[macro_export]
+macro_rules! forward_process_waits {
+    ($inner:ident) => {
+        fn wait_start(
+            &self,
+            pid: $crate::process::ProcessId,
+        ) -> futures::future::LocalBoxFuture<'static, Result<(), $crate::process::ProcessError>> {
+            self.$inner.wait_start(pid)
+        }
+        fn wait(&self, pid: $crate::process::ProcessId) -> $crate::process::ChildWait {
+            self.$inner.wait(pid)
+        }
+        fn kill(
+            &self,
+            pid: $crate::process::ProcessId,
+            signal: i32,
+        ) -> Result<(), $crate::process::ProcessError> {
+            self.$inner.kill(pid, signal)
+        }
+        fn wait_direct_group(
+            &self,
+            group: $crate::process::GroupId,
+        ) -> futures::future::LocalBoxFuture<'static, Result<(), $crate::process::ProcessError>> {
+            self.$inner.wait_direct_group(group)
+        }
+    };
+}
+pub use forward_process_waits;
+
 pub trait ProcessHost {
     /// Allocate a group ID synchronously, without running command work. IDs are
     /// unique for the lifetime of this host, including through shared handles and
@@ -226,7 +272,10 @@ pub trait ProcessHost {
     /// StartFailed carries the exec/fork errno; Runtime(11) means cancellation
     /// prevented entry and the terminal wait still owns its actual outcome.
     fn wait_start(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
-    fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>>;
+    fn wait(&self, pid: ProcessId) -> ChildWait;
+    fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
+        self.kill(pid, signal)
+    }
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError>;
     /// Wait only for shell-owned direct processes, never inherited descendants.
     /// The caller must first join its shell execution tasks so admission is done.
@@ -258,7 +307,7 @@ struct Child {
     direct: bool,
     cancel: Cancel,
     signal: Rc<Cell<i32>>,
-    exit: JoinHandle<i32>,
+    exit: JoinHandle<ChildExit>,
 }
 type Program = dyn Fn(SpawnRequest, Cancel) -> LocalBoxFuture<'static, i32>;
 struct HostState {
@@ -470,12 +519,12 @@ impl ProcessHost for InProcessHost {
         // registry code, and its inherited endpoints must still be dropped.
         let exit = self.0.executor.spawn(async move {
             if child_cancel.is_cancelled() {
-                return 128 + child_signal.get();
+                return ChildExit::Signaled(child_signal.get());
             }
             let future = program(request, child_cancel.clone());
             match child_cancel.run(future).await {
-                Ok(status) => status,
-                Err(_) => 128 + child_signal.get(),
+                Ok(status) => ChildExit::Exited(status),
+                Err(_) => ChildExit::Signaled(child_signal.get()),
             }
         });
         self.0.groups.borrow_mut().entry(group).or_insert(false);
@@ -503,7 +552,7 @@ impl ProcessHost for InProcessHost {
             .ok_or(ProcessError::UnknownProcess(pid));
         futures::future::ready(result).boxed_local()
     }
-    fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
+    fn wait(&self, pid: ProcessId) -> ChildWait {
         let exit = self
             .0
             .children
@@ -824,7 +873,10 @@ mod tests {
         for group in [0, 123, GroupId::MAX] {
             let pid = host.spawn(request("exit", group)).unwrap();
             ex.drive(10);
-            assert_eq!(host.wait(pid).now_or_never(), Some(Ok(17)));
+            assert_eq!(
+                host.wait(pid).now_or_never(),
+                Some(Ok(ChildExit::Exited(17)))
+            );
         }
         assert_eq!(host.retained_count(), 0);
     }
@@ -841,7 +893,7 @@ mod tests {
         assert!(!guard.terminated);
         ex.drive(10);
         assert_eq!(guard.finish().now_or_never(), Some(Ok(())));
-        assert_eq!(wait.now_or_never(), Some(Ok(17)));
+        assert_eq!(wait.now_or_never(), Some(Ok(ChildExit::Exited(17))));
         assert!(guard.terminated);
         drop(guard);
         assert_eq!(host.retained_count(), 0);
@@ -939,7 +991,7 @@ mod tests {
         assert_eq!(guard.finish().now_or_never(), None);
         drop(guard);
         ex.drive(20);
-        assert_eq!(wait.now_or_never(), Some(Ok(143)));
+        assert_eq!(wait.now_or_never(), Some(Ok(ChildExit::Signaled(15))));
         assert_eq!(host.retained_count(), 0);
     }
     #[test]
@@ -994,8 +1046,8 @@ mod tests {
         let other = host.wait(pid);
         ex.drive(10);
         assert_eq!(host.active_count(), 0);
-        assert_eq!(wait.now_or_never(), Some(Ok(7)));
-        assert_eq!(other.now_or_never(), Some(Ok(7)));
+        assert_eq!(wait.now_or_never(), Some(Ok(ChildExit::Exited(7))));
+        assert_eq!(other.now_or_never(), Some(Ok(ChildExit::Exited(7))));
         let mut bytes = [0; 8];
         assert_eq!(read.read(&mut bytes).now_or_never(), Some(Ok(2)));
         assert_eq!(&bytes[..2], b"ok");
@@ -1022,7 +1074,10 @@ mod tests {
         req.fds.insert(1, write);
         let pid = host.spawn(req).unwrap();
         ex.drive(10);
-        assert_eq!(host.wait(pid).now_or_never(), Some(Ok(23)));
+        assert_eq!(
+            host.wait(pid).now_or_never(),
+            Some(Ok(ChildExit::Exited(23)))
+        );
     }
     #[test]
     fn pid_kill_leaves_descendants_for_group_cleanup_without_background() {
@@ -1052,9 +1107,12 @@ mod tests {
         ex.drive(10);
         assert_eq!(host.active_count(), 1);
         assert_eq!(host.wait_group(1).now_or_never(), Some(Ok(())));
-        assert_eq!(root_wait.now_or_never(), Some(Ok(130)));
-        assert_eq!(child_wait.now_or_never(), Some(Ok(130)));
-        assert_eq!(grandchild_wait.now_or_never(), Some(Ok(130)));
+        assert_eq!(root_wait.now_or_never(), Some(Ok(ChildExit::Signaled(2))));
+        assert_eq!(child_wait.now_or_never(), Some(Ok(ChildExit::Signaled(2))));
+        assert_eq!(
+            grandchild_wait.now_or_never(),
+            Some(Ok(ChildExit::Signaled(2)))
+        );
         assert_eq!(host.retained_count(), 1);
         host.kill_group(2, 15).unwrap();
         assert!(matches!(
@@ -1063,7 +1121,7 @@ mod tests {
         ));
         let wait = host.wait(background);
         ex.drive(10);
-        assert_eq!(wait.now_or_never(), Some(Ok(143)));
+        assert_eq!(wait.now_or_never(), Some(Ok(ChildExit::Signaled(15))));
         assert_eq!(host.retained_count(), 0);
     }
     #[test]
@@ -1114,7 +1172,10 @@ mod tests {
         ex.drive(10);
         gate.notify();
         ex.drive(10);
-        assert_eq!(host.wait(middle).now_or_never(), Some(Ok(0)));
+        assert_eq!(
+            host.wait(middle).now_or_never(),
+            Some(Ok(ChildExit::Exited(0)))
+        );
         host.kill(root, 2).unwrap();
         ex.drive(10);
         assert!(host.wait(leaf).now_or_never().is_none());
@@ -1122,8 +1183,8 @@ mod tests {
         host.kill_group(1, 2).unwrap();
         ex.drive(10);
         assert_eq!(host.wait_group(1).now_or_never(), Some(Ok(())));
-        assert_eq!(root_wait.now_or_never(), Some(Ok(130)));
-        assert_eq!(leaf_wait.now_or_never(), Some(Ok(130)));
+        assert_eq!(root_wait.now_or_never(), Some(Ok(ChildExit::Signaled(2))));
+        assert_eq!(leaf_wait.now_or_never(), Some(Ok(ChildExit::Signaled(2))));
         assert_eq!(host.retained_count(), 0);
     }
     #[test]

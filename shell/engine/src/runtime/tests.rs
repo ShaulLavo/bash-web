@@ -3,7 +3,7 @@ use crate::{
     Limits, Session,
     executor::Cancel,
     io::{self, Capture, MemoryFs},
-    process::ProcessGroup,
+    process::{ChildExit, ProcessGroup},
 };
 use std::collections::BTreeSet;
 
@@ -375,6 +375,11 @@ impl Abi for Fake {
                 }));
                 return;
             }
+            if command == "handled-int" {
+                cancel.cancelled().await;
+                status.set(Some(WaitResult::Exited(argv[1].parse().unwrap())));
+                return;
+            }
             let run = async {
                 let output = fds.get(1).ok_or(1)?;
                 match command.as_str() {
@@ -711,12 +716,78 @@ fn shutdown_session(executor: &Executor, runtime: &Runtime, fake: &Fake, session
     );
     assert_eq!(runtime.retained_count(), 0);
     assert!(runtime.0.groups.borrow().is_empty());
-    assert!(runtime.0.inputs.borrow().is_empty());
-    assert_eq!(runtime.0.input_slots.get(), 0);
+    assert_input_released(runtime);
+    assert_no_runtime_waiters(executor, runtime, fake);
+}
+fn wait_status(executor: &Executor, runtime: &Runtime, pid: u64) -> Result<i32, ProcessError> {
+    finish(executor, runtime, executor.spawn(runtime.wait(pid))).map(ChildExit::status)
+}
+fn wait_status_now(runtime: &Runtime, pid: u64) -> Option<Result<i32, ProcessError>> {
+    runtime
+        .wait(pid)
+        .now_or_never()
+        .map(|result| result.map(ChildExit::status))
+}
+fn inherited_input(
+    executor: &Executor,
+    runtime: &Runtime,
+    fake: &Fake,
+) -> (GroupId, Endpoint, u64, u32) {
+    let group = runtime.allocate_group();
+    let mut spec = request(runtime, "inherit", group);
+    let source = Endpoint::bytes(vec![b'x'; io::PIPE_CAPACITY * 3]);
+    spec.fds.insert(0, source.clone());
+    let direct = runtime.spawn(spec).unwrap();
+    executor.drive(64);
+    assert_eq!(wait_status_now(runtime, direct), Some(Ok(0)));
+    let job = fake.job_of(direct as u32).unwrap();
+    (group, source, direct, job)
+}
+fn release_after_detach_error(
+    executor: &Executor,
+    runtime: &Runtime,
+    fake: &Fake,
+    group: GroupId,
+    direct: u64,
+    job: u32,
+) {
+    fake.wait_job_errors.borrow_mut().insert(job, 63);
+    assert_eq!(
+        runtime.detach_group(group).now_or_never(),
+        Some(Err(ProcessError::Runtime(63)))
+    );
+    fake.wait_job_errors.borrow_mut().remove(&job);
+    fake.descendant_gates.borrow()[&(direct as u32 + 1)].cancel();
+    executor.drive(64);
+}
+fn finish_group_and_check_idle(
+    executor: &Executor,
+    runtime: &Runtime,
+    fake: &Fake,
+    group: GroupId,
+) {
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert!(runtime.0.groups.borrow().is_empty());
+    assert!(runtime.0.waits.borrow().is_empty());
+    assert_no_runtime_waiters(executor, runtime, fake);
+}
+fn assert_no_runtime_waiters(executor: &Executor, runtime: &Runtime, fake: &Fake) {
     assert!(runtime.0.waiters.borrow().is_empty());
     assert!(fake.access_requests.borrow().is_empty());
+    assert_host_idle(executor, fake);
+}
+fn assert_host_idle(executor: &Executor, fake: &Fake) {
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     assert_eq!(executor.drive(64).pending, 0);
+}
+fn finish_sibling(executor: &Executor, runtime: &Runtime, fake: &Fake, group: GroupId, pid: u64) {
+    runtime.kill_group(group, 15).unwrap();
+    assert_eq!(wait_status(executor, runtime, pid), Ok(143));
+    finish_group_and_check_idle(executor, runtime, fake, group);
+}
+fn assert_input_released(runtime: &Runtime) {
+    assert!(runtime.0.inputs.borrow().is_empty());
+    assert_eq!(runtime.0.input_slots.get(), 0);
 }
 fn request(runtime: &Runtime, name: &str, group: GroupId) -> SpawnRequest {
     SpawnRequest {
@@ -938,10 +1009,7 @@ fn child_start_readiness_is_non_consuming_and_precedes_terminal_cleanup() {
             WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno)),
             _ => unreachable!(),
         };
-        assert_eq!(
-            finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-            expected
-        );
+        assert_eq!(wait_status(&executor, &runtime, pid), expected);
         assert_eq!(fake.start_status(pid as u32), Err(12));
         finish(
             &executor,
@@ -1003,10 +1071,7 @@ fn cancelled_pending_start_preserves_terminal_signal_without_diagnostic() {
         finish(&executor, &runtime, started),
         Err(ProcessError::Runtime(11))
     );
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(130)
-    );
+    assert_eq!(wait_status(&executor, &runtime, pid), Ok(130));
     finish(
         &executor,
         &runtime,
@@ -1410,15 +1475,8 @@ fn spawn_forwards_resolved_executable_separately_from_original_argv_zero() {
         "/home/guest/done"
     );
     assert_eq!(fake.requests.borrow().last().unwrap().argv, ["done", "ARG"]);
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(0)
-    );
-    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
-    assert!(runtime.0.groups.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_eq!(wait_status(&executor, &runtime, pid), Ok(0));
+    finish_group_and_check_idle(&executor, &runtime, &fake, group);
 }
 
 #[test]
@@ -1897,7 +1955,7 @@ fn dropping_detached_wait_observer_preserves_runtime_reaper() {
     let group = runtime.allocate_group();
     let parent = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
     executor.drive(64);
-    assert_eq!(runtime.wait(parent).now_or_never(), Some(Ok(0)));
+    assert_eq!(wait_status_now(&runtime, parent), Some(Ok(0)));
     drop(runtime.detach_group(group));
     fake.descendant_gate.cancel();
     for _ in 0..10 {
@@ -2031,10 +2089,7 @@ fn group_wait_includes_later_children_and_every_descendant_confirmation() {
     );
 
     fake.held_jobs.borrow_mut().insert(first_job);
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(first))),
-        Ok(0)
-    );
+    assert_eq!(wait_status(&executor, &runtime, first), Ok(0));
     let done = executor.spawn(runtime.wait_group(group));
     executor.drive(64);
     assert!(!done.is_finished());
@@ -2068,10 +2123,7 @@ fn killing_dynamic_background_group_rejects_new_members_and_isolates_siblings() 
     let first = runtime.spawn(request(&runtime, "exit", group)).unwrap();
     let first_job = fake.job_of(first as u32).unwrap();
     fake.held_jobs.borrow_mut().insert(first_job);
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(first))),
-        Ok(0)
-    );
+    assert_eq!(wait_status(&executor, &runtime, first), Ok(0));
     let later = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
     let later_job = fake.job_of(later as u32).unwrap();
     let foreground_pid = runtime
@@ -2129,10 +2181,7 @@ fn group_fanout_continues_after_errors_and_invalid_signal_does_not_close_admissi
     let first = runtime.spawn(request(&runtime, "exit", group)).unwrap();
     let first_job = fake.job_of(first as u32).unwrap();
     fake.wait_job_errors.borrow_mut().insert(first_job, 63);
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(first))),
-        Ok(0)
-    );
+    assert_eq!(wait_status(&executor, &runtime, first), Ok(0));
     let later = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
     let later_job = fake.job_of(later as u32).unwrap();
     fake.kill_job_errors.borrow_mut().insert(first_job, 71);
@@ -2500,11 +2549,9 @@ fn buffered_input_admission_is_bounded_and_released_after_cancellation() {
             .all(|child| child.status.get() == Some(WaitResult::Signaled(15)))
     );
     assert!(runtime.0.groups.borrow().is_empty());
-    assert!(runtime.0.inputs.borrow().is_empty());
-    assert_eq!(runtime.0.input_slots.get(), 0);
+    assert_input_released(&runtime);
     assert_eq!(runtime.retained_count(), 0);
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_host_idle(&executor, &fake);
 }
 
 #[test]
@@ -3204,7 +3251,7 @@ fn completed_inherited_jobs_release_admission_during_one_foreground_group() {
     for _ in 0..MAX_RETAINED_PROCESSES + 1 {
         let direct = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
         executor.drive(64);
-        assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+        assert_eq!(wait_status_now(&runtime, direct), Some(Ok(0)));
         let member = direct as u32 + 1;
         assert_eq!(fake.wait(member), Err(AGAIN));
         fake.descendant_gates.borrow()[&member].cancel();
@@ -3215,8 +3262,7 @@ fn completed_inherited_jobs_release_admission_during_one_foreground_group() {
     assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
     assert_eq!(fake.reaped_jobs.borrow().len(), MAX_RETAINED_PROCESSES + 1);
     assert!(runtime.0.groups.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_host_idle(&executor, &fake);
 }
 
 #[test]
@@ -3226,8 +3272,8 @@ fn group_reaps_later_inherited_job_while_earlier_member_stays_live() {
     let first = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
     let later = runtime.spawn(request(&runtime, "inherit", group)).unwrap();
     executor.drive(64);
-    assert_eq!(runtime.wait(first).now_or_never(), Some(Ok(0)));
-    assert_eq!(runtime.wait(later).now_or_never(), Some(Ok(0)));
+    assert_eq!(wait_status_now(&runtime, first), Some(Ok(0)));
+    assert_eq!(wait_status_now(&runtime, later), Some(Ok(0)));
     let first_job = fake.job_of(first as u32).unwrap();
     let later_job = fake.job_of(later as u32).unwrap();
     let done = executor.spawn(runtime.wait_group(group));
@@ -3249,8 +3295,7 @@ fn group_reaps_later_inherited_job_while_earlier_member_stays_live() {
     assert_eq!(*fake.reaped_jobs.borrow(), vec![later_job, first_job]);
     assert!(runtime.0.waiters.borrow().is_empty());
     assert!(runtime.0.groups.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_host_idle(&executor, &fake);
 }
 
 #[test]
@@ -3278,7 +3323,7 @@ fn admission_sweep_preserves_unconsumed_direct_status_and_failed_job_handles() {
     assert!(fake.reaped_jobs.borrow().is_empty());
     assert_eq!(runtime.retained_count(), 2);
     fake.wait_job_errors.borrow_mut().insert(first_job, 63);
-    assert_eq!(runtime.wait(first).now_or_never(), Some(Ok(0)));
+    assert_eq!(wait_status_now(&runtime, first), Some(Ok(0)));
     let third = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
     assert!(
         runtime.0.groups.borrow()[&group]
@@ -3302,27 +3347,16 @@ fn admission_sweep_preserves_unconsumed_direct_status_and_failed_job_handles() {
     let pid = runtime.spawn(request(&runtime, "done", sibling)).unwrap();
     assert!(fake.reaped_jobs.borrow().contains(&first_job));
     assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(0)
-    );
+    assert_eq!(wait_status(&executor, &runtime, pid), Ok(0));
     assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
     assert!(runtime.0.groups.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_host_idle(&executor, &fake);
 }
 
 #[test]
 fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
     let (executor, fake, runtime) = setup();
-    let group = runtime.allocate_group();
-    let mut spec = request(&runtime, "inherit", group);
-    let source = Endpoint::bytes(vec![b'x'; io::PIPE_CAPACITY * 3]);
-    spec.fds.insert(0, source.clone());
-    let direct = runtime.spawn(spec).unwrap();
-    executor.drive(64);
-    assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
-    let job = fake.job_of(direct as u32).unwrap();
+    let (group, source, direct, job) = inherited_input(&executor, &runtime, &fake);
     let done = executor.spawn(runtime.wait_group(group));
     executor.drive(64);
     assert!(
@@ -3357,19 +3391,8 @@ fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
         Some(Ok(())),
         "no ABI poll of a reaped job is needed"
     );
-    assert!(runtime.0.inputs.borrow().is_empty());
-    assert_eq!(runtime.0.input_slots.get(), 0);
-    runtime.kill_group(sibling, 15).unwrap();
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(143)
-    );
-    assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
-    assert!(runtime.0.groups.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
-    assert!(fake.access_requests.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_input_released(&runtime);
+    finish_sibling(&executor, &runtime, &fake, sibling, pid);
 }
 
 #[test]
@@ -3386,16 +3409,9 @@ fn healed_wait_errors_keep_logical_cleanup_bounded_until_successful_retry() {
         }
         let direct = direct.unwrap();
         executor.drive(64);
-        assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
+        assert_eq!(wait_status_now(&runtime, direct), Some(Ok(0)));
         let job = fake.job_of(direct as u32).unwrap();
-        fake.wait_job_errors.borrow_mut().insert(job, 63);
-        assert_eq!(
-            runtime.detach_group(group).now_or_never(),
-            Some(Err(ProcessError::Runtime(63)))
-        );
-        fake.wait_job_errors.borrow_mut().remove(&job);
-        fake.descendant_gates.borrow()[&(direct as u32 + 1)].cancel();
-        executor.drive(64);
+        release_after_detach_error(&executor, &runtime, &fake, group, direct, job);
         failed.push(group);
     }
     assert_eq!(runtime.retained_count(), 0);
@@ -3409,37 +3425,15 @@ fn healed_wait_errors_keep_logical_cleanup_bounded_until_successful_retry() {
     assert_eq!(runtime.retained_slots(), 0);
     let group = runtime.allocate_group();
     let pid = runtime.spawn(request(&runtime, "done", group)).unwrap();
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(0)
-    );
-    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
-    assert!(runtime.0.groups.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
-    assert!(fake.access_requests.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_eq!(wait_status(&executor, &runtime, pid), Ok(0));
+    finish_group_and_check_idle(&executor, &runtime, &fake, group);
 }
 
 #[test]
 fn healed_wait_error_keeps_input_ownership_charged_until_retry_completes() {
     let (executor, fake, runtime) = setup();
-    let group = runtime.allocate_group();
-    let mut spec = request(&runtime, "inherit", group);
-    let source = Endpoint::bytes(vec![b'x'; io::PIPE_CAPACITY * 3]);
-    spec.fds.insert(0, source.clone());
-    let direct = runtime.spawn(spec).unwrap();
-    executor.drive(64);
-    assert_eq!(runtime.wait(direct).now_or_never(), Some(Ok(0)));
-    let job = fake.job_of(direct as u32).unwrap();
-    fake.wait_job_errors.borrow_mut().insert(job, 63);
-    assert_eq!(
-        runtime.detach_group(group).now_or_never(),
-        Some(Err(ProcessError::Runtime(63)))
-    );
-    fake.wait_job_errors.borrow_mut().remove(&job);
-    fake.descendant_gates.borrow()[&(direct as u32 + 1)].cancel();
-    executor.drive(64);
+    let (group, source, direct, job) = inherited_input(&executor, &runtime, &fake);
+    release_after_detach_error(&executor, &runtime, &fake, group, direct, job);
     let sibling = runtime.allocate_group();
     let pid = runtime.spawn(request(&runtime, "sleep", sibling)).unwrap();
     assert!(fake.reaped_jobs.borrow().contains(&job));
@@ -3459,20 +3453,8 @@ fn healed_wait_error_keeps_input_ownership_charged_until_retry_completes() {
     assert_eq!(finish(&executor, &runtime, retry), Ok(()));
     assert!(!runtime.0.groups.borrow().contains_key(&group));
     assert_eq!(runtime.retained_slots(), 1);
-    assert!(runtime.0.inputs.borrow().is_empty());
-    assert_eq!(runtime.0.input_slots.get(), 0);
-    runtime.kill_group(sibling, 15).unwrap();
-    assert_eq!(
-        finish(&executor, &runtime, executor.spawn(runtime.wait(pid))),
-        Ok(143)
-    );
-    assert_eq!(runtime.wait_group(sibling).now_or_never(), Some(Ok(())));
-    assert!(runtime.0.groups.borrow().is_empty());
-    assert!(runtime.0.waits.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
-    assert!(fake.access_requests.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_input_released(&runtime);
+    finish_sibling(&executor, &runtime, &fake, sibling, pid);
 }
 
 #[test]
@@ -3482,7 +3464,7 @@ fn runtime_job_retention_is_bounded_and_empty_jobs_do_not_accumulate() {
     for _ in 0..MAX_RETAINED_PROCESSES + 1 {
         let pid = runtime.spawn(request(&runtime, "done", group)).unwrap();
         executor.drive(64);
-        assert_eq!(runtime.wait(pid).now_or_never(), Some(Ok(0)));
+        assert_eq!(wait_status_now(&runtime, pid), Some(Ok(0)));
         assert!(runtime.0.groups.borrow()[&group].runtime_jobs.is_empty());
     }
     // Residual jobs, not just direct pid records, occupy the shared admission
@@ -3525,8 +3507,7 @@ fn runtime_job_retention_is_bounded_and_empty_jobs_do_not_accumulate() {
     assert_eq!(runtime.retained_count(), 0);
     assert!(runtime.0.groups.borrow().is_empty());
     assert!(runtime.0.waits.borrow().is_empty());
-    assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_host_idle(&executor, &fake);
 }
 
 #[test]
@@ -4044,3 +4025,91 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
 
 mod inherited;
 mod read_exact;
+
+#[test]
+fn handled_interrupt_preserves_child_status_after_cleanup() {
+    for code in [0, 7] {
+        handled_interrupt_result(&format!("handled-int {code}"), code, b"");
+        handled_interrupt_result(&format!("handled-int {code}; echo AFTER"), 0, b"AFTER\n");
+        handled_interrupt_result(&format!("{{ handled-int {code}; }}"), code, b"");
+        handled_interrupt_result(
+            &format!("while :; do :; done | handled-int {code}"),
+            130,
+            b"",
+        );
+    }
+}
+
+fn handled_interrupt_result(source: &str, expected: i32, expected_output: &[u8]) {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let command = session.start(source).unwrap();
+    executor.drive(64);
+    assert_eq!(fake.children.borrow().len(), 1);
+    session.interrupt();
+    let actual = finish(&executor, &runtime, command);
+    let output = fake.output.bytes();
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert_eq!(output, expected_output, "{source}");
+    assert_eq!(actual, expected, "{source}");
+}
+
+#[test]
+fn delivered_sigint_stops_a_default_child_loop() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let command = session.start("while :; do sleep; done").unwrap();
+    executor.drive(64);
+    session.interrupt();
+    let actual = finish(&executor, &runtime, command);
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert_eq!(actual, 130);
+}
+
+#[test]
+fn terminal_child_delivery_is_non_closing_and_uses_its_runtime_job_only_when_owned() {
+    for own_job in [false, true] {
+        let (executor, fake, runtime) = setup();
+        runtime.set_job_control(own_job);
+        let group = runtime.allocate_group();
+        let pid = runtime.spawn(request(&runtime, "sleep", group)).unwrap();
+        executor.drive(64);
+        let job = fake.children.borrow()[&(pid as u32)].job;
+        runtime.signal_child(pid, 2).unwrap();
+        runtime.signal_child(pid, 2).unwrap();
+        let id = if own_job { job } else { pid as u32 };
+        assert_eq!(*fake.signals.borrow(), vec![(own_job, id, 2); 2]);
+        assert!(!runtime.0.groups.borrow()[&group].closing);
+        let next = runtime.spawn(request(&runtime, "emit", group)).unwrap();
+        let first = finish(&executor, &runtime, executor.spawn(runtime.wait(pid))).unwrap();
+        assert_eq!(first, crate::process::ChildExit::Signaled(2));
+        assert_eq!(
+            finish(&executor, &runtime, executor.spawn(runtime.wait(next))).unwrap(),
+            crate::process::ChildExit::Exited(0)
+        );
+        finish(
+            &executor,
+            &runtime,
+            executor.spawn(runtime.wait_group(group)),
+        )
+        .unwrap();
+        assert_eq!(runtime.retained_count(), 0);
+    }
+}
+
+#[test]
+fn delegated_waiting_interrupt_is_acknowledged_once_without_canceling_the_job() {
+    let (executor, fake, runtime) = setup();
+    runtime.set_job_control(true);
+    let session = runtime_session(&executor, &runtime);
+    let command = session.start("handled-int 7").unwrap();
+    executor.drive(64);
+    session.interrupt();
+    assert!(session.take_delegated_interrupt());
+    assert!(!session.take_delegated_interrupt());
+    assert_eq!(fake.signals.borrow().len(), 1);
+    assert!(fake.signals.borrow()[0].0);
+    let code = finish(&executor, &runtime, command);
+    shutdown_session(&executor, &runtime, &fake, session);
+    assert_eq!(code, 7);
+}

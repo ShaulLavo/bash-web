@@ -19,7 +19,11 @@ export const control = {
 } as const;
 export const INPUT_CAPACITY = 65536;
 export const OUTPUT_CAPACITY = 262144;
-const HEADER_BYTES = 64;
+const HEADER_BYTES = 72;
+export interface ShellPrompt {
+  readonly generation: bigint;
+  readonly status: number;
+}
 export interface BridgeInputRoute {
   push(bytes: Uint8Array): number;
   available(): number;
@@ -31,6 +35,7 @@ export interface BridgeInputRoute {
 }
 export class SharedBridge {
   private route?: BridgeInputRoute;
+  private readonly promptState: BigInt64Array;
   readonly state: Int32Array;
   readonly input: Uint8Array;
   readonly output: Uint8Array;
@@ -39,8 +44,23 @@ export class SharedBridge {
     readonly buffer = new SharedArrayBuffer(HEADER_BYTES + INPUT_CAPACITY + OUTPUT_CAPACITY),
   ) {
     this.state = new Int32Array(buffer, 0, HEADER_BYTES / 4);
+    this.promptState = new BigInt64Array(buffer, 64, 1);
     this.input = new Uint8Array(buffer, HEADER_BYTES, INPUT_CAPACITY);
     this.output = new Uint8Array(buffer, HEADER_BYTES + INPUT_CAPACITY, OUTPUT_CAPACITY);
+  }
+  /** One atomic receipt pairs the generation with its shell status. */
+  readPrompt(): ShellPrompt | undefined {
+    const receipt = Atomics.load(this.promptState, 0);
+    if (receipt === 0n) return;
+    return { generation: receipt >> 8n, status: Number(receipt & 255n) };
+  }
+  /** The interactive guest is the only writer of prompt receipts. */
+  publishPrompt(status: number): void {
+    const generation = (Atomics.load(this.promptState, 0) >> 8n) + 1n;
+    Atomics.store(this.state, control.status, status);
+    Atomics.store(this.state, control.phase, 1);
+    Atomics.store(this.promptState, 0, (generation << 8n) | BigInt(status & 255));
+    this.signal();
   }
   signal() {
     Atomics.add(this.state, control.wake, 1);

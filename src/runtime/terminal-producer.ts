@@ -189,9 +189,9 @@ function acquireTerminalProducer(
         replaceEditor(group: TerminalGroup, member: TerminalMember) {
           next = { group, member };
         },
-        restoreEditor(): TerminalResult<void> {
+        restoreEditor(mode: TerminalMode): TerminalResult<void> {
           return terminalResult(() => {
-            const group = terminalValue(authority.createGroup({ initialMode: "raw" }));
+            const group = terminalValue(authority.createGroup({ initialMode: mode }));
             const member = terminalValue(
               authority.admitExisting({ group, pid: options.controller.pid }),
             ).member;
@@ -201,11 +201,11 @@ function acquireTerminalProducer(
             next = { group, member };
           });
         },
-        raw(): TerminalResult<void> {
+        mode(mode: TerminalMode): TerminalResult<void> {
           return terminalResult(() => {
             const controls = terminalControls(stream)!;
             const snapshot = terminalValue(controls.snapshot());
-            terminalValue(controls.setMode({ expected: snapshot.selection, mode: "raw" }));
+            terminalValue(controls.setMode({ expected: snapshot.selection, mode }));
           });
         },
         read(chunks: readonly Uint8Array[]) {

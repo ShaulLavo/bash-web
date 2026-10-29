@@ -66,7 +66,7 @@ test("terminal ring wraps without losing binary bytes or exceeding its fixed cap
   assert.deepEqual(a, binary.subarray(0, 2));
   assert.deepEqual(b.subarray(0, 3), binary.subarray(2));
   assert.equal(bridge.availableInput(), 0);
-  assert.equal(bridge.buffer.byteLength, 64 + INPUT_CAPACITY + OUTPUT_CAPACITY);
+  assert.equal(bridge.buffer.byteLength, 72 + INPUT_CAPACITY + OUTPUT_CAPACITY);
 });
 
 test("arbitrary fd remapping preserves transferable terminal endpoint provenance", () => {
@@ -225,7 +225,7 @@ test("unrecoverable crashed holder fails terminal closed without unsafe lock rec
   assert.equal(bridge.closed(), true);
   assert.equal(createBridgeTerminal(bridge.buffer, 0).tryRead!([new Uint8Array(1)]), -29);
   assert.equal(createBridgeTerminal(bridge.buffer, 1).tryWrite!([new Uint8Array([1])]), -29);
-  shellTerminalImports(bridge.buffer).phase(1);
+  shellTerminalImports(bridge.buffer).phase(1, 0);
   assert.equal(
     Atomics.load(bridge.state, control.phase),
     4,
@@ -259,7 +259,7 @@ test("all child terminal fds share fresh admission, independently of parent and 
 
 test("child shell phase imports exist without changing root terminal ownership", () => {
   const bridge = new SharedBridge();
-  shellTerminalImports(bridge.buffer).phase(1);
-  shellTerminalImports().phase(2);
+  shellTerminalImports(bridge.buffer).phase(1, 0);
+  shellTerminalImports().phase(2, 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 1);
 });

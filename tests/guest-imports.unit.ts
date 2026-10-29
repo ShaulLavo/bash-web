@@ -276,3 +276,23 @@ test("production worker keeps terminal stdio for an empty root transport but not
     }
   }
 });
+
+test("prompt publication stores shell status before ready and wakes repeated ready prompts", () => {
+  const bridge = new SharedBridge();
+  const root = shellTerminalImports(bridge.buffer);
+  root.phase(2, 0);
+  root.phase(1, 1);
+  assert.equal(Atomics.load(bridge.state, control.phase), 1);
+  assert.equal(Atomics.load(bridge.state, control.status), 1);
+  const wake = Atomics.load(bridge.state, control.wake);
+  root.phase(1, 130);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
+  assert.ok(Atomics.load(bridge.state, control.wake) > wake);
+  root.phase(2, 42);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
+  shellTerminalImports().phase(1, 7);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
+  bridge.close();
+  root.phase(1, 0);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
+});
