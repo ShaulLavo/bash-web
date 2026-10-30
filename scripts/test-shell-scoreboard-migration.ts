@@ -125,6 +125,9 @@ function makeOracle(
     cases: ["YQ==", "Yg=="].map((stdout, index) => ({
       id: `oils:${index}`,
       corpus: "oils",
+      file: "fixture.spec.ts",
+      line: index + 1,
+      name: `fixture ${index}`,
       category: "fixture",
       kind: "builtins-only",
       code: "printf a",
@@ -603,6 +606,15 @@ function processState(pid: number): { active: boolean; start?: string } {
     throw error;
   }
 }
+function readProcessMarker(marker: string): { pid: number; start: string | undefined } {
+  const pid = Number(readFileSync(marker, "utf8"));
+  return { pid, start: processState(pid).start };
+}
+async function killOwnedProcess(pid: number | undefined, start: string | undefined): Promise<void> {
+  if (!pid || processState(pid).start !== start || !processState(pid).active) return;
+  process.kill(pid, "SIGKILL");
+  await until(() => !processState(pid).active);
+}
 for (const descendant of [false, true]) {
   for (const cancellation of ["TERM", "parent disconnect"]) {
     test(`${cancellation} stops ${descendant ? "descendant after leader exit" : "child"} before removing scratch`, async () => {
@@ -623,8 +635,7 @@ for (const descendant of [false, true]) {
               const scratch = readdirSync(runner)[0];
               const marker = scratch && resolve(runner, scratch, "started");
               if (!marker || !existsSync(marker)) return false;
-              pid = Number(readFileSync(marker, "utf8"));
-              start = processState(pid).start;
+              ({ pid, start } = readProcessMarker(marker));
               return start !== undefined;
             });
             assert.ok(pid);
@@ -641,15 +652,7 @@ for (const descendant of [false, true]) {
             child.kill("SIGTERM");
             await exited;
             // Emergency fixture teardown also owns the grandchild if an assertion exposes a bug.
-            const ownedPid = pid;
-            if (
-              ownedPid &&
-              processState(ownedPid).start === start &&
-              processState(ownedPid).active
-            ) {
-              process.kill(ownedPid, "SIGKILL");
-              await until(() => !processState(ownedPid).active);
-            }
+            await killOwnedProcess(pid, start);
           }
         },
         { hang: true, descendant },
@@ -733,11 +736,7 @@ ${Buffer.concat(errors)}`,
           child.kill("SIGTERM");
           await exited;
           clearTimeout(watchdog);
-          const ownedPid = pid;
-          if (ownedPid && processState(ownedPid).start === start && processState(ownedPid).active) {
-            process.kill(ownedPid, "SIGKILL");
-            await until(() => !processState(ownedPid).active);
-          }
+          await killOwnedProcess(pid, start);
           // Even a watchdog failure must await the orphan launcher's IPC-disconnect cleanup
           // before the outer fixture removes its files. The entrypoint's own scratch is ours.
           await until(

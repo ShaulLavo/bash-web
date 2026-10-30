@@ -272,8 +272,12 @@ function inputs(): RecomputeInputs {
     baseSha: "a".repeat(40),
     mainSha: "a".repeat(40),
   };
-  const score = fixture.score(["a", "x"]);
-  const base = { ...fixture.floor(["a", "y"]), run: { runId: 2, attempt: 1 }, lostIds: [] };
+  const score = structuredClone(fixture.score(["a", "x"]));
+  const base = structuredClone({
+    ...fixture.floor(["a", "y"]),
+    run: { runId: 2, attempt: 1 },
+    lostIds: [],
+  });
   const raw: HistoricalAcceptedRawScore = {
     schema: 1,
     kind: "raw-score",
@@ -284,7 +288,7 @@ function inputs(): RecomputeInputs {
     inputsSha256: "inputs",
     resultSha256: digest(score),
     score,
-    floor: fixture.floor(["a"]),
+    floor: structuredClone(fixture.floor(["a"])),
   };
   const receipt = qualification(fixture.oracle, raw.floor, score, binding);
   const record: AcceptedGainRecord = {

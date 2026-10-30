@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { parse } from "yaml";
 import {
   artifactJson,
   assertAcceptedRecordCheckout,
@@ -13,7 +12,6 @@ import {
   git,
   mainEvidence,
   oracleAt,
-  requestArtifact,
   requestArtifacts,
   requestJobs,
   requestPullRequest,
@@ -29,7 +27,6 @@ import type {
   HostRun,
   PullRequest,
   RawScore,
-  UploaderEvidence,
 } from "./shell-scoreboard-main.ts";
 import {
   accumulateFloor,
@@ -40,18 +37,23 @@ import {
   validateOwnScore,
 } from "./shell-scoreboard-floor.ts";
 import type { MainFloor, Qualification } from "./shell-scoreboard-floor.ts";
-import {
-  assertBinding,
-  assertRecord,
-  assertRunBinding,
-  digest,
-  isRecord,
-} from "./shell-scoreboard.ts";
+import { assertRecord, assertRunBinding, digest, isRecord } from "./shell-scoreboard.ts";
 import type { Binding, Oracle, PullRequestBinding, RunBinding } from "./shell-scoreboard.ts";
-import { assertHistoricalRaw } from "./shell-scoreboard-accepted-gains.ts";
+import {
+  assertHistoricalRaw,
+  assertLandedContribution,
+  assertArtifactClaim,
+  claimedArtifactMetadata,
+  time,
+  unique,
+  assertHistoricalJobSet,
+} from "./shell-scoreboard-accepted-gains.ts";
 import type {
   AcceptedGainFloor,
   HistoricalAcceptedRawScore,
+  ArtifactClaim,
+  Lifetime,
+  LandedContribution,
 } from "./shell-scoreboard-accepted-gains.ts";
 
 export const terminalCut = Object.freeze({
@@ -64,15 +66,6 @@ export const terminalCut = Object.freeze({
   recordPath: "scoreboard/accepted-gains/terminal-main-2026-10-29.json",
   recordDigest: "ce9ea1108674599cc30734efc58f711f2c145e455468852f9be4078694de3dec",
 });
-interface ArtifactClaim {
-  artifactId: number;
-  archiveSha256: string;
-  payloadSha256: string;
-  uploader: UploaderEvidence;
-}
-interface Lifetime {
-  expires: number;
-}
 export interface TerminalContributionRecord {
   landed: {
     mergeCommit: string;
@@ -91,25 +84,10 @@ export interface TerminalContributionRecord {
   gainsSha256: string;
   [key: string]: unknown;
 }
-export interface TerminalLandedEntry extends TerminalContributionRecord {
-  landed: {
-    pr: number;
-    mergeCommit: string;
-    firstParent: string;
-    tree: string;
-    [key: string]: unknown;
+export type TerminalLandedEntry = TerminalContributionRecord &
+  LandedContribution & {
+    artifacts: { raw: ArtifactClaim; qualification: ArtifactClaim };
   };
-  original: {
-    binding: PullRequestBinding;
-    run: RunBinding;
-    tree: string;
-    inputsSha256: string;
-    resultSha256: string;
-    capturedFloorSha256: string;
-    [key: string]: unknown;
-  };
-  artifacts: { raw: ArtifactClaim; qualification: ArtifactClaim };
-}
 export interface TerminalRequirementRecord {
   base: {
     sourceSha: string;
@@ -146,17 +124,6 @@ interface TerminalFacts {
   composedTree: string;
   inputsSha256: string;
 }
-function time(value: unknown): number {
-  assert.ok(typeof value === "string", "missing evidence time");
-  const result = Date.parse(value);
-  assert.ok(Number.isFinite(result), "missing evidence time");
-  return result;
-}
-function unique<T>(items: T[], predicate: (item: T) => boolean, label: string): T {
-  const matches = items.filter(predicate);
-  assert.equal(matches.length, 1, `missing/ambiguous ${label}`);
-  return matches[0];
-}
 function complete<List extends { total_count: number }, Field extends keyof List>(
   value: List,
   field: Field,
@@ -192,38 +159,11 @@ function recordEntries(root: string, sourceSha: string): string[] {
     .split("\n")
     .filter(Boolean);
 }
-function assertUploaderEvidence(value: unknown): asserts value is UploaderEvidence {
-  assertRecord(value);
-  for (const key of ["runId", "attempt", "jobId", "artifactId"])
-    assert.equal(typeof value[key], "number", `invalid uploader ${key}`);
-  for (const key of ["archiveSha256", "uploaderLogsSha256"])
-    assert.equal(typeof value[key], "string", `invalid uploader ${key}`);
-}
-function assertArtifactClaim(value: unknown): asserts value is ArtifactClaim {
-  assertRecord(value);
-  assert.equal(typeof value.artifactId, "number", "invalid artifact claim");
-  assert.equal(typeof value.archiveSha256, "string", "invalid artifact archive");
-  assert.equal(typeof value.payloadSha256, "string", "invalid artifact payload");
-  assertUploaderEvidence(value.uploader);
-}
 function assertLandedEntry(value: unknown): asserts value is TerminalLandedEntry {
-  assertRecord(value);
-  assertRecord(value.landed);
-  assert.equal(typeof value.landed.pr, "number", "invalid landed PR");
-  for (const key of ["mergeCommit", "firstParent", "tree"])
-    assert.equal(typeof value.landed[key], "string", `invalid landed ${key}`);
-  assertRecord(value.original);
-  assertBinding(value.original.binding);
-  assert.equal(value.original.binding.kind, "pull-request");
-  assertRunBinding(value.original.run);
-  for (const key of ["tree", "inputsSha256", "resultSha256", "capturedFloorSha256"])
-    assert.equal(typeof value.original[key], "string", `invalid original ${key}`);
+  assertLandedContribution(value);
   assertRecord(value.artifacts);
   assertArtifactClaim(value.artifacts.raw);
   assertArtifactClaim(value.artifacts.qualification);
-  assert.ok(Array.isArray(value.gains), "missing terminal gains");
-  for (const id of value.gains) assert.equal(typeof id, "string", "invalid terminal gain");
-  assert.equal(typeof value.gainsSha256, "string", "invalid terminal gain digest");
 }
 export function assertTerminalRecord(value: unknown): asserts value is TerminalRecord {
   assertRecord(value);
@@ -340,23 +280,7 @@ export function assertTerminalJobs(
   workflow: string,
   mergedAt: string,
 ): void {
-  const definition: unknown = parse(workflow);
-  assertRecord(definition);
-  assertRecord(definition.jobs);
-  const names = Object.keys(definition.jobs).sort();
-  assert.equal(names.length, 12, "reviewed terminal Shell job set");
-  assert.deepEqual(jobs.map((job) => job.name).sort(), names, "missing/extra original job");
-  assert.equal(run.status, "completed");
-  assert.equal(run.conclusion, "success");
-  for (const job of jobs) {
-    assertJobBinding(job, run);
-    assert.equal(job.status, "completed");
-    assert.equal(job.conclusion, "success");
-    assert.ok(
-      time(job.started_at) <= time(job.completed_at) && time(job.completed_at) < time(mergedAt),
-      "original job finished after merge",
-    );
-  }
+  assertHistoricalJobSet(run, jobs, workflow, mergedAt, 12, "reviewed terminal Shell job set");
 }
 export function assertTerminalLanded(
   record: TerminalLandedEntry,
@@ -404,9 +328,7 @@ async function artifact(
   kind: ArtifactKind,
   lifetime: Lifetime,
 ): Promise<unknown> {
-  const metadata = await requestArtifact(client, `/actions/artifacts/${claim.artifactId}`);
-  assert.equal(metadata.id, claim.artifactId);
-  assert.equal(metadata.digest, `sha256:${claim.archiveSha256}`);
+  const metadata = await claimedArtifactMetadata(client, claim);
   lifetime.expires = Math.min(lifetime.expires, time(metadata.expires_at));
   assert.ok(lifetime.expires > Date.now(), "expired recovery evidence");
   const job = unique(host.jobs, (item) => item.id === claim.uploader.jobId, "recorded uploader");

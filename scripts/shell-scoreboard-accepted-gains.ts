@@ -26,6 +26,7 @@ import {
 import type {
   ArtifactKind,
   GithubClient,
+  HostArtifact,
   HostJob,
   HostRun,
   PullRequest,
@@ -93,7 +94,7 @@ export interface PreparedCandidate {
   selected: Binding;
   run: RunBinding;
 }
-interface Lifetime {
+export interface Lifetime {
   expires: number;
 }
 interface PreparationContext {
@@ -102,7 +103,7 @@ interface PreparationContext {
   oracle: Oracle;
   lifetime: Lifetime;
 }
-interface ArtifactClaim {
+export interface ArtifactClaim {
   artifactId: number;
   archiveSha256: string;
   payloadSha256: string;
@@ -128,7 +129,7 @@ export interface AcceptedGainRecord {
   baseFloor: { sourceSha: string; run: RunBinding; floorSha256: string };
   [key: string]: unknown;
 }
-export interface AcceptedRecord extends AcceptedGainRecord {
+export interface LandedContribution {
   landed: {
     pr: number;
     mergeCommit: string;
@@ -145,8 +146,14 @@ export interface AcceptedRecord extends AcceptedGainRecord {
     capturedFloorSha256: string;
     [key: string]: unknown;
   };
-  artifacts: { raw: ArtifactClaim; qualification: ArtifactClaim; baseFloor: ArtifactClaim };
+  gains: string[];
+  gainsSha256: string;
+  [key: string]: unknown;
 }
+export type AcceptedRecord = AcceptedGainRecord &
+  LandedContribution & {
+    artifacts: { raw: ArtifactClaim; qualification: ArtifactClaim; baseFloor: ArtifactClaim };
+  };
 interface TreeEntry {
   path: string;
   mode: string;
@@ -169,13 +176,13 @@ function immutable<T>(value: T): T {
   for (const child of Object.values(value)) immutable(child);
   return Object.freeze(value);
 }
-function time(value: unknown): number {
+export function time(value: unknown): number {
   assert.ok(typeof value === "string", "missing evidence time");
   const result = Date.parse(value);
   assert.ok(Number.isFinite(result), "missing evidence time");
   return result;
 }
-function unique<T>(items: T[], predicate: (item: T) => boolean, name: string): T {
+export function unique<T>(items: T[], predicate: (item: T) => boolean, name: string): T {
   const found = items.filter(predicate);
   assert.equal(found.length, 1, `missing/ambiguous ${name}`);
   return found[0];
@@ -207,14 +214,14 @@ function assertUploaderEvidence(value: unknown): asserts value is UploaderEviden
   for (const key of ["archiveSha256", "uploaderLogsSha256"])
     assert.equal(typeof value[key], "string", `invalid uploader ${key}`);
 }
-function assertArtifactClaim(value: unknown): asserts value is ArtifactClaim {
+export function assertArtifactClaim(value: unknown): asserts value is ArtifactClaim {
   assertRecord(value);
   assert.equal(typeof value.artifactId, "number", "invalid artifact claim");
   assert.equal(typeof value.archiveSha256, "string", "invalid artifact archive");
   assert.equal(typeof value.payloadSha256, "string", "invalid artifact payload");
   assertUploaderEvidence(value.uploader);
 }
-export function assertAcceptedRecord(value: unknown): asserts value is AcceptedRecord {
+export function assertLandedContribution(value: unknown): asserts value is LandedContribution {
   assertRecord(value);
   assertRecord(value.landed);
   assert.equal(typeof value.landed.pr, "number", "invalid landed PR");
@@ -226,14 +233,18 @@ export function assertAcceptedRecord(value: unknown): asserts value is AcceptedR
   assertRunBinding(value.original.run);
   for (const key of ["tree", "inputsSha256", "resultSha256", "capturedFloorSha256"])
     assert.equal(typeof value.original[key], "string", `invalid original ${key}`);
+  assert.ok(Array.isArray(value.gains), "invalid accepted gains");
+  for (const id of value.gains) assert.equal(typeof id, "string", "invalid accepted gain");
+  assert.equal(typeof value.gainsSha256, "string", "invalid accepted gain digest");
+}
+export function assertAcceptedRecord(value: unknown): asserts value is AcceptedRecord {
+  assertLandedContribution(value);
   assertRecord(value.artifacts);
   assertArtifactClaim(value.artifacts.raw);
   assertArtifactClaim(value.artifacts.qualification);
   assertArtifactClaim(value.artifacts.baseFloor);
-  for (const key of ["rowIdentitySha256", "skipMembershipSha256", "gainsSha256"])
+  for (const key of ["rowIdentitySha256", "skipMembershipSha256"])
     assert.equal(typeof value[key], "string", `invalid record ${key}`);
-  assert.ok(Array.isArray(value.gains), "invalid accepted gains");
-  for (const id of value.gains) assert.equal(typeof id, "string", "invalid accepted gain");
   assertRecord(value.baseFloor);
   fullSha(value.baseFloor.sourceSha);
   assertRunBinding(value.baseFloor.run);
@@ -251,7 +262,7 @@ export function assertAcceptedFloor(value: unknown): asserts value is AcceptedGa
     assert.equal(typeof id, "string", "invalid accepted ID");
   assert.equal(typeof value.floorSha256, "string", "missing accepted floor digest");
 }
-function assertRawIdentity(value: unknown): asserts value is RawScore<unknown> {
+export function assertRawIdentity(value: unknown): asserts value is RawScore<unknown> {
   assertRecord(value);
   assertBinding(value.selected);
   assertRunBinding(value.run);
@@ -375,17 +386,19 @@ export function assertTerminalBlock(
   assert.equal((text.match(/test result: FAILED\./g) ?? []).length, 1, "additional native failure");
   assert.match(text, /test result: FAILED\. 442 passed; 1 failed; 0 ignored;/);
 }
-export function assertHistoricalJobs(
+export function assertHistoricalJobSet(
   run: HostRun,
   jobs: HostJob[],
   workflow: string,
   mergedAt: string,
+  expectedCount: number,
+  description: string,
 ): void {
   const definition: unknown = parse(workflow);
   assertRecord(definition);
   assertRecord(definition.jobs);
   const names = Object.keys(definition.jobs).sort();
-  assert.equal(names.length, 10, "reviewed historical Shell job set");
+  assert.equal(names.length, expectedCount, description);
   assert.deepEqual(jobs.map((item) => item.name).sort(), names, "missing/extra historical job");
   assert.equal(run.status, "completed");
   assert.equal(run.conclusion, "success");
@@ -398,6 +411,14 @@ export function assertHistoricalJobs(
       "historical job did not finish before merge",
     );
   }
+}
+export function assertHistoricalJobs(
+  run: HostRun,
+  jobs: HostJob[],
+  workflow: string,
+  mergedAt: string,
+): void {
+  assertHistoricalJobSet(run, jobs, workflow, mergedAt, 10, "reviewed historical Shell job set");
 }
 function assertRun(run: HostRun, record: AcceptedRecord): void {
   const { original } = record;
@@ -473,6 +494,15 @@ async function terminalBlock(client: GithubClient): Promise<void> {
   const logs = await client.request(`/actions/jobs/${native.id}/logs`, "text");
   assertTerminalBlock(run, jobs, artifacts, logs);
 }
+export async function claimedArtifactMetadata(
+  client: GithubClient,
+  claim: ArtifactClaim,
+): Promise<HostArtifact> {
+  const metadata = await requestArtifact(client, `/actions/artifacts/${claim.artifactId}`);
+  assert.equal(metadata.id, claim.artifactId);
+  assert.equal(metadata.digest, `sha256:${claim.archiveSha256}`);
+  return metadata;
+}
 async function artifact(
   client: GithubClient,
   run: HostRun,
@@ -483,9 +513,7 @@ async function artifact(
   testedSource: string,
   lifetime: Lifetime,
 ): Promise<unknown> {
-  const metadata = await requestArtifact(client, `/actions/artifacts/${claim.artifactId}`);
-  assert.equal(metadata.id, claim.artifactId);
-  assert.equal(metadata.digest, `sha256:${claim.archiveSha256}`);
+  const metadata = await claimedArtifactMetadata(client, claim);
   assert.ok(metadata.expires_at, "missing artifact expiry");
   const expires = time(metadata.expires_at);
   assert.ok(expires > Date.now(), "artifact expired by timestamp");

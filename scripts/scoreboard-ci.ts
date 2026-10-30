@@ -36,6 +36,7 @@ import type { Binding, MainPushBinding, Oracle, RunBinding } from "./shell-score
 import {
   assertAcceptedFloor,
   assertAcceptedRaw,
+  assertRawIdentity,
   prepareCandidate,
   foldCandidate,
 } from "./shell-scoreboard-accepted-gains.ts";
@@ -101,16 +102,6 @@ function assertEvent(value: unknown): asserts value is GitHubEvent {
   assert.equal(typeof value.pull_request.base.ref, "string", "invalid event base ref");
   assertRecord(value.pull_request.base.repo);
   assert.equal(typeof value.pull_request.base.repo.id, "number", "invalid event base repository");
-}
-function assertRawIdentity(value: unknown): asserts value is RawScore<unknown> {
-  assertRecord(value);
-  assertBinding(value.selected);
-  assertRunBinding(value.run);
-  fullSha(value.sourceSha);
-  assert.equal(typeof value.capturedAt, "string", "missing raw capture time");
-  assert.equal(typeof value.inputsSha256, "string", "missing raw input digest");
-  assert.equal(typeof value.resultSha256, "string", "missing raw result digest");
-  assertScore(value.score);
 }
 function assertQualificationRaw(value: unknown): asserts value is QualificationRaw {
   assertRawIdentity(value);
