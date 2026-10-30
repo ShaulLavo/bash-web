@@ -342,17 +342,24 @@ function string(value: unknown): string {
   return value;
 }
 
-test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", async () => {
+async function referenceCases() {
   const document: unknown = JSON.parse(
     await readFile(resolve(root, "tests/terminal/readline-navigation.json"), "utf8"),
   );
-  for (const value of values(record(document).cases)) {
+  return values(record(document).cases).map((value) => {
     const fixture = record(value);
-    if (fixture.parity !== true) continue;
     assert.ok(typeof fixture.columns === "number");
-    const steps: Step[] = [{ prompt: "$ " }];
     const history = values(fixture.history).map((entry) => string(entry));
+    const steps: Step[] = [{ prompt: "$ " }];
     for (const entry of history) steps.push({ keys: entry + "\r" }, { prompt: "$ " });
+    const preceding = history.map((entry) => `$ ${entry}\r\n`).join("");
+    return { fixture, columns: fixture.columns, steps, preceding };
+  });
+}
+
+test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", async () => {
+  for (const { fixture, columns, steps, preceding } of await referenceCases()) {
+    if (fixture.parity !== true) continue;
     for (const rawStep of values(fixture.steps)) {
       const step = record(rawStep);
       const input = Buffer.from(string(step.inputHex), "hex").toString();
@@ -360,10 +367,9 @@ test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", 
       assert.ok(typeof step.point === "number");
       const prefix = Buffer.from(line).subarray(0, step.point).toString();
       steps.push({ keys: input });
-      const actual = replay(fixture.columns, 100, steps);
-      const preceding = history.map((entry) => `$ ${entry}\r\n`).join("");
+      const actual = replay(columns, 100, steps);
       const expected = direct(
-        fixture.columns,
+        columns,
         100,
         `${preceding}$ ${line.replaceAll("\n", "\r\n")}`,
         `${preceding}$ ${prefix.replaceAll("\n", "\r\n")}`,
@@ -375,32 +381,19 @@ test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", 
 });
 
 test("native Shift key bytes retain explicit newline and safe-CSI policies in the VT", async () => {
-  const document: unknown = JSON.parse(
-    await readFile(resolve(root, "tests/terminal/readline-navigation.json"), "utf8"),
-  );
   const policies = new Map([
     ["modified-arrows", "one two\n\nthree"],
     ["shift-enter-policy", "# first\n# second"],
   ]);
-  for (const value of values(record(document).cases)) {
-    const fixture = record(value);
+  for (const { fixture, columns, steps, preceding } of await referenceCases()) {
     if (fixture.parity !== false) continue;
     const expected = policies.get(string(fixture.name));
     assert.ok(expected !== undefined, String(fixture.name));
-    assert.ok(typeof fixture.columns === "number");
-    const steps: Step[] = [{ prompt: "$ " }];
-    const history = values(fixture.history).map((entry) => string(entry));
-    for (const entry of history) steps.push({ keys: entry + "\r" }, { prompt: "$ " });
     const keys = values(fixture.steps)
       .map((entry) => Buffer.from(string(record(entry).inputHex), "hex").toString())
       .join("");
-    const actual = replay(fixture.columns, 100, steps.concat([{ keys }]));
-    const preceding = history.map((entry) => `$ ${entry}\r\n`).join("");
-    const directPolicy = direct(
-      fixture.columns,
-      100,
-      `${preceding}$ ${expected.replaceAll("\n", "\r\n")}`,
-    );
+    const actual = replay(columns, 100, steps.concat([{ keys }]));
+    const directPolicy = direct(columns, 100, `${preceding}$ ${expected.replaceAll("\n", "\r\n")}`);
     assert.deepEqual(actual.lines, directPolicy.lines, string(fixture.name));
     assert.deepEqual(actual.cursor, directPolicy.cursor, string(fixture.name));
   }
