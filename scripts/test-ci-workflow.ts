@@ -262,10 +262,7 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
   const run = commands(compat);
   assert.equal(env.BASH_COMPAT_BASE_REF, undefined);
   assert.match(run, /node scripts\/scoreboard-ci\.ts baseline BASH_COMPAT_BASE_REF/);
-  assert.match(
-    commands(jobs().layers),
-    /node scripts\/scoreboard-ci\.ts baseline LAYERS_BASE_REF/,
-  );
+  assert.match(commands(jobs().layers), /node scripts\/scoreboard-ci\.ts baseline LAYERS_BASE_REF/);
   assert.doesNotMatch(
     readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
     /github\.event\.pull_request\.base\.sha/,
