@@ -36,9 +36,11 @@ interface OracleCase {
   code: string;
   kind?: string;
   excluded?: string;
-  bash: PackedResult;
+  bash?: PackedResult;
   [key: string]: unknown;
 }
+
+type ObservedOracleCase = OracleCase & { bash: PackedResult };
 
 interface Oracle extends CoreOracle {
   cases: OracleCase[];
@@ -103,7 +105,10 @@ assert.ok(
 );
 const originalBytes = await readFile(oraclePath);
 const oracle = validatedOracle(JSON.parse(originalBytes.toString("utf8")));
-const eligible = oracle.cases.filter((item) => !item.excluded && item.kind === "builtins-only");
+const eligible = oracle.cases.filter(
+  (item): item is ObservedOracleCase =>
+    !item.excluded && item.kind === "builtins-only" && item.bash !== undefined,
+);
 await mkdir(scratchRoot, { recursive: true });
 const scratch = await mkdtemp(resolve(scratchRoot, "audit-"));
 const activeChildren: ActiveChildren = new Map();
