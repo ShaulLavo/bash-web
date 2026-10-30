@@ -93,6 +93,7 @@ test("a large Markdown paste moves between hard lines before history", async ({ 
   await page.keyboard.insertText("echo SAVED_HISTORY");
   await page.keyboard.press("Enter");
   await ready(page);
+  await expect.poll(() => lines(page)).toEqual(["$ echo SAVED_HISTORY", "SAVED_HISTORY", "$"]);
   const prefix = "# Document\n\nA short paragraph.\n\n".repeat(80);
   const markdown = `${prefix}## Last heading\n\nA final paragraph with unequal length.`;
   await page.evaluate((text) => window.bashWeb!.terminal!.paste(text), markdown);
