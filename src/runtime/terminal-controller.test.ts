@@ -980,12 +980,14 @@ for (const timing of ["queued", "cleaned", "during-select"] as const) {
     f.bridge.discardInput();
     await barrier(f.bridge);
     await f.flush();
+    let interruptedTransfer = false;
     if (timing === "during-select") {
+      // A real nested foreground keeps the acknowledgement's selection race reachable.
+      await f.start(f.reserve(0, first.transport));
       const transfer = f.authority.transfer.bind(f.authority);
-      let pending = true;
       context.mock.method(f.authority, "transfer", (options: Parameters<typeof transfer>[0]) => {
-        if (pending) f.supervisor.exit(first.pid, 0);
-        pending = false;
+        if (!interruptedTransfer) f.supervisor.exit(first.pid, 0);
+        interruptedTransfer = true;
         return transfer(options);
       });
     }
@@ -995,6 +997,7 @@ for (const timing of ["queued", "cleaned", "during-select"] as const) {
     await f.flush();
     if (timing === "cleaned") f.controller.interruptDelegated(1n);
     await f.flush();
+    if (timing === "during-select") assert.equal(interruptedTransfer, true);
     assertInput(f, childTerminal);
   });
 }

@@ -226,13 +226,41 @@ for (const { mode, status, source, expected, after } of [
 ] as const) {
   test(`public prompt SIGINT ${mode}/${status}: ${source}`, { timeout: 15000 }, async (context) => {
     const { shell, initial, output, ready } = await signalFixture(context, mode, status);
+    let shellDone:
+      | { kind: "pending" }
+      | { kind: "settled"; value: Awaited<typeof shell.done> }
+      | { kind: "rejected"; error: string } = { kind: "pending" };
+    void shell.done.then(
+      (value) => {
+        shellDone = { kind: "settled", value };
+      },
+      (error: unknown) => {
+        shellDone = { kind: "rejected", error: String(error) };
+      },
+    );
     context.after(() => context.diagnostic(output()));
     await send(shell, source);
     await ready();
     if (source === "signal-status 1>&2 | signal-status")
       await until(context, () => output().split("SIGNAL_READY\n").length > 2);
     shell.interrupt();
-    const prompt = await shell.waitForPrompt({ after: initial.generation, signal: context.signal });
+    const prompt = await shell
+      .waitForPrompt({ after: initial.generation, signal: context.signal })
+      .catch((error: unknown) => {
+        context.diagnostic(
+          JSON.stringify(
+            {
+              shellDone,
+              phase: Atomics.load(shell.terminal.state, api.control.phase),
+              status: Atomics.load(shell.terminal.state, api.control.status),
+              closed: shell.terminal.closed(),
+              prompt: shell.terminal.readPrompt(),
+            },
+            (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value),
+          ),
+        );
+        throw error;
+      });
     assert.equal(prompt.status, expected, output());
     assert.equal(output().includes("AFTER\x1b[?2004h"), after, output());
     if (mode === "handled") assert.ok(output().includes("SIGNAL_HANDLED 1\n"), output());
