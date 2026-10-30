@@ -11,6 +11,7 @@ const families = {
     "cut",
     "tr",
     "head",
+    "nl",
     "which",
     "ls",
     "mkdir",

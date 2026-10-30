@@ -6,7 +6,8 @@ import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyCiArtifacts } from "./ci-artifacts.ts";
-import { familyWasmPath, familyWasiAdapter } from "./family-assets.ts";
+import { familyWasmPath } from "./family-assets.ts";
+import { verifiedFamilyNames, verifyFamilyGuest } from "./verify-family-guests.ts";
 import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
@@ -101,8 +102,8 @@ const helpers = execFileSync(
   { encoding: "utf8" },
 );
 assert.equal(helpers, "['a', 'b c']\n/home/fixture\nNone\n");
-const size = (label: string, path: string, filesystemAdapter?: string) => {
-  verifyWasiGuest(path, undefined, filesystemAdapter);
+const size = (label: string, path: string, verify = () => verifyWasiGuest(path)) => {
+  verify();
   const bytes = readFileSync(path);
   const brotli = brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
   const gzip = gzipSync(bytes, { level: 9 }).length;
@@ -114,17 +115,5 @@ const size = (label: string, path: string, filesystemAdapter?: string) => {
 const core = size("Shell core release WASI (standalone embedding)", wasm);
 assert.ok(core <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
 size("Shell core release WASI (browser runtime)", resolve(release, "shell-runtime.wasm"));
-for (const name of [
-  "cat",
-  "find",
-  "grep",
-  "head",
-  "ls",
-  "mkdir",
-  "seq",
-  "sort",
-  "tail",
-  "uniq",
-  "wc",
-])
-  size(`Utility add-on ${name}`, familyWasmPath(name), familyWasiAdapter(name));
+for (const name of verifiedFamilyNames)
+  size(`Utility add-on ${name}`, familyWasmPath(name), () => verifyFamilyGuest(name));
