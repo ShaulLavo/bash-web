@@ -151,6 +151,9 @@ test("resize editing restores a usable prompt", async ({ page }) => {
 test("bounded heavy streaming keeps the main thread responsive", async ({ page }) => {
   await open(page);
   await command(page, "seq 1000000");
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb?.metrics()?.outputBytes))
+    .toBeGreaterThan(1000);
   await page.waitForTimeout(250);
   const responsive = await page.evaluate(() => ({
     time: performance.now(),

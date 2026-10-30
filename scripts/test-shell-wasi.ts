@@ -6,8 +6,8 @@ import { resolve } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import { shellTargetDirectory, wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyCiArtifacts } from "./ci-artifacts.ts";
-import { familyWasmPath } from "./family-assets.ts";
-import { verifiedFamilyNames, verifyFamilyGuest } from "./verify-family-guests.ts";
+import { familyProgramNames, familyWasmPath } from "./family-assets.ts";
+import { verifyFamilyGuest } from "./verify-family-guests.ts";
 import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
@@ -115,5 +115,5 @@ const size = (label: string, path: string, verify = () => verifyWasiGuest(path))
 const core = size("Shell core release WASI (standalone embedding)", wasm);
 assert.ok(core <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
 size("Shell core release WASI (browser runtime)", resolve(release, "shell-runtime.wasm"));
-for (const name of verifiedFamilyNames)
+for (const name of familyProgramNames)
   size(`Utility add-on ${name}`, familyWasmPath(name), () => verifyFamilyGuest(name));

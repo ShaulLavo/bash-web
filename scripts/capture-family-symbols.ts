@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { familyWasmPath, familyWasiAdapter } from "./family-assets.ts";
-import { guestRecord, verifiedFamilyNames } from "./verify-family-guests.ts";
+import { familyProgramNames, familyWasmPath, familyWasiAdapter } from "./family-assets.ts";
+import { guestRecord } from "./verify-family-guests.ts";
 import { functionNames, verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const json = (path: string) => guestRecord(JSON.parse(readFileSync(path, "utf8")));
@@ -113,7 +113,7 @@ function main() {
     provenance:
       "Function indices from the exact named optimized outputs in the published derivations. Capture verifies the named hashes, reruns scanner and memory checks, and proves that removing only name custom sections yields the released bytes exactly. Final SHA-256 binds these symbols to unchanged executable bytes. Historical local guest provenance is unchanged.",
     guests: Object.fromEntries(
-      verifiedFamilyNames.map((name) => [name, capture(name, directory, revision)]),
+      familyProgramNames.map((name) => [name, capture(name, directory, revision)]),
     ),
   };
   writeFileSync(output, JSON.stringify(proof, null, 2) + "\n");
