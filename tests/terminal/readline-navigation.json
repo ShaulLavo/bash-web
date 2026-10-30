@@ -30,7 +30,7 @@
     "ss3-up": "1b4f41",
     "ss3-down": "1b4f42"
   },
-  "historyObservation": "Unique seeded entry bytes identify recall; every line and byte point comes from bind -x.",
+  "historyObservation": "Runtime history_offset/history_length read from child ELF symbols through read-only /proc/PID/mem, respecting Bash COPY relocations. Converted bind-x point also checked against native rl_point.",
   "ghostty": {
     "repository": "https://github.com/ghostty-org/ghostty",
     "revision": "7b11f3dca034d8d24369ad3856afe57946d7902a",
@@ -125,10 +125,7 @@
     {
       "name": "observer-unit-control",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -136,6 +133,8 @@
           "line": "a中🙂b",
           "point": 9,
           "readlinePoint": 4,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 4
         },
@@ -145,6 +144,8 @@
           "line": "a中🙂b",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -154,6 +155,8 @@
           "line": "a中🙂b",
           "point": 1,
           "readlinePoint": 1,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 1
         },
@@ -163,6 +166,8 @@
           "line": "a中🙂b",
           "point": 4,
           "readlinePoint": 2,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 2
         },
@@ -172,6 +177,8 @@
           "line": "a中🙂b",
           "point": 8,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 3
         },
@@ -181,6 +188,8 @@
           "line": "a中🙂b",
           "point": 9,
           "readlinePoint": 4,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 4
         },
@@ -190,6 +199,8 @@
           "line": "a中🙂b",
           "point": 8,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 3
         },
@@ -199,6 +210,8 @@
           "line": "a中🙂b",
           "point": 9,
           "readlinePoint": 4,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 4
         },
@@ -208,6 +221,8 @@
           "line": "a中🙂b",
           "point": 8,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 3
         },
@@ -217,6 +232,8 @@
           "line": "a中🙂b",
           "point": 4,
           "readlinePoint": 2,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 2
         },
@@ -226,6 +243,8 @@
           "line": "a中🙂b",
           "point": 1,
           "readlinePoint": 1,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 1
         }
@@ -235,10 +254,7 @@
     {
       "name": "markdown-blank-lines",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -246,6 +262,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 132,
           "readlinePoint": 132,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 15,
           "scalarColumn": 0
         },
@@ -255,6 +273,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -264,6 +284,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 132,
           "readlinePoint": 132,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 15,
           "scalarColumn": 0
         },
@@ -273,6 +295,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 131,
           "readlinePoint": 131,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 14,
           "scalarColumn": 18
         },
@@ -282,6 +306,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -291,6 +317,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 132,
           "readlinePoint": 132,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 15,
           "scalarColumn": 0
         },
@@ -300,6 +328,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -309,6 +339,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 132,
           "readlinePoint": 132,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 15,
           "scalarColumn": 0
         },
@@ -318,6 +350,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -327,6 +361,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -336,6 +372,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -345,6 +383,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -354,6 +394,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 132,
           "readlinePoint": 132,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 15,
           "scalarColumn": 0
         },
@@ -363,6 +405,8 @@
           "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
           "point": 132,
           "readlinePoint": 132,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 15,
           "scalarColumn": 0
         }
@@ -372,10 +416,7 @@
     {
       "name": "empty-lines",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -383,6 +424,8 @@
           "line": "\n\n\n",
           "point": 3,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 0
         },
@@ -392,6 +435,8 @@
           "line": "\n\n\n",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -401,6 +446,8 @@
           "line": "\n\n\n",
           "point": 3,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 0
         },
@@ -410,6 +457,8 @@
           "line": "\n\n\n",
           "point": 2,
           "readlinePoint": 2,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 0
         },
@@ -419,6 +468,8 @@
           "line": "\n\n\n",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -428,6 +479,8 @@
           "line": "\n\n\n",
           "point": 3,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 0
         },
@@ -437,6 +490,8 @@
           "line": "\n\n\n",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -446,6 +501,8 @@
           "line": "\n\n\n",
           "point": 3,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 0
         },
@@ -455,6 +512,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -464,6 +523,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -473,6 +534,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -482,6 +545,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -491,6 +556,8 @@
           "line": "\n\n\n",
           "point": 3,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 0
         },
@@ -500,6 +567,8 @@
           "line": "\n\n\n",
           "point": 3,
           "readlinePoint": 3,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 0
         }
@@ -509,10 +578,7 @@
     {
       "name": "unicode-wrap",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -520,6 +586,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 150,
           "readlinePoint": 142,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 1
         },
@@ -529,6 +597,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -538,6 +608,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 150,
           "readlinePoint": 142,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 1
         },
@@ -547,6 +619,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 147,
           "readlinePoint": 141,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 0
         },
@@ -556,6 +630,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -565,6 +641,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 150,
           "readlinePoint": 142,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 1
         },
@@ -574,6 +652,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -583,6 +663,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 150,
           "readlinePoint": 142,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 1
         },
@@ -592,6 +674,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -601,6 +685,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -610,6 +696,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -619,6 +707,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -628,6 +718,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 150,
           "readlinePoint": 142,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 1
         },
@@ -637,6 +729,8 @@
           "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
           "point": 150,
           "readlinePoint": 142,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 1
         }
@@ -646,10 +740,7 @@
     {
       "name": "history-from-middle",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -657,6 +748,8 @@
           "line": "first\n\nmiddle\nlast",
           "point": 18,
           "readlinePoint": 18,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 4
         },
@@ -666,6 +759,8 @@
           "line": "first\n\nmiddle\nlast",
           "point": 17,
           "readlinePoint": 17,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 3
         },
@@ -675,6 +770,8 @@
           "line": "first\n\nmiddle\nlast",
           "point": 16,
           "readlinePoint": 16,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 2
         },
@@ -684,6 +781,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -693,6 +792,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -702,6 +803,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -711,6 +814,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -720,6 +825,8 @@
           "line": "first\n\nmiddle\nlast",
           "point": 18,
           "readlinePoint": 18,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 4
         },
@@ -729,6 +836,8 @@
           "line": "first\n\nmiddle\nlast",
           "point": 18,
           "readlinePoint": 18,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 3,
           "scalarColumn": 4
         }
@@ -738,10 +847,7 @@
     {
       "name": "history-from-start",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -749,6 +855,8 @@
           "line": "first\n\nlast",
           "point": 11,
           "readlinePoint": 11,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 4
         },
@@ -758,6 +866,8 @@
           "line": "first\n\nlast",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -767,6 +877,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -776,6 +888,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -785,6 +899,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -794,6 +910,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -803,6 +921,8 @@
           "line": "first\n\nlast",
           "point": 11,
           "readlinePoint": 11,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 4
         },
@@ -812,6 +932,8 @@
           "line": "first\n\nlast",
           "point": 11,
           "readlinePoint": 11,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 4
         }
@@ -819,12 +941,149 @@
       "parity": true
     },
     {
+      "name": "history-boundary-cursors",
+      "columns": 24,
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e64726166740a0a656e641b5b3230317e",
+          "line": "draft\n\nend",
+          "point": 10,
+          "readlinePoint": 10,
+          "historyOffset": 2,
+          "historyLength": 2,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 0,
+          "readlinePoint": 0,
+          "historyOffset": 0,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 0,
+          "readlinePoint": 0,
+          "historyOffset": 0,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "ctrl-e",
+          "inputHex": "05",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 23,
+          "readlinePoint": 23,
+          "historyOffset": 0,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 23
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 0,
+          "readlinePoint": 0,
+          "historyOffset": 1,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "draft\n\nend",
+          "point": 10,
+          "readlinePoint": 10,
+          "historyOffset": 2,
+          "historyLength": 2,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "draft\n\nend",
+          "point": 0,
+          "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "draft\n\nend",
+          "point": 0,
+          "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        }
+      ],
+      "parity": true
+    },
+    {
       "name": "history-control",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -832,6 +1091,8 @@
           "line": "one\n\ntwo",
           "point": 8,
           "readlinePoint": 8,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         },
@@ -841,6 +1102,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -850,6 +1113,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -859,6 +1124,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -868,6 +1135,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -877,6 +1146,8 @@
           "line": "one\n\ntwo",
           "point": 8,
           "readlinePoint": 8,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         },
@@ -886,6 +1157,8 @@
           "line": "one\n\ntwo",
           "point": 8,
           "readlinePoint": 8,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         }
@@ -895,10 +1168,7 @@
     {
       "name": "history-ss3",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -906,6 +1176,8 @@
           "line": "one\n\ntwo",
           "point": 8,
           "readlinePoint": 8,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         },
@@ -915,6 +1187,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -924,6 +1198,8 @@
           "line": "one\n\ntwo",
           "point": 8,
           "readlinePoint": 8,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         }
@@ -933,10 +1209,7 @@
     {
       "name": "words",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -944,6 +1217,8 @@
           "line": "one,two  café中!\n\nlast word",
           "point": 29,
           "readlinePoint": 26,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 9
         },
@@ -953,6 +1228,8 @@
           "line": "one,two  café中!\n\nlast word",
           "point": 25,
           "readlinePoint": 22,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 5
         },
@@ -962,6 +1239,8 @@
           "line": "one,two  café中!\n\nlast word",
           "point": 20,
           "readlinePoint": 17,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 0
         },
@@ -971,6 +1250,8 @@
           "line": "one,two  café中!\n\nlast word",
           "point": 9,
           "readlinePoint": 9,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 9
         },
@@ -980,6 +1261,8 @@
           "line": "one,two  café中!\n\nlast word",
           "point": 17,
           "readlinePoint": 14,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 14
         },
@@ -989,6 +1272,8 @@
           "line": "one,two  café中!\n\nlast word",
           "point": 24,
           "readlinePoint": 21,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 4
         },
@@ -998,6 +1283,8 @@
           "line": "one,two  café中!\n\nlast word",
           "point": 29,
           "readlinePoint": 26,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 9
         }
@@ -1007,10 +1294,7 @@
     {
       "name": "modified-arrows",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -1018,6 +1302,8 @@
           "line": "one two\n\nthree",
           "point": 14,
           "readlinePoint": 14,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 5
         },
@@ -1027,6 +1313,8 @@
           "line": "one two\n\nthreeD",
           "point": 15,
           "readlinePoint": 15,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 6
         },
@@ -1036,6 +1324,8 @@
           "line": "one two\n\nthreeDC",
           "point": 16,
           "readlinePoint": 16,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 7
         },
@@ -1045,6 +1335,8 @@
           "line": "one two\n\nthreeDCA",
           "point": 17,
           "readlinePoint": 17,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 8
         },
@@ -1054,6 +1346,8 @@
           "line": "one two\n\nthreeDCAB",
           "point": 18,
           "readlinePoint": 18,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 9
         },
@@ -1063,6 +1357,8 @@
           "line": "one two\n\nthreeDCAB",
           "point": 18,
           "readlinePoint": 18,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 9
         },
@@ -1072,6 +1368,8 @@
           "line": "one two\n\nthreeDCAB",
           "point": 18,
           "readlinePoint": 18,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 9
         }
@@ -1081,10 +1379,7 @@
     {
       "name": "draft-edits",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -1092,6 +1387,8 @@
           "line": "draft\n\nend",
           "point": 10,
           "readlinePoint": 10,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         },
@@ -1101,6 +1398,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -1110,6 +1409,8 @@
           "line": "draft\n\nend",
           "point": 10,
           "readlinePoint": 10,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         },
@@ -1119,6 +1420,8 @@
           "line": "draft\n\nend",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -1128,6 +1431,8 @@
           "line": "# draft\n\nend",
           "point": 2,
           "readlinePoint": 2,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 2
         },
@@ -1137,6 +1442,8 @@
           "line": "# draft\n\nend",
           "point": 12,
           "readlinePoint": 12,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 3
         },
@@ -1146,6 +1453,8 @@
           "line": "# draft\n\nend tail",
           "point": 17,
           "readlinePoint": 17,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 8
         },
@@ -1155,6 +1464,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -1164,6 +1475,8 @@
           "line": "# draft\n\nend tail",
           "point": 17,
           "readlinePoint": 17,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 2,
           "scalarColumn": 8
         }
@@ -1173,10 +1486,7 @@
     {
       "name": "feel-navigation",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "bracketed-paste",
@@ -1184,6 +1494,8 @@
           "line": "# heading\n\n# middle\n\n# tail",
           "point": 27,
           "readlinePoint": 27,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 4,
           "scalarColumn": 6
         },
@@ -1193,6 +1505,8 @@
           "line": "# heading\n\n# middle\n\n# tail",
           "point": 0,
           "readlinePoint": 0,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 0
         },
@@ -1202,6 +1516,8 @@
           "line": "# START # heading\n\n# middle\n\n# tail",
           "point": 8,
           "readlinePoint": 8,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 8
         },
@@ -1211,6 +1527,8 @@
           "line": "# START # heading\n\n# middle\n\n# tail",
           "point": 35,
           "readlinePoint": 35,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 4,
           "scalarColumn": 6
         },
@@ -1220,6 +1538,8 @@
           "line": "# START # heading\n\n# middle\n\n# tail END",
           "point": 39,
           "readlinePoint": 39,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 4,
           "scalarColumn": 10
         },
@@ -1229,6 +1549,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -1238,6 +1560,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -1247,6 +1571,8 @@
           "line": "printf 'HISTORY_OLDER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 0,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -1256,6 +1582,8 @@
           "line": "printf 'HISTORY_NEWER\\n'",
           "point": 24,
           "readlinePoint": 24,
+          "historyOffset": 1,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 24
         },
@@ -1265,6 +1593,8 @@
           "line": "# START # heading\n\n# middle\n\n# tail END",
           "point": 39,
           "readlinePoint": 39,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 4,
           "scalarColumn": 10
         },
@@ -1274,6 +1604,8 @@
           "line": "# START # heading\n\n# middle\n\n# tail END",
           "point": 39,
           "readlinePoint": 39,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 4,
           "scalarColumn": 10
         }
@@ -1283,10 +1615,7 @@
     {
       "name": "shift-enter-policy",
       "columns": 24,
-      "history": [
-        "printf 'HISTORY_OLDER\\n'",
-        "printf 'HISTORY_NEWER\\n'"
-      ],
+      "history": ["printf 'HISTORY_OLDER\\n'", "printf 'HISTORY_NEWER\\n'"],
       "steps": [
         {
           "key": "insert",
@@ -1294,6 +1623,8 @@
           "line": "# first",
           "point": 7,
           "readlinePoint": 7,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 7
         },
@@ -1303,6 +1634,8 @@
           "line": "# first;2;13~",
           "point": 13,
           "readlinePoint": 13,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 13
         },
@@ -1312,6 +1645,8 @@
           "line": "# first;2;13~# second",
           "point": 21,
           "readlinePoint": 21,
+          "historyOffset": 2,
+          "historyLength": 2,
           "logicalRow": 0,
           "scalarColumn": 21
         }
@@ -1327,10 +1662,7 @@
     "readlineSha256": "c55b53a98e218df23f2f90ca1015974e122be2ee1d5fc93db1cc097440699b65",
     "readlineVersion": "8.3",
     "readlineVersionHex": "0x803",
-    "packages": [
-      "bash 5.3.20-1",
-      "readline 8.3.6-1"
-    ],
+    "packages": ["bash 5.3.20-1", "readline 8.3.6-1"],
     "libraries": [
       {
         "path": "/usr/lib/gconv/gconv-modules.cache",
@@ -1411,37 +1743,14 @@
     "afterSha256": "8f620fff99bde919e1bed00a09d94706e879807a20216ca9cc2d1e5bf2ef0c68",
     "functions": "\n\"\\C-g\": abort\n\"\\C-x\\C-g\": abort\n\"\\e\\C-g\": abort\n\"\\C-j\": accept-line\n\"\\C-m\": accept-line\n# alias-expand-line (not bound)\n# arrow-key-prefix (not bound)\n# backward-byte (not bound)\n\"\\C-b\": backward-char\n\"\\eOD\": backward-char\n\"\\e[D\": backward-char\n\"\\C-h\": backward-delete-char\n\"\\C-?\": backward-delete-char\n\"\\C-x\\C-?\": backward-kill-line\n\"\\e\\C-h\": backward-kill-word\n\"\\e\\C-?\": backward-kill-word\n\"\\e[1;3D\": backward-word\n\"\\e[1;5D\": backward-word\n\"\\eb\": backward-word\n# bash-vi-complete (not bound)\n\"\\e<\": beginning-of-history\n\"\\C-a\": beginning-of-line\n\"\\eOH\": beginning-of-line\n\"\\e[H\": beginning-of-line\n\"\\e[200~\": bracketed-paste-begin\n\"\\C-xe\": call-last-kbd-macro\n\"\\ec\": capitalize-word\n\"\\C-]\": character-search\n\"\\e\\C-]\": character-search-backward\n\"\\e\\C-l\": clear-display\n\"\\C-l\": clear-screen\n\"\\C-i\": complete\n\"\\e\\e\": complete\n\"\\e!\": complete-command\n\"\\e/\": complete-filename\n\"\\e@\": complete-hostname\n\"\\e{\": complete-into-braces\n\"\\e~\": complete-username\n\"\\e$\": complete-variable\n# copy-backward-word (not bound)\n# copy-forward-word (not bound)\n# copy-region-as-kill (not bound)\n# dabbrev-expand (not bound)\n\"\\C-d\": delete-char\n\"\\e[3~\": delete-char\n# delete-char-or-list (not bound)\n\"\\e\\\\\": delete-horizontal-space\n\"\\e-\": digit-argument\n\"\\e0\": digit-argument\n\"\\e1\": digit-argument\n\"\\e2\": digit-argument\n\"\\e3\": digit-argument\n\"\\e4\": digit-argument\n\"\\e5\": digit-argument\n\"\\e6\": digit-argument\n\"\\e7\": digit-argument\n\"\\e8\": digit-argument\n\"\\e9\": digit-argument\n\"\\C-x\\C-v\": display-shell-version\n\"\\C-xA\": do-lowercase-version\n\"\\C-xB\": do-lowercase-version\n\"\\C-xC\": do-lowercase-version\n\"\\C-xD\": do-lowercase-version\n\"\\C-xE\": do-lowercase-version\n\"\\C-xF\": do-lowercase-version\n\"\\C-xG\": do-lowercase-version\n\"\\C-xH\": do-lowercase-version\n\"\\C-xI\": do-lowercase-version\n\"\\C-xJ\": do-lowercase-version\n\"\\C-xK\": do-lowercase-version\n\"\\C-xL\": do-lowercase-version\n\"\\C-xM\": do-lowercase-version\n\"\\C-xN\": do-lowercase-version\n\"\\C-xO\": do-lowercase-version\n\"\\C-xP\": do-lowercase-version\n\"\\C-xQ\": do-lowercase-version\n\"\\C-xR\": do-lowercase-version\n\"\\C-xS\": do-lowercase-version\n\"\\C-xT\": do-lowercase-version\n\"\\C-xU\": do-lowercase-version\n\"\\C-xV\": do-lowercase-version\n\"\\C-xW\": do-lowercase-version\n\"\\C-xX\": do-lowercase-version\n\"\\C-xY\": do-lowercase-version\n\"\\C-xZ\": do-lowercase-version\n\"\\eA\": do-lowercase-version\n\"\\eB\": do-lowercase-version\n\"\\eC\": do-lowercase-version\n\"\\eD\": do-lowercase-version\n\"\\eE\": do-lowercase-version\n\"\\eF\": do-lowercase-version\n\"\\eG\": do-lowercase-version\n\"\\eH\": do-lowercase-version\n\"\\eI\": do-lowercase-version\n\"\\eJ\": do-lowercase-version\n\"\\eK\": do-lowercase-version\n\"\\eL\": do-lowercase-version\n\"\\eM\": do-lowercase-version\n\"\\eN\": do-lowercase-version\n\"\\eP\": do-lowercase-version\n\"\\eQ\": do-lowercase-version\n\"\\eR\": do-lowercase-version\n\"\\eS\": do-lowercase-version\n\"\\eT\": do-lowercase-version\n\"\\eU\": do-lowercase-version\n\"\\eV\": do-lowercase-version\n\"\\eW\": do-lowercase-version\n\"\\eX\": do-lowercase-version\n\"\\eY\": do-lowercase-version\n\"\\eZ\": do-lowercase-version\n\"\\el\": downcase-word\n# dump-functions (not bound)\n# dump-macros (not bound)\n# dump-variables (not bound)\n\"\\e\\C-i\": dynamic-complete-history\n\"\\C-x\\C-e\": edit-and-execute-command\n# emacs-editing-mode (not bound)\n\"\\C-x)\": end-kbd-macro\n\"\\e>\": end-of-history\n\"\\C-e\": end-of-line\n\"\\eOF\": end-of-line\n\"\\e[F\": end-of-line\n\"\\C-x\\C-x\": exchange-point-and-mark\n\"\\ex\": execute-named-command\n# export-completions (not bound)\n# fetch-history (not bound)\n# forward-backward-delete-char (not bound)\n# forward-byte (not bound)\n\"\\C-f\": forward-char\n\"\\eOC\": forward-char\n\"\\e[C\": forward-char\n\"\\C-s\": forward-search-history\n\"\\e[1;3C\": forward-word\n\"\\e[1;5C\": forward-word\n\"\\ef\": forward-word\n\"\\eg\": glob-complete-word\n\"\\C-x*\": glob-expand-word\n\"\\C-xg\": glob-list-expansions\n# history-and-alias-expand-line (not bound)\n\"\\e^\": history-expand-line\n\"\\e[5~\": history-search-backward\n\"\\e[6~\": history-search-forward\n# history-substring-search-backward (not bound)\n# history-substring-search-forward (not bound)\n\"\\e#\": insert-comment\n\"\\e*\": insert-completions\n\"\\e.\": insert-last-argument\n\"\\e_\": insert-last-argument\n\"\\C-k\": kill-line\n# kill-region (not bound)\n# kill-whole-line (not bound)\n\"\\e[3;5~\": kill-word\n\"\\ed\": kill-word\n# magic-space (not bound)\n# menu-complete (not bound)\n# menu-complete-backward (not bound)\n\"\\C-n\": next-history\n\"\\eOB\": next-history\n\"\\e[B\": next-history\n# next-screen-line (not bound)\n\"\\en\": non-incremental-forward-search-history\n# non-incremental-forward-search-history-again (not bound)\n\"\\ep\": non-incremental-reverse-search-history\n# non-incremental-reverse-search-history-again (not bound)\n# old-menu-complete (not bound)\n\"\\C-o\": operate-and-get-next\n\"\\e[2~\": overwrite-mode\n\"\\C-x!\": possible-command-completions\n\"\\e=\": possible-completions\n\"\\e?\": possible-completions\n\"\\C-x/\": possible-filename-completions\n\"\\C-x@\": possible-hostname-completions\n\"\\C-x~\": possible-username-completions\n\"\\C-x$\": possible-variable-completions\n\"\\C-p\": previous-history\n\"\\eOA\": previous-history\n\"\\e[A\": previous-history\n# previous-screen-line (not bound)\n# print-last-kbd-macro (not bound)\n\"\\C-q\": quoted-insert\n\"\\C-v\": quoted-insert\n\"\\C-x\\C-r\": re-read-init-file\n# redraw-current-line (not bound)\n\"\\C-r\": reverse-search-history\n\"\\e\\C-r\": revert-line\n\"\\er\": revert-line\n\" \": self-insert\n\"!\": self-insert\n\"\\\"\": self-insert\n\"#\": self-insert\n\"$\": self-insert\n\"%\": self-insert\n\"&\": self-insert\n\"'\": self-insert\n\"(\": self-insert\n\")\": self-insert\n\"*\": self-insert\n\"+\": self-insert\n\",\": self-insert\n\"-\": self-insert\n\".\": self-insert\n\"/\": self-insert\n\"0\": self-insert\n\"1\": self-insert\n\"2\": self-insert\n\"3\": self-insert\n\"4\": self-insert\n\"5\": self-insert\n\"6\": self-insert\n\"7\": self-insert\n\"8\": self-insert\n\"9\": self-insert\n\":\": self-insert\n\";\": self-insert\n\"<\": self-insert\n\"=\": self-insert\n\">\": self-insert\n\"?\": self-insert\n\"@\": self-insert\n\"A\": self-insert\n\"B\": self-insert\n\"C\": self-insert\n\"D\": self-insert\n\"E\": self-insert\n\"F\": self-insert\n\"G\": self-insert\n\"H\": self-insert\n\"I\": self-insert\n\"J\": self-insert\n\"K\": self-insert\n\"L\": self-insert\n\"M\": self-insert\n\"N\": self-insert\n\"O\": self-insert\n\"P\": self-insert\n\"Q\": self-insert\n\"R\": self-insert\n\"S\": self-insert\n\"T\": self-insert\n\"U\": self-insert\n\"V\": self-insert\n\"W\": self-insert\n\"X\": self-insert\n\"Y\": self-insert\n\"Z\": self-insert\n\"[\": self-insert\n\"\\\\\": self-insert\n\"]\": self-insert\n\"^\": self-insert\n\"_\": self-insert\n\"`\": self-insert\n\"a\": self-insert\n\"b\": self-insert\n\"c\": self-insert\n\"d\": self-insert\n\"e\": self-insert\n\"f\": self-insert\n\"g\": self-insert\n\"h\": self-insert\n\"i\": self-insert\n\"j\": self-insert\n\"k\": self-insert\n\"l\": self-insert\n\"m\": self-insert\n\"n\": self-insert\n\"o\": self-insert\n\"p\": self-insert\n\"q\": self-insert\n\"r\": self-insert\n\"s\": self-insert\n\"t\": self-insert\n\"u\": self-insert\n\"v\": self-insert\n\"w\": self-insert\n\"x\": self-insert\n\"y\": self-insert\n\"z\": self-insert\n\"{\": self-insert\n\"|\": self-insert\n\"}\": self-insert\n\"~\": self-insert\n\"\\200\": self-insert\n\"\\201\": self-insert\n\"\\202\": self-insert\n\"\\203\": self-insert\n\"\\204\": self-insert\n\"\\205\": self-insert\n\"\\206\": self-insert\n\"\\207\": self-insert\n\"\\210\": self-insert\n\"\\211\": self-insert\n\"\\212\": self-insert\n\"\\213\": self-insert\n\"\\214\": self-insert\n\"\\215\": self-insert\n\"\\216\": self-insert\n\"\\217\": self-insert\n\"\\220\": self-insert\n\"\\221\": self-insert\n\"\\222\": self-insert\n\"\\223\": self-insert\n\"\\224\": self-insert\n\"\\225\": self-insert\n\"\\226\": self-insert\n\"\\227\": self-insert\n\"\\230\": self-insert\n\"\\231\": self-insert\n\"\\232\": self-insert\n\"\\233\": self-insert\n\"\\234\": self-insert\n\"\\235\": self-insert\n\"\\236\": self-insert\n\"\\237\": self-insert\n\"\\240\": self-insert\n\"\\241\": self-insert\n\"\\242\": self-insert\n\"\\243\": self-insert\n\"\\244\": self-insert\n\"\\245\": self-insert\n\"\\246\": self-insert\n\"\\247\": self-insert\n\"\\250\": self-insert\n\"\\251\": self-insert\n\"\\252\": self-insert\n\"\\253\": self-insert\n\"\\254\": self-insert\n\"\\255\": self-insert\n\"\\256\": self-insert\n\"\\257\": self-insert\n\"\\260\": self-insert\n\"\\261\": self-insert\n\"\\262\": self-insert\n\"\\263\": self-insert\n\"\\264\": self-insert\n\"\\265\": self-insert\n\"\\266\": self-insert\n\"\\267\": self-insert\n\"\\270\": self-insert\n\"\\271\": self-insert\n\"\\272\": self-insert\n\"\\273\": self-insert\n\"\\274\": self-insert\n\"\\275\": self-insert\n\"\\276\": self-insert\n\"\\277\": self-insert\n\"\\300\": self-insert\n\"\\301\": self-insert\n\"\\302\": self-insert\n\"\\303\": self-insert\n\"\\304\": self-insert\n\"\\305\": self-insert\n\"\\306\": self-insert\n\"\\307\": self-insert\n\"\\310\": self-insert\n\"\\311\": self-insert\n\"\\312\": self-insert\n\"\\313\": self-insert\n\"\\314\": self-insert\n\"\\315\": self-insert\n\"\\316\": self-insert\n\"\\317\": self-insert\n\"\\320\": self-insert\n\"\\321\": self-insert\n\"\\322\": self-insert\n\"\\323\": self-insert\n\"\\324\": self-insert\n\"\\325\": self-insert\n\"\\326\": self-insert\n\"\\327\": self-insert\n\"\\330\": self-insert\n\"\\331\": self-insert\n\"\\332\": self-insert\n\"\\333\": self-insert\n\"\\334\": self-insert\n\"\\335\": self-insert\n\"\\336\": self-insert\n\"\\337\": self-insert\n\"\\340\": self-insert\n\"\\341\": self-insert\n\"\\342\": self-insert\n\"\\343\": self-insert\n\"\\344\": self-insert\n\"\\345\": self-insert\n\"\\346\": self-insert\n\"\\347\": self-insert\n\"\\350\": self-insert\n\"\\351\": self-insert\n\"\\352\": self-insert\n\"\\353\": self-insert\n\"\\354\": self-insert\n\"\\355\": self-insert\n\"\\356\": self-insert\n\"\\357\": self-insert\n\"\\360\": self-insert\n\"\\361\": self-insert\n\"\\362\": self-insert\n\"\\363\": self-insert\n\"\\364\": self-insert\n\"\\365\": self-insert\n\"\\366\": self-insert\n\"\\367\": self-insert\n\"\\370\": self-insert\n\"\\371\": self-insert\n\"\\372\": self-insert\n\"\\373\": self-insert\n\"\\374\": self-insert\n\"\\375\": self-insert\n\"\\376\": self-insert\n\"\\377\": self-insert\n\"\\C-@\": set-mark\n\"\\e \": set-mark\n# shell-backward-kill-word (not bound)\n\"\\e\\C-b\": shell-backward-word\n\"\\e\\C-e\": shell-expand-line\n\"\\e\\C-f\": shell-forward-word\n\"\\e\\C-d\": shell-kill-word\n\"\\e\\C-t\": shell-transpose-words\n# skip-csi-sequence (not bound)\n\"\\C-xs\": spell-correct-word\n\"\\C-x(\": start-kbd-macro\n# tab-insert (not bound)\n\"\\e&\": tilde-expand\n\"\\C-t\": transpose-chars\n\"\\et\": transpose-words\n# tty-status (not bound)\n\"\\C-x\\C-u\": undo\n\"\\C-_\": undo\n# universal-argument (not bound)\n# unix-filename-rubout (not bound)\n\"\\C-u\": unix-line-discard\n\"\\C-w\": unix-word-rubout\n\"\\eu\": upcase-word\n# vi-append-eol (not bound)\n# vi-append-mode (not bound)\n# vi-arg-digit (not bound)\n# vi-bWord (not bound)\n# vi-back-to-indent (not bound)\n# vi-backward-bigword (not bound)\n# vi-backward-word (not bound)\n# vi-bword (not bound)\n# vi-change-case (not bound)\n# vi-change-char (not bound)\n# vi-change-to (not bound)\n# vi-char-search (not bound)\n# vi-column (not bound)\n# vi-complete (not bound)\n# vi-delete (not bound)\n# vi-delete-to (not bound)\n# vi-eWord (not bound)\n# vi-edit-and-execute-command (not bound)\n# vi-editing-mode (not bound)\n# vi-end-bigword (not bound)\n# vi-end-word (not bound)\n# vi-eof-maybe (not bound)\n# vi-eword (not bound)\n# vi-fWord (not bound)\n# vi-fetch-history (not bound)\n# vi-first-print (not bound)\n# vi-forward-bigword (not bound)\n# vi-forward-word (not bound)\n# vi-fword (not bound)\n# vi-goto-mark (not bound)\n# vi-insert-beg (not bound)\n# vi-insertion-mode (not bound)\n# vi-match (not bound)\n# vi-movement-mode (not bound)\n# vi-next-word (not bound)\n# vi-overstrike (not bound)\n# vi-overstrike-delete (not bound)\n# vi-prev-word (not bound)\n# vi-put (not bound)\n# vi-redo (not bound)\n# vi-replace (not bound)\n# vi-rubout (not bound)\n# vi-search (not bound)\n# vi-search-again (not bound)\n# vi-set-mark (not bound)\n# vi-subst (not bound)\n# vi-tilde-expand (not bound)\n# vi-undo (not bound)\n# vi-unix-word-rubout (not bound)\n# vi-yank-arg (not bound)\n# vi-yank-pop (not bound)\n# vi-yank-to (not bound)\n\"\\C-y\": yank\n\"\\e.\": yank-last-arg\n\"\\e_\": yank-last-arg\n\"\\e\\C-y\": yank-nth-arg\n\"\\ey\": yank-pop\n",
     "variables": "set bind-tty-special-chars on\nset blink-matching-paren off\nset byte-oriented off\nset colored-completion-prefix off\nset colored-stats off\nset completion-ignore-case off\nset completion-map-case off\nset convert-meta off\nset disable-completion off\nset echo-control-characters on\nset enable-active-region on\nset enable-bracketed-paste on\nset enable-keypad off\nset enable-meta-key on\nset expand-tilde off\nset force-meta-prefix off\nset history-preserve-point off\nset horizontal-scroll-mode off\nset input-meta on\nset mark-directories on\nset mark-modified-lines off\nset mark-symlinked-directories off\nset match-hidden-files on\nset menu-complete-display-prefix off\nset meta-flag on\nset output-meta on\nset page-completions on\nset prefer-visible-bell on\nset print-completions-horizontally off\nset revert-all-at-newline off\nset search-ignore-case off\nset show-all-if-ambiguous off\nset show-all-if-unmodified off\nset show-mode-in-prompt off\nset skip-completed-text off\nset visible-stats off\nset active-region-end-color \\e[27m\nset active-region-start-color \\e[7m\nset bell-style audible\nset comment-begin #\nset completion-display-width -1\nset completion-prefix-display-length 0\nset completion-query-items 100\nset editing-mode emacs\nset emacs-mode-string @\nset history-size -1\nset keymap emacs\nset keyseq-timeout 500\nset vi-cmd-mode-string (cmd)\nset vi-ins-mode-string (ins)\n",
-    "diagnostic": "\"\\C-x\\C-g\" \"_observe\"\n"
+    "diagnostic": "\"\\C-x\\C-g\" \"_observe\"\n",
+    "onlyRemovedBinding": ["\"\\C-x\\C-g\": abort"]
   },
   "observerUnitControl": {
     "text": "a中🙂b",
-    "rawReadlinePoints": [
-      4,
-      0,
-      1,
-      2,
-      3,
-      4,
-      3,
-      4,
-      3,
-      2,
-      1
-    ],
-    "utf8BytePoints": [
-      9,
-      0,
-      1,
-      4,
-      8,
-      9,
-      8,
-      9,
-      8,
-      4,
-      1
-    ],
-    "conclusion": "This Bash bind -x READLINE_POINT counts Unicode scalars, not UTF-8 bytes.",
-    "mutationControl": "Every event followed by a second unchanged observation; all line/point/logical fields equal."
+    "rawReadlinePoints": [4, 0, 1, 2, 3, 4, 3, 4, 3, 2, 1],
+    "utf8BytePoints": [9, 0, 1, 4, 8, 9, 8, 9, 8, 4, 1],
+    "conclusion": "This Bash bind -x READLINE_POINT counts Unicode scalars, not UTF-8 bytes. Every converted point also matches native rl_point read directly from the child.",
+    "mutationControl": "Every event observed twice unchanged; every prefix also replayed in a fresh PTY with no intervening diagnostics. All line/point/logical fields equal."
   }
 }

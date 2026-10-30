@@ -290,7 +290,7 @@ test("multiline commands repaint hard rows and leave output below them", () => {
   const home = replay(8, 3, [
     { prompt: "$ " },
     {
-      keys: `one${newline}two${newline}three${newline}four${newline}five\x01${"\x1b[A".repeat(4)}X`,
+      keys: `one${newline}two${newline}three${newline}four${newline}five\x01X`,
     },
   ]);
   assert.deepEqual(home.screen, ["$ Xone", "two", "three"]);
@@ -329,22 +329,79 @@ test("typing after a cursor move at the right margin matches text written direct
   }
 });
 
-test("hard-line navigation preserves the pasted screen and places the caret before edits", () => {
-  const command = "# Heading\n\nA paragraph longer than the terminal width.\n\nTail";
-  const pasted = `\x1b[200~${command}\x1b[201~`;
-  const steps: Step[] = [{ prompt: "$ " }, { keys: `${pasted}\x01` }];
-  const home = replay(12, 12, steps);
-  const reference = direct(
-    12,
-    12,
-    `$ ${command.replaceAll("\n", "\r\n")}`,
-    "$ # Heading\r\n\r\nA paragraph longer than the terminal width.\r\n\r\n",
+function record(value: unknown): Record<string, unknown> {
+  assert.ok(typeof value === "object" && value !== null);
+  return Object.fromEntries(Object.entries(value));
+}
+function values(value: unknown): readonly unknown[] {
+  assert.ok(Array.isArray(value));
+  return value;
+}
+function string(value: unknown): string {
+  assert.ok(typeof value === "string");
+  return value;
+}
+
+test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", async () => {
+  const document: unknown = JSON.parse(
+    await readFile(resolve(root, "tests/terminal/readline-navigation.json"), "utf8"),
   );
-  assert.deepEqual(home.lines, reference.lines);
-  assert.deepEqual(home.cursor, reference.cursor);
-  const edited = replay(12, 12, steps.concat([{ keys: "!\x1b[A?\x01\x1b[A>" }]));
-  const expected = "$ # Heading\r\n\r\n>A paragraph longer than the terminal width.\r\n?\r\n!Tail";
-  const after = direct(12, 12, expected, "$ # Heading\r\n\r\n>");
-  assert.deepEqual(edited.lines, after.lines);
-  assert.deepEqual(edited.cursor, after.cursor);
+  for (const value of values(record(document).cases)) {
+    const fixture = record(value);
+    if (fixture.parity !== true) continue;
+    assert.ok(typeof fixture.columns === "number");
+    const steps: Step[] = [{ prompt: "$ " }];
+    const history = values(fixture.history).map((entry) => string(entry));
+    for (const entry of history) steps.push({ keys: entry + "\r" }, { prompt: "$ " });
+    for (const rawStep of values(fixture.steps)) {
+      const step = record(rawStep);
+      const input = Buffer.from(string(step.inputHex), "hex").toString();
+      const line = string(step.line);
+      assert.ok(typeof step.point === "number");
+      const prefix = Buffer.from(line).subarray(0, step.point).toString();
+      steps.push({ keys: input });
+      const actual = replay(fixture.columns, 100, steps);
+      const preceding = history.map((entry) => `$ ${entry}\r\n`).join("");
+      const expected = direct(
+        fixture.columns,
+        100,
+        `${preceding}$ ${line.replaceAll("\n", "\r\n")}`,
+        `${preceding}$ ${prefix.replaceAll("\n", "\r\n")}`,
+      );
+      assert.deepEqual(actual.lines, expected.lines, `${fixture.name} ${step.key}`);
+      assert.deepEqual(actual.cursor, expected.cursor, `${fixture.name} ${step.key}`);
+    }
+  }
+});
+
+test("native Shift key bytes retain explicit newline and safe-CSI policies in the VT", async () => {
+  const document: unknown = JSON.parse(
+    await readFile(resolve(root, "tests/terminal/readline-navigation.json"), "utf8"),
+  );
+  const policies = new Map([
+    ["modified-arrows", "one two\n\nthree"],
+    ["shift-enter-policy", "# first\n# second"],
+  ]);
+  for (const value of values(record(document).cases)) {
+    const fixture = record(value);
+    if (fixture.parity !== false) continue;
+    const expected = policies.get(string(fixture.name));
+    assert.ok(expected !== undefined, String(fixture.name));
+    assert.ok(typeof fixture.columns === "number");
+    const steps: Step[] = [{ prompt: "$ " }];
+    const history = values(fixture.history).map((entry) => string(entry));
+    for (const entry of history) steps.push({ keys: entry + "\r" }, { prompt: "$ " });
+    const keys = values(fixture.steps)
+      .map((entry) => Buffer.from(string(record(entry).inputHex), "hex").toString())
+      .join("");
+    const actual = replay(fixture.columns, 100, steps.concat([{ keys }]));
+    const preceding = history.map((entry) => `$ ${entry}\r\n`).join("");
+    const directPolicy = direct(
+      fixture.columns,
+      100,
+      `${preceding}$ ${expected.replaceAll("\n", "\r\n")}`,
+    );
+    assert.deepEqual(actual.lines, directPolicy.lines, string(fixture.name));
+    assert.deepEqual(actual.cursor, directPolicy.cursor, string(fixture.name));
+  }
 });

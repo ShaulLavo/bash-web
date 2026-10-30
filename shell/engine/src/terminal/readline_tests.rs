@@ -20,6 +20,7 @@ struct Step {
     input_hex: String,
     line: String,
     point: usize,
+    history_offset: usize,
 }
 fn unhex(text: &str) -> Vec<u8> {
     (0..text.len())
@@ -46,12 +47,7 @@ fn bash5_readline_byte_replay() {
         "../../../../tests/terminal/readline-navigation.json"
     ))
     .unwrap();
-    let mismatches: Vec<_> = reference
-        .cases
-        .iter()
-        .filter(|case| case.parity)
-        .flat_map(replay)
-        .collect();
+    let mismatches: Vec<_> = reference.cases.iter().flat_map(replay).collect();
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
 fn replay(case: &Case) -> Vec<String> {
@@ -71,15 +67,41 @@ fn replay(case: &Case) -> Vec<String> {
             serde_json::json!({
                 "case": case.name, "step": index, "key": step.key, "inputHex": step.input_hex,
                 "line": actual, "point": editor.cursor, "historyAt": editor.history_at,
-                "expectedLine": step.line, "expectedPoint": step.point
+                "expectedLine": step.line, "expectedPoint": step.point,
+            "expectedHistoryOffset": step.history_offset, "selectedParity": case.parity
             })
         );
-        if actual != step.line || editor.cursor != step.point {
+        if !case.parity {
+            check_policy(case, index, &editor);
+            continue;
+        }
+        let history_offset = editor.history_at.unwrap_or(editor.history.len());
+        if actual != step.line
+            || editor.cursor != step.point
+            || history_offset != step.history_offset
+        {
             mismatches.push(format!(
-                "{} step {index} {}: point {} != {}; line {:?} != {:?}",
-                case.name, step.key, editor.cursor, step.point, actual, step.line
+                "{} step {index} {}: point {} != {}; history {} != {}; line {:?} != {:?}",
+                case.name,
+                step.key,
+                editor.cursor,
+                step.point,
+                history_offset,
+                step.history_offset,
+                actual,
+                step.line
             ));
         }
     }
     mismatches
+}
+
+fn check_policy(case: &Case, index: usize, editor: &Editor) {
+    let expected = match case.name.as_str() {
+        "modified-arrows" => "one two\n\nthree",
+        "shift-enter-policy" => ["# first", "# first\n", "# first\n# second"][index],
+        name => panic!("unqualified input policy {name}"),
+    };
+    assert_eq!(editor.line, expected.as_bytes(), "{} {index}", case.name);
+    assert_eq!(editor.cursor, expected.len(), "{} {index}", case.name);
 }

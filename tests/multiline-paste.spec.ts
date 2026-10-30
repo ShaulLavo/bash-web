@@ -76,8 +76,6 @@ test("multiline wrapped editing and resize preserve rows and the caret", async (
   await page.setViewportSize({ width: 620, height: 600 });
   await expect.poll(() => page.evaluate(() => window.bashWeb!.snapshot().cols)).not.toBe(columns);
   await page.keyboard.press("Home");
-  await page.keyboard.press("ArrowUp");
-  await page.keyboard.press("ArrowUp");
   await page.keyboard.press("Control+k");
   await expect.poll(() => lines(page)).toEqual(["$"]);
   await expect
@@ -89,7 +87,7 @@ test("multiline wrapped editing and resize preserve rows and the caret", async (
   await expect.poll(() => lines(page)).toEqual(["$ echo AFTER_RESIZE", "AFTER_RESIZE", "$"]);
 });
 
-test("a large Markdown paste moves between hard lines before history", async ({ page }) => {
+test("a large Markdown paste uses whole-buffer movement and history", async ({ page }) => {
   await page.keyboard.insertText("echo SAVED_HISTORY");
   await page.keyboard.press("Enter");
   await ready(page);
@@ -103,27 +101,26 @@ test("a large Markdown paste moves between hard lines before history", async ({ 
   await page.keyboard.press("Control+a");
   await expect
     .poll(() => page.evaluate(() => window.bashWeb!.terminal!.geometry().cursor.x))
-    .toBe(0);
-  await page.keyboard.insertText("!");
-  await page.keyboard.press("ArrowUp");
-  await page.keyboard.insertText("?");
-  await page.keyboard.press("Home");
-  await page.keyboard.press("ArrowUp");
-  await page.keyboard.insertText("#");
-  await page.keyboard.press("Home");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.insertText(">");
-  await page.keyboard.press("ArrowDown");
+    .toBe(2);
+  await page.keyboard.insertText("# START ");
   await page.keyboard.press("End");
-  await page.keyboard.insertText("<");
+  await page.keyboard.insertText(" END");
   await expect
-    .poll(async () => (await lines(page)).slice(-3))
-    .toEqual(["### Last heading", ">?", "!A final paragraph with unequal length.<"]);
-  expect(await page.evaluate(() => window.bashWeb!.terminal!.geometry().cursor.x)).toBe(40);
-  await test.info().attach("large-markdown-hard-line-navigation", {
+    .poll(async () => (await lines(page)).at(-1))
+    .toBe("A final paragraph with unequal length. END");
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(async () => (await lines(page)).at(-1)).toBe("$ echo SAVED_HISTORY");
+  await page.keyboard.press("ArrowDown");
+  await expect
+    .poll(async () => (await lines(page)).at(-1))
+    .toBe("A final paragraph with unequal length. END");
+  await test.info().attach("large-markdown-bash5-navigation", {
     body: await page.screenshot(),
     contentType: "image/png",
   });
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+k");
+  await expect.poll(async () => (await lines(page)).at(-1)).toBe("$");
   await page.keyboard.press("Control+c");
   await ready(page);
   await page.keyboard.press("ArrowUp");
