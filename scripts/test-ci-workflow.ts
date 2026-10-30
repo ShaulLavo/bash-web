@@ -230,7 +230,7 @@ test("quality package recipes preserve complete current selections", () => {
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(
     expanded(String(scripts["test:shell:scoreboard"])),
-    /node scripts\/scoreboard-tests\.mjs/,
+    /node scripts\/scoreboard-tests\.ts/,
   );
   assert.doesNotMatch(expanded(String(scripts["test:shell:scoreboard"])), /scripts\/test-/);
 });
@@ -261,11 +261,8 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
     assert.equal(env[key], value);
   const run = commands(compat);
   assert.equal(env.BASH_COMPAT_BASE_REF, undefined);
-  assert.match(run, /node scripts\/scoreboard-ci\.mjs baseline BASH_COMPAT_BASE_REF/);
-  assert.match(
-    commands(jobs().layers),
-    /node scripts\/scoreboard-ci\.mjs baseline LAYERS_BASE_REF/,
-  );
+  assert.match(run, /node scripts\/scoreboard-ci\.ts baseline BASH_COMPAT_BASE_REF/);
+  assert.match(commands(jobs().layers), /node scripts\/scoreboard-ci\.ts baseline LAYERS_BASE_REF/);
   assert.doesNotMatch(
     readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
     /github\.event\.pull_request\.base\.sha/,
@@ -351,7 +348,7 @@ test("compatibility reuses the shared node build while standalone commands still
     );
   assert.equal(
     expanded("npm run test:shell:scoreboard:prebuilt"),
-    "node scripts/scoreboard-tests.mjs",
+    "node scripts/scoreboard-tests.ts",
   );
 });
 
@@ -423,8 +420,8 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
     commands(floor),
     /bash-compat\.mjs|compat:shell|build:|run.*status.*completed/,
   );
-  assert.match(commands(floor), /scoreboard-ci\.mjs fold/);
-  assert.match(commands(floor), /scoreboard-ci\.mjs enforce/);
+  assert.match(commands(floor), /scoreboard-ci\.ts fold/);
+  assert.match(commands(floor), /scoreboard-ci\.ts enforce/);
   const producer = readFileSync(new URL("./bash-compat.ts", import.meta.url), "utf8");
   assert.match(producer, /BASH_COMPAT_RAW !== "1"/);
   assert.doesNotMatch(producer, /requireMembership: true/);
@@ -544,10 +541,10 @@ test("scoreboard and observation run independently using one shared node build",
   assert.ok(prepare.indexOf("npm run build:node-harness") < prepare.indexOf("tar -czf"));
   assert.match(prepare, /tar -czf .* \.build\/node /);
   assert.equal(
-    expanded(commands(scoreboard)).match(/node scripts\/scoreboard-tests\.mjs/g)?.length,
+    expanded(commands(scoreboard)).match(/node scripts\/scoreboard-tests\.ts/g)?.length,
     1,
   );
-  assert.doesNotMatch(expanded(commands(observation)), /scoreboard-tests\.mjs/);
+  assert.doesNotMatch(expanded(commands(observation)), /scoreboard-tests\.ts/);
   assert.ok(Array.isArray(scoreboard.steps));
   for (const action of ["javascript", "native"])
     assert.equal(
@@ -581,8 +578,8 @@ test("scoreboard and observation run independently using one shared node build",
   );
   assert.match(String(object(upload.with).path), /\$\{\{ runner.temp \}\}\/scoreboard-input\.json/);
   const observe = commands(observation);
-  assert.ok(observe.indexOf("scoreboard-ci.mjs prepare") < observe.indexOf("diagnose-compat.ts"));
-  assert.doesNotMatch(commands(publisher), /scoreboard-ci\.mjs prepare/);
+  assert.ok(observe.indexOf("scoreboard-ci.ts prepare") < observe.indexOf("diagnose-compat.ts"));
+  assert.doesNotMatch(commands(publisher), /scoreboard-ci\.ts prepare/);
 });
 
 test("layer and split compatibility producers select immutable baselines after JavaScript restore", () => {
@@ -596,7 +593,7 @@ test("layer and split compatibility producers select immutable baselines after J
     {
       id: "own-shell-observation",
       variable: "BASH_COMPAT_BASE_REF",
-      consumer: "scoreboard-ci.mjs prepare",
+      consumer: "scoreboard-ci.ts prepare",
     },
   ]) {
     const job = object(jobs()[id]);
@@ -604,7 +601,7 @@ test("layer and split compatibility producers select immutable baselines after J
     assert.ok(Array.isArray(job.steps));
     const steps = job.steps.map(object);
     const restore = steps.findIndex((step) => step.uses === "./.github/actions/javascript");
-    const command = `node scripts/scoreboard-ci.mjs baseline ${variable}`;
+    const command = `node scripts/scoreboard-ci.ts baseline ${variable}`;
     const baseline = steps.findIndex((step) => step.run === command);
     assert.equal(steps.filter((step) => step.run === command).length, 1);
     assert.ok(restore >= 0 && restore < baseline, `${id} restores dependencies before selection`);

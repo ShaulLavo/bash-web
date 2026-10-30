@@ -25,37 +25,47 @@ import {
   resolveFloor,
   scoringInputs,
   sourceEquivalent,
-} from "./shell-scoreboard-main.mjs";
-import { bootstrap } from "./shell-scoreboard-floor.mjs";
-import { bytesDigest, digest, summarize } from "./shell-scoreboard.mjs";
-import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
+  assertRawScore,
+} from "./shell-scoreboard-main.ts";
+import type {
+  EvidenceSet,
+  HostArtifact,
+  HostJob,
+  HostRun,
+  RawScore,
+} from "./shell-scoreboard-main.ts";
+import { bootstrap, assertMainFloor } from "./shell-scoreboard-floor.ts";
+import type { FloorEvidence, MainFloor } from "./shell-scoreboard-floor.ts";
+import { assertBinding, assertRecord, bytesDigest, digest, summarize } from "./shell-scoreboard.ts";
+import type { Score } from "./shell-scoreboard.ts";
+import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
 import {
   foldQualification,
   prepareQualification,
   sealRaw,
   selectBaseline,
   verifyBinding,
-} from "./scoreboard-ci.mjs";
+} from "./scoreboard-ci.ts";
 
-const sha = (n) => n.toString(16).padStart(40, "0");
+const sha = (n: number): string => n.toString(16).padStart(40, "0");
 const fixture = scoreboardFixture("oils");
 const { oracle } = fixture;
-const score = (ids) => fixture.score(ids, true);
-const floor = (sourceSha, ids) => fixture.floor(ids, sourceSha);
+const score = (ids: string[]): Score => fixture.score(ids, true);
+const floor = (sourceSha: string, ids: string[]): MainFloor => fixture.floor(ids, sourceSha);
 const twoEdges = () =>
   new Map([
     [sha(2), sha(1)],
     [sha(1), bootstrap.sourceSha],
   ]);
-const empty = () => ({ scores: [], floors: [], evidence: [] });
-function provenance(kind = "raw") {
+const empty = (): EvidenceSet => ({ scores: [], floors: [], evidence: [] });
+function provenance(kind: "raw" | "floor" = "raw") {
   const jobName = kind === "raw" ? "own-shell-compatibility" : "score-floor";
   const observe = kind === "raw" ? "Seal complete raw score" : "Fold main floor and qualification";
   const upload = kind === "raw" ? "Upload complete raw score" : "Upload cumulative main floor";
   const name = `own-shell-${kind}-${sha(1)}-10-2`;
   const start = "2026-10-24T17:00:00Z",
     end = "2026-10-24T17:00:02Z";
-  const run = {
+  const run: HostRun = {
     id: 10,
     run_attempt: 2,
     repository: { id: authority.repositoryId },
@@ -68,7 +78,7 @@ function provenance(kind = "raw") {
     status: "in_progress",
     conclusion: null,
   };
-  const job = {
+  const job: HostJob = {
     id: 20,
     name: jobName,
     run_id: 10,
@@ -85,7 +95,7 @@ function provenance(kind = "raw") {
       completed_at: end,
     })),
   };
-  const artifact = {
+  const artifact: HostArtifact = {
     id: 30,
     name,
     workflow_run: { id: 10, head_sha: sha(1), head_repository_id: authority.repositoryId },
@@ -190,12 +200,14 @@ test("a successfully uploaded regression receipt stays authoritative, never gree
     number: 3,
     status: "completed",
     conclusion: "failure",
+    started_at: "2026-10-24T17:00:02Z",
+    completed_at: "2026-10-24T17:00:03Z",
   });
   assert.doesNotThrow(() => assertUploader(input));
   input.job.steps[2].name = "Some broken validation";
   assert.throws(() => assertUploader(input), /unexpected failed producer/);
 });
-function archive(entries) {
+function archive(entries: [string, string][]): Buffer {
   return execFileSync(
     "python3",
     [
@@ -227,17 +239,26 @@ test("archive digests, fixed members and duplicates/path traversal fail closed",
       ["raw.json", "{}"],
       ["extra", "x"],
     ],
-  ]) {
+  ] satisfies [string, string][][]) {
     const bad = archive(entries);
     assert.throws(() => artifactJson(bad, { digest: `sha256:${bytesDigest(bad)}` }, "raw.json"));
   }
 });
-async function resolution(sourceSha, records, parents, same = () => false) {
+async function resolution(
+  sourceSha: string,
+  records: Map<string, EvidenceSet>,
+  parents: Map<string, string>,
+  same: (before: string, source: string) => boolean = () => false,
+) {
   return resolveFloor({
     oracle,
     sourceSha,
     collect: async (sha) => records.get(sha) ?? empty(),
-    parent: (sha) => parents.get(sha),
+    parent: (sha) => {
+      const parent = parents.get(sha);
+      assert.ok(parent);
+      return parent;
+    },
     equivalent: (before, source) => ({
       equivalent: same(before, source),
       beforeInputsSha256: digest(before),
@@ -308,13 +329,18 @@ test("resolution stops at 32 edges without a history replay or static fallback",
   );
   assert.equal(visited, 33);
 });
-async function withRepo(body) {
+interface RepoContext {
+  root: string;
+  put: (path: string, value: string | Buffer) => void;
+  commit: () => string;
+}
+async function withRepo(body: (repo: RepoContext) => void | Promise<void>): Promise<void> {
   const root = mkdtempSync(resolve(process.env.TMPDIR || tmpdir(), "scoreboard-git-"));
   try {
     git(root, ["init", "-q"]);
     git(root, ["config", "user.name", "Score fixture"]);
     git(root, ["config", "user.email", "score@example.invalid"]);
-    const put = (path, value) => {
+    const put = (path: string, value: string | Buffer): void => {
       mkdirSync(resolve(root, path, ".."), { recursive: true });
       writeFileSync(resolve(root, path), value);
     };
@@ -352,7 +378,7 @@ test("complete input equivalence excludes only reviewed regular docs, never adap
     assert.notDeepEqual(scoringInputs(root, base), scoringInputs(root, changed));
   });
 });
-function pullRequestProvenance(headSha, baseSha) {
+function pullRequestProvenance(headSha: string, baseSha: string) {
   return {
     event: {
       repository: { id: authority.repositoryId },
@@ -422,7 +448,7 @@ test("H/C/B/M are distinct and actual merge parents/current main inclusion are c
   });
 });
 
-function rebuiltMerge({ root, put, commit }) {
+function rebuiltMerge({ root, put, commit }: RepoContext) {
   put("source.txt", "base");
   const eventBase = commit();
   git(root, ["checkout", "-qb", "feature"]);
@@ -434,7 +460,7 @@ function rebuiltMerge({ root, put, commit }) {
   git(root, ["-c", "commit.gpgsign=false", "merge", "--no-ff", "-m", "rebuilt", headSha]);
   const sourceSha = git(root, ["rev-parse", "HEAD"]);
   const { event, run } = pullRequestProvenance(headSha, eventBase);
-  run.pull_requests = [{ head: { sha: headSha }, base: { sha: eventBase } }];
+  Object.assign(run, { pull_requests: [{ head: { sha: headSha }, base: { sha: eventBase } }] });
   return { root, event, eventName: "pull_request", sourceSha, mainSha, run };
 }
 test("a rebuilt tested merge binds its main parent rather than the stale PR event base", async () => {
@@ -492,20 +518,76 @@ test("rebuilt merge validation rejects wrong heads, unrelated or invalid bases, 
   });
 });
 
+interface ObservationInput {
+  selected: { kind: string; sourceSha: string; beforeSha: string };
+  sourceSha: string;
+  capturedAt: string;
+  run: RawScore["run"];
+  floor: null;
+  inputsSha256: string;
+}
+interface HostedInput {
+  run: HostRun;
+  job?: HostJob;
+  jobs?: HostJob[];
+  artifact?: HostArtifact;
+  artifacts?: HostArtifact[];
+  logs?: string;
+  logsByJobId?: Record<number, string>;
+  bytes?: Buffer;
+  bytesByArtifact?: Record<number, Buffer>;
+  payload?: RawScore | MainFloor;
+  input?: ObservationInput;
+  score?: Score;
+  omitScore?: boolean;
+  extraMembers?: [string, string][];
+  logOverride?: string;
+  workflow?: string;
+  refresh?: () => void;
+}
+interface HostedArtifact extends HostedInput {
+  kind: "raw" | "floor";
+  job: HostJob;
+  artifact: HostArtifact;
+  logs: string;
+  workflow: string;
+  payload: RawScore | MainFloor;
+  bytes: Buffer;
+}
+interface HostedObservation extends HostedInput {
+  jobs: HostJob[];
+  artifact: HostArtifact;
+  artifacts: HostArtifact[];
+  input: ObservationInput;
+  score: Score;
+  workflow: string;
+  bytes: Buffer;
+  logsByJobId: Record<number, string>;
+  refresh: () => void;
+}
 function hostedArtifact({
   root,
   sourceSha,
   attempt,
   kind,
-  passes,
+  passes = [],
   status = "completed",
   observation = score(passes),
   requiredFloor = floor(sourceSha, passes),
-}) {
+}: {
+  root: string;
+  sourceSha: string;
+  attempt: number;
+  kind: "raw" | "floor";
+  passes?: string[];
+  status?: string;
+  observation?: Score;
+  requiredFloor?: MainFloor;
+}): HostedArtifact {
   const input = provenance(kind);
   Object.assign(input.run, { head_sha: sourceSha, run_attempt: attempt });
   Object.assign(input.job, { head_sha: sourceSha, run_attempt: attempt, id: 20 + attempt, status });
-  const raw = {
+  const raw: RawScore = {
     schema: 1,
     kind: "raw-score",
     sourceSha,
@@ -534,10 +616,25 @@ function hostedArtifact({
   input.logs = `2026-10-24T17:00:01.100Z SHA256 digest of uploaded artifact zip is ${bytesDigest(bytes)}\n2026-10-24T17:00:01.200Z Artifact ${input.artifact.name} has been successfully uploaded! Final size is ${bytes.length} bytes. Artifact ID is ${input.artifact.id}\n`;
   return { ...input, payload, bytes };
 }
-function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }) {
+function hostedObservation({
+  root,
+  sourceSha,
+  attempt = 1,
+  passes = ["a", "x"],
+}: {
+  root: string;
+  sourceSha: string;
+  attempt?: number;
+  passes?: string[];
+}): HostedObservation {
   const beforeSha = git(root, ["rev-parse", `${sourceSha}^`]);
   const start = "2026-10-24T17:00:00Z";
-  const step = (name, number, startedAt = start, completedAt = "2026-10-24T17:00:02Z") => ({
+  const step = (
+    name: string,
+    number: number,
+    startedAt = start,
+    completedAt = "2026-10-24T17:00:02Z",
+  ): HostJob["steps"][number] => ({
     name,
     number,
     status: "completed",
@@ -545,7 +642,7 @@ function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }
     started_at: startedAt,
     completed_at: completedAt,
   });
-  const run = {
+  const run: HostRun = {
     id: 10,
     run_attempt: attempt,
     repository: { id: authority.repositoryId },
@@ -558,9 +655,17 @@ function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }
     status: "completed",
     conclusion: "failure",
   };
-  const jobs = [
-    { id: 11, name: "prepare", status: "completed", conclusion: "success" },
-    { id: 12, name: "own-shell-scoreboard", status: "completed", conclusion: "failure" },
+  const common = { run_id: run.id, run_attempt: attempt, head_sha: sourceSha };
+  const jobs: HostJob[] = [
+    { ...common, id: 11, name: "prepare", status: "completed", conclusion: "success", steps: [] },
+    {
+      ...common,
+      id: 12,
+      name: "own-shell-scoreboard",
+      status: "completed",
+      conclusion: "failure",
+      steps: [],
+    },
     {
       id: 13,
       name: "own-shell-observation",
@@ -585,7 +690,14 @@ function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }
         step("Run actions/upload-artifact@v4", 11, "2026-10-24T17:00:04Z", "2026-10-24T17:00:05Z"),
       ],
     },
-    { id: 14, name: "own-shell-compatibility", status: "completed", conclusion: "skipped" },
+    {
+      ...common,
+      id: 14,
+      name: "own-shell-compatibility",
+      status: "completed",
+      conclusion: "skipped",
+      steps: [],
+    },
   ];
   for (const job of jobs) {
     job.run_id = run.id;
@@ -602,7 +714,7 @@ function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }
     inputsSha256: digest(scoringInputs(root, sourceSha)),
   };
   const scoreValue = score(passes);
-  const artifact = {
+  const artifact: HostArtifact = {
     id: 101,
     name: `own-shell-current-${sourceSha}-${run.id}-${attempt}`,
     workflow_run: { id: run.id, head_sha: sourceSha, head_repository_id: authority.repositoryId },
@@ -610,16 +722,20 @@ function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }
     digest: "",
     created_at: "2026-10-24T17:00:04.500Z",
   };
-  const result = {
+  const result: HostedObservation = {
     run,
     jobs,
     artifacts: [artifact],
     artifact,
     input,
     score: scoreValue,
+    bytes: Buffer.alloc(0),
+    logsByJobId: {},
     workflow: readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
     refresh() {
-      const entries = [["scoreboard-input.json", JSON.stringify(this.input)]].concat(
+      const entries: [string, string][] = (
+        [["scoreboard-input.json", JSON.stringify(this.input)]] satisfies [string, string][]
+      ).concat(
         this.omitScore ? [] : [["own-shell-current.json", JSON.stringify(this.score)]],
         [["own-shell-diagnostics/host.jsonl", "diagnostics"]],
         this.extraMembers ?? [],
@@ -636,31 +752,46 @@ function hostedObservation({ root, sourceSha, attempt = 1, passes = ["a", "x"] }
   result.refresh();
   return result;
 }
-function hostedClient(sourceSha, inputs) {
+function hostedClient(sourceSha: string, inputs: HostedInput[]) {
   const runId = inputs[0].run.id;
-  const requests = [];
-  const jobs = inputs.flatMap((item) => item.jobs ?? [item.job]);
-  const artifacts = inputs.flatMap((item) => item.artifacts ?? [item.artifact]);
-  const logs = new Map(
-    inputs.flatMap((item) =>
-      (item.jobs ?? [item.job]).map((job) => [job.id, item.logsByJobId?.[job.id] ?? item.logs]),
-    ),
+  const requests: string[] = [];
+  const jobs = inputs.flatMap((item) => item.jobs ?? (item.job ? [item.job] : []));
+  const artifacts = inputs.flatMap(
+    (item) => item.artifacts ?? (item.artifact ? [item.artifact] : []),
   );
-  const bytes = new Map(
+  const logs = new Map<number, string>(
     inputs.flatMap((item) =>
-      (item.artifacts ?? [item.artifact]).map((artifact) => [
-        artifact.id,
-        item.bytesByArtifact?.[artifact.id] ?? item.bytes,
+      (item.jobs ?? (item.job ? [item.job] : [])).map((job) => [
+        job.id,
+        item.logsByJobId?.[job.id] ?? item.logs ?? "",
       ]),
     ),
   );
-  async function request(path) {
+  const bytes = new Map<number, Buffer>(
+    inputs.flatMap((item) =>
+      (item.artifacts ?? (item.artifact ? [item.artifact] : [])).flatMap((artifact) => {
+        const value = item.bytesByArtifact?.[artifact.id] ?? item.bytes;
+        return value ? [[artifact.id, value]] : [];
+      }),
+    ),
+  );
+  function request(path: string, type: "bytes"): Promise<Buffer>;
+  function request(path: string, type: "text"): Promise<string>;
+  function request(path: string, type?: "json"): Promise<unknown>;
+  async function request(path: string, type: "json" | "bytes" | "text" = "json"): Promise<unknown> {
+    void type;
     requests.push(path);
     if (path.startsWith(`/actions/workflows/${authority.workflowId}/runs?`))
       return {
         total_count: 1,
         workflow_runs: [
-          { id: runId, run_attempt: Math.max(...inputs.map((item) => item.run.run_attempt)) },
+          {
+            id: runId,
+            run_attempt: Math.max(...inputs.map((item) => item.run.run_attempt)),
+            head_sha: sourceSha,
+            status: "completed",
+            conclusion: "success",
+          },
         ],
       };
     if (path === `/actions/runs/${runId}/artifacts?per_page=100`)
@@ -673,24 +804,33 @@ function hostedClient(sourceSha, inputs) {
       if (attempt[2])
         return {
           total_count: selected.reduce(
-            (count, item) => count + (item.jobs ?? [item.job]).length,
+            (count, item) => count + (item.jobs ?? (item.job ? [item.job] : [])).length,
             0,
           ),
           jobs: jobs.filter((job) =>
-            selected.some((item) => (item.jobs ?? [item.job]).includes(job)),
+            selected.some((item) => (item.jobs ?? (item.job ? [item.job] : [])).includes(job)),
           ),
         };
       return selected[0]?.run;
     }
     const log = path.match(/^\/actions\/jobs\/(\d+)\/logs$/);
-    if (log && logs.has(Number(log[1]))) return logs.get(Number(log[1]));
+    if (log) {
+      const value = logs.get(Number(log[1]));
+      if (value !== undefined) return value;
+    }
     const artifact = path.match(/^\/actions\/artifacts\/(\d+)\/zip$/);
-    if (artifact && bytes.has(Number(artifact[1]))) return bytes.get(Number(artifact[1]));
+    if (artifact) {
+      const value = bytes.get(Number(artifact[1]));
+      if (value) return value;
+    }
     throw new Error(`unexpected host request ${path} at ${sourceSha}`);
   }
   return { request, requests };
 }
-async function withObservationRepo(body, workflow = provenance().workflow) {
+async function withObservationRepo(
+  body: (context: { root: string; sourceSha: string }) => Promise<void>,
+  workflow = provenance().workflow,
+): Promise<void> {
   await withRepo(async ({ root, put, commit }) => {
     put("base.txt", "base");
     commit();
@@ -699,7 +839,11 @@ async function withObservationRepo(body, workflow = provenance().workflow) {
     await body({ root, sourceSha });
   });
 }
-function resolveNonEquivalentFixture(sourceSha, found, predecessorEvidence = []) {
+function resolveNonEquivalentFixture(
+  sourceSha: string,
+  found: EvidenceSet,
+  predecessorEvidence: FloorEvidence[] = [],
+) {
   return resolveFloor({
     oracle,
     sourceSha,
@@ -743,10 +887,13 @@ test("API admission preserves all completed attempts while the workflow is runni
       false,
     );
     // A cheap rerun can admit its original completed producer without a new replay.
-    await admitQualificationRaw({ root, client, raw: inputs[0].payload });
+    const rawPayload = inputs[0].payload;
+    assert.ok("score" in rawPayload);
+    assertRawScore(rawPayload);
+    await admitQualificationRaw({ root, client, raw: rawPayload });
     inputs[0].job.run_attempt = 2;
     await assert.rejects(
-      admitQualificationRaw({ root, client, raw: inputs[0].payload }),
+      admitQualificationRaw({ root, client, raw: rawPayload }),
       /old producer attempt/,
     );
   });
@@ -779,8 +926,11 @@ test("completed failed main attempts can admit a complete observation without se
     const found = await mainEvidence({ root, oracle, client }).collect(sourceSha);
     assert.equal(found.scores.length, 1);
     assert.equal(found.evidence[0].kind, "observation");
-    assert.equal(found.evidence[0].sealer.conclusion, "skipped");
-    assert.equal(found.evidence[0].gate.conclusion, "failure");
+    const evidence = found.evidence[0];
+    assertRecord(evidence.sealer);
+    assertRecord(evidence.gate);
+    assert.equal(evidence.sealer.conclusion, "skipped");
+    assert.equal(evidence.gate.conclusion, "failure");
     assert.equal(found.evidence[0].inputSha256, digest(input.input));
     assert.equal(found.evidence[0].payloadSha256, digest(input.score));
     const predecessor = { kind: "predecessor-sentinel", sourceSha: bootstrap.sourceSha };
@@ -822,7 +972,10 @@ test("a valid raw score takes precedence over a coexisting current archive", asy
     input.bytesByArtifact = { [raw.artifact.id]: raw.bytes };
     const client = hostedClient(sourceSha, [input]);
     const found = await mainEvidence({ root, oracle, client }).collect(sourceSha);
-    assert.deepEqual(found.scores, [raw.payload.score]);
+    const rawPayload = raw.payload;
+    assert.ok("score" in rawPayload);
+    assertRawScore(rawPayload);
+    assert.deepEqual(found.scores, [rawPayload.score]);
     assert.deepEqual(
       found.evidence.map((item) => item.kind),
       ["raw"],
@@ -835,7 +988,13 @@ test("a valid raw score takes precedence over a coexisting current archive", asy
 });
 
 test("collector observation boundaries reject corrupt ZIPs, missing cases and unsafe source evidence", async () => {
-  const cases = [
+  const cases: {
+    name: string;
+    patch: (input: HostedObservation) => void;
+    refresh: boolean;
+    error: RegExp | ((error: unknown) => boolean);
+    workflow?: string;
+  }[] = [
     {
       name: "served ZIP corruption after valid upload provenance",
       patch(input) {
@@ -861,7 +1020,10 @@ test("collector observation boundaries reject corrupt ZIPs, missing cases and un
         input.extraMembers = [["own-shell-diagnostics/../escape.json", "{}"]];
       },
       refresh: true,
-      error: (error) => /ValueError: unsafe archive member/.test(error.stderr?.toString() ?? ""),
+      error: (error: unknown) => {
+        if (!error || typeof error !== "object" || !("stderr" in error)) return false;
+        return /ValueError: unsafe archive member/.test(String(error.stderr));
+      },
     },
     {
       name: "immutable workflow omits the reviewed uploader ID",
@@ -886,7 +1048,7 @@ test("collector observation boundaries reject corrupt ZIPs, missing cases and un
 });
 
 test("observation admission stays closed for incomplete or wrongly gated attempts", async () => {
-  const patches = [
+  const patches: [string, (input: HostedObservation) => void][] = [
     ["running workflow", (input) => (input.run.status = "in_progress")],
     ["successful workflow", (input) => (input.run.conclusion = "success")],
     ["failed observation", (input) => (input.jobs[2].conclusion = "failure")],
@@ -933,8 +1095,39 @@ test("a skipped sealer with a raw artifact is rejected instead of borrowing it",
   });
 });
 
+test("pending unrelated steps do not block selected producer evidence", async () => {
+  await withObservationRepo(async ({ root, sourceSha }) => {
+    const input = hostedObservation({ root, sourceSha });
+    input.jobs[0].steps.push(
+      {
+        name: "Run npm run test:browser",
+        number: 14,
+        status: "in_progress",
+        conclusion: null,
+        started_at: "2026-10-30T01:25:17Z",
+        completed_at: null,
+      },
+      {
+        name: "Run actions/upload-artifact@v4",
+        number: 15,
+        status: "pending",
+        conclusion: null,
+        started_at: null,
+        completed_at: null,
+      },
+    );
+    const evidence = mainEvidence({ root, oracle, client: hostedClient(sourceSha, [input]) });
+    assert.equal((await evidence.collect(sourceSha)).scores.length, 1);
+    input.jobs[2].steps[1].completed_at = null;
+    await assert.rejects(
+      mainEvidence({ root, oracle, client: hostedClient(sourceSha, [input]) }).collect(sourceSha),
+      /missing host step times/,
+    );
+  });
+});
+
 test("observation payload tampering fails closed", async () => {
-  const cases = [
+  const cases: [string, (input: HostedObservation) => void, RegExp][] = [
     ["wrong attempt", (input) => (input.input.run.attempt = 2), /observation attempt mismatch/],
     [
       "wrong inputs",
@@ -993,7 +1186,7 @@ test("observation payload tampering fails closed", async () => {
 test("observation uploader shape is unique and explicitly optional-file", async () => {
   await withObservationRepo(async ({ root, sourceSha }) => {
     const input = hostedObservation({ root, sourceSha });
-    const uploader = {
+    const uploader: Parameters<typeof assertUploader>[0] = {
       run: input.run,
       job: input.jobs[2],
       artifact: input.artifact,
@@ -1011,7 +1204,7 @@ test("observation uploader shape is unique and explicitly optional-file", async 
       "          if-no-files-found: ignore",
       "  own-shell-compatibility:",
     ].join("\n");
-    const invalidWorkflows = [
+    const invalidWorkflows: [string, RegExp][] = [
       [input.workflow.replace("      - id: current-upload\n", ""), /wrong reviewed upload step ID/],
       [
         input.workflow.replace("  own-shell-compatibility:\n", () => `${duplicateUploader}\n`),
@@ -1043,7 +1236,7 @@ test("observation uploader shape is unique and explicitly optional-file", async 
   });
 });
 
-function qualificationFixture(repo) {
+function qualificationFixture(repo: RepoContext) {
   const { root, put } = repo;
   const project = resolve(import.meta.dirname, "..");
   const common = git(project, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
@@ -1068,7 +1261,7 @@ function qualificationFixture(repo) {
     .slice(0, 2)
     .map((item) => item.id)
     .sort();
-  const score = (passes) => {
+  const score = (passes: string[]): Score => {
     const cases = oracle.cases.map(({ bash: _bash, ...item }) => ({
       ...item,
       outcome:
@@ -1095,29 +1288,39 @@ function qualificationFixture(repo) {
     id: 11,
     run_attempt: 1,
     head_repository: { id: authority.repositoryId },
+    head_branch: "fixture",
+    status: "in_progress",
+    conclusion: null,
   };
-  let rawClient;
-  const client = {
-    requests: [],
-    observedMain: input.mainSha,
-    async request(path) {
-      this.requests.push(path);
-      if (path === "/git/ref/heads/main") return { object: { sha: this.observedMain } };
-      if (path === "/actions/runs/11/attempts/1") return run;
-      if (
-        path.startsWith("/actions/runs/11/") ||
-        path === "/actions/jobs/99/logs" ||
-        path === "/actions/artifacts/999/zip"
-      )
-        return rawClient.request(path);
-      assert.ok(
-        !path.includes(input.event.pull_request.base.sha),
-        "stale event base must not replace current main floor",
-      );
-      return mainClient.request(path);
-    },
-  };
-  function publish(raw) {
+  let rawClient: ReturnType<typeof hostedClient> | undefined;
+  const requests: string[] = [];
+  function request(path: string, type: "bytes"): Promise<Buffer>;
+  function request(path: string, type: "text"): Promise<string>;
+  function request(path: string, type?: "json"): Promise<unknown>;
+  async function request(path: string, type: "json" | "bytes" | "text" = "json"): Promise<unknown> {
+    requests.push(path);
+    if (path === "/git/ref/heads/main") return { object: { sha: client.observedMain } };
+    if (path === "/actions/runs/11/attempts/1") return run;
+    if (
+      path.startsWith("/actions/runs/11/") ||
+      path === "/actions/jobs/99/logs" ||
+      path === "/actions/artifacts/999/zip"
+    ) {
+      assert.ok(rawClient);
+      if (type === "bytes") return rawClient.request(path, "bytes");
+      if (type === "text") return rawClient.request(path, "text");
+      return rawClient.request(path);
+    }
+    assert.ok(
+      !path.includes(input.event.pull_request.base.sha),
+      "stale event base must not replace current main floor",
+    );
+    if (type === "bytes") return mainClient.request(path, "bytes");
+    if (type === "text") return mainClient.request(path, "text");
+    return mainClient.request(path);
+  }
+  const client = { requests, observedMain: input.mainSha, request };
+  function publish(raw: RawScore<unknown>): void {
     const value = hostedArtifact({
       root,
       sourceSha: input.sourceSha,
@@ -1128,7 +1331,7 @@ function qualificationFixture(repo) {
     });
     value.run = run;
     Object.assign(value.job, { id: 99, run_id: 11, head_sha: run.head_sha });
-    value.bytes = archive([["raw.json", JSON.stringify(raw)]]);
+    value.bytes = archive([["raw.json", JSON.stringify(raw)]] satisfies [string, string][]);
     Object.assign(value.artifact, {
       id: 999,
       name: `own-shell-raw-${input.sourceSha}-11-1`,
@@ -1140,7 +1343,10 @@ function qualificationFixture(repo) {
   }
   return { ...input, client, ids, score, publish };
 }
-async function withQualificationEnvironment(input, body) {
+async function withQualificationEnvironment(
+  input: ReturnType<typeof qualificationFixture> | ReturnType<typeof rebuiltMerge>,
+  body: () => void | Promise<void>,
+): Promise<void> {
   const eventPath = resolve(input.root, "event.json");
   writeFileSync(eventPath, JSON.stringify(input.event));
   const values = {
@@ -1158,17 +1364,23 @@ async function withQualificationEnvironment(input, body) {
     restoreEnvironment(previous);
   }
 }
-function restoreEnvironment(previous) {
+function restoreEnvironment(previous: NodeJS.ProcessEnv): void {
   for (const [key, value] of Object.entries(previous)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
 }
-async function assertQualificationLifecycle(input) {
+async function assertQualificationLifecycle(
+  input: ReturnType<typeof qualificationFixture>,
+): Promise<void> {
   const { root, client, ids } = input;
   const preparedPath = resolve(root, "prepared.json");
   await prepareQualification({ root, client, output: preparedPath });
-  const prepared = JSON.parse(readFileSync(preparedPath, "utf8"));
+  const prepared: unknown = JSON.parse(readFileSync(preparedPath, "utf8"));
+  assertRecord(prepared);
+  assertBinding(prepared.selected);
+  assert.ok(prepared.selected.kind === "pull-request");
+  assertMainFloor(prepared.floor);
   assert.equal(prepared.selected.baseSha, input.mainSha);
   assert.equal(prepared.selected.mainSha, input.mainSha);
   assert.equal(prepared.floor.sourceSha, input.mainSha);
@@ -1187,6 +1399,8 @@ async function assertQualificationLifecycle(input) {
   writeFileSync(scorePath, JSON.stringify(input.score(ids)));
   const seal = () => sealRaw({ root, input: preparedPath, scorePath, output: rawDirectory });
   const invalid = structuredClone(prepared);
+  assertBinding(invalid.selected);
+  assert.ok(invalid.selected.kind === "pull-request");
   invalid.selected.baseSha = input.event.pull_request.base.sha;
   writeFileSync(preparedPath, JSON.stringify(invalid));
   assert.throws(seal, /prepared source binding mismatch/);
@@ -1195,7 +1409,8 @@ async function assertQualificationLifecycle(input) {
   for (const passes of [ids, ids.slice(0, 1)]) {
     writeFileSync(scorePath, JSON.stringify(input.score(passes)));
     seal();
-    const raw = JSON.parse(readFileSync(rawPath, "utf8"));
+    const raw: unknown = JSON.parse(readFileSync(rawPath, "utf8"));
+    assertRawScore(raw);
     assert.deepEqual(raw.selected, prepared.selected);
     input.publish(raw);
     const folded = await foldQualification({ root, client, rawPath, output });
@@ -1209,7 +1424,9 @@ async function assertQualificationLifecycle(input) {
     );
   }
   assert.ok(client.requests.includes("/actions/artifacts/999/zip"));
-  const raw = JSON.parse(readFileSync(rawPath, "utf8"));
+  const raw: unknown = JSON.parse(readFileSync(rawPath, "utf8"));
+  assertRawScore(raw);
+  assert.ok(raw.selected.kind === "pull-request");
   raw.selected.baseSha = input.event.pull_request.base.sha;
   writeFileSync(rawPath, JSON.stringify(raw));
   await assert.rejects(
@@ -1230,22 +1447,27 @@ test("workflow baseline commands select the tested main parent for both gates an
     await withQualificationEnvironment(input, () => assertBaselineCommands(repo, input));
   });
 });
-function assertBaselineCommands({ root, put }, input) {
+function assertBaselineCommands(
+  { root, put }: RepoContext,
+  input: ReturnType<typeof rebuiltMerge>,
+): void {
   for (const file of [
-    "scoreboard-ci.mjs",
-    "shell-scoreboard-main.mjs",
-    "shell-scoreboard-floor.mjs",
-    "shell-scoreboard.mjs",
-    "shell-scoreboard-accepted-gains.mjs",
-    "shell-scoreboard-terminal-recovery.mjs",
+    "scoreboard-ci.ts",
+    "shell-scoreboard-main.ts",
+    "shell-scoreboard-floor.ts",
+    "shell-scoreboard.ts",
+    "shell-scoreboard-accepted-gains.ts",
+    "shell-scoreboard-terminal-recovery.ts",
   ])
     put(`scripts/${file}`, readFileSync(new URL(file, import.meta.url)));
   symlinkSync(resolve(import.meta.dirname, "../node_modules"), resolve(root, "node_modules"));
   git(root, ["update-ref", "refs/remotes/origin/main", input.mainSha]);
   const output = resolve(root, "github-env");
-  const env = { ...process.env, GITHUB_ENV: output };
-  const execute = (name) =>
-    execFileSync(process.execPath, [resolve(root, "scripts/scoreboard-ci.mjs"), "baseline", name], {
+  const env: NodeJS.ProcessEnv = { ...process.env, GITHUB_ENV: output };
+  const eventPath = env.GITHUB_EVENT_PATH;
+  assert.ok(eventPath);
+  const execute = (name: string): Buffer =>
+    execFileSync(process.execPath, [resolve(root, "scripts/scoreboard-ci.ts"), "baseline", name], {
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -1257,22 +1479,22 @@ function assertBaselineCommands({ root, put }, input) {
   assert.throws(() => execute("NODE_OPTIONS"));
   const dependent = structuredClone(input.event);
   dependent.pull_request.base.ref = "terminal/a2-multiline";
-  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(dependent));
+  writeFileSync(eventPath, JSON.stringify(dependent));
   writeFileSync(output, "");
   execute("LAYERS_BASE_REF");
   assert.equal(readFileSync(output, "utf8"), `LAYERS_BASE_REF=${input.mainSha}\n`);
   assert.throws(() => execute("BASH_COMPAT_BASE_REF"), /PR does not target main/);
   const foreign = structuredClone(dependent);
   foreign.pull_request.base.repo.id++;
-  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(foreign));
+  writeFileSync(eventPath, JSON.stringify(foreign));
   assert.throws(() => execute("LAYERS_BASE_REF"), /PR base repository/);
   const forged = structuredClone(dependent);
   forged.pull_request.head.sha = input.mainSha;
-  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(forged));
+  writeFileSync(eventPath, JSON.stringify(forged));
   assert.throws(() => execute("LAYERS_BASE_REF"), /second parent differs/);
   const unrelated = structuredClone(dependent);
   unrelated.pull_request.base.sha = input.event.pull_request.head.sha;
-  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(unrelated));
+  writeFileSync(eventPath, JSON.stringify(unrelated));
   assert.throws(() => execute("LAYERS_BASE_REF"), /event base is not in tested base history/);
 
   const push = {
@@ -1281,12 +1503,12 @@ function assertBaselineCommands({ root, put }, input) {
     after: input.sourceSha,
     before: input.mainSha,
   };
-  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(push));
+  writeFileSync(eventPath, JSON.stringify(push));
   env.GITHUB_EVENT_NAME = "push";
   writeFileSync(output, "");
   execute("LAYERS_BASE_REF");
   assert.equal(readFileSync(output, "utf8"), `LAYERS_BASE_REF=${input.mainSha}\n`);
   push.before = "0".repeat(40);
-  writeFileSync(env.GITHUB_EVENT_PATH, JSON.stringify(push));
+  writeFileSync(eventPath, JSON.stringify(push));
   assert.throws(() => execute("LAYERS_BASE_REF"));
 }

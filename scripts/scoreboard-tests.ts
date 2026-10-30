@@ -10,11 +10,11 @@ const families = [
   /^test-bash-compat.*\.(?:mjs|ts)$/,
   /^test-compat-selection\.(?:mjs|ts)$/,
 ];
-function isScoreboardEntrypoint(name) {
+function isScoreboardEntrypoint(name: string): boolean {
   if (/-browser\.(?:mjs|ts)$/.test(name)) return false;
   return families.some((family) => family.test(name));
 }
-export function discoverScoreboardTests(directory) {
+export function discoverScoreboardTests(directory: string): string[] {
   const entries = readdirSync(directory, { withFileTypes: true });
   const selected = entries.filter((entry) => isScoreboardEntrypoint(entry.name));
   assert.ok(
@@ -28,7 +28,7 @@ export function discoverScoreboardTests(directory) {
     );
   return selected.map((entry) => resolve(directory, entry.name)).sort();
 }
-export function runScoreboardTests(directory) {
+export function runScoreboardTests(directory: string) {
   const { NODE_TEST_CONTEXT: _context, ...environment } = process.env;
   return spawnSync(
     process.execPath,

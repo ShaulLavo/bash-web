@@ -12,7 +12,7 @@ The later main push can consume the same record to resolve predecessor f6. Only 
 
 This path does not support other failed sources, multiple gaps, record chains, historical runtime replay, test-file equivalence exceptions, retries, waivers or runtime capabilities. Candidate B remains rejected.
 
-Focused tests run with `node --test scripts/test-shell-scoreboard-accepted-gains.mjs`. Existing scoreboard and workflow tests cover ordinary floor resolution, artifact provenance and blocking job ownership.
+Focused tests run with `node --test scripts/test-shell-scoreboard-accepted-gains.ts`. Existing scoreboard and workflow tests cover ordinary floor resolution, artifact provenance and blocking job ownership.
 
 ## Cancelled terminal main runs
 
@@ -24,4 +24,4 @@ Normal main evidence takes priority. Recovery runs only when the normal resolver
 
 The result is an `AcceptedGainFloor`, not an observation of either cancelled main source. Preparation and folding reconstruct the host proof independently. The current source must supply a fresh Waffle observation through the shared observation job and the separate raw sealer. Only an authenticated observation of the new main source can publish its main floor. A single-commit main push is required while using this fixed-cut recovery. Layer and ordinary main source qualification are unchanged.
 
-Focused tests are `scripts/test-shell-scoreboard-terminal-recovery.mjs`. Its compressed host snapshot and supplementary Git object pack are test inputs only. Production still reads authenticated host evidence and enforces artifact expiry. The general policy for skipping intermediate main workflows is separate follow-up work.
+Focused tests are `scripts/test-shell-scoreboard-terminal-recovery.ts`. Its compressed host snapshot and supplementary Git object pack are test inputs only. Production still reads authenticated host evidence and enforces artifact expiry. The general policy for skipping intermediate main workflows is separate follow-up work.

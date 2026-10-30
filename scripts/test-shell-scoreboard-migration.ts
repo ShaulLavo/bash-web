@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { waffleBuildFixture } from "../tests/helpers/waffle-build-inputs.ts";
-import { execFileSync, fork, spawn } from "node:child_process";
+import { execFileSync, fork, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -24,8 +24,17 @@ import {
   instrumentReceiptPath,
   oraclePath,
   targetBranchBaseline,
-} from "./shell-scoreboard-base.mjs";
-import { bytesDigest, compareScores, sealOracle, validateScore } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-base.ts";
+import {
+  assertOracle,
+  assertRecord,
+  assertScore,
+  bytesDigest,
+  compareScores,
+  sealOracle,
+  validateScore,
+} from "./shell-scoreboard.ts";
+import type { Oracle, OracleEnvironment, Score } from "./shell-scoreboard.ts";
 import { killGroup } from "./shell-process-group.ts";
 
 // Original fake compiler/scorer: no Cargo, WASI execution, network, or installed dependencies.
@@ -101,7 +110,9 @@ writeFileSync(process.env.BASH_COMPAT_OUT, JSON.stringify({
   })),
 }));
 `;
-function makeOracle(environment = { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000 }) {
+function makeOracle(
+  environment: OracleEnvironment = { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000 },
+): Oracle {
   return sealOracle({
     schema: 1,
     oracle: { capture: "old" },
@@ -114,6 +125,9 @@ function makeOracle(environment = { nodeVersion: "v26.12.1", stdin: "empty", tim
     cases: ["YQ==", "Yg=="].map((stdout, index) => ({
       id: `oils:${index}`,
       corpus: "oils",
+      file: "fixture.spec.ts",
+      line: index + 1,
+      name: `fixture ${index}`,
       category: "fixture",
       kind: "builtins-only",
       code: "printf a",
@@ -121,7 +135,7 @@ function makeOracle(environment = { nodeVersion: "v26.12.1", stdin: "empty", tim
     })),
   });
 }
-function score(oracle, outcomes = ["pass", "fail"]) {
+function score(oracle: Oracle, outcomes: string[] = ["pass", "fail"]): Score {
   return {
     identity: oracle.identity,
     cases: oracle.cases.map(({ id, corpus, category, kind }, index) => ({
@@ -132,6 +146,13 @@ function score(oracle, outcomes = ["pass", "fail"]) {
       outcome: outcomes[index],
     })),
   };
+}
+function currentOracleEnvironment(): OracleEnvironment {
+  const oracle: unknown = JSON.parse(
+    readFileSync(new URL(`../${oraclePath}`, import.meta.url), "utf8"),
+  );
+  assertOracle(oracle);
+  return oracle.environment;
 }
 function directChildren() {
   const ids = readFileSync(`/proc/${process.pid}/task/${process.pid}/children`, "utf8").trim();
@@ -144,34 +165,42 @@ function directChildren() {
       : [],
   );
 }
-function signalChild(pid) {
+function signalChild(pid: number): void {
   if (!processState(pid).active) return;
   try {
     process.kill(pid, "SIGTERM");
   } catch (error) {
-    if (error.code !== "ESRCH") throw error;
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ESRCH")
+      throw error;
   }
 }
-function admitChildren(preexisting, owned) {
+function admitChildren(
+  preexisting: Map<number, string | undefined>,
+  owned: Map<number, string | undefined>,
+): void {
   for (const [pid, start] of directChildren()) {
     if (preexisting.get(pid) === start || owned.has(pid)) continue;
     owned.set(pid, start);
     signalChild(pid);
   }
 }
-function restoreEnvironment(saved) {
+function restoreEnvironment(saved: NodeJS.ProcessEnv): void {
   for (const name of Object.keys(process.env)) {
     if (!(name in saved)) delete process.env[name];
   }
   Object.assign(process.env, saved);
 }
-function fixtureOwner() {
+interface FixtureOwner {
+  scratch?: string;
+  close: () => Promise<void>;
+}
+function fixtureOwner(): FixtureOwner {
   const preexisting = directChildren();
-  const owner = { scratch: undefined };
-  let teardown;
-  const cleanup = () =>
+  const owner: FixtureOwner = { scratch: undefined, close: async () => {} };
+  let teardown: Promise<void> | undefined;
+  const cleanup = (): Promise<void> =>
     (teardown ??= (async () => {
-      const owned = new Map();
+      const owned = new Map<number, string | undefined>();
       const deadline = Date.now() + 15000;
       for (;;) {
         admitChildren(preexisting, owned);
@@ -218,8 +247,29 @@ function fixtureOwner() {
   };
   return owner;
 }
+interface FixtureContext {
+  repo: string;
+  ref: string;
+  next: Oracle;
+  old: Oracle;
+  runner: string;
+  put: (path: string, contents: string | Buffer) => void;
+  update: (oracle: Oracle) => void;
+}
+interface FixtureOptions {
+  wrongBaseline?: boolean;
+  badChecksum?: boolean;
+  hang?: boolean;
+  descendant?: boolean;
+  buildFail?: boolean;
+  invalidArtifact?: boolean;
+  scoreFail?: boolean;
+  entrypoint?: boolean;
+  targetRunner?: string;
+  tarMode?: "fail" | "hang";
+}
 async function fixture(
-  run,
+  run: (context: FixtureContext) => Promise<void>,
   {
     wrongBaseline = false,
     badChecksum = false,
@@ -231,8 +281,8 @@ async function fixture(
     entrypoint = false,
     targetRunner = undefined,
     tarMode = undefined,
-  } = {},
-) {
+  }: FixtureOptions = {},
+): Promise<void> {
   const owner = fixtureOwner(); // Teardown and the pre-existing child inventory precede setup.
   const saved = { ...process.env };
   try {
@@ -244,11 +294,11 @@ async function fixture(
     const runner = resolve(scratch, "runner");
     const bin = resolve(scratch, "bin");
     for (const directory of [repo, runner, bin]) mkdirSync(directory);
-    const put = (path, contents) => {
+    const put = (path: string, contents: string | Buffer): void => {
       mkdirSync(dirname(resolve(repo, path)), { recursive: true });
       writeFileSync(resolve(repo, path), contents);
     };
-    const git = (args) =>
+    const git = (args: string[]): string =>
       execFileSync("git", args, {
         cwd: repo,
         encoding: "utf8",
@@ -256,7 +306,7 @@ async function fixture(
       }).trim();
     const old = makeOracle(
       entrypoint
-        ? JSON.parse(readFileSync(new URL(`../${oraclePath}`, import.meta.url))).environment
+        ? currentOracleEnvironment()
         : targetRunner
           ? { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
           : undefined,
@@ -342,11 +392,15 @@ printf fixture > "$1/lib/wasm32-wasip1/libc.a"
       chmodSync(resolve(bin, "npm"), 0o755);
     }
     const candidate = structuredClone(old);
+    assertRecord(candidate.oracle);
     candidate.oracle.capture = "corrected";
-    candidate.cases[0].bash.stdout = "eg==";
-    candidate.cases[1].bash.stdout = "YQ==";
+    const firstBash = candidate.cases[0].bash;
+    const secondBash = candidate.cases[1].bash;
+    assert.ok(firstBash && secondBash);
+    firstBash.stdout = "eg==";
+    secondBash.stdout = "YQ==";
     const next = sealOracle(candidate);
-    const update = (oracle) => {
+    const update = (oracle: Oracle): void => {
       put(oraclePath, JSON.stringify(oracle));
       put(
         "sources.lock.json",
@@ -397,6 +451,7 @@ printf fixture > "$1/lib/wasm32-wasip1/libc.a"
 test("migration rebuilds immutable target and lowered candidate baseline cannot conceal regression", async () => {
   await fixture(async ({ repo, ref, next }) => {
     const target = await targetBranchBaseline(repo, ref, next);
+    assert.ok(target);
     assert.deepEqual(
       target.cases.map((item) => item.outcome),
       ["fail", "pass"],
@@ -418,6 +473,7 @@ test("migration launcher excludes inherited Node startup hooks", async () => {
       process.env.NODE_OPTIONS = `--require=${preload}`;
       process.execArgv.push("--require", preload);
       const target = await targetBranchBaseline(repo, ref, next);
+      assert.ok(target);
       assert.deepEqual(
         target.cases.map((item) => item.outcome),
         ["fail", "pass"],
@@ -441,10 +497,9 @@ test("migration rejects incorrect immutable baseline membership", async () => {
 test("migration rejects a freshly built artifact with the wrong memory cap before scoring", async () => {
   await fixture(
     async ({ repo, ref }) => {
-      await assert.rejects(
-        targetBranchBaseline(repo, ref, JSON.parse(readFileSync(resolve(repo, oraclePath)))),
-        /failed \(1\)/,
-      );
+      const candidate: unknown = JSON.parse(readFileSync(resolve(repo, oraclePath), "utf8"));
+      assertOracle(candidate);
+      await assert.rejects(targetBranchBaseline(repo, ref, candidate), /failed \(1\)/);
       assert.equal(
         existsSync(resolve(repo, "scorer-ran")),
         false,
@@ -491,12 +546,13 @@ test("migration rejects case, environment, source and schema changes", async () 
         o.environment.stdin = "changed";
       },
       (o) => {
+        assertRecord(o.sources.oils);
         o.sources.oils.revision = "changed";
       },
       (o) => {
         o.schema = 2;
       },
-    ]) {
+    ] satisfies ((oracle: Oracle) => void)[]) {
       const changed = structuredClone(next);
       mutate(changed);
       await assert.rejects(
@@ -512,7 +568,7 @@ test("migration rejects invalid base refs and supplied artifacts or baseline pat
     for (const invalid of ["HEAD", ref.slice(0, 12), "a".repeat(40), `${ref}:shell`, "--help"])
       await assert.rejects(targetBranchBaseline(repo, invalid, next));
     await assert.rejects(
-      targetBranchBaseline(repo, ref, next, { wasm: "supplied.wasm" }),
+      Reflect.apply(targetBranchBaseline, undefined, [repo, ref, next, { wasm: "supplied.wasm" }]),
       /no supplied artifacts/,
     );
     for (const name of ["BASH_COMPAT_SHELL_WASM", "BASH_COMPAT_ORACLE", "BASH_COMPAT_BASELINE"]) {
@@ -531,7 +587,7 @@ test("unchanged oracle preserves original target ratchet without rebuilding", as
   });
 });
 
-async function until(condition) {
+async function until(condition: () => boolean): Promise<void> {
   const deadline = Date.now() + 10000;
   while (!condition()) {
     assert.ok(Date.now() < deadline, "timed out waiting for fixture");
@@ -539,15 +595,25 @@ async function until(condition) {
   }
 }
 
-function processState(pid) {
+function processState(pid: number): { active: boolean; start?: string } {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
     return { active: !["Z", "X"].includes(fields[0]), start: fields[19] };
   } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error)) throw error;
     if (error.code === "ENOENT" || error.code === "ESRCH") return { active: false };
     throw error;
   }
+}
+function readProcessMarker(marker: string): { pid: number; start: string | undefined } {
+  const pid = Number(readFileSync(marker, "utf8"));
+  return { pid, start: processState(pid).start };
+}
+async function killOwnedProcess(pid: number | undefined, start: string | undefined): Promise<void> {
+  if (!pid || processState(pid).start !== start || !processState(pid).active) return;
+  process.kill(pid, "SIGKILL");
+  await until(() => !processState(pid).active);
 }
 for (const descendant of [false, true]) {
   for (const cancellation of ["TERM", "parent disconnect"]) {
@@ -555,24 +621,24 @@ for (const descendant of [false, true]) {
       await fixture(
         async ({ repo, ref, runner }) => {
           const launcher = fileURLToPath(
-            new URL("./shell-scoreboard-migration.mjs", import.meta.url),
+            new URL("./shell-scoreboard-migration.ts", import.meta.url),
           );
           const child =
             cancellation === "TERM"
               ? spawn(process.execPath, [launcher, repo, ref], { stdio: "ignore" })
               : fork(launcher, [repo, ref], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
-          const exited = new Promise((accept) => child.once("exit", accept));
-          let pid;
-          let start;
+          const exited = new Promise<void>((accept) => child.once("exit", () => accept()));
+          let pid: number | undefined;
+          let start: string | undefined;
           try {
             await until(() => {
               const scratch = readdirSync(runner)[0];
               const marker = scratch && resolve(runner, scratch, "started");
               if (!marker || !existsSync(marker)) return false;
-              pid = Number(readFileSync(marker, "utf8"));
-              start = processState(pid).start;
+              ({ pid, start } = readProcessMarker(marker));
               return start !== undefined;
             });
+            assert.ok(pid);
             if (cancellation === "TERM") child.kill("SIGTERM");
             else child.disconnect();
             await exited;
@@ -586,10 +652,7 @@ for (const descendant of [false, true]) {
             child.kill("SIGTERM");
             await exited;
             // Emergency fixture teardown also owns the grandchild if an assertion exposes a bug.
-            if (pid && processState(pid).start === start && processState(pid).active) {
-              process.kill(pid, "SIGKILL");
-              await until(() => !processState(pid).active);
-            }
+            await killOwnedProcess(pid, start);
           }
         },
         { hang: true, descendant },
@@ -598,26 +661,45 @@ for (const descendant of [false, true]) {
   }
 }
 
-for (const signal of ["SIGTERM", "SIGINT"]) {
+function putCompatibilityEntrypoint(put: FixtureContext["put"]): void {
+  // Only the compiler and archived target scorer are stand-ins. The candidate entrypoint,
+  // trusted baseline launcher, migration supervisor and group draining are shipped code.
+  for (const name of [
+    "bash-compat.ts",
+    "compat-programs.ts",
+    "bash-compat-helpers.ts",
+    "bash-compat-runner.ts",
+    "shell-scoreboard.ts",
+    "shell-scoreboard-base.ts",
+    "shell-scoreboard-migration.ts",
+    "shell-process-group.ts",
+    "wasi-build.ts",
+    "waffle-release-inputs.ts",
+    "verify-wasi-guests.ts",
+  ])
+    put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
+}
+function runCompatibility(repo: string, runner: string) {
+  return spawnSync(process.execPath, [resolve(repo, "scripts/bash-compat.ts")], {
+    env: {
+      ...process.env,
+      BASH_COMPAT_MODE: "frozen",
+      BASH_COMPAT_ENGINES: "own-shell",
+      BASH_COMPAT_SCRATCH: runner,
+      BASH_COMPAT_TIMEOUT_MS: "10000",
+      BASH_COMPAT_BASE_REF: "HEAD",
+      BASH_COMPAT_RECORD: "0",
+      BASH_COMPAT_SKIP_BUILD: "1",
+    },
+    encoding: "utf8",
+  });
+}
+const signals: NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
+for (const signal of signals) {
   test(`${signal} on the compatibility entrypoint awaits its active migration`, async () => {
     await fixture(
       async ({ repo, runner, put }) => {
-        // Only the compiler and archived target scorer are stand-ins. The candidate entrypoint,
-        // trusted baseline launcher, migration supervisor and group draining are shipped code.
-        for (const name of [
-          "bash-compat.ts",
-          "compat-programs.ts",
-          "bash-compat-helpers.ts",
-          "bash-compat-runner.ts",
-          "shell-scoreboard.mjs",
-          "shell-scoreboard-base.mjs",
-          "shell-scoreboard-migration.mjs",
-          "shell-process-group.ts",
-          "wasi-build.ts",
-          "waffle-release-inputs.ts",
-          "verify-wasi-guests.ts",
-        ])
-          put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
+        putCompatibilityEntrypoint(put);
         const child = spawn(process.execPath, [resolve(repo, "scripts/bash-compat.ts")], {
           env: {
             ...process.env,
@@ -627,16 +709,18 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
           },
           stdio: ["ignore", "ignore", "pipe"],
         });
-        const errors = [];
-        child.stderr.on("data", (chunk) => errors.push(chunk));
-        const exited = new Promise((accept) => child.once("close", (code) => accept(code)));
+        const errors: Buffer[] = [];
+        child.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+        const exited = new Promise<number | null>((accept) =>
+          child.once("close", (code) => accept(code)),
+        );
         // This independent watchdog also releases the launcher's IPC parent-death cleanup
         // if the old, uncancellable entrypoint is used as a negative control.
         const watchdog = setTimeout(() => child.kill("SIGKILL"), 8000).unref();
-        let pid;
-        let start;
+        let pid: number | undefined;
+        let start: string | undefined;
         try {
-          let directory;
+          let directory: string | undefined;
           await until(() => {
             assert.equal(
               child.exitCode ?? child.signalCode,
@@ -653,6 +737,7 @@ ${Buffer.concat(errors)}`,
             start = processState(pid).start;
             return start !== undefined;
           });
+          assert.ok(pid && directory);
           child.kill(signal);
           await delay(50);
           assert.equal(child.exitCode, null, "entrypoint exited before its compiler stopped");
@@ -669,10 +754,7 @@ ${Buffer.concat(errors)}`,
           child.kill("SIGTERM");
           await exited;
           clearTimeout(watchdog);
-          if (pid && processState(pid).start === start && processState(pid).active) {
-            process.kill(pid, "SIGKILL");
-            await until(() => !processState(pid).active);
-          }
+          await killOwnedProcess(pid, start);
           // Even a watchdog failure must await the orphan launcher's IPC-disconnect cleanup
           // before the outer fixture removes its files. The entrypoint's own scratch is ours.
           await until(
@@ -685,6 +767,29 @@ ${Buffer.concat(errors)}`,
   });
 }
 
+test("frozen validation skips non-runnable missing observations but rejects eligible ones", async () => {
+  for (const eligible of [false, true]) {
+    await fixture(
+      async ({ repo, runner, put, update, next }) => {
+        putCompatibilityEntrypoint(put);
+        const changed = structuredClone(next.cases[0]);
+        delete changed.bash;
+        if (!eligible) changed.kind = "needs-commands";
+        update(sealOracle({ ...next, cases: [changed] }));
+        const result = runCompatibility(repo, runner);
+        assert.notEqual(result.status, 0);
+        if (eligible) {
+          assert.match(result.stderr, /invalid oracle status/);
+          return;
+        }
+        assert.doesNotMatch(result.stderr, /Missing oracle observation/);
+        assert.match(result.stderr, /BASH_COMPAT_BASE_REF must be a full commit SHA/);
+      },
+      { entrypoint: true },
+    );
+  }
+});
+
 test("archive setup failure removes scratch acquired before extraction", async () => {
   await fixture(
     async ({ repo, ref, next, runner }) => {
@@ -695,7 +800,9 @@ test("archive setup failure removes scratch acquired before extraction", async (
   );
 });
 
-function setupConsumer(runner) {
+function setupConsumer(
+  runner: string,
+): { directory: string; pid: number; start: string } | undefined {
   const directory = readdirSync(runner).find((name) => name.startsWith("audit-oracle-migration-"));
   if (!directory) return;
   const marker = resolve(runner, directory, "setup-started");
@@ -706,23 +813,27 @@ function setupConsumer(runner) {
   return { directory, pid, start };
 }
 
-async function cleanupSetupConsumer(consumer) {
+async function cleanupSetupConsumer(consumer: ReturnType<typeof setupConsumer>): Promise<void> {
   if (!consumer || processState(consumer.pid).start !== consumer.start) return;
   killGroup(consumer.pid, "SIGKILL");
   await until(() => !processState(consumer.pid).active);
 }
 
-async function interruptSetup({ repo, ref, runner }, cancellation) {
-  const launcher = fileURLToPath(new URL("./shell-scoreboard-migration.mjs", import.meta.url));
+async function interruptSetup(
+  { repo, ref, runner }: Pick<FixtureContext, "repo" | "ref" | "runner">,
+  cancellation: string,
+): Promise<void> {
+  const launcher = fileURLToPath(new URL("./shell-scoreboard-migration.ts", import.meta.url));
   const child = fork(launcher, [repo, ref], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
-  const exited = new Promise((accept) => child.once("exit", accept));
+  const exited = new Promise<void>((accept) => child.once("exit", () => accept()));
   const watchdog = setTimeout(() => child.kill("SIGKILL"), 8000).unref();
-  let consumer;
+  let consumer: ReturnType<typeof setupConsumer>;
   try {
     await until(() => {
       consumer = setupConsumer(runner);
       return consumer !== undefined;
     });
+    assert.ok(consumer);
     if (cancellation === "TERM") child.kill("SIGTERM");
     else child.disconnect();
     await delay(50);
@@ -749,6 +860,7 @@ test("waffle target migration installs target-pinned dependencies in target scra
   await fixture(
     async ({ repo, ref, next }) => {
       const result = await targetBranchBaseline(repo, ref, next);
+      assert.ok(result);
       assert.deepEqual(
         result.cases.map((item) => item.outcome),
         ["fail", "pass"],
@@ -762,7 +874,7 @@ test("waffle target migration installs target-pinned dependencies in target scra
   );
 });
 
-function linkRepositoryHistory(put) {
+function linkRepositoryHistory(put: FixtureContext["put"]): string {
   const root = resolve(import.meta.dirname, "..");
   const common = execFileSync("git", ["rev-parse", "--git-common-dir"], {
     cwd: root,
@@ -775,12 +887,13 @@ function linkRepositoryHistory(put) {
 test("instrument migration prepares a cold patched sysroot before its first cargo build", async () => {
   await fixture(async ({ repo, runner, put, update }) => {
     const root = linkRepositoryHistory(put);
-    const candidate = JSON.parse(
+    const candidate: unknown = JSON.parse(
       execFileSync("git", ["show", `38c229271c851543ce564976e7b09f2971c5e0f8:${oraclePath}`], {
         cwd: root,
         maxBuffer: 1 << 26,
       }).toString(),
     );
+    assertOracle(candidate);
     update(candidate);
     put(instrumentReceiptPath, readFileSync(resolve(root, instrumentReceiptPath)));
     const proof = resolve(repo, "cold-build-proof");
@@ -811,13 +924,16 @@ process.exit(21);
 test("runtime migration builds and supplies immutable target utility guests", async () => {
   await fixture(async ({ repo, runner, put, update }) => {
     const root = linkRepositoryHistory(put);
-    const candidate = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
+    const candidate: unknown = JSON.parse(readFileSync(resolve(root, oraclePath), "utf8"));
+    assertOracle(candidate);
     update(candidate);
     put(runtimeReceiptPath, readFileSync(resolve(root, runtimeReceiptPath)));
     put(baselinePath, readFileSync(resolve(root, baselinePath)));
+    const targetBaseline = baseBranchBaseline(root, authorizedRuntimeTransition.target);
+    assert.ok(targetBaseline);
     const migratedTarget = {
       identity: candidate.identity,
-      cases: baseBranchBaseline(root, authorizedRuntimeTransition.target).cases,
+      cases: targetBaseline.cases,
     };
     put("fixture-target-score.json", JSON.stringify(migratedTarget));
     put("scripts/build-node-harness.ts", "");
@@ -856,8 +972,10 @@ writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('fixture-target-score.js
 `,
     );
     const result = await targetBranchBaseline(repo, authorizedRuntimeTransition.target, candidate);
+    assert.ok(result);
     assert.deepEqual(result, migratedTarget);
-    const candidateScore = JSON.parse(readFileSync(resolve(repo, baselinePath)));
+    const candidateScore: unknown = JSON.parse(readFileSync(resolve(repo, baselinePath), "utf8"));
+    assertScore(candidateScore);
     const delta = compareScores(result, candidateScore);
     assert.equal(delta.ok, true);
     assert.ok(
@@ -871,7 +989,7 @@ writeFileSync(process.env.BASH_COMPAT_OUT, readFileSync('fixture-target-score.js
       { [passing.id]: "fail" },
       { [failing.id]: "pass" },
       { [passing.id]: "fail", [failing.id]: "pass" },
-    ]) {
+    ] satisfies Record<string, string>[]) {
       const changed = {
         ...migratedTarget,
         cases: migratedTarget.cases.map((item) => ({

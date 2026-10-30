@@ -55,7 +55,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select immutable layer baseline
-        run: node scripts/scoreboard-ci.mjs baseline LAYERS_BASE_REF
+        run: node scripts/scoreboard-ci.ts baseline LAYERS_BASE_REF
       - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
         env:
           LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
@@ -234,7 +234,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select compatibility baseline
-        run: node scripts/scoreboard-ci.mjs baseline BASH_COMPAT_BASE_REF
+        run: node scripts/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - uses: actions/cache@v4
         with:
@@ -279,10 +279,10 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select compatibility baseline
-        run: node scripts/scoreboard-ci.mjs baseline BASH_COMPAT_BASE_REF
+        run: node scripts/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - name: Bind qualification and resolve PR main floor
-        run: node scripts/scoreboard-ci.mjs prepare "${{ runner.temp }}/scoreboard-input.json"
+        run: node scripts/scoreboard-ci.ts prepare "${{ runner.temp }}/scoreboard-input.json"
         env:
           GH_TOKEN: ${{ github.token }}
       - run: node --test scripts/test-diagnose-compat.ts
@@ -334,7 +334,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}
       - name: Seal complete raw score
-        run: node scripts/scoreboard-ci.mjs raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
+        run: node scripts/scoreboard-ci.ts raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
       - name: Upload complete raw score
         id: raw-upload
         uses: actions/upload-artifact@v4
@@ -366,7 +366,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/scoreboard-raw
       - name: Fold main floor and qualification
-        run: node scripts/scoreboard-ci.mjs fold "${{ runner.temp }}/scoreboard-raw/raw.json" "${{ runner.temp }}/scoreboard-floor"
+        run: node scripts/scoreboard-ci.ts fold "${{ runner.temp }}/scoreboard-raw/raw.json" "${{ runner.temp }}/scoreboard-floor"
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Upload cumulative main floor
@@ -385,7 +385,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
       - name: Enforce qualification
-        run: node scripts/scoreboard-ci.mjs enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
+        run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
   browser:
     needs:
       - prepare

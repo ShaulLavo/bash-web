@@ -8,7 +8,7 @@ import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 
 import { resolve } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
-import { sealOracle } from "./shell-scoreboard.mjs";
+import { sealOracle } from "./shell-scoreboard.ts";
 
 interface AuditReport {
   originalIdentity: unknown;
