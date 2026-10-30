@@ -107,14 +107,19 @@ export interface PullRequestBinding {
   baseSha: string;
   mainSha: string;
 }
-export type Binding = MainPushBinding | PullRequestBinding;
+export interface DispatchBinding {
+  kind: "workflow-dispatch";
+  sourceSha: string;
+  beforeSha: string;
+}
+export type Binding = MainPushBinding | PullRequestBinding | DispatchBinding;
 export interface RunBinding {
   runId: number;
   attempt: number;
 }
 export function assertBinding(value: unknown): asserts value is Binding {
   assertRecord(value);
-  if (value.kind === "main-push") {
+  if (value.kind === "main-push" || value.kind === "workflow-dispatch") {
     assert.equal(typeof value.sourceSha, "string", "missing main source SHA");
     assert.equal(typeof value.beforeSha, "string", "missing main predecessor SHA");
     return;

@@ -1236,7 +1236,7 @@ test("observation uploader shape is unique and explicitly optional-file", async 
   });
 });
 
-function qualificationFixture(repo: RepoContext) {
+function qualificationFixture(repo: RepoContext, dispatch = false) {
   const { root, put } = repo;
   const project = resolve(import.meta.dirname, "..");
   const common = git(project, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
@@ -1292,6 +1292,10 @@ function qualificationFixture(repo: RepoContext) {
     status: "in_progress",
     conclusion: null,
   };
+  if (dispatch) {
+    run.event = "workflow_dispatch";
+    run.head_sha = input.sourceSha;
+  }
   let rawClient: ReturnType<typeof hostedClient> | undefined;
   const requests: string[] = [];
   function request(path: string, type: "bytes"): Promise<Buffer>;
@@ -1512,3 +1516,83 @@ function assertBaselineCommands(
   writeFileSync(eventPath, JSON.stringify(push));
   assert.throws(() => execute("LAYERS_BASE_REF"));
 }
+
+async function assertManualQualificationLifecycle(
+  input: ReturnType<typeof qualificationFixture>,
+): Promise<void> {
+  process.env.GITHUB_EVENT_NAME = "workflow_dispatch";
+  assert.ok(process.env.GITHUB_EVENT_PATH);
+  writeFileSync(
+    process.env.GITHUB_EVENT_PATH,
+    JSON.stringify({
+      repository: input.event.repository,
+      ref: "refs/heads/automation/waffle-updates",
+    }),
+  );
+  const preparedPath = resolve(input.root, "manual-prepared.json");
+  await prepareQualification({ root: input.root, client: input.client, output: preparedPath });
+  const prepared: unknown = JSON.parse(readFileSync(preparedPath, "utf8"));
+  assertRecord(prepared);
+  assertBinding(prepared.selected);
+  assert.deepEqual(prepared.selected, {
+    kind: "workflow-dispatch",
+    sourceSha: input.sourceSha,
+    beforeSha: input.mainSha,
+  });
+  assertMainFloor(prepared.floor);
+  const scorePath = resolve(input.root, "manual-score.json");
+  const rawDir = resolve(input.root, "manual-raw");
+  const output = resolve(input.root, "manual-folded");
+  for (const passes of [input.ids, input.ids.slice(0, 1)]) {
+    writeFileSync(scorePath, JSON.stringify(input.score(passes)));
+    sealRaw({ root: input.root, input: preparedPath, scorePath, output: rawDir });
+    const rawPath = resolve(rawDir, "raw.json");
+    const raw: unknown = JSON.parse(readFileSync(rawPath, "utf8"));
+    assertRawScore(raw);
+    input.publish(raw);
+    const result = await foldQualification({
+      root: input.root,
+      client: input.client,
+      rawPath,
+      output,
+    });
+    assert.equal(result.ok, passes.length === input.ids.length);
+    assert.deepEqual(result.binding, prepared.selected);
+    assert.equal(existsSync(resolve(output, "floor.json")), false);
+  }
+}
+
+test("manual branch qualification keeps the captured main floor and cannot publish a main observation", async () => {
+  await withRepo(async (repo) => {
+    const input = qualificationFixture(repo, true);
+    await withQualificationEnvironment(input, () => assertManualQualificationLifecycle(input));
+  });
+});
+
+test("manual branch binding accepts a non-merge head and rejects the wrong host event", async () => {
+  await withRepo(({ root, put, commit }) => {
+    put("package.json", "{}");
+    const mainSha = commit();
+    put("package.json", '{"pin":true}');
+    const sourceSha = commit();
+    const event = { repository: { id: authority.repositoryId } };
+    const run = {
+      repository: event.repository,
+      event: "workflow_dispatch",
+      head_sha: sourceSha,
+      workflow_id: authority.workflowId,
+      path: authority.workflowPath,
+    };
+    const input = { root, event, eventName: "workflow_dispatch", sourceSha, mainSha, run };
+    assert.deepEqual(verifyBinding(input), {
+      kind: "workflow-dispatch",
+      sourceSha,
+      beforeSha: mainSha,
+    });
+    assert.equal(selectBaseline(input), mainSha);
+    assert.throws(
+      () => verifyBinding({ ...input, run: { ...run, event: "push" } }),
+      /wrong run event/,
+    );
+  });
+});

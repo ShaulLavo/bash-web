@@ -329,6 +329,13 @@ function candidateRecord(root: string, selected: Binding, sourceSha: string): Ac
       merge,
       "candidate does not include M",
     );
+  } else if (selected.kind === "workflow-dispatch") {
+    assert.equal(selected.sourceSha, sourceSha);
+    assert.equal(
+      git(root, ["merge-base", merge, sourceSha]),
+      merge,
+      "dispatch candidate does not include accepted merge",
+    );
   } else {
     assert.equal(selected.kind, "main-push");
     assert.equal(selected.sourceSha, sourceSha);
