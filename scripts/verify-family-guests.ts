@@ -5,20 +5,6 @@ import { resolve } from "node:path";
 import { familyWasiAdapter, familyWasmPath } from "./family-assets.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
-export const verifiedFamilyNames = [
-  "cat",
-  "find",
-  "grep",
-  "head",
-  "ls",
-  "mkdir",
-  "seq",
-  "sort",
-  "tail",
-  "uniq",
-  "wc",
-] as const;
-
 export function guestRecord(value: unknown): Record<string, unknown> {
   assert.ok(value !== null && typeof value === "object" && !Array.isArray(value));
   return Object.fromEntries(Object.entries(value));

@@ -38,6 +38,8 @@ for (const [family, names] of Object.entries(families)) {
   for (const name of names) owners.set(name, `waffle-${family}`);
 }
 
+export const familyProgramNames = Array.from(owners.keys());
+
 export function familyWasmPath(name: string): string {
   const owner = owners.get(name);
   if (!owner) throw new Error(`Unknown family program: ${name}`);
