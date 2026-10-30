@@ -42,6 +42,17 @@ export function assertMainFloor(value: unknown): asserts value is MainFloor {
     assert.equal(typeof evidence.kind, "string", "invalid floor evidence");
   }
 }
+function assertCountFields(value: Record<string, unknown>, label: string): void {
+  for (const key of ["total", "passed", "skipped"])
+    assert.equal(typeof value[key], "number", `missing ${label} ${key}`);
+}
+function assertSummaryCategories(summary: Record<string, unknown>): void {
+  assertRecord(summary.categories);
+  for (const category of Object.values(summary.categories)) {
+    assertRecord(category);
+    assertCountFields(category, "category");
+  }
+}
 export function assertQualification(value: unknown): asserts value is Qualification {
   assertRecord(value);
   assert.equal(value.kind, "qualification", "unsupported qualification kind");
@@ -53,14 +64,8 @@ export function assertQualification(value: unknown): asserts value is Qualificat
   assertRecord(value.counts);
   for (const summary of Object.values(value.counts)) {
     assertRecord(summary);
-    for (const key of ["total", "passed", "skipped"])
-      assert.equal(typeof summary[key], "number", `missing summary ${key}`);
-    assertRecord(summary.categories);
-    for (const category of Object.values(summary.categories)) {
-      assertRecord(category);
-      for (const key of ["total", "passed", "skipped"])
-        assert.equal(typeof category[key], "number", `missing category ${key}`);
-    }
+    assertCountFields(summary, "summary");
+    assertSummaryCategories(summary);
   }
   assertRecord(value.corpora);
   for (const corpus of Object.values(value.corpora)) {
