@@ -10,6 +10,7 @@ import {
   createTerminalInputPolicy,
   createTerminalSession,
   claimTerminalAuthority,
+  terminalControls,
   type TerminalMember,
 } from "waffle/browser/runtime-terminals";
 import { DescriptorTable } from "waffle/core/descriptors";
@@ -1017,3 +1018,47 @@ test("queued stale acknowledgement cannot clear the next generation interrupt", 
   assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
   f.bridge.acknowledgeInputDiscard();
 });
+
+for (const operation of ["readiness", "tryRead", "prepare"] as const) {
+  test(`a root prompt parked behind discard resumes through ${operation}`, async (context) => {
+    const f = await fixture(context);
+    const root = createShellTerminals(
+      { runtimeProcess: f.root },
+      f.bridge.buffer,
+      createTerminalAdmission(),
+      f.bridge,
+      () => {},
+    );
+    assert.ok(root);
+    context.after(() => root.dispose());
+    f.bridge.publishPrompt(0);
+    root.ready();
+    Atomics.store(f.bridge.state, control.phase, 2);
+    root.phase(2);
+    const input = root.resolve(0);
+    const controls = terminalControls(input)!;
+    assert.equal(terminalValue(controls.snapshot()).mode, "cooked");
+    assert.equal(f.bridge.send(Uint8Array.of(65, 13)), 2);
+    f.bridge.interrupt();
+    assert.equal(f.bridge.discardInput(), false);
+    f.bridge.publishPrompt(130);
+    root.phase(1);
+    assert.equal(Atomics.load(f.bridge.state, control.cancel), 2);
+    assert.equal(input.readiness().readable, false);
+    const waiting = Atomics.load(f.bridge.state, control.wake);
+    await barrier(f.bridge);
+    assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
+    assert.ok(Atomics.load(f.bridge.state, control.wake) > waiting, "the completed flush woke the root");
+    if (operation === "prepare") root.prepare();
+    if (operation === "tryRead") assert.equal(input.tryRead!([new Uint8Array(1)]), -6);
+    if (operation !== "tryRead") assert.equal(input.readiness().readable, false);
+    assert.equal(Atomics.load(f.bridge.state, control.cancel), 0, "root polling acknowledges the flushed prompt");
+    assert.equal(terminalValue(controls.snapshot()).mode, "raw");
+    assert.equal(f.input.available(), 0);
+    assert.equal(f.bridge.readPrompt()?.status, 130);
+    assert.equal(f.bridge.send(Uint8Array.of(66)), 1);
+    const byte = new Uint8Array(1);
+    assert.equal(input.tryRead!([byte]), 1);
+    assert.equal(byte[0], 66);
+  });
+}
