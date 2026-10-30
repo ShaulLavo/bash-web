@@ -775,3 +775,7 @@ mod tests {
         assert_eq!(editor.feed(4), Action::Eof);
     }
 }
+
+#[cfg(test)]
+#[path = "terminal/readline_tests.rs"]
+mod readline_tests;

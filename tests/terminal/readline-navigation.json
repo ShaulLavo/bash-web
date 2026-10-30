@@ -1,0 +1,1447 @@
+{
+  "schema": 1,
+  "locale": "C.UTF-8",
+  "inputrc": "/dev/null",
+  "keymap": "emacs-standard",
+  "terminal": "xterm-ghostty",
+  "diagnosticHex": "1807",
+  "keys": {
+    "cmd-left": "01",
+    "cmd-right": "05",
+    "ctrl-a": "01",
+    "ctrl-e": "05",
+    "left": "1b5b44",
+    "right": "1b5b43",
+    "up": "1b5b41",
+    "down": "1b5b42",
+    "ctrl-p": "10",
+    "ctrl-n": "0e",
+    "option-left": "1b62",
+    "option-right": "1b66",
+    "option-up": "1b5b313b3341",
+    "option-down": "1b5b313b3342",
+    "shift-left": "1b5b313b3244",
+    "shift-right": "1b5b313b3243",
+    "shift-up": "1b5b313b3241",
+    "shift-down": "1b5b313b3242",
+    "shift-enter": "1b5b32373b323b31337e",
+    "home": "1b5b48",
+    "end": "1b5b46",
+    "ss3-up": "1b4f41",
+    "ss3-down": "1b4f42"
+  },
+  "historyObservation": "Unique seeded entry bytes identify recall; every line and byte point comes from bind -x.",
+  "ghostty": {
+    "repository": "https://github.com/ghostty-org/ghostty",
+    "revision": "7b11f3dca034d8d24369ad3856afe57946d7902a",
+    "platform": "macOS defaults, no active selection",
+    "protocol": "legacy, kitty flags 0; CSI normal and SS3 application cursor variants",
+    "cmdUpDown": "consumed jump_to_prompt, no PTY bytes",
+    "shiftArrows": "performable adjust_selection consumes if a selection exists; otherwise CSI 1;2 A/B/C/D",
+    "optionUpDown": "CSI 1;3 A/B; optionLeftRight use default ESC b/f bindings",
+    "bracketedPaste": {
+      "mode": 2004,
+      "startHex": "1b5b3230307e",
+      "endHex": "1b5b3230317e"
+    },
+    "files": [
+      {
+        "path": "src/config/Config.zig",
+        "sha256": "a50aeab6c14b7b9393dc0a431024b9ef4d9f76b7fbe44d6b3d253c42f7d7d1df",
+        "excerpts": [
+          {
+            "first": 6710,
+            "last": 6734,
+            "text": "        try self.set.putFlags(\n            alloc,\n            .{ .key = .{ .physical = .arrow_left }, .mods = .{ .shift = true } },\n            .{ .adjust_selection = .left },\n            .{ .performable = true },\n        );\n        try self.set.putFlags(\n            alloc,\n            .{ .key = .{ .physical = .arrow_right }, .mods = .{ .shift = true } },\n            .{ .adjust_selection = .right },\n            .{ .performable = true },\n        );\n        try self.set.putFlags(\n            alloc,\n            .{ .key = .{ .physical = .arrow_up }, .mods = .{ .shift = true } },\n            .{ .adjust_selection = .up },\n            .{ .performable = true },\n        );\n        try self.set.putFlags(\n            alloc,\n            .{ .key = .{ .physical = .arrow_down }, .mods = .{ .shift = true } },\n            .{ .adjust_selection = .down },\n            .{ .performable = true },\n        );\n        try self.set.putFlags("
+          },
+          {
+            "first": 7140,
+            "last": 7150,
+            "text": "            // Semantic prompts\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_up }, .mods = .{ .super = true, .shift = true } },\n                .{ .jump_to_prompt = -1 },\n            );\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_down }, .mods = .{ .super = true, .shift = true } },\n                .{ .jump_to_prompt = 1 },\n            );"
+          },
+          {
+            "first": 7260,
+            "last": 7269,
+            "text": "            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_up }, .mods = .{ .super = true } },\n                .{ .jump_to_prompt = -1 },\n            );\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_down }, .mods = .{ .super = true } },\n                .{ .jump_to_prompt = 1 },\n            );"
+          },
+          {
+            "first": 7331,
+            "last": 7359,
+            "text": "            // to legacy encoding (not fixterms). It seems macOS users more than\n            // others are used to these keys so we set them as defaults. If\n            // people want to get back to the fixterm encoding they can set\n            // the keybinds to `unbind`.\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_right }, .mods = .{ .super = true } },\n                .{ .text = \"\\\\x05\" },\n            );\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_left }, .mods = .{ .super = true } },\n                .{ .text = \"\\\\x01\" },\n            );\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .backspace }, .mods = .{ .super = true } },\n                .{ .text = \"\\\\x15\" },\n            );\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_left }, .mods = .{ .alt = true } },\n                .{ .esc = \"b\" },\n            );\n            try self.set.put(\n                alloc,\n                .{ .key = .{ .physical = .arrow_right }, .mods = .{ .alt = true } },\n                .{ .esc = \"f\" },\n            );"
+          }
+        ]
+      },
+      {
+        "path": "src/input/function_keys.zig",
+        "sha256": "2ff8b5e2c2d8239fa50f8a218943420da4a945a3402231ec9d9505abd189a212",
+        "excerpts": [
+          {
+            "first": 53,
+            "last": 69,
+            "text": "pub const modifiers: []const key.Mods = &.{\n    .{ .shift = true },\n    .{ .alt = true },\n    .{ .shift = true, .alt = true },\n    .{ .ctrl = true },\n    .{ .shift = true, .ctrl = true },\n    .{ .alt = true, .ctrl = true },\n    .{ .shift = true, .alt = true, .ctrl = true },\n    .{ .super = true },\n    .{ .shift = true, .super = true },\n    .{ .alt = true, .super = true },\n    .{ .shift = true, .alt = true, .super = true },\n    .{ .ctrl = true, .super = true },\n    .{ .shift = true, .ctrl = true, .super = true },\n    .{ .alt = true, .ctrl = true, .super = true },\n    .{ .shift = true, .alt = true, .ctrl = true, .super = true },\n};"
+          },
+          {
+            "first": 81,
+            "last": 86,
+            "text": "    result.set(.arrow_up, pcStyle(\"\\x1b[1;{}A\") ++ cursorKey(\"\\x1b[A\", \"\\x1bOA\"));\n    result.set(.arrow_down, pcStyle(\"\\x1b[1;{}B\") ++ cursorKey(\"\\x1b[B\", \"\\x1bOB\"));\n    result.set(.arrow_right, pcStyle(\"\\x1b[1;{}C\") ++ cursorKey(\"\\x1b[C\", \"\\x1bOC\"));\n    result.set(.arrow_left, pcStyle(\"\\x1b[1;{}D\") ++ cursorKey(\"\\x1b[D\", \"\\x1bOD\"));\n    result.set(.home, pcStyle(\"\\x1b[1;{}H\") ++ cursorKey(\"\\x1b[H\", \"\\x1bOH\"));\n    result.set(.end, pcStyle(\"\\x1b[1;{}F\") ++ cursorKey(\"\\x1b[F\", \"\\x1bOF\"));"
+          },
+          {
+            "first": 213,
+            "last": 214,
+            "text": "    result.set(.enter, &.{\n        .{ .mods = .{ .shift = true }, .sequence = \"\\x1b[27;2;13~\" },"
+          }
+        ]
+      },
+      {
+        "path": "src/input/key_encode.zig",
+        "sha256": "18a4a0dcae16eb70fe30652d41bfca2c812695d0ea8cabd84626bf09bc781ae9",
+        "excerpts": [
+          {
+            "first": 342,
+            "last": 351,
+            "text": "    // If we match a PC style function key then that is our result.\n    if (pcStyleFunctionKey(\n        event.key,\n        all_mods,\n        opts.cursor_key_application,\n        opts.keypad_key_application,\n        opts.ignore_keypad_with_numlock,\n        opts.modify_other_keys_state_2,\n        opts.backarrow_key_mode,\n    )) |sequence| pc_style: {"
+          }
+        ]
+      },
+      {
+        "path": "src/input/paste.zig",
+        "sha256": "81cc2943b84787062afcc72547471252dde929038eb32b3c61be235309198bc4",
+        "excerpts": [
+          {
+            "first": 4,
+            "last": 6,
+            "text": "/// The bracketed paste (mode 2004) frame written around the data.\npub const bracketed_prefix = \"\\x1b[200~\";\npub const bracketed_suffix = \"\\x1b[201~\";"
+          },
+          {
+            "first": 103,
+            "last": 106,
+            "text": "    if (opts.bracketed) {\n        result[0] = bracketed_prefix;\n        result[2] = bracketed_suffix;\n        return result;"
+          }
+        ]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "observer-unit-control",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e61e4b8adf09f9982621b5b3230317e",
+          "line": "a中🙂b",
+          "point": 9,
+          "readlinePoint": 4,
+          "logicalRow": 0,
+          "scalarColumn": 4
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "a中🙂b",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "a中🙂b",
+          "point": 1,
+          "readlinePoint": 1,
+          "logicalRow": 0,
+          "scalarColumn": 1
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "a中🙂b",
+          "point": 4,
+          "readlinePoint": 2,
+          "logicalRow": 0,
+          "scalarColumn": 2
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "a中🙂b",
+          "point": 8,
+          "readlinePoint": 3,
+          "logicalRow": 0,
+          "scalarColumn": 3
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "a中🙂b",
+          "point": 9,
+          "readlinePoint": 4,
+          "logicalRow": 0,
+          "scalarColumn": 4
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "a中🙂b",
+          "point": 8,
+          "readlinePoint": 3,
+          "logicalRow": 0,
+          "scalarColumn": 3
+        },
+        {
+          "key": "ctrl-e",
+          "inputHex": "05",
+          "line": "a中🙂b",
+          "point": 9,
+          "readlinePoint": 4,
+          "logicalRow": 0,
+          "scalarColumn": 4
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "a中🙂b",
+          "point": 8,
+          "readlinePoint": 3,
+          "logicalRow": 0,
+          "scalarColumn": 3
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "a中🙂b",
+          "point": 4,
+          "readlinePoint": 2,
+          "logicalRow": 0,
+          "scalarColumn": 2
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "a中🙂b",
+          "point": 1,
+          "readlinePoint": 1,
+          "logicalRow": 0,
+          "scalarColumn": 1
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "markdown-blank-lines",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e2320446f63756d656e740a0a412073686f7274207061726167726170682e0a0a2320446f63756d656e740a0a412073686f7274207061726167726170682e0a0a2320446f63756d656e740a0a412073686f7274207061726167726170682e0a0a2323204c6173742068656164696e670a0a412066696e616c207061726167726170682e0a1b5b3230317e",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 132,
+          "readlinePoint": 132,
+          "logicalRow": 15,
+          "scalarColumn": 0
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 132,
+          "readlinePoint": 132,
+          "logicalRow": 15,
+          "scalarColumn": 0
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 131,
+          "readlinePoint": 131,
+          "logicalRow": 14,
+          "scalarColumn": 18
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "ctrl-e",
+          "inputHex": "05",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 132,
+          "readlinePoint": 132,
+          "logicalRow": 15,
+          "scalarColumn": 0
+        },
+        {
+          "key": "home",
+          "inputHex": "1b5b48",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "end",
+          "inputHex": "1b5b46",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 132,
+          "readlinePoint": 132,
+          "logicalRow": 15,
+          "scalarColumn": 0
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 132,
+          "readlinePoint": 132,
+          "logicalRow": 15,
+          "scalarColumn": 0
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n# Document\n\nA short paragraph.\n\n## Last heading\n\nA final paragraph.\n",
+          "point": 132,
+          "readlinePoint": 132,
+          "logicalRow": 15,
+          "scalarColumn": 0
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "empty-lines",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e0a0a0a1b5b3230317e",
+          "line": "\n\n\n",
+          "point": 3,
+          "readlinePoint": 3,
+          "logicalRow": 3,
+          "scalarColumn": 0
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "\n\n\n",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "\n\n\n",
+          "point": 3,
+          "readlinePoint": 3,
+          "logicalRow": 3,
+          "scalarColumn": 0
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "\n\n\n",
+          "point": 2,
+          "readlinePoint": 2,
+          "logicalRow": 2,
+          "scalarColumn": 0
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "\n\n\n",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "ctrl-e",
+          "inputHex": "05",
+          "line": "\n\n\n",
+          "point": 3,
+          "readlinePoint": 3,
+          "logicalRow": 3,
+          "scalarColumn": 0
+        },
+        {
+          "key": "home",
+          "inputHex": "1b5b48",
+          "line": "\n\n\n",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "end",
+          "inputHex": "1b5b46",
+          "line": "\n\n\n",
+          "point": 3,
+          "readlinePoint": 3,
+          "logicalRow": 3,
+          "scalarColumn": 0
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "\n\n\n",
+          "point": 3,
+          "readlinePoint": 3,
+          "logicalRow": 3,
+          "scalarColumn": 0
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "\n\n\n",
+          "point": 3,
+          "readlinePoint": 3,
+          "logicalRow": 3,
+          "scalarColumn": 0
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "unicode-wrap",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307ee4b8ad2065cc8120f09f9982207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473207769646520776f726473200a0ae5b0be1b5b3230317e",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 150,
+          "readlinePoint": 142,
+          "logicalRow": 2,
+          "scalarColumn": 1
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 150,
+          "readlinePoint": 142,
+          "logicalRow": 2,
+          "scalarColumn": 1
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 147,
+          "readlinePoint": 141,
+          "logicalRow": 2,
+          "scalarColumn": 0
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "ctrl-e",
+          "inputHex": "05",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 150,
+          "readlinePoint": 142,
+          "logicalRow": 2,
+          "scalarColumn": 1
+        },
+        {
+          "key": "home",
+          "inputHex": "1b5b48",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "end",
+          "inputHex": "1b5b46",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 150,
+          "readlinePoint": 142,
+          "logicalRow": 2,
+          "scalarColumn": 1
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 150,
+          "readlinePoint": 142,
+          "logicalRow": 2,
+          "scalarColumn": 1
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中 é 🙂 wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words wide words \n\n尾",
+          "point": 150,
+          "readlinePoint": 142,
+          "logicalRow": 2,
+          "scalarColumn": 1
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "history-from-middle",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e66697273740a0a6d6964646c650a6c6173741b5b3230317e",
+          "line": "first\n\nmiddle\nlast",
+          "point": 18,
+          "readlinePoint": 18,
+          "logicalRow": 3,
+          "scalarColumn": 4
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "first\n\nmiddle\nlast",
+          "point": 17,
+          "readlinePoint": 17,
+          "logicalRow": 3,
+          "scalarColumn": 3
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "first\n\nmiddle\nlast",
+          "point": 16,
+          "readlinePoint": 16,
+          "logicalRow": 3,
+          "scalarColumn": 2
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "first\n\nmiddle\nlast",
+          "point": 18,
+          "readlinePoint": 18,
+          "logicalRow": 3,
+          "scalarColumn": 4
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "first\n\nmiddle\nlast",
+          "point": 18,
+          "readlinePoint": 18,
+          "logicalRow": 3,
+          "scalarColumn": 4
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "history-from-start",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e66697273740a0a6c6173741b5b3230317e",
+          "line": "first\n\nlast",
+          "point": 11,
+          "readlinePoint": 11,
+          "logicalRow": 2,
+          "scalarColumn": 4
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "first\n\nlast",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "first\n\nlast",
+          "point": 11,
+          "readlinePoint": 11,
+          "logicalRow": 2,
+          "scalarColumn": 4
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "first\n\nlast",
+          "point": 11,
+          "readlinePoint": 11,
+          "logicalRow": 2,
+          "scalarColumn": 4
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "history-control",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e6f6e650a0a74776f1b5b3230317e",
+          "line": "one\n\ntwo",
+          "point": 8,
+          "readlinePoint": 8,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "ctrl-p",
+          "inputHex": "10",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "ctrl-p",
+          "inputHex": "10",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "ctrl-p",
+          "inputHex": "10",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "ctrl-n",
+          "inputHex": "0e",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "ctrl-n",
+          "inputHex": "0e",
+          "line": "one\n\ntwo",
+          "point": 8,
+          "readlinePoint": 8,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "ctrl-n",
+          "inputHex": "0e",
+          "line": "one\n\ntwo",
+          "point": 8,
+          "readlinePoint": 8,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "history-ss3",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e6f6e650a0a74776f1b5b3230317e",
+          "line": "one\n\ntwo",
+          "point": 8,
+          "readlinePoint": 8,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "ss3-up",
+          "inputHex": "1b4f41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "ss3-down",
+          "inputHex": "1b4f42",
+          "line": "one\n\ntwo",
+          "point": 8,
+          "readlinePoint": 8,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "words",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e6f6e652c74776f2020636166c3a9e4b8ad210a0a6c61737420776f72641b5b3230317e",
+          "line": "one,two  café中!\n\nlast word",
+          "point": 29,
+          "readlinePoint": 26,
+          "logicalRow": 2,
+          "scalarColumn": 9
+        },
+        {
+          "key": "option-left",
+          "inputHex": "1b62",
+          "line": "one,two  café中!\n\nlast word",
+          "point": 25,
+          "readlinePoint": 22,
+          "logicalRow": 2,
+          "scalarColumn": 5
+        },
+        {
+          "key": "option-left",
+          "inputHex": "1b62",
+          "line": "one,two  café中!\n\nlast word",
+          "point": 20,
+          "readlinePoint": 17,
+          "logicalRow": 2,
+          "scalarColumn": 0
+        },
+        {
+          "key": "option-left",
+          "inputHex": "1b62",
+          "line": "one,two  café中!\n\nlast word",
+          "point": 9,
+          "readlinePoint": 9,
+          "logicalRow": 0,
+          "scalarColumn": 9
+        },
+        {
+          "key": "option-right",
+          "inputHex": "1b66",
+          "line": "one,two  café中!\n\nlast word",
+          "point": 17,
+          "readlinePoint": 14,
+          "logicalRow": 0,
+          "scalarColumn": 14
+        },
+        {
+          "key": "option-right",
+          "inputHex": "1b66",
+          "line": "one,two  café中!\n\nlast word",
+          "point": 24,
+          "readlinePoint": 21,
+          "logicalRow": 2,
+          "scalarColumn": 4
+        },
+        {
+          "key": "option-right",
+          "inputHex": "1b66",
+          "line": "one,two  café中!\n\nlast word",
+          "point": 29,
+          "readlinePoint": 26,
+          "logicalRow": 2,
+          "scalarColumn": 9
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "modified-arrows",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e6f6e652074776f0a0a74687265651b5b3230317e",
+          "line": "one two\n\nthree",
+          "point": 14,
+          "readlinePoint": 14,
+          "logicalRow": 2,
+          "scalarColumn": 5
+        },
+        {
+          "key": "shift-left",
+          "inputHex": "1b5b313b3244",
+          "line": "one two\n\nthreeD",
+          "point": 15,
+          "readlinePoint": 15,
+          "logicalRow": 2,
+          "scalarColumn": 6
+        },
+        {
+          "key": "shift-right",
+          "inputHex": "1b5b313b3243",
+          "line": "one two\n\nthreeDC",
+          "point": 16,
+          "readlinePoint": 16,
+          "logicalRow": 2,
+          "scalarColumn": 7
+        },
+        {
+          "key": "shift-up",
+          "inputHex": "1b5b313b3241",
+          "line": "one two\n\nthreeDCA",
+          "point": 17,
+          "readlinePoint": 17,
+          "logicalRow": 2,
+          "scalarColumn": 8
+        },
+        {
+          "key": "shift-down",
+          "inputHex": "1b5b313b3242",
+          "line": "one two\n\nthreeDCAB",
+          "point": 18,
+          "readlinePoint": 18,
+          "logicalRow": 2,
+          "scalarColumn": 9
+        },
+        {
+          "key": "option-up",
+          "inputHex": "1b5b313b3341",
+          "line": "one two\n\nthreeDCAB",
+          "point": 18,
+          "readlinePoint": 18,
+          "logicalRow": 2,
+          "scalarColumn": 9
+        },
+        {
+          "key": "option-down",
+          "inputHex": "1b5b313b3342",
+          "line": "one two\n\nthreeDCAB",
+          "point": 18,
+          "readlinePoint": 18,
+          "logicalRow": 2,
+          "scalarColumn": 9
+        }
+      ],
+      "parity": false
+    },
+    {
+      "name": "draft-edits",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e64726166740a0a656e641b5b3230317e",
+          "line": "draft\n\nend",
+          "point": 10,
+          "readlinePoint": 10,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "draft\n\nend",
+          "point": 10,
+          "readlinePoint": 10,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "ctrl-a",
+          "inputHex": "01",
+          "line": "draft\n\nend",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "insert",
+          "inputHex": "2320",
+          "line": "# draft\n\nend",
+          "point": 2,
+          "readlinePoint": 2,
+          "logicalRow": 0,
+          "scalarColumn": 2
+        },
+        {
+          "key": "ctrl-e",
+          "inputHex": "05",
+          "line": "# draft\n\nend",
+          "point": 12,
+          "readlinePoint": 12,
+          "logicalRow": 2,
+          "scalarColumn": 3
+        },
+        {
+          "key": "insert",
+          "inputHex": "207461696c",
+          "line": "# draft\n\nend tail",
+          "point": 17,
+          "readlinePoint": 17,
+          "logicalRow": 2,
+          "scalarColumn": 8
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "# draft\n\nend tail",
+          "point": 17,
+          "readlinePoint": 17,
+          "logicalRow": 2,
+          "scalarColumn": 8
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "feel-navigation",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "bracketed-paste",
+          "inputHex": "1b5b3230307e232068656164696e670a0a23206d6964646c650a0a23207461696c1b5b3230317e",
+          "line": "# heading\n\n# middle\n\n# tail",
+          "point": 27,
+          "readlinePoint": 27,
+          "logicalRow": 4,
+          "scalarColumn": 6
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "# heading\n\n# middle\n\n# tail",
+          "point": 0,
+          "readlinePoint": 0,
+          "logicalRow": 0,
+          "scalarColumn": 0
+        },
+        {
+          "key": "insert",
+          "inputHex": "2320535441525420",
+          "line": "# START # heading\n\n# middle\n\n# tail",
+          "point": 8,
+          "readlinePoint": 8,
+          "logicalRow": 0,
+          "scalarColumn": 8
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "# START # heading\n\n# middle\n\n# tail",
+          "point": 35,
+          "readlinePoint": 35,
+          "logicalRow": 4,
+          "scalarColumn": 6
+        },
+        {
+          "key": "insert",
+          "inputHex": "20454e44",
+          "line": "# START # heading\n\n# middle\n\n# tail END",
+          "point": 39,
+          "readlinePoint": 39,
+          "logicalRow": 4,
+          "scalarColumn": 10
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "printf 'HISTORY_OLDER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "printf 'HISTORY_NEWER\\n'",
+          "point": 24,
+          "readlinePoint": 24,
+          "logicalRow": 0,
+          "scalarColumn": 24
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "# START # heading\n\n# middle\n\n# tail END",
+          "point": 39,
+          "readlinePoint": 39,
+          "logicalRow": 4,
+          "scalarColumn": 10
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "# START # heading\n\n# middle\n\n# tail END",
+          "point": 39,
+          "readlinePoint": 39,
+          "logicalRow": 4,
+          "scalarColumn": 10
+        }
+      ],
+      "parity": true
+    },
+    {
+      "name": "shift-enter-policy",
+      "columns": 24,
+      "history": [
+        "printf 'HISTORY_OLDER\\n'",
+        "printf 'HISTORY_NEWER\\n'"
+      ],
+      "steps": [
+        {
+          "key": "insert",
+          "inputHex": "23206669727374",
+          "line": "# first",
+          "point": 7,
+          "readlinePoint": 7,
+          "logicalRow": 0,
+          "scalarColumn": 7
+        },
+        {
+          "key": "shift-enter",
+          "inputHex": "1b5b32373b323b31337e",
+          "line": "# first;2;13~",
+          "point": 13,
+          "readlinePoint": 13,
+          "logicalRow": 0,
+          "scalarColumn": 13
+        },
+        {
+          "key": "insert",
+          "inputHex": "23207365636f6e64",
+          "line": "# first;2;13~# second",
+          "point": 21,
+          "readlinePoint": 21,
+          "logicalRow": 0,
+          "scalarColumn": 21
+        }
+      ],
+      "parity": false
+    }
+  ],
+  "identity": {
+    "bash": "/usr/bin/bash",
+    "bashVersion": "GNU bash, version 5.3.20(1)-release (x86_64-pc-linux-gnu)",
+    "bashSha256": "c14c8f498f3be96f076ceb07d65dba584a86dca3c86b5dce65ed0f6cae73358d",
+    "runtimeReadline": "/usr/lib/libreadline.so.8.3",
+    "readlineSha256": "c55b53a98e218df23f2f90ca1015974e122be2ee1d5fc93db1cc097440699b65",
+    "readlineVersion": "8.3",
+    "readlineVersionHex": "0x803",
+    "packages": [
+      "bash 5.3.20-1",
+      "readline 8.3.6-1"
+    ],
+    "libraries": [
+      {
+        "path": "/usr/lib/gconv/gconv-modules.cache",
+        "sha256": "0fde9bfd93c2ac83b23f0ab2e89f438be92f3c368247410eff58ccc847d7a783"
+      },
+      {
+        "path": "/usr/lib/ld-linux-x86-64.so.2",
+        "sha256": "f5e11cc62f8f2c24dff532982559f4303dba3b17e7450551372a88c8e7ea8757"
+      },
+      {
+        "path": "/usr/lib/libc.so.6",
+        "sha256": "02c8c3d06180beee9c7d0392aa85736c7d19f274a81e7f8f0b3d9e28e0641524"
+      },
+      {
+        "path": "/usr/lib/libncursesw.so.6.6",
+        "sha256": "7498a0b0f75deb5417e109d1853679f1a6b201e52e03b247c914fec0a36e3a5b"
+      },
+      {
+        "path": "/usr/lib/libreadline.so.8.3",
+        "sha256": "c55b53a98e218df23f2f90ca1015974e122be2ee1d5fc93db1cc097440699b65"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_ADDRESS",
+        "sha256": "26e2800affab801cb36d4ff9625a95c3abceeda2b6553a7aecd0cfcf34c98099"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_COLLATE",
+        "sha256": "47a5f5359a8f324abc39d69a7f6241a2ac0e2fbbeae5b9c3a756e682b75d087b"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_CTYPE",
+        "sha256": "40680545df4f92443c15e7c6f51a7fdc9154ebedd9eff1ed5c48437039add365"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_IDENTIFICATION",
+        "sha256": "be5c6f4aa0cc2c05ab5ce3ed43c538cd7decbf97b42bc7c73f19414292f4dd4c"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_MEASUREMENT",
+        "sha256": "bb14a6f2cbd5092a755e8f272079822d3e842620dd4542a8dfa1e5e72fc6115b"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES",
+        "sha256": "f9ad02f1d8eba721d4cbd50c365b5c681c39aec008f90bfc2be2dc80bfbaddcb"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_MONETARY",
+        "sha256": "bfd9e9975443b834582493fe9a8d7aefcd989376789c17470a1e548aee76fd55"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_NAME",
+        "sha256": "14507aad9f806112e464b9ca94c93b2e4d759ddc612b5f87922d7cac7170697d"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_NUMERIC",
+        "sha256": "f5976e6b3e6b24dfe03caad6a5b98d894d8110d8bd15507e690fd60fd3e04ab2"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_PAPER",
+        "sha256": "cde048b81e2a026517cc707c906aebbd50f5ee3957b6f0c1c04699dffcb7c015"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_TELEPHONE",
+        "sha256": "f4caf0d12844219b65ba42edc7ec2f5ac1b2fc36a3c88c28887457275daca1ee"
+      },
+      {
+        "path": "/usr/lib/locale/C.utf8/LC_TIME",
+        "sha256": "0910b595d1d5d4e52cc0f415bbb1ff07c015d6860d34aae02505dd9973a63154"
+      },
+      {
+        "path": "/usr/lib/locale/locale-archive",
+        "sha256": "7bf2da63b17127e5976936957419603a8b057f606dcf56de1e81e9256ad06a32"
+      }
+    ]
+  },
+  "bindings": {
+    "beforeSha256": "8b3a6baea18f9cbb1e7ba353920af9ceba62a5cc84a8d6e7565862c02a751444",
+    "afterSha256": "8f620fff99bde919e1bed00a09d94706e879807a20216ca9cc2d1e5bf2ef0c68",
+    "functions": "\n\"\\C-g\": abort\n\"\\C-x\\C-g\": abort\n\"\\e\\C-g\": abort\n\"\\C-j\": accept-line\n\"\\C-m\": accept-line\n# alias-expand-line (not bound)\n# arrow-key-prefix (not bound)\n# backward-byte (not bound)\n\"\\C-b\": backward-char\n\"\\eOD\": backward-char\n\"\\e[D\": backward-char\n\"\\C-h\": backward-delete-char\n\"\\C-?\": backward-delete-char\n\"\\C-x\\C-?\": backward-kill-line\n\"\\e\\C-h\": backward-kill-word\n\"\\e\\C-?\": backward-kill-word\n\"\\e[1;3D\": backward-word\n\"\\e[1;5D\": backward-word\n\"\\eb\": backward-word\n# bash-vi-complete (not bound)\n\"\\e<\": beginning-of-history\n\"\\C-a\": beginning-of-line\n\"\\eOH\": beginning-of-line\n\"\\e[H\": beginning-of-line\n\"\\e[200~\": bracketed-paste-begin\n\"\\C-xe\": call-last-kbd-macro\n\"\\ec\": capitalize-word\n\"\\C-]\": character-search\n\"\\e\\C-]\": character-search-backward\n\"\\e\\C-l\": clear-display\n\"\\C-l\": clear-screen\n\"\\C-i\": complete\n\"\\e\\e\": complete\n\"\\e!\": complete-command\n\"\\e/\": complete-filename\n\"\\e@\": complete-hostname\n\"\\e{\": complete-into-braces\n\"\\e~\": complete-username\n\"\\e$\": complete-variable\n# copy-backward-word (not bound)\n# copy-forward-word (not bound)\n# copy-region-as-kill (not bound)\n# dabbrev-expand (not bound)\n\"\\C-d\": delete-char\n\"\\e[3~\": delete-char\n# delete-char-or-list (not bound)\n\"\\e\\\\\": delete-horizontal-space\n\"\\e-\": digit-argument\n\"\\e0\": digit-argument\n\"\\e1\": digit-argument\n\"\\e2\": digit-argument\n\"\\e3\": digit-argument\n\"\\e4\": digit-argument\n\"\\e5\": digit-argument\n\"\\e6\": digit-argument\n\"\\e7\": digit-argument\n\"\\e8\": digit-argument\n\"\\e9\": digit-argument\n\"\\C-x\\C-v\": display-shell-version\n\"\\C-xA\": do-lowercase-version\n\"\\C-xB\": do-lowercase-version\n\"\\C-xC\": do-lowercase-version\n\"\\C-xD\": do-lowercase-version\n\"\\C-xE\": do-lowercase-version\n\"\\C-xF\": do-lowercase-version\n\"\\C-xG\": do-lowercase-version\n\"\\C-xH\": do-lowercase-version\n\"\\C-xI\": do-lowercase-version\n\"\\C-xJ\": do-lowercase-version\n\"\\C-xK\": do-lowercase-version\n\"\\C-xL\": do-lowercase-version\n\"\\C-xM\": do-lowercase-version\n\"\\C-xN\": do-lowercase-version\n\"\\C-xO\": do-lowercase-version\n\"\\C-xP\": do-lowercase-version\n\"\\C-xQ\": do-lowercase-version\n\"\\C-xR\": do-lowercase-version\n\"\\C-xS\": do-lowercase-version\n\"\\C-xT\": do-lowercase-version\n\"\\C-xU\": do-lowercase-version\n\"\\C-xV\": do-lowercase-version\n\"\\C-xW\": do-lowercase-version\n\"\\C-xX\": do-lowercase-version\n\"\\C-xY\": do-lowercase-version\n\"\\C-xZ\": do-lowercase-version\n\"\\eA\": do-lowercase-version\n\"\\eB\": do-lowercase-version\n\"\\eC\": do-lowercase-version\n\"\\eD\": do-lowercase-version\n\"\\eE\": do-lowercase-version\n\"\\eF\": do-lowercase-version\n\"\\eG\": do-lowercase-version\n\"\\eH\": do-lowercase-version\n\"\\eI\": do-lowercase-version\n\"\\eJ\": do-lowercase-version\n\"\\eK\": do-lowercase-version\n\"\\eL\": do-lowercase-version\n\"\\eM\": do-lowercase-version\n\"\\eN\": do-lowercase-version\n\"\\eP\": do-lowercase-version\n\"\\eQ\": do-lowercase-version\n\"\\eR\": do-lowercase-version\n\"\\eS\": do-lowercase-version\n\"\\eT\": do-lowercase-version\n\"\\eU\": do-lowercase-version\n\"\\eV\": do-lowercase-version\n\"\\eW\": do-lowercase-version\n\"\\eX\": do-lowercase-version\n\"\\eY\": do-lowercase-version\n\"\\eZ\": do-lowercase-version\n\"\\el\": downcase-word\n# dump-functions (not bound)\n# dump-macros (not bound)\n# dump-variables (not bound)\n\"\\e\\C-i\": dynamic-complete-history\n\"\\C-x\\C-e\": edit-and-execute-command\n# emacs-editing-mode (not bound)\n\"\\C-x)\": end-kbd-macro\n\"\\e>\": end-of-history\n\"\\C-e\": end-of-line\n\"\\eOF\": end-of-line\n\"\\e[F\": end-of-line\n\"\\C-x\\C-x\": exchange-point-and-mark\n\"\\ex\": execute-named-command\n# export-completions (not bound)\n# fetch-history (not bound)\n# forward-backward-delete-char (not bound)\n# forward-byte (not bound)\n\"\\C-f\": forward-char\n\"\\eOC\": forward-char\n\"\\e[C\": forward-char\n\"\\C-s\": forward-search-history\n\"\\e[1;3C\": forward-word\n\"\\e[1;5C\": forward-word\n\"\\ef\": forward-word\n\"\\eg\": glob-complete-word\n\"\\C-x*\": glob-expand-word\n\"\\C-xg\": glob-list-expansions\n# history-and-alias-expand-line (not bound)\n\"\\e^\": history-expand-line\n\"\\e[5~\": history-search-backward\n\"\\e[6~\": history-search-forward\n# history-substring-search-backward (not bound)\n# history-substring-search-forward (not bound)\n\"\\e#\": insert-comment\n\"\\e*\": insert-completions\n\"\\e.\": insert-last-argument\n\"\\e_\": insert-last-argument\n\"\\C-k\": kill-line\n# kill-region (not bound)\n# kill-whole-line (not bound)\n\"\\e[3;5~\": kill-word\n\"\\ed\": kill-word\n# magic-space (not bound)\n# menu-complete (not bound)\n# menu-complete-backward (not bound)\n\"\\C-n\": next-history\n\"\\eOB\": next-history\n\"\\e[B\": next-history\n# next-screen-line (not bound)\n\"\\en\": non-incremental-forward-search-history\n# non-incremental-forward-search-history-again (not bound)\n\"\\ep\": non-incremental-reverse-search-history\n# non-incremental-reverse-search-history-again (not bound)\n# old-menu-complete (not bound)\n\"\\C-o\": operate-and-get-next\n\"\\e[2~\": overwrite-mode\n\"\\C-x!\": possible-command-completions\n\"\\e=\": possible-completions\n\"\\e?\": possible-completions\n\"\\C-x/\": possible-filename-completions\n\"\\C-x@\": possible-hostname-completions\n\"\\C-x~\": possible-username-completions\n\"\\C-x$\": possible-variable-completions\n\"\\C-p\": previous-history\n\"\\eOA\": previous-history\n\"\\e[A\": previous-history\n# previous-screen-line (not bound)\n# print-last-kbd-macro (not bound)\n\"\\C-q\": quoted-insert\n\"\\C-v\": quoted-insert\n\"\\C-x\\C-r\": re-read-init-file\n# redraw-current-line (not bound)\n\"\\C-r\": reverse-search-history\n\"\\e\\C-r\": revert-line\n\"\\er\": revert-line\n\" \": self-insert\n\"!\": self-insert\n\"\\\"\": self-insert\n\"#\": self-insert\n\"$\": self-insert\n\"%\": self-insert\n\"&\": self-insert\n\"'\": self-insert\n\"(\": self-insert\n\")\": self-insert\n\"*\": self-insert\n\"+\": self-insert\n\",\": self-insert\n\"-\": self-insert\n\".\": self-insert\n\"/\": self-insert\n\"0\": self-insert\n\"1\": self-insert\n\"2\": self-insert\n\"3\": self-insert\n\"4\": self-insert\n\"5\": self-insert\n\"6\": self-insert\n\"7\": self-insert\n\"8\": self-insert\n\"9\": self-insert\n\":\": self-insert\n\";\": self-insert\n\"<\": self-insert\n\"=\": self-insert\n\">\": self-insert\n\"?\": self-insert\n\"@\": self-insert\n\"A\": self-insert\n\"B\": self-insert\n\"C\": self-insert\n\"D\": self-insert\n\"E\": self-insert\n\"F\": self-insert\n\"G\": self-insert\n\"H\": self-insert\n\"I\": self-insert\n\"J\": self-insert\n\"K\": self-insert\n\"L\": self-insert\n\"M\": self-insert\n\"N\": self-insert\n\"O\": self-insert\n\"P\": self-insert\n\"Q\": self-insert\n\"R\": self-insert\n\"S\": self-insert\n\"T\": self-insert\n\"U\": self-insert\n\"V\": self-insert\n\"W\": self-insert\n\"X\": self-insert\n\"Y\": self-insert\n\"Z\": self-insert\n\"[\": self-insert\n\"\\\\\": self-insert\n\"]\": self-insert\n\"^\": self-insert\n\"_\": self-insert\n\"`\": self-insert\n\"a\": self-insert\n\"b\": self-insert\n\"c\": self-insert\n\"d\": self-insert\n\"e\": self-insert\n\"f\": self-insert\n\"g\": self-insert\n\"h\": self-insert\n\"i\": self-insert\n\"j\": self-insert\n\"k\": self-insert\n\"l\": self-insert\n\"m\": self-insert\n\"n\": self-insert\n\"o\": self-insert\n\"p\": self-insert\n\"q\": self-insert\n\"r\": self-insert\n\"s\": self-insert\n\"t\": self-insert\n\"u\": self-insert\n\"v\": self-insert\n\"w\": self-insert\n\"x\": self-insert\n\"y\": self-insert\n\"z\": self-insert\n\"{\": self-insert\n\"|\": self-insert\n\"}\": self-insert\n\"~\": self-insert\n\"\\200\": self-insert\n\"\\201\": self-insert\n\"\\202\": self-insert\n\"\\203\": self-insert\n\"\\204\": self-insert\n\"\\205\": self-insert\n\"\\206\": self-insert\n\"\\207\": self-insert\n\"\\210\": self-insert\n\"\\211\": self-insert\n\"\\212\": self-insert\n\"\\213\": self-insert\n\"\\214\": self-insert\n\"\\215\": self-insert\n\"\\216\": self-insert\n\"\\217\": self-insert\n\"\\220\": self-insert\n\"\\221\": self-insert\n\"\\222\": self-insert\n\"\\223\": self-insert\n\"\\224\": self-insert\n\"\\225\": self-insert\n\"\\226\": self-insert\n\"\\227\": self-insert\n\"\\230\": self-insert\n\"\\231\": self-insert\n\"\\232\": self-insert\n\"\\233\": self-insert\n\"\\234\": self-insert\n\"\\235\": self-insert\n\"\\236\": self-insert\n\"\\237\": self-insert\n\"\\240\": self-insert\n\"\\241\": self-insert\n\"\\242\": self-insert\n\"\\243\": self-insert\n\"\\244\": self-insert\n\"\\245\": self-insert\n\"\\246\": self-insert\n\"\\247\": self-insert\n\"\\250\": self-insert\n\"\\251\": self-insert\n\"\\252\": self-insert\n\"\\253\": self-insert\n\"\\254\": self-insert\n\"\\255\": self-insert\n\"\\256\": self-insert\n\"\\257\": self-insert\n\"\\260\": self-insert\n\"\\261\": self-insert\n\"\\262\": self-insert\n\"\\263\": self-insert\n\"\\264\": self-insert\n\"\\265\": self-insert\n\"\\266\": self-insert\n\"\\267\": self-insert\n\"\\270\": self-insert\n\"\\271\": self-insert\n\"\\272\": self-insert\n\"\\273\": self-insert\n\"\\274\": self-insert\n\"\\275\": self-insert\n\"\\276\": self-insert\n\"\\277\": self-insert\n\"\\300\": self-insert\n\"\\301\": self-insert\n\"\\302\": self-insert\n\"\\303\": self-insert\n\"\\304\": self-insert\n\"\\305\": self-insert\n\"\\306\": self-insert\n\"\\307\": self-insert\n\"\\310\": self-insert\n\"\\311\": self-insert\n\"\\312\": self-insert\n\"\\313\": self-insert\n\"\\314\": self-insert\n\"\\315\": self-insert\n\"\\316\": self-insert\n\"\\317\": self-insert\n\"\\320\": self-insert\n\"\\321\": self-insert\n\"\\322\": self-insert\n\"\\323\": self-insert\n\"\\324\": self-insert\n\"\\325\": self-insert\n\"\\326\": self-insert\n\"\\327\": self-insert\n\"\\330\": self-insert\n\"\\331\": self-insert\n\"\\332\": self-insert\n\"\\333\": self-insert\n\"\\334\": self-insert\n\"\\335\": self-insert\n\"\\336\": self-insert\n\"\\337\": self-insert\n\"\\340\": self-insert\n\"\\341\": self-insert\n\"\\342\": self-insert\n\"\\343\": self-insert\n\"\\344\": self-insert\n\"\\345\": self-insert\n\"\\346\": self-insert\n\"\\347\": self-insert\n\"\\350\": self-insert\n\"\\351\": self-insert\n\"\\352\": self-insert\n\"\\353\": self-insert\n\"\\354\": self-insert\n\"\\355\": self-insert\n\"\\356\": self-insert\n\"\\357\": self-insert\n\"\\360\": self-insert\n\"\\361\": self-insert\n\"\\362\": self-insert\n\"\\363\": self-insert\n\"\\364\": self-insert\n\"\\365\": self-insert\n\"\\366\": self-insert\n\"\\367\": self-insert\n\"\\370\": self-insert\n\"\\371\": self-insert\n\"\\372\": self-insert\n\"\\373\": self-insert\n\"\\374\": self-insert\n\"\\375\": self-insert\n\"\\376\": self-insert\n\"\\377\": self-insert\n\"\\C-@\": set-mark\n\"\\e \": set-mark\n# shell-backward-kill-word (not bound)\n\"\\e\\C-b\": shell-backward-word\n\"\\e\\C-e\": shell-expand-line\n\"\\e\\C-f\": shell-forward-word\n\"\\e\\C-d\": shell-kill-word\n\"\\e\\C-t\": shell-transpose-words\n# skip-csi-sequence (not bound)\n\"\\C-xs\": spell-correct-word\n\"\\C-x(\": start-kbd-macro\n# tab-insert (not bound)\n\"\\e&\": tilde-expand\n\"\\C-t\": transpose-chars\n\"\\et\": transpose-words\n# tty-status (not bound)\n\"\\C-x\\C-u\": undo\n\"\\C-_\": undo\n# universal-argument (not bound)\n# unix-filename-rubout (not bound)\n\"\\C-u\": unix-line-discard\n\"\\C-w\": unix-word-rubout\n\"\\eu\": upcase-word\n# vi-append-eol (not bound)\n# vi-append-mode (not bound)\n# vi-arg-digit (not bound)\n# vi-bWord (not bound)\n# vi-back-to-indent (not bound)\n# vi-backward-bigword (not bound)\n# vi-backward-word (not bound)\n# vi-bword (not bound)\n# vi-change-case (not bound)\n# vi-change-char (not bound)\n# vi-change-to (not bound)\n# vi-char-search (not bound)\n# vi-column (not bound)\n# vi-complete (not bound)\n# vi-delete (not bound)\n# vi-delete-to (not bound)\n# vi-eWord (not bound)\n# vi-edit-and-execute-command (not bound)\n# vi-editing-mode (not bound)\n# vi-end-bigword (not bound)\n# vi-end-word (not bound)\n# vi-eof-maybe (not bound)\n# vi-eword (not bound)\n# vi-fWord (not bound)\n# vi-fetch-history (not bound)\n# vi-first-print (not bound)\n# vi-forward-bigword (not bound)\n# vi-forward-word (not bound)\n# vi-fword (not bound)\n# vi-goto-mark (not bound)\n# vi-insert-beg (not bound)\n# vi-insertion-mode (not bound)\n# vi-match (not bound)\n# vi-movement-mode (not bound)\n# vi-next-word (not bound)\n# vi-overstrike (not bound)\n# vi-overstrike-delete (not bound)\n# vi-prev-word (not bound)\n# vi-put (not bound)\n# vi-redo (not bound)\n# vi-replace (not bound)\n# vi-rubout (not bound)\n# vi-search (not bound)\n# vi-search-again (not bound)\n# vi-set-mark (not bound)\n# vi-subst (not bound)\n# vi-tilde-expand (not bound)\n# vi-undo (not bound)\n# vi-unix-word-rubout (not bound)\n# vi-yank-arg (not bound)\n# vi-yank-pop (not bound)\n# vi-yank-to (not bound)\n\"\\C-y\": yank\n\"\\e.\": yank-last-arg\n\"\\e_\": yank-last-arg\n\"\\e\\C-y\": yank-nth-arg\n\"\\ey\": yank-pop\n",
+    "variables": "set bind-tty-special-chars on\nset blink-matching-paren off\nset byte-oriented off\nset colored-completion-prefix off\nset colored-stats off\nset completion-ignore-case off\nset completion-map-case off\nset convert-meta off\nset disable-completion off\nset echo-control-characters on\nset enable-active-region on\nset enable-bracketed-paste on\nset enable-keypad off\nset enable-meta-key on\nset expand-tilde off\nset force-meta-prefix off\nset history-preserve-point off\nset horizontal-scroll-mode off\nset input-meta on\nset mark-directories on\nset mark-modified-lines off\nset mark-symlinked-directories off\nset match-hidden-files on\nset menu-complete-display-prefix off\nset meta-flag on\nset output-meta on\nset page-completions on\nset prefer-visible-bell on\nset print-completions-horizontally off\nset revert-all-at-newline off\nset search-ignore-case off\nset show-all-if-ambiguous off\nset show-all-if-unmodified off\nset show-mode-in-prompt off\nset skip-completed-text off\nset visible-stats off\nset active-region-end-color \\e[27m\nset active-region-start-color \\e[7m\nset bell-style audible\nset comment-begin #\nset completion-display-width -1\nset completion-prefix-display-length 0\nset completion-query-items 100\nset editing-mode emacs\nset emacs-mode-string @\nset history-size -1\nset keymap emacs\nset keyseq-timeout 500\nset vi-cmd-mode-string (cmd)\nset vi-ins-mode-string (ins)\n",
+    "diagnostic": "\"\\C-x\\C-g\" \"_observe\"\n"
+  },
+  "observerUnitControl": {
+    "text": "a中🙂b",
+    "rawReadlinePoints": [
+      4,
+      0,
+      1,
+      2,
+      3,
+      4,
+      3,
+      4,
+      3,
+      2,
+      1
+    ],
+    "utf8BytePoints": [
+      9,
+      0,
+      1,
+      4,
+      8,
+      9,
+      8,
+      9,
+      8,
+      4,
+      1
+    ],
+    "conclusion": "This Bash bind -x READLINE_POINT counts Unicode scalars, not UTF-8 bytes.",
+    "mutationControl": "Every event followed by a second unchanged observation; all line/point/logical fields equal."
+  }
+}
