@@ -47,7 +47,7 @@ function terminalSession(context: TestContext) {
   );
   const editor = must(authority.createGroup({ initialMode: "raw" }));
   const member = must(authority.admitExisting({ group: editor, pid: root.pid }));
-  must(authority.acquire({ group: editor, expected: null }));
+  const lease = must(authority.acquire({ group: editor, expected: null }));
   const attachment = attachTerminal({
     context: member.context,
     process: root,
@@ -55,7 +55,7 @@ function terminalSession(context: TestContext) {
     policy,
   });
   context.after(() => attachment.dispose());
-  return { root, input, display, authority, editor, member, attachment };
+  return { root, input, display, authority, editor, member, attachment, lease };
 }
 
 test("an idle prompt requests raw mode once instead of on every host call", (context) => {
@@ -97,6 +97,47 @@ test("an idle prompt requests raw mode once instead of on every host call", (con
   terminals.phase(1);
   assert.equal(must(controls.snapshot()).mode, "raw", "each new prompt requests raw mode");
 });
+
+for (const operation of ["readiness", "tryRead"] as const) {
+  test(`a prompt pending behind an external group resumes typing through ${operation}`, (context) => {
+    const { root, input, display, authority, child, lease } = outputMember(context);
+    root.data = { terminalContext: display.inherit(), terminalInput: input.buffer };
+    const bridge = new SharedBridge();
+    bridge.publishPrompt(0);
+    const terminals = createShellTerminals(
+      { runtimeProcess: root },
+      bridge.buffer,
+      createTerminalAdmission(),
+      bridge,
+      () => {},
+    );
+    assert.ok(terminals);
+    context.after(() => terminals.dispose());
+    terminals.ready();
+    terminals.phase(2);
+    const external = must(authority.createGroup({ initialMode: "raw" }));
+    const externalMember = must(authority.admitExisting({ group: external, pid: child.pid }));
+    const externalLease = must(authority.transfer({ from: lease, to: external }));
+    const restored = must(authority.createGroup({ initialMode: "cooked" }));
+    must(authority.admitExisting({ group: restored, pid: root.pid }));
+    bridge.publishPrompt(0);
+    terminals.phase(1);
+    must(authority.transfer({ from: externalLease, to: restored }));
+    must(authority.removeMember(externalMember.member));
+    must(authority.retireGroup({ group: external, reason: "completed" }));
+    const endpoint = terminals.resolve(0);
+    const controls = terminalControls(endpoint)!;
+    assert.equal(must(controls.snapshot()).mode, "cooked", "raw mode waits for root selection");
+    if (operation === "readiness") endpoint.readiness();
+    if (operation === "tryRead") endpoint.tryRead!([new Uint8Array(1)]);
+    assert.equal(must(controls.snapshot()).mode, "raw");
+    assert.equal(must(pushTerminalInput(display, input, Uint8Array.of(65))), 1);
+    assert.equal(endpoint.readiness().readable, true, "typing is readable without Enter");
+    const byte = new Uint8Array(1);
+    assert.equal(endpoint.tryRead!([byte]), 1);
+    assert.equal(byte[0], 65);
+  });
+}
 
 for (const target of [1, 2] as const) {
   test(`session terminal target ${target} preserves FD_READ and the shared fd0 input cursor`, (context) => {
@@ -172,7 +213,13 @@ function outputMember(context: TestContext) {
     terminalContext: admitted.context,
     terminalInput: session.input.buffer,
   };
-  return { ...session, child, bridge: new SharedBridge(), admission: createTerminalAdmission() };
+  return {
+    ...session,
+    lease: admitted.lease ?? session.lease,
+    child,
+    bridge: new SharedBridge(),
+    admission: createTerminalAdmission(),
+  };
 }
 
 for (const target of [1, 2] as const) {

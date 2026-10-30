@@ -78,3 +78,22 @@ test("Ctrl+L clears the screen and keeps the command being edited", async ({ pag
     .poll(async () => (await screen(page)).slice(0, 3))
     .toEqual(["$ echo drafXt", "drafXt", "$"]);
 });
+
+test("clear after an external command keeps new typing visible before Enter", async ({ page }) => {
+  await page.keyboard.insertText("seq 1 30");
+  await page.keyboard.press("Enter");
+  await ready(page);
+  await expect.poll(() => text(page)).toContain("30");
+  await page.keyboard.insertText("clear");
+  await page.keyboard.press("Enter");
+  await ready(page);
+  await expect.poll(() => text(page)).toEqual(["$"]);
+  await page.keyboard.insertText("echo CLEAR_4x");
+  await expect.poll(() => text(page)).toEqual(["$ echo CLEAR_4x"]);
+  await page.keyboard.press("Backspace");
+  await page.keyboard.insertText("2");
+  await expect.poll(() => text(page)).toEqual(["$ echo CLEAR_42"]);
+  await page.keyboard.press("Enter");
+  await ready(page);
+  await expect.poll(() => text(page)).toEqual(["$ echo CLEAR_42", "CLEAR_42", "$"]);
+});
