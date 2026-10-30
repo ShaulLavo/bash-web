@@ -58,11 +58,11 @@ function terminalSession(context: TestContext) {
   return { root, input, display, authority, editor, member, attachment, lease };
 }
 
-test("an idle prompt requests raw mode once instead of on every host call", (context) => {
-  const { root, input, member } = terminalSession(context);
-  root.data = { terminalContext: member.context, terminalInput: input.buffer };
+function rootTerminals(context: TestContext, session: ReturnType<typeof terminalSession>) {
+  const { root, input, display } = session;
+  root.data = { terminalContext: display.inherit(), terminalInput: input.buffer };
   const bridge = new SharedBridge();
-  Atomics.store(bridge.state, control.phase, 1);
+  bridge.publishPrompt(0);
   const terminals = createShellTerminals(
     { runtimeProcess: root },
     bridge.buffer,
@@ -72,6 +72,11 @@ test("an idle prompt requests raw mode once instead of on every host call", (con
   );
   assert.ok(terminals);
   context.after(() => terminals.dispose());
+  return { bridge, terminals };
+}
+
+test("an idle prompt requests raw mode once instead of on every host call", (context) => {
+  const { bridge, terminals } = rootTerminals(context, terminalSession(context));
   terminals.ready();
   terminals.phase(1);
   const wakes = () => Atomics.load(bridge.state, control.wake);
@@ -100,19 +105,9 @@ test("an idle prompt requests raw mode once instead of on every host call", (con
 
 for (const operation of ["readiness", "tryRead"] as const) {
   test(`a prompt pending behind an external group resumes typing through ${operation}`, (context) => {
-    const { root, input, display, authority, child, lease } = outputMember(context);
-    root.data = { terminalContext: display.inherit(), terminalInput: input.buffer };
-    const bridge = new SharedBridge();
-    bridge.publishPrompt(0);
-    const terminals = createShellTerminals(
-      { runtimeProcess: root },
-      bridge.buffer,
-      createTerminalAdmission(),
-      bridge,
-      () => {},
-    );
-    assert.ok(terminals);
-    context.after(() => terminals.dispose());
+    const session = outputMember(context);
+    const { root, input, display, authority, child, lease } = session;
+    const { bridge, terminals } = rootTerminals(context, session);
     terminals.ready();
     terminals.phase(2);
     const external = must(authority.createGroup({ initialMode: "raw" }));
