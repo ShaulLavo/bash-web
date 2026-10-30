@@ -5,16 +5,31 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
-import { prepareCandidate, foldCandidate } from "./shell-scoreboard-accepted-gains.mjs";
+import {
+  prepareCandidate,
+  foldCandidate,
+  assertAcceptedFloor,
+  assertAcceptedRaw,
+} from "./shell-scoreboard-accepted-gains.ts";
+import type {
+  AcceptedRawScore,
+  HistoricalAcceptedRawScore,
+} from "./shell-scoreboard-accepted-gains.ts";
 import {
   terminalCut,
   terminalRecord,
+  assertTerminalRecord,
   assertTerminalCancelled,
   assertTerminalJobs,
   assertTerminalLanded,
   recomputeTerminalRequirement,
   assertTerminalFreshObservation,
-} from "./shell-scoreboard-terminal-recovery.mjs";
+} from "./shell-scoreboard-terminal-recovery.ts";
+import type {
+  TerminalContribution,
+  TerminalContributionRecord,
+  TerminalRequirementRecord,
+} from "./shell-scoreboard-terminal-recovery.ts";
 import {
   authority,
   git,
@@ -22,36 +37,99 @@ import {
   resolveMainFloor,
   artifactJson,
   scoringInputs,
-} from "./shell-scoreboard-main.mjs";
-import { bootstrap, qualification, compareFloor } from "./shell-scoreboard-floor.mjs";
-import { digest, bytesDigest, summarize } from "./shell-scoreboard.mjs";
-import { prepareQualification, sealRaw, foldQualification } from "./scoreboard-ci.mjs";
-import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
+  assertArtifactListing,
+  assertHostArtifact,
+  assertHostRun,
+  assertJobListing,
+  assertPullRequest,
+  assertRawScore,
+} from "./shell-scoreboard-main.ts";
+import type { GithubClient, HostArtifact, HostStep } from "./shell-scoreboard-main.ts";
+import {
+  bootstrap,
+  qualification,
+  compareFloor,
+  assertMainFloor,
+} from "./shell-scoreboard-floor.ts";
+import { digest, bytesDigest, summarize, assertRecord } from "./shell-scoreboard.ts";
+import type { Binding, MainPushBinding, PullRequestBinding, Score } from "./shell-scoreboard.ts";
+import { prepareQualification, sealRaw, foldQualification } from "./scoreboard-ci.ts";
+import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
 const project = resolve(import.meta.dirname, "..");
-const record = JSON.parse(readFileSync(resolve(project, terminalCut.recordPath), "utf8"));
-const sha = (number) => number.toString(16).padStart(40, "0");
+const record: unknown = JSON.parse(readFileSync(resolve(project, terminalCut.recordPath), "utf8"));
+assertTerminalRecord(record);
+const sha = (number: number): string => number.toString(16).padStart(40, "0");
+type StoredValue = Record<string, unknown> | Buffer | string;
+type ResponseType = "json" | "bytes" | "text";
+interface Candidate {
+  root: string;
+  sourceSha: string;
+  selected: Binding;
+}
+interface MainCandidate extends Candidate {
+  selected: MainPushBinding;
+}
+interface PullCandidate extends Candidate {
+  selected: PullRequestBinding;
+}
 function hostFixture() {
-  const responses = JSON.parse(
-    gunzipSync(readFileSync(new URL("./test-data/terminal-floor-host.json.gz", import.meta.url))),
+  const responses: unknown = JSON.parse(
+    gunzipSync(
+      readFileSync(new URL("./test-data/terminal-floor-host.json.gz", import.meta.url)),
+    ).toString("utf8"),
   );
-  const values = new Map(
-    responses.map(({ path, type, value }) => [
-      `${type}:${path}`,
-      type === "bytes" ? Buffer.from(value, "base64") : value,
-    ]),
-  );
+  assert.ok(Array.isArray(responses));
+  const values = new Map<string, StoredValue>();
+  for (const response of responses) {
+    assertRecord(response);
+    assert.equal(typeof response.path, "string");
+    assert.equal(typeof response.type, "string");
+    if (response.type === "bytes") {
+      assert.ok(typeof response.value === "string");
+      values.set(`${response.type}:${response.path}`, Buffer.from(response.value, "base64"));
+      continue;
+    }
+    if (response.type === "text") {
+      assert.ok(typeof response.value === "string");
+      values.set(`${response.type}:${response.path}`, response.value);
+      continue;
+    }
+    assertRecord(response.value);
+    values.set(`${response.type}:${response.path}`, response.value);
+  }
   values.set("json:/git/ref/heads/main", { object: { sha: terminalCut.sourceSha } });
-  const client = {
-    async request(path, type = "json") {
-      const key = `${type}:${path}`;
-      assert.ok(values.has(key), `unexpected host request ${key}`);
-      const value = values.get(key);
-      return type === "json" ? structuredClone(value) : value;
-    },
-  };
+  function request(path: string, type: "bytes"): Promise<Buffer>;
+  function request(path: string, type: "text"): Promise<string>;
+  function request(path: string, type?: "json"): Promise<unknown>;
+  async function request(path: string, type: ResponseType = "json"): Promise<unknown> {
+    const key = `${type}:${path}`;
+    const value = values.get(key);
+    assert.ok(value !== undefined, `unexpected host request ${key}`);
+    if (type === "bytes") {
+      assert.ok(Buffer.isBuffer(value));
+      return value;
+    }
+    if (type === "text") {
+      assert.equal(typeof value, "string");
+      return value;
+    }
+    return structuredClone(value);
+  }
+  const client: GithubClient = { request };
   return { values, client };
 }
-async function withCandidate(body) {
+type HostFixture = ReturnType<typeof hostFixture>;
+function hostJson(host: HostFixture, path: string): Record<string, unknown> {
+  const value = host.values.get(`json:${path}`);
+  assertRecord(value);
+  return value;
+}
+function hostBytes(host: HostFixture, path: string): Buffer {
+  const value = host.values.get(`bytes:${path}`);
+  assert.ok(Buffer.isBuffer(value));
+  return value;
+}
+async function withCandidate(body: (candidate: MainCandidate) => Promise<void>): Promise<void> {
   const root = mkdtempSync(resolve(process.env.TMPDIR || tmpdir(), "terminal-floor-"));
   try {
     git(root, ["init", "-q"]);
@@ -98,7 +176,11 @@ async function withCandidate(body) {
       mkdirSync(resolve(root, path, ".."), { recursive: true });
       writeFileSync(resolve(root, path), git(root, ["show", `${sourceSha}:${path}`]) + "\n");
     }
-    const selected = { kind: "main-push", sourceSha, beforeSha: terminalCut.sourceSha };
+    const selected: MainPushBinding = {
+      kind: "main-push",
+      sourceSha,
+      beforeSha: terminalCut.sourceSha,
+    };
     await body({ root, sourceSha, selected });
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -118,15 +200,28 @@ test("cancelled-parent fixture recovers all 4764 accepted IDs without relabellin
       client,
       run: { runId: 1, attempt: 1 },
     });
-    assert.equal(prepared.floor.kind, "AcceptedGainFloor");
+    assert.ok(prepared.floor.kind === "AcceptedGainFloor");
     assert.equal(prepared.floor.base.sourceSha, terminalCut.baseSha);
     assert.equal(prepared.floor.ids.length, 4764);
     assert.equal(prepared.floor.floorSha256, record.requirement.floorSha256);
-    assert.equal(prepared.floor.sourceSha, undefined);
-    assert.equal(prepared.floor.score, undefined);
+    assert.equal("sourceSha" in prepared.floor, false);
+    assert.equal("score" in prepared.floor, false);
     for (const id of ["bashkit-suite:blackbox-edge-cases:232", "brush-suite:ifs:1"])
       assert.ok(prepared.floor.ids.includes(id));
-    await assert.rejects(foldCandidate(structuredClone(prepared), {}), /forged preparation/);
+    const score = scoreboardFixture("oils").score(["a"]);
+    const raw: AcceptedRawScore = {
+      schema: 1,
+      kind: "raw-score",
+      selected: prepared.selected,
+      run: prepared.run,
+      sourceSha: prepared.sourceSha,
+      capturedAt: "2026-10-29T10:00:01Z",
+      inputsSha256: "forged-preparation-control",
+      resultSha256: digest(score),
+      score,
+      floor: prepared.floor,
+    };
+    await assert.rejects(foldCandidate(structuredClone(prepared), raw), /forged preparation/);
   });
 });
 test("terminal receipt rejects workspace edits, changed claims and unrelated candidate sources", async () => {
@@ -146,12 +241,17 @@ test("terminal receipt rejects workspace edits, changed claims and unrelated can
   });
 });
 test("fixed-cut original jobs, cancelled runs and topology keep all host identity checks", () => {
-  const { values } = hostFixture();
-  const get = (path) => structuredClone(values.get(`json:${path}`));
+  const host = hostFixture();
+  const get = (path: string): Record<string, unknown> => structuredClone(hostJson(host, path));
   const claim = record.cancelled[0];
   const run = get(`/actions/runs/${claim.runId}/attempts/1`);
-  const jobs = get(`/actions/runs/${claim.runId}/attempts/1/jobs?per_page=100`).jobs;
-  const artifacts = get(`/actions/runs/${claim.runId}/artifacts?per_page=100`).artifacts;
+  assertHostRun(run);
+  const jobListing = get(`/actions/runs/${claim.runId}/attempts/1/jobs?per_page=100`);
+  assertJobListing(jobListing);
+  const jobs = jobListing.jobs;
+  const artifactListing = get(`/actions/runs/${claim.runId}/artifacts?per_page=100`);
+  assertArtifactListing(artifactListing);
+  const artifacts = artifactListing.artifacts;
   assert.doesNotThrow(() => assertTerminalCancelled(claim, run, jobs, artifacts));
   for (const patch of [
     { conclusion: "failure" },
@@ -175,6 +275,7 @@ test("fixed-cut original jobs, cancelled runs and topology keep all host identit
     inputsSha256: original.original.inputsSha256,
   };
   const pr = get(`/pulls/${original.landed.pr}`);
+  assertPullRequest(pr);
   assert.notEqual(facts.tree, facts.testedTree);
   assert.doesNotThrow(() => assertTerminalLanded(original, pr, facts));
   for (const changed of [
@@ -193,7 +294,10 @@ test("fixed-cut original jobs, cancelled runs and topology keep all host identit
   ])
     assert.throws(() => assertTerminalLanded(original, pr, { ...facts, ...patch }));
   const originalRun = get(`/actions/runs/${original.original.run.runId}/attempts/2`);
-  const originalJobs = get(`/actions/runs/${originalRun.id}/attempts/2/jobs?per_page=100`).jobs;
+  assertHostRun(originalRun);
+  const originalJobListing = get(`/actions/runs/${originalRun.id}/attempts/2/jobs?per_page=100`);
+  assertJobListing(originalJobListing);
+  const originalJobs = originalJobListing.jobs;
   const workflow = git(project, ["show", `${terminalCut.sourceSha}:${authority.workflowPath}`]);
   assert.doesNotThrow(() => assertTerminalJobs(originalRun, originalJobs, workflow, pr.merged_at));
   for (const patch of [
@@ -214,8 +318,8 @@ test("fixed-cut original jobs, cancelled runs and topology keep all host identit
 function membershipFixture() {
   const fixture = scoreboardFixture("oils");
   const base = { ...fixture.floor(["a"], sha(1)), run: { runId: 10, attempt: 1 }, lostIds: [] };
-  const entries = [sha(2), sha(3), sha(4)].map((mergeCommit, index) => {
-    const binding = {
+  const entries: TerminalContribution[] = [sha(2), sha(3), sha(4)].map((mergeCommit, index) => {
+    const binding: PullRequestBinding = {
       kind: "pull-request",
       headSha: sha(index + 10),
       testedMergeSha: sha(index + 20),
@@ -224,12 +328,13 @@ function membershipFixture() {
     };
     const addition = [["x"], ["y"], []][index];
     const score = fixture.score(["a"].concat(addition));
-    const raw = {
+    const raw: HistoricalAcceptedRawScore = {
       schema: 1,
       kind: "raw-score",
       sourceSha: binding.testedMergeSha,
       selected: structuredClone(binding),
       run: { runId: index + 20, attempt: 2 },
+      capturedAt: "2026-10-29T10:00:01Z",
       inputsSha256: digest(index),
       resultSha256: digest(score),
       score,
@@ -239,7 +344,7 @@ function membershipFixture() {
     const gains = Object.values(receipt.corpora)
       .flatMap((row) => row.gained)
       .sort();
-    const record = {
+    const contribution: TerminalContributionRecord = {
       landed: { mergeCommit, firstParent: sha(index + 1) },
       original: {
         binding,
@@ -251,14 +356,14 @@ function membershipFixture() {
       gains,
       gainsSha256: digest(gains),
     };
-    return { record, raw, receipt };
+    return { record: contribution, raw, receipt };
   });
-  const record = {
+  const requirementRecord: TerminalRequirementRecord = {
     base: { sourceSha: base.sourceSha, run: base.run, floorSha256: base.floorSha256 },
     landed: entries.map((item) => item.record),
     requirement: { count: 3, floorSha256: digest(["a", "x", "y"]) },
   };
-  return { fixture, base, record, entries };
+  return { fixture, base, record: requirementRecord, entries };
 }
 test("stale-base accepted contributions union every captured ID; later PR cannot erase earlier gains", () => {
   const { fixture, base, record, entries } = membershipFixture();
@@ -292,7 +397,9 @@ test("stale-base accepted contributions union every captured ID; later PR cannot
     (v) => {
       v.record.requirement.count = 1;
     },
-  ]) {
+  ] satisfies ((
+    value: Pick<ReturnType<typeof membershipFixture>, "record" | "entries">,
+  ) => void)[]) {
     const value = structuredClone({ record, entries });
     mutate(value);
     assert.throws(() =>
@@ -301,7 +408,7 @@ test("stale-base accepted contributions union every captured ID; later PR cannot
   }
 });
 function observationFixture() {
-  const step = (name, number, start, end) => ({
+  const step = (name: string, number: number, start: string, end: string): HostStep => ({
     name,
     number,
     status: "completed",
@@ -312,7 +419,11 @@ function observationFixture() {
   const raw = {
     sourceSha: sha(1),
     run: { runId: 10, attempt: 2 },
-    selected: { kind: "main-push" },
+    selected: {
+      kind: "main-push",
+      sourceSha: sha(1),
+      beforeSha: sha(0),
+    } satisfies MainPushBinding,
     capturedAt: "2026-10-29T10:00:01Z",
   };
   const jobs = ["own-shell-observation", "own-shell-compatibility"].map((name) => ({
@@ -322,7 +433,7 @@ function observationFixture() {
     head_sha: sha(1),
     status: "completed",
     conclusion: "success",
-    steps: [],
+    steps: Array<HostStep>(),
   }));
   jobs[0].steps = [
     step("Bind qualification and resolve PR main floor", 1, "00", "02"),
@@ -350,17 +461,21 @@ test("current shared-job observation is fresh, source-bound and sealed only afte
     (v) => {
       v.jobs[1].steps[0].started_at = "2026-10-29T10:00:02Z";
     },
-  ]) {
+  ] satisfies ((value: ReturnType<typeof observationFixture>) => void)[]) {
     const value = observationFixture();
     mutate(value);
     assert.throws(() => assertTerminalFreshObservation(value.raw, value.jobs));
   }
 });
-function publishCandidate(host, candidate, raw) {
+type PublishRaw = Pick<AcceptedRawScore, "run" | "sourceSha" | "selected"> & {
+  [key: string]: unknown;
+};
+function publishCandidate(host: HostFixture, candidate: Candidate, raw: PublishRaw): void {
   const runId = raw.run.runId;
   const attempt = raw.run.attempt;
   const pullRequest = candidate.selected.kind === "pull-request";
-  const headSha = pullRequest ? candidate.selected.headSha : candidate.sourceSha;
+  const headSha =
+    candidate.selected.kind === "pull-request" ? candidate.selected.headSha : candidate.sourceSha;
   const start = "2026-10-29T10:02:00Z",
     end = "2026-10-29T10:02:02Z";
   const run = {
@@ -376,7 +491,12 @@ function publishCandidate(host, candidate, raw) {
     status: "in_progress",
     conclusion: null,
   };
-  const step = (name, number, started_at, completed_at) => ({
+  const step = (
+    name: string,
+    number: number,
+    started_at: string,
+    completed_at: string,
+  ): HostStep => ({
     name,
     number,
     started_at,
@@ -427,7 +547,7 @@ function publishCandidate(host, candidate, raw) {
     ],
     { input: JSON.stringify(raw), maxBuffer: 16 * 1024 * 1024 },
   );
-  const artifact = {
+  const artifact: HostArtifact = {
     id: 99993 + attempt,
     name: `own-shell-raw-${candidate.sourceSha}-${runId}-${attempt}`,
     digest: `sha256:${bytesDigest(bytes)}`,
@@ -440,15 +560,22 @@ function publishCandidate(host, candidate, raw) {
       head_repository_id: authority.repositoryId,
     },
   };
-  const set = (path, value, type = "json") => host.values.set(`${type}:${path}`, value);
+  const set = (path: string, value: StoredValue, type: ResponseType = "json"): void => {
+    host.values.set(`${type}:${path}`, value);
+  };
   set(`/actions/runs/${runId}/attempts/${attempt}`, run);
   set(`/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`, {
     total_count: 2,
     jobs: [observer, sealer],
   });
   const existing = host.values.get(`json:/actions/runs/${runId}/artifacts?per_page=100`);
-  const artifacts = (existing?.artifacts ?? [])
-    .filter((item) => item.id !== artifact.id)
+  if (existing !== undefined) assertRecord(existing);
+  const previous = existing && Array.isArray(existing.artifacts) ? existing.artifacts : [];
+  const artifacts = previous
+    .filter((item) => {
+      assertRecord(item);
+      return item.id !== artifact.id;
+    })
     .concat([artifact]);
   set(`/actions/runs/${runId}/artifacts?per_page=100`, {
     total_count: artifacts.length,
@@ -466,37 +593,49 @@ function publishCandidate(host, candidate, raw) {
     { total_count: 1, workflow_runs: [run] },
   );
 }
-function currentScore(host) {
-  const listing = host.values.get("json:/actions/runs/40841852105/artifacts?per_page=100");
-  const metadata = listing.artifacts.find((item) => item.id === 12883574814);
-  return artifactJson(
-    host.values.get("bytes:/actions/artifacts/12883574814/zip"),
+function currentScore(host: HostFixture): Score {
+  const listing = hostJson(host, "/actions/runs/40841852105/artifacts?per_page=100");
+  assert.ok(Array.isArray(listing.artifacts));
+  const metadata = listing.artifacts.find((item) => {
+    assertRecord(item);
+    return item.id === 12883574814;
+  });
+  assertHostArtifact(metadata);
+  const raw = artifactJson(
+    hostBytes(host, "/actions/artifacts/12883574814/zip"),
     metadata,
     "raw.json",
-  ).score;
+  );
+  assertRawScore(raw);
+  return raw.score;
 }
-async function withQualificationEnvironment(candidate, body) {
+async function withQualificationEnvironment(
+  candidate: Candidate,
+  body: () => Promise<void>,
+): Promise<void> {
   const eventPath = resolve(candidate.root, "event.json");
-  const pullRequest = candidate.selected.kind === "pull-request";
   const repository = { id: authority.repositoryId };
-  const event = pullRequest
-    ? {
-        repository,
-        pull_request: {
-          head: { sha: candidate.selected.headSha },
-          base: { ref: "main", sha: candidate.selected.baseSha, repo: repository },
-        },
-      }
-    : {
-        repository,
-        ref: "refs/heads/main",
-        after: candidate.sourceSha,
-        before: candidate.selected.beforeSha,
-      };
+  let event;
+  if (candidate.selected.kind === "pull-request") {
+    event = {
+      repository,
+      pull_request: {
+        head: { sha: candidate.selected.headSha },
+        base: { ref: "main", sha: candidate.selected.baseSha, repo: repository },
+      },
+    };
+  } else {
+    event = {
+      repository,
+      ref: "refs/heads/main",
+      after: candidate.sourceSha,
+      before: candidate.selected.beforeSha,
+    };
+  }
   writeFileSync(eventPath, JSON.stringify(event));
   const environment = {
     GITHUB_EVENT_PATH: eventPath,
-    GITHUB_EVENT_NAME: pullRequest ? "pull_request" : "push",
+    GITHUB_EVENT_NAME: candidate.selected.kind === "pull-request" ? "pull_request" : "push",
     GITHUB_SHA: candidate.sourceSha,
     GITHUB_RUN_ID: "99990",
     GITHUB_RUN_ATTEMPT: "1",
@@ -514,10 +653,10 @@ async function withQualificationEnvironment(candidate, body) {
     }
   }
 }
-async function assertMainLifecycle(candidate) {
+async function assertMainLifecycle(candidate: MainCandidate): Promise<void> {
   await withQualificationEnvironment(candidate, () => runMainLifecycle(candidate));
 }
-async function captureFixture(candidate, host) {
+async function captureFixture(candidate: Candidate, host: HostFixture) {
   const { client } = host;
   const run = { runId: 99990, attempt: 1 };
   const prepared = resolve(candidate.root, "prepared.json");
@@ -535,24 +674,28 @@ async function captureFixture(candidate, host) {
   };
   publishCandidate(host, candidate, initial);
   await prepareQualification({ root: candidate.root, client, output: prepared });
-  const capture = JSON.parse(readFileSync(prepared, "utf8"));
+  const capture: unknown = JSON.parse(readFileSync(prepared, "utf8"));
+  assertRecord(capture);
+  assertAcceptedFloor(capture.floor);
   assert.equal(capture.floor.kind, "AcceptedGainFloor");
   assert.equal(capture.floor.ids.length, 4764);
   writeFileSync(scorePath, JSON.stringify(score));
   sealRaw({ root: candidate.root, input: prepared, scorePath, output: rawDir });
   const rawPath = resolve(rawDir, "raw.json");
-  const raw = JSON.parse(readFileSync(rawPath, "utf8"));
+  const raw: unknown = JSON.parse(readFileSync(rawPath, "utf8"));
+  assertAcceptedRaw(raw);
   publishCandidate(host, candidate, raw);
   return { raw, rawPath, output, score, run };
 }
-async function runMainLifecycle(candidate) {
+async function runMainLifecycle(candidate: MainCandidate): Promise<void> {
   const host = hostFixture();
   const { client } = host;
   const { raw, rawPath, output, score, run } = await captureFixture(candidate, host);
   const result = await foldQualification({ root: candidate.root, client, rawPath, output });
   assert.equal(result.ok, true);
   assert.deepEqual(result.binding, candidate.selected);
-  const floor = JSON.parse(readFileSync(resolve(output, "floor.json"), "utf8"));
+  const floor: unknown = JSON.parse(readFileSync(resolve(output, "floor.json"), "utf8"));
+  assertMainFloor(floor);
   assert.equal(floor.sourceSha, candidate.sourceSha);
   assert.deepEqual(floor.run, run);
   assert.equal(floor.beforeSha, terminalCut.sourceSha);
@@ -564,7 +707,9 @@ async function runMainLifecycle(candidate) {
   assert.ok(currentEvidence, "new main authority requires this source's completed producer");
   for (const removed of ["bashkit-suite:blackbox-edge-cases:232", "brush-suite:ifs:1"]) {
     const changed = structuredClone(raw);
-    changed.score.cases.find((row) => row.id === removed).outcome = "fail";
+    const removedCase = changed.score.cases.find((row) => row.id === removed);
+    assert.ok(removedCase);
+    removedCase.outcome = "fail";
     changed.score.counts = summarize(changed.score);
     changed.resultSha256 = digest(changed.score);
     publishCandidate(host, candidate, changed);
@@ -574,11 +719,15 @@ async function runMainLifecycle(candidate) {
       /accepted passing IDs were lost/,
     );
   }
-  const extra = score.cases.find(
+  const extraCase = score.cases.find(
     (row) => row.kind === "builtins-only" && !row.excluded && row.outcome === "fail",
-  ).id;
+  );
+  assert.ok(extraCase);
+  const extra = extraCase.id;
   const earlier = structuredClone(raw);
-  earlier.score.cases.find((row) => row.id === extra).outcome = "pass";
+  const earlierCase = earlier.score.cases.find((row) => row.id === extra);
+  assert.ok(earlierCase);
+  earlierCase.outcome = "pass";
   earlier.score.counts = summarize(earlier.score);
   earlier.resultSha256 = digest(earlier.score);
   publishCandidate(host, candidate, earlier);
@@ -588,7 +737,8 @@ async function runMainLifecycle(candidate) {
   writeFileSync(rawPath, JSON.stringify(later));
   const regression = await foldQualification({ root: candidate.root, client, rawPath, output });
   assert.equal(regression.ok, false, "a later same-source attempt cannot erase an earlier gain");
-  const retained = JSON.parse(readFileSync(resolve(output, "floor.json"), "utf8"));
+  const retained: unknown = JSON.parse(readFileSync(resolve(output, "floor.json"), "utf8"));
+  assertMainFloor(retained);
   assert.equal(retained.floorIds.length, 4765);
   assert.deepEqual(retained.lostIds, [extra]);
   assert.ok(retained.floorIds.includes(extra));
@@ -604,37 +754,54 @@ test("forged foreign PRs, changed uploaders and expired receipt artifacts never 
   await withCandidate(async (candidate) => {
     for (const mutate of [
       (host) => {
-        host.values.get("json:/pulls/178").head.repo.id = 1;
+        const pr = hostJson(host, "/pulls/178");
+        assertRecord(pr.head);
+        assertRecord(pr.head.repo);
+        pr.head.repo.id = 1;
       },
       (host) => {
-        host.values.get(
-          `json:/actions/workflows/${authority.workflowId}/runs?event=pull_request&head_sha=${record.landed[1].original.binding.headSha}&per_page=100`,
-        ).workflow_runs[0].run_attempt++;
+        const runs = hostJson(
+          host,
+          `/actions/workflows/${authority.workflowId}/runs?event=pull_request&head_sha=${record.landed[1].original.binding.headSha}&per_page=100`,
+        );
+        assert.ok(Array.isArray(runs.workflow_runs));
+        const first = runs.workflow_runs[0];
+        assertRecord(first);
+        assert.ok(typeof first.run_attempt === "number");
+        first.run_attempt++;
       },
       (host) => {
-        host.values.get("json:/pulls/178").merge_commit_sha = sha(99);
+        hostJson(host, "/pulls/178").merge_commit_sha = sha(99);
       },
       (host) => {
-        host.values.get("json:/actions/artifacts/12882357078").digest = `sha256:${"0".repeat(64)}`;
+        hostJson(host, "/actions/artifacts/12882357078").digest = `sha256:${"0".repeat(64)}`;
       },
       (host) => {
-        host.values.get("json:/actions/artifacts/12882357078").expires_at = "2026-10-28T00:00:00Z";
+        hostJson(host, "/actions/artifacts/12882357078").expires_at = "2026-10-28T00:00:00Z";
       },
       (host) => {
         host.values.set("text:/actions/jobs/123333893573/logs", "forged uploader");
       },
       (host) => {
-        host.values.get("json:/actions/runs/40832924721/attempts/2").event = "workflow_dispatch";
+        hostJson(host, "/actions/runs/40832924721/attempts/2").event = "workflow_dispatch";
       },
       (host) => {
-        host.values
-          .get("json:/actions/runs/40841645539/attempts/1/jobs?per_page=100")
-          .jobs.find((job) => job.name === "own-shell-observation")
-          .steps.find(
-            (step) => step.name === "Observe compatibility with the shared node build",
-          ).conclusion = "success";
+        const listing = hostJson(host, "/actions/runs/40841645539/attempts/1/jobs?per_page=100");
+        assert.ok(Array.isArray(listing.jobs));
+        const job = listing.jobs.find((value) => {
+          assertRecord(value);
+          return value.name === "own-shell-observation";
+        });
+        assertRecord(job);
+        assert.ok(Array.isArray(job.steps));
+        const step = job.steps.find((value) => {
+          assertRecord(value);
+          return value.name === "Observe compatibility with the shared node build";
+        });
+        assertRecord(step);
+        step.conclusion = "success";
       },
-    ]) {
+    ] satisfies ((host: HostFixture) => void)[]) {
       const host = hostFixture();
       mutate(host);
       await assert.rejects(
@@ -643,7 +810,7 @@ test("forged foreign PRs, changed uploaders and expired receipt artifacts never 
     }
   });
 });
-async function assertPullRequestLifecycle(candidate) {
+async function assertPullRequestLifecycle(candidate: PullCandidate): Promise<void> {
   const host = hostFixture();
   const { raw, rawPath, output } = await captureFixture(candidate, host);
   const result = await foldQualification({
@@ -654,6 +821,7 @@ async function assertPullRequestLifecycle(candidate) {
   });
   assert.equal(result.ok, true);
   assert.deepEqual(result.binding, candidate.selected);
+  assertAcceptedFloor(result.floorSource);
   assert.equal(result.floorSource.kind, "AcceptedGainFloor");
   assert.equal(result.floorSource.ids.length, 4764);
   assert.equal(raw.sourceSha, candidate.selected.testedMergeSha);
@@ -682,7 +850,7 @@ test("tested PR merge qualifies against the fixed cut but never publishes a main
       "tested PR merge fixture",
     ]);
     git(candidate.root, ["update-ref", "HEAD", sourceSha]);
-    const selected = {
+    const selected: PullRequestBinding = {
       kind: "pull-request",
       headSha,
       testedMergeSha: sourceSha,

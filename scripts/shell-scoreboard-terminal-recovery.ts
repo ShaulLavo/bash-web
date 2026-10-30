@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { parse } from "yaml";
 import {
   artifactJson,
   assertAcceptedRecordCheckout,
@@ -11,18 +10,53 @@ import {
   authority,
   fullSha,
   git,
+  hasStepTimes,
   mainEvidence,
   oracleAt,
+  requestArtifacts,
+  requestJobs,
+  requestPullRequest,
+  requestRun,
+  requestWorkflowRuns,
   scoringInputs,
   sourceEquivalent,
-} from "./shell-scoreboard-main.mjs";
+} from "./shell-scoreboard-main.ts";
+import type {
+  ArtifactKind,
+  CompletedHostStep,
+  GithubClient,
+  HostJob,
+  HostRun,
+  PullRequest,
+  RawScore,
+} from "./shell-scoreboard-main.ts";
 import {
   accumulateFloor,
+  assertMainFloor,
+  assertQualification,
   qualification,
   validateFloor,
   validateOwnScore,
-} from "./shell-scoreboard-floor.mjs";
-import { digest } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-floor.ts";
+import type { MainFloor, Qualification } from "./shell-scoreboard-floor.ts";
+import { assertRecord, assertRunBinding, digest, isRecord } from "./shell-scoreboard.ts";
+import type { Binding, Oracle, PullRequestBinding, RunBinding } from "./shell-scoreboard.ts";
+import {
+  assertHistoricalRaw,
+  assertLandedContribution,
+  assertArtifactClaim,
+  claimedArtifactMetadata,
+  time,
+  unique,
+  assertHistoricalJobSet,
+} from "./shell-scoreboard-accepted-gains.ts";
+import type {
+  AcceptedGainFloor,
+  HistoricalAcceptedRawScore,
+  ArtifactClaim,
+  Lifetime,
+  LandedContribution,
+} from "./shell-scoreboard-accepted-gains.ts";
 
 export const terminalCut = Object.freeze({
   sourceSha: "c442e234405e00dcb25e7503cbd930185fbfd63f",
@@ -34,45 +68,126 @@ export const terminalCut = Object.freeze({
   recordPath: "scoreboard/accepted-gains/terminal-main-2026-10-29.json",
   recordDigest: "ce9ea1108674599cc30734efc58f711f2c145e455468852f9be4078694de3dec",
 });
-function time(value) {
-  const result = Date.parse(value);
-  assert.ok(Number.isFinite(result), "missing evidence time");
-  return result;
+export interface TerminalContributionRecord {
+  landed: {
+    mergeCommit: string;
+    firstParent: string;
+    [key: string]: unknown;
+  };
+  original: {
+    binding: PullRequestBinding;
+    run: RunBinding;
+    inputsSha256: string;
+    resultSha256: string;
+    capturedFloorSha256: string;
+    [key: string]: unknown;
+  };
+  gains: string[];
+  gainsSha256: string;
+  [key: string]: unknown;
 }
-function unique(items, predicate, label) {
-  const matches = items.filter(predicate);
-  assert.equal(matches.length, 1, `missing/ambiguous ${label}`);
-  return matches[0];
+export type TerminalLandedEntry = TerminalContributionRecord &
+  LandedContribution & {
+    artifacts: { raw: ArtifactClaim; qualification: ArtifactClaim };
+  };
+export interface TerminalRequirementRecord {
+  base: {
+    sourceSha: string;
+    run: RunBinding;
+    floorSha256: string;
+  };
+  landed: TerminalContributionRecord[];
+  requirement: { count: number; floorSha256: string };
+  [key: string]: unknown;
 }
-function complete(value, field) {
+export interface TerminalRecord extends TerminalRequirementRecord {
+  schema: number;
+  kind: "accepted-main-requirement-chain";
+  base: {
+    sourceSha: string;
+    run: RunBinding;
+    floorSha256: string;
+    artifact: ArtifactClaim;
+  };
+  landed: TerminalLandedEntry[];
+  cancelled: { sourceSha: string; runId: number; attempt: number }[];
+}
+export interface TerminalContribution {
+  record: TerminalContributionRecord;
+  raw: HistoricalAcceptedRawScore;
+  receipt: Qualification;
+}
+interface TerminalFacts {
+  parents: string[];
+  tree: string;
+  testedParents: string[];
+  testedTree: string;
+  ancestor: string;
+  composedTree: string;
+  inputsSha256: string;
+}
+function complete<List extends { total_count: number }, Field extends keyof List>(
+  value: List,
+  field: Field,
+): List[Field] {
   assert.ok(
     Number.isSafeInteger(value.total_count) && value.total_count >= 0 && value.total_count <= 100,
     "unbounded host listing",
   );
-  assert.equal(value[field].length, value.total_count, "incomplete host listing");
-  return value[field];
+  const entries = value[field];
+  assert.ok(Array.isArray(entries), "missing host listing");
+  assert.equal(entries.length, value.total_count, "incomplete host listing");
+  return entries;
 }
-function history(root, sourceSha) {
+function history(root: string, sourceSha: string): string[] {
   return git(root, ["rev-list", "--first-parent", "--max-count=33", fullSha(sourceSha)]).split(
     "\n",
   );
 }
-export function terminalRecoveryTarget(root, sourceSha) {
+export function terminalRecoveryTarget(root: string, sourceSha: string): boolean {
   return history(root, sourceSha).includes(terminalCut.sourceSha);
 }
-export function terminalGap(error) {
+export function terminalGap(error: unknown): boolean {
   return (
+    isRecord(error) &&
     error.name === "FloorPrerequisite" &&
     error.reason === "missing-non-equivalent-main-score" &&
+    typeof error.sourceSha === "string" &&
     terminalCut.gaps.includes(error.sourceSha)
   );
 }
-function recordEntries(root, sourceSha) {
+function recordEntries(root: string, sourceSha: string): string[] {
   return git(root, ["ls-tree", "-r", sourceSha, "--", "scoreboard/accepted-gains"])
     .split("\n")
     .filter(Boolean);
 }
-export function terminalRecord(root, sourceSha, selected) {
+function assertLandedEntry(value: unknown): asserts value is TerminalLandedEntry {
+  assertLandedContribution(value);
+  assertRecord(value.artifacts);
+  assertArtifactClaim(value.artifacts.raw);
+  assertArtifactClaim(value.artifacts.qualification);
+}
+export function assertTerminalRecord(value: unknown): asserts value is TerminalRecord {
+  assertRecord(value);
+  assertRecord(value.base);
+  fullSha(value.base.sourceSha);
+  assertRunBinding(value.base.run);
+  assert.equal(typeof value.base.floorSha256, "string", "invalid terminal base digest");
+  assertArtifactClaim(value.base.artifact);
+  assert.ok(Array.isArray(value.landed), "missing terminal landed chain");
+  for (const entry of value.landed) assertLandedEntry(entry);
+  assert.ok(Array.isArray(value.cancelled), "missing cancelled chain");
+  for (const claim of value.cancelled) {
+    assertRecord(claim);
+    fullSha(claim.sourceSha);
+    assert.equal(typeof claim.runId, "number", "invalid cancelled run");
+    assert.equal(typeof claim.attempt, "number", "invalid cancelled attempt");
+  }
+  assertRecord(value.requirement);
+  assert.equal(typeof value.requirement.count, "number", "invalid requirement count");
+  assert.equal(typeof value.requirement.floorSha256, "string", "invalid requirement digest");
+}
+export function terminalRecord(root: string, sourceSha: string, selected: Binding): TerminalRecord {
   assertAcceptedRecordCheckout(root, sourceSha);
   const entries = recordEntries(root, sourceSha);
   const added = unique(
@@ -86,8 +201,9 @@ export function terminalRecord(root, sourceSha, selected) {
     recordEntries(root, terminalCut.sourceSha),
     "accepted records are append-only",
   );
-  const record = JSON.parse(git(root, ["show", `${sourceSha}:${terminalCut.recordPath}`]));
+  const record: unknown = JSON.parse(git(root, ["show", `${sourceSha}:${terminalCut.recordPath}`]));
   assert.equal(digest(record), terminalCut.recordDigest, "unreviewed terminal receipt");
+  assertTerminalRecord(record);
   assert.equal(record.schema, 1);
   assert.equal(record.kind, "accepted-main-requirement-chain");
   assert.equal(record.base.sourceSha, terminalCut.baseSha);
@@ -117,7 +233,12 @@ export function terminalRecord(root, sourceSha, selected) {
   assert.ok(terminalRecoveryTarget(root, target), "target is outside terminal recovery history");
   return record;
 }
-export function assertTerminalCancelled(claim, run, jobs, artifacts) {
+export function assertTerminalCancelled(
+  claim: TerminalRecord["cancelled"][number],
+  run: HostRun,
+  jobs: HostJob[],
+  artifacts: { name: string; [key: string]: unknown }[],
+): void {
   assertMainRun(run, claim.sourceSha, claim.attempt);
   assert.equal(run.id, claim.runId, "wrong cancelled run");
   assert.equal(run.status, "completed", "nonterminal cancelled run");
@@ -130,7 +251,7 @@ export function assertTerminalCancelled(claim, run, jobs, artifacts) {
     assertJobBinding(job, run);
     assert.equal(job.status, "completed");
     assert.ok(
-      ["success", "skipped", "cancelled"].includes(job.conclusion),
+      ["success", "skipped", "cancelled"].includes(job.conclusion ?? ""),
       "different main job failure",
     );
   }
@@ -139,7 +260,7 @@ export function assertTerminalCancelled(claim, run, jobs, artifacts) {
     assert.ok(producers.length <= 1, "ambiguous cancelled producer");
     if (!producers.length) continue;
     assert.ok(
-      ["cancelled", "skipped"].includes(producers[0].conclusion),
+      ["cancelled", "skipped"].includes(producers[0].conclusion ?? ""),
       "producer was not cancelled",
     );
     const steps = producers[0].steps;
@@ -155,23 +276,19 @@ export function assertTerminalCancelled(claim, run, jobs, artifacts) {
     );
   }
 }
-export function assertTerminalJobs(run, jobs, workflow, mergedAt) {
-  const names = Object.keys(parse(workflow).jobs).sort();
-  assert.equal(names.length, 12, "reviewed terminal Shell job set");
-  assert.deepEqual(jobs.map((job) => job.name).sort(), names, "missing/extra original job");
-  assert.equal(run.status, "completed");
-  assert.equal(run.conclusion, "success");
-  for (const job of jobs) {
-    assertJobBinding(job, run);
-    assert.equal(job.status, "completed");
-    assert.equal(job.conclusion, "success");
-    assert.ok(
-      time(job.started_at) <= time(job.completed_at) && time(job.completed_at) < time(mergedAt),
-      "original job finished after merge",
-    );
-  }
+export function assertTerminalJobs(
+  run: HostRun,
+  jobs: HostJob[],
+  workflow: string,
+  mergedAt: string,
+): void {
+  assertHistoricalJobSet(run, jobs, workflow, mergedAt, 12, "reviewed terminal Shell job set");
 }
-export function assertTerminalLanded(record, pr, facts) {
+export function assertTerminalLanded(
+  record: TerminalLandedEntry,
+  pr: PullRequest,
+  facts: TerminalFacts,
+): void {
   const { landed, original } = record;
   assertLandedPullRequest(pr, record);
   assert.equal(original.binding.kind, "pull-request");
@@ -187,20 +304,33 @@ export function assertTerminalLanded(record, pr, facts) {
   assert.equal(facts.composedTree, landed.tree, "different landed composition");
   assert.equal(facts.inputsSha256, original.inputsSha256, "original source inputs changed");
 }
-async function runJobs(client, binding) {
-  const run = await client.request(`/actions/runs/${binding.runId}/attempts/${binding.attempt}`);
+async function runJobs(
+  client: GithubClient,
+  binding: RunBinding,
+): Promise<{ run: HostRun; jobs: HostJob[] }> {
+  const run = await requestRun(
+    client,
+    `/actions/runs/${binding.runId}/attempts/${binding.attempt}`,
+  );
   assert.equal(run.id, binding.runId);
   assert.equal(run.run_attempt, binding.attempt);
-  const jobs = complete(
-    await client.request(`/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`),
-    "jobs",
+  const listing = await requestJobs(
+    client,
+    `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
   );
+  const jobs = complete(listing, "jobs");
   return { run, jobs };
 }
-async function artifact(root, client, host, claim, sourceSha, kind, lifetime) {
-  const metadata = await client.request(`/actions/artifacts/${claim.artifactId}`);
-  assert.equal(metadata.id, claim.artifactId);
-  assert.equal(metadata.digest, `sha256:${claim.archiveSha256}`);
+async function artifact(
+  root: string,
+  client: GithubClient,
+  host: { run: HostRun; jobs: HostJob[] },
+  claim: ArtifactClaim,
+  sourceSha: string,
+  kind: ArtifactKind,
+  lifetime: Lifetime,
+): Promise<unknown> {
+  const metadata = await claimedArtifactMetadata(client, claim);
   lifetime.expires = Math.min(lifetime.expires, time(metadata.expires_at));
   assert.ok(lifetime.expires > Date.now(), "expired recovery evidence");
   const job = unique(host.jobs, (item) => item.id === claim.uploader.jobId, "recorded uploader");
@@ -222,9 +352,15 @@ async function artifact(root, client, host, claim, sourceSha, kind, lifetime) {
   assert.equal(digest(value), claim.payloadSha256, "recorded payload changed");
   return value;
 }
-async function acceptedContribution(root, client, oracle, record, lifetime) {
+async function acceptedContribution(
+  root: string,
+  client: GithubClient,
+  oracle: Oracle,
+  record: TerminalLandedEntry,
+  lifetime: Lifetime,
+): Promise<TerminalContribution> {
   const { landed, original } = record;
-  const pr = await client.request(`/pulls/${landed.pr}`);
+  const pr = await requestPullRequest(client, `/pulls/${landed.pr}`);
   const tested = fullSha(original.binding.testedMergeSha);
   git(root, ["fetch", "--no-tags", "origin", tested]);
   assertTerminalLanded(record, pr, {
@@ -246,12 +382,11 @@ async function acceptedContribution(root, client, oracle, record, lifetime) {
     oracle.identity,
     "original frozen oracle changed",
   );
-  const runs = complete(
-    await client.request(
-      `/actions/workflows/${authority.workflowId}/runs?event=pull_request&head_sha=${original.binding.headSha}&per_page=100`,
-    ),
-    "workflow_runs",
+  const listing = await requestWorkflowRuns(
+    client,
+    `/actions/workflows/${authority.workflowId}/runs?event=pull_request&head_sha=${original.binding.headSha}&per_page=100`,
   );
+  const runs = complete(listing, "workflow_runs");
   assert.equal(runs.length, 1, "unreviewed original PR run set");
   assert.equal(runs[0].id, original.run.runId);
   assert.equal(runs[0].run_attempt, original.run.attempt, "original PR gained another attempt");
@@ -269,6 +404,7 @@ async function acceptedContribution(root, client, oracle, record, lifetime) {
     pr.merged_at,
   );
   const raw = await artifact(root, client, host, record.artifacts.raw, tested, "raw", lifetime);
+  assertHistoricalRaw(raw);
   const receipt = await artifact(
     root,
     client,
@@ -278,9 +414,15 @@ async function acceptedContribution(root, client, oracle, record, lifetime) {
     "qualification",
     lifetime,
   );
+  assertQualification(receipt);
   return { record, raw, receipt };
 }
-export function recomputeTerminalRequirement(oracle, record, base, contributions) {
+export function recomputeTerminalRequirement(
+  oracle: Oracle,
+  record: TerminalRequirementRecord,
+  base: MainFloor,
+  contributions: TerminalContribution[],
+): MainFloor {
   validateFloor(oracle, base);
   assert.equal(base.sourceSha, record.base.sourceSha);
   assert.deepEqual(base.run, record.base.run);
@@ -326,23 +468,28 @@ export function recomputeTerminalRequirement(oracle, record, base, contributions
   assert.equal(required.floorSha256, record.requirement.floorSha256, "accepted membership changed");
   return required;
 }
-async function cancelledRuns(root, client, oracle, record) {
+async function cancelledRuns(
+  root: string,
+  client: GithubClient,
+  oracle: Oracle,
+  record: TerminalRecord,
+): Promise<void> {
   const evidence = mainEvidence({ root, oracle, client });
   for (const claim of record.cancelled) {
-    const listing = complete(
-      await client.request(
-        `/actions/workflows/${authority.workflowId}/runs?event=push&head_sha=${claim.sourceSha}&per_page=100`,
-      ),
-      "workflow_runs",
+    const listing = await requestWorkflowRuns(
+      client,
+      `/actions/workflows/${authority.workflowId}/runs?event=push&head_sha=${claim.sourceSha}&per_page=100`,
     );
-    assert.equal(listing.length, 1, "different cancelled main run set");
-    assert.equal(listing[0].id, claim.runId);
-    assert.equal(listing[0].run_attempt, claim.attempt, "cancelled main retried");
+    const runs = complete(listing, "workflow_runs");
+    assert.equal(runs.length, 1, "different cancelled main run set");
+    assert.equal(runs[0].id, claim.runId);
+    assert.equal(runs[0].run_attempt, claim.attempt, "cancelled main retried");
     const host = await runJobs(client, claim);
-    const artifacts = complete(
-      await client.request(`/actions/runs/${claim.runId}/artifacts?per_page=100`),
-      "artifacts",
+    const artifactListing = await requestArtifacts(
+      client,
+      `/actions/runs/${claim.runId}/artifacts?per_page=100`,
     );
+    const artifacts = complete(artifactListing, "artifacts");
     assertTerminalCancelled(claim, host.run, host.jobs, artifacts);
     assert.deepEqual(
       await evidence.collect(claim.sourceSha),
@@ -358,7 +505,14 @@ export async function prepareTerminalRecovery({
   sourceSha,
   selected,
   lifetime,
-}) {
+}: {
+  root: string;
+  client: GithubClient;
+  oracle: Oracle;
+  sourceSha: string;
+  selected: Binding;
+  lifetime: Lifetime;
+}): Promise<AcceptedGainFloor> {
   const record = terminalRecord(root, sourceSha, selected);
   await cancelledRuns(root, client, oracle, record);
   const baseHost = await runJobs(client, record.base.run);
@@ -378,7 +532,8 @@ export async function prepareTerminalRecovery({
     "floor",
     lifetime,
   );
-  const contributions = [];
+  assertMainFloor(base);
+  const contributions: TerminalContribution[] = [];
   for (const entry of record.landed)
     contributions.push(await acceptedContribution(root, client, oracle, entry, lifetime));
   let required = recomputeTerminalRequirement(oracle, record, base, contributions);
@@ -423,14 +578,21 @@ export async function prepareTerminalRecovery({
     evidence: required.evidence,
   };
 }
-function successfulStep(job, label) {
+function successfulStep(job: Pick<HostJob, "steps">, label: string): CompletedHostStep {
   const step = unique(job.steps, (item) => item.name === label, label);
   assert.equal(step.status, "completed");
   assert.equal(step.conclusion, "success");
+  assert.ok(hasStepTimes(step), "missing evidence time");
   assert.ok(time(step.completed_at) >= time(step.started_at));
   return step;
 }
-export function assertTerminalFreshObservation(raw, jobs) {
+export function assertTerminalFreshObservation(
+  raw: Pick<RawScore<unknown>, "sourceSha" | "run" | "selected" | "capturedAt">,
+  jobs: Pick<
+    HostJob,
+    "name" | "run_id" | "run_attempt" | "head_sha" | "status" | "conclusion" | "steps"
+  >[],
+): void {
   const observer = unique(jobs, (job) => job.name === "own-shell-observation", "Waffle observer");
   const sealer = unique(jobs, (job) => job.name === "own-shell-compatibility", "raw sealer");
   for (const job of [observer, sealer]) {

@@ -1,5 +1,6 @@
 // Runs the pinned shell spec corpora through GNU bash and the standalone WASM shell.
 // Bash is the oracle: a case passes when stdout and exit status match bash exactly.
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -15,8 +16,10 @@ import {
   createShellRunner,
   normalize,
 } from "./bash-compat-runner.ts";
-import { cancelTargetMigrations, targetBranchBaseline } from "./shell-scoreboard-base.mjs";
+import { cancelTargetMigrations, targetBranchBaseline } from "./shell-scoreboard-base.ts";
 import {
+  assertOracle,
+  assertScore,
   bytesDigest,
   compactResult,
   digest,
@@ -25,8 +28,9 @@ import {
   summarize,
   compareScores,
   validateScore,
-} from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard.ts";
 import type { ActiveChildren, BufferedResult, ShellResult } from "./bash-compat-runner.ts";
+import type { Oracle as CoreOracle, Score as CoreScore } from "./shell-scoreboard.ts";
 
 type Corpus = "oils" | "brush-suite" | "bashkit-suite";
 type EngineName = "own-shell";
@@ -78,6 +82,7 @@ interface PackedResult {
   timeout?: boolean;
   outputLimit?: boolean;
   crash?: string;
+  [key: string]: unknown;
 }
 
 interface OracleCase {
@@ -91,17 +96,15 @@ interface OracleCase {
   kind?: CaseKind;
   excluded?: string;
   needs?: string[];
-  bash: PackedResult;
-}
-
-interface CaptureRecord extends Omit<OracleCase, "bash"> {
   bash?: PackedResult;
+  [key: string]: unknown;
 }
 
-interface Oracle {
-  sources: Record<Corpus, { revision: string }>;
-  environment: { nodeVersion: string };
-  identity: unknown;
+type CaptureRecord = OracleCase;
+
+interface Oracle extends CoreOracle {
+  sources: Record<Corpus, { revision: string }> & Record<string, unknown>;
+  environment: { nodeVersion: string; [key: string]: unknown };
   cases: OracleCase[];
 }
 
@@ -113,13 +116,12 @@ interface ScoreCase {
   outcome: string;
   excluded?: string;
   actual?: unknown;
+  [key: string]: unknown;
 }
 
-interface Score {
-  identity: unknown;
-  engine: string;
-  counts: unknown;
+interface Score extends CoreScore {
   cases: ScoreCase[];
+  engine: string;
 }
 
 interface SourcePin {
@@ -169,14 +171,35 @@ function validatePins(value: unknown): asserts value is Pins {
     throw new Error("Invalid shell scoreboard pin");
 }
 
+function assertBashOracle(value: CoreOracle): asserts value is Oracle {
+  assert.equal(typeof value.environment.nodeVersion, "string", "Invalid oracle Node version");
+  for (const corpus of ["oils", "brush-suite", "bashkit-suite"]) {
+    assert.ok(isRecord(value.sources[corpus]));
+    assert.equal(typeof value.sources[corpus].revision, "string", "Invalid oracle source revision");
+  }
+  for (const item of value.cases) {
+    assert.equal(typeof item.file, "string", "Invalid oracle case file");
+    assert.equal(typeof item.line, "number", "Invalid oracle case line");
+    assert.equal(typeof item.name, "string", "Invalid oracle case name");
+    assert.equal(typeof item.code, "string", "Invalid oracle case code");
+  }
+}
 function validatedOracle(value: unknown): Oracle {
+  assertOracle(value);
   verifyOracle(value);
-  return value as Oracle;
+  assertBashOracle(value);
+  return value;
 }
 
-function validatedScore(oracle: Oracle, value: unknown): Score {
+function assertBashScore(value: CoreScore): asserts value is Score {
+  assert.equal(value.engine, "own-shell", "Invalid score engine");
+  for (const item of value.cases) assert.ok(isCorpus(item.corpus), "Invalid score corpus");
+}
+function validatedScore(oracle: CoreOracle, value: unknown): Score {
+  assertScore(value);
   validateScore(oracle, value);
-  return value as Score;
+  assertBashScore(value);
+  return value;
 }
 
 interface ClassificationCase {
@@ -1530,6 +1553,7 @@ async function runFrozen() {
   let done = 0;
   await mapLimit(oracle.cases, jobs, async (item, index) => {
     if (cancelled || item.excluded || item.kind !== "builtins-only") return;
+    assert.ok(item.bash, "Missing oracle observation");
     const actual = normalizeResult(await pool.run(item.code));
     if (cancelled) return;
     const expected = { status: item.bash.status, stdout: Buffer.from(item.bash.stdout, "base64") };

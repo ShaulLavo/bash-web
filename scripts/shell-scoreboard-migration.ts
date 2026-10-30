@@ -12,22 +12,30 @@ import {
   migrationEnvironment,
   migrationEvidence,
   oraclePath,
-} from "./shell-scoreboard-base.mjs";
+} from "./shell-scoreboard-base.ts";
 import {
+  assertOracle,
+  assertRecord,
+  assertScore,
   bytesDigest,
   compareScores,
   summarize,
   validateScore,
   verifyOracle,
-} from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard.ts";
+import type { Oracle, Score } from "./shell-scoreboard.ts";
 import { wasiCargoEnvironment, wasiSysrootCommand } from "./wasi-build.ts";
 import { drainGroup, killGroup } from "./shell-process-group.ts";
 
 const root = resolve(process.argv[2] ?? ".");
 const ref = process.argv[3];
-const children = new Map();
+assert.equal(typeof ref, "string", "missing immutable base SHA");
+interface ChildState {
+  timer?: NodeJS.Timeout;
+}
+const children = new Map<number, ChildState>();
 let interrupted = false;
-function stop() {
+function stop(): void {
   interrupted = true;
   for (const [pid, child] of children) {
     killGroup(pid, "SIGTERM");
@@ -40,23 +48,28 @@ for (const signal of ["SIGTERM", "SIGINT", "disconnect"]) process.on(signal, sto
 // scorer overrides, or any candidate-provided artifacts. Shared dependency caches remain usable.
 const env = migrationEnvironment();
 env.GIT_NO_REPLACE_OBJECTS = "1";
-function run(command, args, cwd, extraEnv = {}) {
+function run(
+  command: string,
+  args: string[],
+  cwd: string,
+  extraEnv: Record<string, string | undefined> = {},
+): Promise<void> {
   assert.ok(!interrupted, "target rebuild interrupted");
-  return new Promise((accept, reject) => {
+  return new Promise<void>((accept, reject) => {
     const child = spawn(command, args, {
       cwd,
       env: { ...env, ...extraEnv },
       stdio: ["ignore", "inherit", "inherit"],
       detached: true,
     });
-    const state = {};
+    const state: ChildState = {};
     if (child.pid) children.set(child.pid, state);
     child.once("error", reject);
     child.once("close", (code, signal) => {
       // Keep ownership of the entire group after its leader exits, until no consumers remain.
       drainGroup(child.pid).then(() => {
         clearTimeout(state.timer);
-        children.delete(child.pid);
+        if (child.pid) children.delete(child.pid);
         if (code === 0 && !interrupted) accept();
         else
           reject(
@@ -67,21 +80,21 @@ function run(command, args, cwd, extraEnv = {}) {
   });
 }
 
-const cargoBuild = (args, cwd, targetDir) =>
+const cargoBuild = (args: string[], cwd: string, targetDir: string): Promise<void> =>
   run(
     "cargo",
     ["build", "--locked", "--release", "--target", "wasm32-wasip1"].concat(args, ["-j2"]),
     cwd,
     { ...wasiCargoEnvironment(root, targetDir, env), CARGO_INCREMENTAL: "0" },
   );
-const verify = (path) =>
+const verify = (path: string): Promise<void> =>
   run(
     process.execPath,
     [fileURLToPath(new URL("./verify-wasi-guests.ts", import.meta.url)), path],
     root,
   );
 
-async function targetUtilityNames(checkout) {
+async function targetUtilityNames(checkout: string): Promise<string[]> {
   const directory = resolve(checkout, "shell/utilities/src/bin");
   if (!existsSync(directory)) return [];
   const entries = await readdir(directory, { withFileTypes: true });
@@ -91,7 +104,15 @@ async function targetUtilityNames(checkout) {
     .sort();
 }
 
-async function buildTarget(checkout, targetDir, runner) {
+interface TargetBuild {
+  wasm: string;
+  fixtures?: string;
+}
+async function buildTarget(
+  checkout: string,
+  targetDir: string,
+  runner: string,
+): Promise<TargetBuild> {
   const [prepareCommand, prepareArgs] = wasiSysrootCommand(root);
   await run(prepareCommand, prepareArgs, root);
   const manifest = ["--manifest-path", "shell/Cargo.toml"];
@@ -125,13 +146,13 @@ async function buildTarget(checkout, targetDir, runner) {
   return { wasm: resolve(release, "shell-runtime.wasm"), fixtures: release };
 }
 
-async function cleanupTarget(scratch) {
+async function cleanupTarget(scratch: string): Promise<void> {
   // Never remove files from under an uninterruptible consumer.
   assert.equal(children.size, 0, `target processes remain; scratch retained at ${scratch}`);
   await rm(scratch, { recursive: true, force: true });
 }
 
-async function targetCheckout(kind, paths) {
+async function targetCheckout(kind: string, paths: string[]) {
   const scratchRoot = process.env.RUNNER_TEMP ?? "/work/tmp/bash-web-climb-subst";
   await mkdir(scratchRoot, { recursive: true });
   const scratch = await mkdtemp(resolve(scratchRoot, `audit-${kind}-migration-`));
@@ -149,7 +170,7 @@ async function targetCheckout(kind, paths) {
   }
 }
 
-async function rescoreUnderCandidateInstrument(candidate) {
+async function rescoreUnderCandidateInstrument(candidate: Oracle): Promise<Score> {
   const { baseline, receipt } = instrumentMigrationEvidence(root, ref, candidate);
   const { scratch, checkout, targetDir } = await targetCheckout("instrument", [
     "shell",
@@ -199,7 +220,8 @@ async function rescoreUnderCandidateInstrument(candidate) {
       binaryHash,
       "target binary changed while scoring",
     );
-    const rescored = JSON.parse(await readFile(output, "utf8"));
+    const rescored: unknown = JSON.parse(await readFile(output, "utf8"));
+    assertScore(rescored);
     validateScore(candidate, rescored);
     assertInstrumentChanges(baseline, rescored, receipt);
     console.error(
@@ -217,16 +239,21 @@ async function rescoreUnderCandidateInstrument(candidate) {
   }
 }
 
-async function migrate() {
+async function migrate(): Promise<Score> {
   assert.equal(
     process.argv.length,
     4,
     "migration launcher accepts only repository and immutable base SHA",
   );
   const candidateBytes = await readFile(resolve(root, oraclePath));
-  const candidate = JSON.parse(candidateBytes);
+  const candidate: unknown = JSON.parse(candidateBytes.toString("utf8"));
+  assertOracle(candidate);
   verifyOracle(candidate);
-  const candidatePins = JSON.parse(await readFile(resolve(root, "sources.lock.json"), "utf8"));
+  const candidatePins: unknown = JSON.parse(
+    await readFile(resolve(root, "sources.lock.json"), "utf8"),
+  );
+  assertRecord(candidatePins);
+  assertRecord(candidatePins.shellScoreboard);
   assert.equal(
     candidatePins.shellScoreboard.oracleSha256,
     bytesDigest(candidateBytes),
@@ -238,9 +265,13 @@ async function migrate() {
   assert.notEqual(candidate.identity.oracle, oracle.identity.oracle, "oracle did not change");
   const { scratch, checkout, targetDir } = await targetCheckout("oracle", []);
   try {
-    const { wasm, fixtures } = await buildTarget(checkout, targetDir, oracle.environment.runner);
+    const { wasm, fixtures } = await buildTarget(
+      checkout,
+      targetDir,
+      oracle.environment.runner ?? "",
+    );
     const binaryHash = bytesDigest(await readFile(wasm));
-    const score = async (label) => {
+    const score = async (label: string): Promise<Score> => {
       const output = resolve(scratch, `${label}.json`);
       await run(process.execPath, ["scripts/bash-compat.mjs"], checkout, {
         BASH_COMPAT_MODE: "frozen",
@@ -259,7 +290,9 @@ async function migrate() {
         binaryHash,
         "target binary changed while scoring",
       );
-      return JSON.parse(await readFile(output, "utf8"));
+      const value: unknown = JSON.parse(await readFile(output, "utf8"));
+      assertScore(value);
+      return value;
     };
     const original = await score("old-oracle");
     validateScore(oracle, original);
@@ -267,16 +300,16 @@ async function migrate() {
     // Only the copied evidence changes, after the exact source has been built and proven.
     // Running the TARGET scorer both times prevents candidate scorer changes forging target scores.
     await writeFile(resolve(checkout, oraclePath), candidateBytes);
+    if (!pins.shellScoreboard) throw new Error("missing target scoreboard pin");
     pins.shellScoreboard.oracleSha256 = bytesDigest(candidateBytes);
     await writeFile(resolve(checkout, "sources.lock.json"), JSON.stringify(pins));
     const corrected = await score("corrected-oracle");
     validateScore(candidate, corrected);
-    const counts = (score) =>
+    const counts = (value: Score) =>
       Object.fromEntries(
-        Object.entries(summarize(score)).map(([corpus, { categories: _categories, ...value }]) => [
-          corpus,
-          value,
-        ]),
+        Object.entries(summarize(value)).map(
+          ([corpus, { categories: _categories, ...summary }]) => [corpus, summary],
+        ),
       );
     const before = new Map(original.cases.map((item) => [item.id, item.outcome]));
     console.error(
@@ -299,19 +332,23 @@ async function migrate() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  let message;
+  let message: { score: Score } | { error: string };
   try {
     message = { score: await migrate() };
     assert.ok(!interrupted, "target rebuild interrupted");
   } catch (error) {
-    message = { error: error.stack ?? String(error) };
+    message = {
+      error: error instanceof Error ? (error.stack ?? String(error)) : String(error),
+    };
     console.error(message.error);
     process.exitCode = 1;
   } finally {
     for (const signal of ["SIGTERM", "SIGINT", "disconnect"]) process.off(signal, stop);
   }
-  if (process.connected) {
-    await new Promise((done) => process.send(message, () => done()));
-    if (process.connected) process.disconnect();
+  const send = process.send?.bind(process);
+  const disconnect = process.disconnect?.bind(process);
+  if (process.connected && send && disconnect) {
+    await new Promise<void>((done) => send(message, () => done()));
+    if (process.connected) disconnect();
   }
 }

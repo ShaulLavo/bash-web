@@ -6,10 +6,10 @@ import {
   bootstrapFloor,
   compareFloor,
   validateFloor,
-} from "./shell-scoreboard-floor.mjs";
-import { digest, summarize, validateScore } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-floor.ts";
+import { digest, summarize, validateScore } from "./shell-scoreboard.ts";
 
-import { scoreboardFixture } from "./shell-scoreboard-test-fixture.mjs";
+import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
 
 const { oracle, score, floor } = scoreboardFixture("brush-suite");
 test("gains succeed, replacements and lost current-main gains fail", () => {
