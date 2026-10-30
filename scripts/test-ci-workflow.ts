@@ -159,13 +159,8 @@ test("each moved current-main gate has one owner", () => {
     prepare: ["sources:browser", "build:worker", "build:node-harness"],
     layers: ["test:check-layers", "check:layers", "typecheck:layers"],
     quality: ["quality:js", "test:ci", "test:guest-build", "typecheck:guest-build", "typecheck:ci"],
-    native: [
-      "check:rust",
-      "build:shell",
-      "build:test-guest",
-      "prepare:wasi-tests",
-      "check:capabilities",
-    ],
+    "native-checks": ["check:rust"],
+    native: ["build:shell", "build:test-guest", "prepare:wasi-tests", "check:capabilities"],
     wasi: ["test:shell:wasi"],
     browser: [
       "build:browser:assets:ci",
