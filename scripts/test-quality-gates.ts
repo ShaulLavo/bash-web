@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
 import type { ProgramPackage } from "waffle/programs";
 import { duplicateArgs, duplicateModes } from "./check-duplicates.ts";
+import { checkJavaScript, type JavaScriptException } from "./check-javascript.ts";
 import { compatibilityPrograms } from "./compat-programs.ts";
 import { selectBasePackages } from "./waffle-compat.ts";
 
@@ -40,6 +41,80 @@ function rejected(result: ToolResult, diagnostic: RegExp) {
   assert.notEqual(result.status, 0, result.output);
   assert.match(result.output, diagnostic);
 }
+
+function runGit(directory: string, args: readonly string[]) {
+  const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+}
+function writeRepoFile(directory: string, path: string, source = "") {
+  const file = resolve(directory, path);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, source);
+}
+function initJavaScriptRepo(directory: string) {
+  runGit(directory, ["init", "-q"]);
+  writeRepoFile(directory, ".gitignore", "dist/\n.build/\n.scratch/\n");
+}
+
+test("JavaScript guard rejects staged and new files across repository roots", () =>
+  fixture((directory) => {
+    initJavaScriptRepo(directory);
+    const files = [
+      "probe.js",
+      "scripts/probe.mjs",
+      "tests/probe.cjs",
+      "nested/deep/probe.js",
+      "scripts/nested/probe.cjs",
+      "tests/nested/probe.mjs",
+      "nested/with space.mjs",
+      "nested/line\nbreak.cjs",
+    ];
+    for (const path of files) writeRepoFile(directory, path);
+    writeRepoFile(directory, "probe.js", "// check-javascript-disable\n");
+    writeRepoFile(
+      directory,
+      "src/input.ts",
+      'export const inputs = ["probe.js", "probe.mjs", "probe.cjs"];\n',
+    );
+    runGit(directory, ["add", "--"].concat(files.slice(0, 4)));
+    assert.deepEqual(checkJavaScript(directory), files.sort());
+  }));
+
+test("JavaScript guard allows only exact generated and test-input exceptions", () =>
+  fixture((directory) => {
+    initJavaScriptRepo(directory);
+    const allowedPaths = ["dist/serve.mjs", "fixtures/invalid.js"];
+    const rejectedPaths = [
+      "dist/other.mjs",
+      "dist/nested/serve.mjs",
+      "fixtures/invalid.mjs",
+      "fixtures/nested/invalid.js",
+      "tests/invalid.js",
+    ];
+    for (const path of allowedPaths.concat(rejectedPaths)) writeRepoFile(directory, path);
+    writeRepoFile(directory, "fixtures/invalid.js", "const = ;\n");
+    runGit(directory, ["add", "-f", "--"].concat(allowedPaths, rejectedPaths));
+    const exceptions = new Map<string, JavaScriptException>([
+      ["dist/serve.mjs", { kind: "generated", reason: "Checked-in generated bundle" }],
+      ["fixtures/invalid.js", { kind: "test-input", reason: "Invalid parser input" }],
+    ]);
+    assert.deepEqual(checkJavaScript(directory, exceptions), rejectedPaths.sort());
+  }));
+
+test("JavaScript guard ignores generated output and rejects symlinks without following", () =>
+  fixture((directory) => {
+    initJavaScriptRepo(directory);
+    for (const path of ["dist/serve.mjs", ".build/node/api.mjs", ".scratch/candidate.cjs"])
+      writeRepoFile(directory, path);
+    writeRepoFile(directory, "src/input.ts", 'export const worker = "dist/serve.mjs";\n');
+    assert.deepEqual(checkJavaScript(directory), []);
+    mkdirSync(resolve(directory, "tests"));
+    symlinkSync("../dist/serve.mjs", resolve(directory, "tests/link.js"));
+    symlinkSync("../dist/serve.mjs", resolve(directory, "tests/link.ts"));
+    runGit(directory, ["add", "--", "tests/link.js", "tests/link.ts"]);
+    assert.deepEqual(checkJavaScript(directory), ["tests/link.js"]);
+  }));
 
 test("compatibility admits exactly the historical ten published programs", () => {
   const expected = ["cat", "find", "grep", "head", "mkdir", "seq", "sort", "tail", "uniq", "wc"];
