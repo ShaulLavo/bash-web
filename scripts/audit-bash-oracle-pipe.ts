@@ -11,7 +11,14 @@ import {
   createShellRunner,
 } from "./bash-compat-runner.ts";
 import type { ActiveChildren, ShellResult } from "./bash-compat-runner.ts";
-import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.ts";
+import {
+  assertOracle,
+  assertRecord,
+  bytesDigest,
+  digest,
+  verifyOracle,
+} from "./shell-scoreboard.ts";
+import type { Oracle as CoreOracle } from "./shell-scoreboard.ts";
 
 interface PackedResult {
   status: number;
@@ -19,20 +26,23 @@ interface PackedResult {
   stderr: string;
   timeout?: boolean;
   outputLimit?: boolean;
+  [key: string]: unknown;
 }
 
 interface OracleCase {
   id: string;
+  corpus: string;
+  category: string;
   code: string;
   kind?: string;
   excluded?: string;
   bash: PackedResult;
+  [key: string]: unknown;
 }
 
-interface Oracle {
+interface Oracle extends CoreOracle {
   cases: OracleCase[];
-  environment: { timeoutMs: number };
-  identity: { sources: unknown; caseSet: unknown };
+  environment: CoreOracle["environment"] & { timeoutMs: number };
   oracle: { executableSha256: string; sandbox: string };
 }
 
@@ -55,9 +65,18 @@ function hasErrorCode(error: unknown, code: string): boolean {
   return error.code === code;
 }
 
+function assertAuditOracle(value: CoreOracle): asserts value is Oracle {
+  assert.equal(typeof value.environment.timeoutMs, "number", "invalid oracle timeout");
+  assertRecord(value.oracle);
+  assert.equal(typeof value.oracle.executableSha256, "string", "invalid oracle executable");
+  assert.equal(typeof value.oracle.sandbox, "string", "invalid oracle sandbox");
+  for (const item of value.cases) assert.equal(typeof item.code, "string", "invalid oracle code");
+}
 function validatedOracle(value: unknown): Oracle {
+  assertOracle(value);
   verifyOracle(value);
-  return value as Oracle;
+  assertAuditOracle(value);
+  return value;
 }
 
 const root = resolve(import.meta.dirname, "..");

@@ -11,7 +11,7 @@ test("lowering the candidate baseline cannot bypass the target branch", () => {
   mkdirSync(scratchRoot, { recursive: true });
   const scratch = mkdtempSync(resolve(scratchRoot, "audit-baseline-test-"));
   try {
-    const git = (args) =>
+    const git = (args: string[]): string =>
       execFileSync("git", args, {
         cwd: scratch,
         encoding: "utf8",
@@ -20,8 +20,23 @@ test("lowering the candidate baseline cannot bypass the target branch", () => {
     git(["init", "-q"]);
     mkdirSync(resolve(scratch, "docs/evidence"), { recursive: true });
     const base = {
-      identity: { caseSet: "same", oracle: "same", environment: "same" },
-      cases: [{ id: "oils:1", corpus: "oils", category: "example", outcome: "pass" }],
+      engine: "own-shell",
+      identity: {
+        schema: 1,
+        caseSet: "same",
+        oracle: "same",
+        environment: "same",
+        sources: "same",
+      },
+      cases: [
+        {
+          id: "oils:1",
+          corpus: "oils",
+          category: "example",
+          kind: "builtins-only",
+          outcome: "pass",
+        },
+      ],
     };
     writeFileSync(resolve(scratch, "sources.lock.json"), '{"shellScoreboard":{}}');
     writeFileSync(resolve(scratch, "docs/evidence/own-shell-baseline.json"), JSON.stringify(base));
@@ -45,9 +60,11 @@ test("lowering the candidate baseline cannot bypass the target branch", () => {
       JSON.stringify(lowered),
     );
     assert.equal(compareScores(lowered, lowered).ok, true);
-    assert.equal(compareScores(baseBranchBaseline(scratch, ref), lowered).ok, false);
+    const target = baseBranchBaseline(scratch, ref);
+    assert.ok(target);
+    assert.equal(compareScores(target, lowered).ok, false);
     lowered.identity.environment = "changed";
-    assert.throws(() => compareScores(baseBranchBaseline(scratch, ref), lowered), /incomparable/);
+    assert.throws(() => compareScores(target, lowered), /incomparable/);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
     assert.equal(execFileSync("test", ["!", "-e", scratch]).length, 0);

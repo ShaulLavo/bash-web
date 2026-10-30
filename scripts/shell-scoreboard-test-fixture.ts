@@ -1,6 +1,8 @@
 import { digest, sealOracle, summarize } from "./shell-scoreboard.ts";
+import type { Score, ScoreCase } from "./shell-scoreboard.ts";
+import type { MainFloor } from "./shell-scoreboard-floor.ts";
 
-export function scoreboardFixture(corpus) {
+export function scoreboardFixture(corpus: string) {
   const oracle = sealOracle({
     schema: 1,
     oracle: {},
@@ -14,8 +16,8 @@ export function scoreboardFixture(corpus) {
       bash: {},
     })),
   });
-  function score(passes, timeout = false) {
-    const cases = oracle.cases.map(({ bash: _bash, ...item }) => ({
+  function score(passes: string[], timeout = false): Score {
+    const cases: ScoreCase[] = oracle.cases.map(({ bash: _bash, ...item }) => ({
       ...item,
       outcome: passes.includes(item.id)
         ? "pass"
@@ -28,7 +30,7 @@ export function scoreboardFixture(corpus) {
     }));
     return { engine: "own-shell", identity: oracle.identity, cases, counts: summarize({ cases }) };
   }
-  function floor(ids, sourceSha = "a".repeat(40)) {
+  function floor(ids: string[], sourceSha = "a".repeat(40)): MainFloor {
     return {
       schema: 1,
       kind: "main-floor",

@@ -3,12 +3,24 @@ import { execFileSync } from "node:child_process";
 import { parse } from "yaml";
 import {
   accumulateFloor,
+  assertMainFloor,
   bootstrap,
   bootstrapFloor,
   validateFloor,
   validateOwnScore,
 } from "./shell-scoreboard-floor.ts";
-import { bytesDigest, digest, verifyOracle } from "./shell-scoreboard.ts";
+import type { FloorEvidence, MainFloor } from "./shell-scoreboard-floor.ts";
+import {
+  assertBinding,
+  assertOracle,
+  assertRecord,
+  assertRunBinding,
+  assertScore,
+  bytesDigest,
+  digest,
+  verifyOracle,
+} from "./shell-scoreboard.ts";
+import type { Binding, Oracle, PullRequestBinding, RunBinding, Score } from "./shell-scoreboard.ts";
 
 export const authority = Object.freeze({
   repository: "ShaulLavo/bash-web",
@@ -45,8 +57,126 @@ const contracts = {
     prefix: "own-shell-floor",
   },
 };
+export type ArtifactKind = keyof typeof contracts;
+interface HostRepository {
+  id: number;
+  [key: string]: unknown;
+}
+export interface HostStep {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  started_at: string;
+  completed_at: string;
+  number: number;
+  [key: string]: unknown;
+}
+export interface HostJob {
+  id: number;
+  name: string;
+  run_id: number;
+  run_attempt: number;
+  head_sha: string;
+  status: string;
+  conclusion: string | null;
+  steps: HostStep[];
+  [key: string]: unknown;
+}
+export interface HostRunSummary {
+  id: number;
+  run_attempt: number;
+  head_sha: string;
+  status: string;
+  conclusion: string | null;
+  [key: string]: unknown;
+}
+export interface HostRun extends HostRunSummary {
+  repository?: HostRepository;
+  head_repository: HostRepository;
+  workflow_id: number;
+  path: string;
+  event: string;
+  head_branch: string;
+  [key: string]: unknown;
+}
+export interface HostArtifact {
+  id: number;
+  name: string;
+  expired: boolean;
+  digest: string;
+  created_at: string;
+  expires_at?: string;
+  workflow_run?: {
+    id: number;
+    head_sha: string;
+    head_repository_id: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+export interface WorkflowRunListing {
+  total_count: number;
+  workflow_runs: HostRunSummary[];
+}
+export interface JobListing {
+  total_count: number;
+  jobs: HostJob[];
+}
+export interface ArtifactListing {
+  total_count: number;
+  artifacts: HostArtifact[];
+}
+export interface PullRequest {
+  number: number;
+  merged: boolean;
+  base: { ref: string; repo: HostRepository };
+  head: { sha: string; repo: HostRepository };
+  merge_commit_sha: string;
+  merged_at: string;
+  [key: string]: unknown;
+}
+export interface UploaderEvidence {
+  runId: number;
+  attempt: number;
+  jobId: number;
+  artifactId: number;
+  archiveSha256: string;
+  uploaderLogsSha256: string;
+}
+export interface RawScore<Floor = MainFloor> {
+  schema: number;
+  kind: string;
+  selected: Binding;
+  run: RunBinding;
+  sourceSha: string;
+  capturedAt?: string;
+  floor?: Floor | null;
+  inputsSha256: string;
+  resultSha256: string;
+  score: Score;
+  observedMainAfter?: string | null;
+  [key: string]: unknown;
+}
+export interface LandedRecord {
+  landed: { pr: number; mergeCommit: string; [key: string]: unknown };
+  original: { binding: PullRequestBinding; [key: string]: unknown };
+}
+export interface EvidenceSet {
+  floors: MainFloor[];
+  scores: Score[];
+  evidence: FloorEvidence[];
+}
+export interface GithubClient {
+  request(path: string, type: "bytes"): Promise<Buffer>;
+  request(path: string, type: "text"): Promise<string>;
+  request(path: string, type?: "json"): Promise<unknown>;
+}
+type ResponseType = "json" | "bytes" | "text";
+
 class FloorPrerequisite extends Error {
-  constructor(reason, sourceSha) {
+  readonly reason: string;
+  readonly sourceSha: string;
+  constructor(reason: string, sourceSha: string) {
     super(
       `scoreboard prerequisite: ${reason} for ${sourceSha}; retry the exact qualification/floor job after its evidence is available; no historical replay was started`,
     );
@@ -55,16 +185,174 @@ class FloorPrerequisite extends Error {
     this.sourceSha = sourceSha;
   }
 }
-export function fullSha(value) {
-  assert.equal(typeof value, "string", "missing source SHA");
+export function fullSha(value: unknown): string {
+  assert.ok(typeof value === "string", "missing source SHA");
   assert.match(value, /^[a-f0-9]{40}$/, "expected immutable full source SHA");
   return value;
 }
-function positive(value) {
-  assert.ok(Number.isSafeInteger(value) && value > 0, "expected positive host ID/attempt");
+function positive(value: unknown): number {
+  assert.ok(
+    typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+    "expected positive host ID/attempt",
+  );
   return value;
 }
-function gitBytes(root, args) {
+function assertRepository(value: unknown): asserts value is HostRepository {
+  assertRecord(value);
+  positive(value.id);
+}
+function assertHostStep(value: unknown): asserts value is HostStep {
+  assertRecord(value);
+  assert.equal(typeof value.name, "string", "missing step name");
+  assert.equal(typeof value.status, "string", "missing step status");
+  assert.ok(
+    value.conclusion === null || typeof value.conclusion === "string",
+    "invalid step conclusion",
+  );
+  assert.equal(typeof value.started_at, "string", "missing step start");
+  assert.equal(typeof value.completed_at, "string", "missing step completion");
+  positive(value.number);
+}
+function assertHostJob(value: unknown): asserts value is HostJob {
+  assertRecord(value);
+  positive(value.id);
+  assert.equal(typeof value.name, "string", "missing job name");
+  positive(value.run_id);
+  positive(value.run_attempt);
+  assert.equal(typeof value.head_sha, "string", "missing host source");
+  assert.equal(typeof value.status, "string", "missing job status");
+  assert.ok(
+    value.conclusion === null || typeof value.conclusion === "string",
+    "invalid job conclusion",
+  );
+  assert.ok(Array.isArray(value.steps), "missing job steps");
+  for (const step of value.steps) assertHostStep(step);
+}
+function assertHostRunSummary(value: unknown): asserts value is HostRunSummary {
+  assertRecord(value);
+  positive(value.id);
+  positive(value.run_attempt);
+  assert.equal(typeof value.head_sha, "string", "missing host source");
+  assert.equal(typeof value.status, "string", "missing run status");
+  assert.ok(
+    value.conclusion === null || typeof value.conclusion === "string",
+    "invalid run conclusion",
+  );
+}
+export function assertHostRun(value: unknown): asserts value is HostRun {
+  assertHostRunSummary(value);
+  if (value.repository !== undefined) assertRepository(value.repository);
+  assertRepository(value.head_repository);
+  positive(value.workflow_id);
+  assert.equal(typeof value.path, "string", "missing workflow path");
+  assert.equal(typeof value.event, "string", "missing run event");
+  assert.equal(typeof value.head_branch, "string", "missing run branch");
+}
+export function assertHostArtifact(value: unknown): asserts value is HostArtifact {
+  assertRecord(value);
+  positive(value.id);
+  assert.equal(typeof value.name, "string", "missing artifact name");
+  assert.equal(typeof value.expired, "boolean", "missing artifact expiry");
+  assert.equal(typeof value.digest, "string", "missing artifact digest");
+  assert.equal(typeof value.created_at, "string", "missing artifact creation time");
+  if (value.expires_at !== undefined)
+    assert.equal(typeof value.expires_at, "string", "invalid artifact expiry");
+  if (value.workflow_run === undefined) return;
+  assertRecord(value.workflow_run);
+  positive(value.workflow_run.id);
+  assert.equal(typeof value.workflow_run.head_sha, "string", "missing artifact source");
+  positive(value.workflow_run.head_repository_id);
+}
+function assertListing(
+  value: unknown,
+): asserts value is Record<string, unknown> & { total_count: number } {
+  assertRecord(value);
+  assert.ok(
+    typeof value.total_count === "number" &&
+      Number.isSafeInteger(value.total_count) &&
+      value.total_count >= 0,
+    "invalid host listing count",
+  );
+}
+function assertWorkflowRunListing(value: unknown): asserts value is WorkflowRunListing {
+  assertListing(value);
+  assertRecord(value);
+  assert.ok(Array.isArray(value.workflow_runs), "missing workflow runs");
+  for (const run of value.workflow_runs) assertHostRunSummary(run);
+}
+export function assertJobListing(value: unknown): asserts value is JobListing {
+  assertListing(value);
+  assertRecord(value);
+  assert.ok(Array.isArray(value.jobs), "missing jobs");
+  for (const job of value.jobs) assertHostJob(job);
+}
+export function assertArtifactListing(value: unknown): asserts value is ArtifactListing {
+  assertListing(value);
+  assertRecord(value);
+  assert.ok(Array.isArray(value.artifacts), "missing artifacts");
+  for (const artifact of value.artifacts) assertHostArtifact(artifact);
+}
+export function assertPullRequest(value: unknown): asserts value is PullRequest {
+  assertRecord(value);
+  positive(value.number);
+  assert.equal(typeof value.merged, "boolean", "missing pull request merge state");
+  assertRecord(value.base);
+  assert.equal(typeof value.base.ref, "string", "missing pull request base ref");
+  assertRepository(value.base.repo);
+  assertRecord(value.head);
+  assert.equal(typeof value.head.sha, "string", "missing pull request head");
+  assertRepository(value.head.repo);
+  assert.equal(typeof value.merge_commit_sha, "string", "missing merge commit");
+  assert.equal(typeof value.merged_at, "string", "missing merge time");
+}
+export function assertRawScore(value: unknown): asserts value is RawScore<unknown> {
+  assertRecord(value);
+  assertBinding(value.selected);
+  assertRunBinding(value.run);
+  fullSha(value.sourceSha);
+  if (value.capturedAt !== undefined)
+    assert.equal(typeof value.capturedAt, "string", "invalid raw capture time");
+  assert.equal(typeof value.inputsSha256, "string", "missing raw input digest");
+  assert.equal(typeof value.resultSha256, "string", "missing raw result digest");
+  assertScore(value.score);
+}
+export async function requestRun(client: GithubClient, path: string): Promise<HostRun> {
+  const value = await client.request(path);
+  assertHostRun(value);
+  return value;
+}
+export async function requestJobs(client: GithubClient, path: string): Promise<JobListing> {
+  const value = await client.request(path);
+  assertJobListing(value);
+  return value;
+}
+export async function requestArtifacts(
+  client: GithubClient,
+  path: string,
+): Promise<ArtifactListing> {
+  const value = await client.request(path);
+  assertArtifactListing(value);
+  return value;
+}
+export async function requestWorkflowRuns(
+  client: GithubClient,
+  path: string,
+): Promise<WorkflowRunListing> {
+  const value = await client.request(path);
+  assertWorkflowRunListing(value);
+  return value;
+}
+export async function requestArtifact(client: GithubClient, path: string): Promise<HostArtifact> {
+  const value = await client.request(path);
+  assertHostArtifact(value);
+  return value;
+}
+export async function requestPullRequest(client: GithubClient, path: string): Promise<PullRequest> {
+  const value = await client.request(path);
+  assertPullRequest(value);
+  return value;
+}
+function gitBytes(root: string, args: string[]): Buffer {
   return execFileSync("git", args, {
     cwd: root,
     env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" },
@@ -72,10 +360,10 @@ function gitBytes(root, args) {
     maxBuffer: 64 * 1024 * 1024,
   });
 }
-export function git(root, args) {
+export function git(root: string, args: string[]): string {
   return gitBytes(root, args).toString("utf8").trimEnd();
 }
-export function assertAcceptedRecordCheckout(root, sourceSha) {
+export function assertAcceptedRecordCheckout(root: string, sourceSha: string): void {
   assert.equal(git(root, ["rev-parse", "HEAD"]), fullSha(sourceSha), "candidate checkout changed");
   assert.equal(
     git(root, ["diff", "--name-only", sourceSha, "--", "scoreboard/accepted-gains"]),
@@ -88,12 +376,15 @@ export function assertAcceptedRecordCheckout(root, sourceSha) {
     "unbound accepted records",
   );
 }
-export function assertJobBinding(job, run) {
+export function assertJobBinding(
+  job: Pick<HostJob, "run_id" | "run_attempt" | "head_sha">,
+  run: Pick<HostRun, "id" | "run_attempt" | "head_sha">,
+): void {
   assert.equal(job.run_id, run.id, "wrong job run");
   assert.equal(job.run_attempt, run.run_attempt, "wrong job attempt");
   assert.equal(job.head_sha, run.head_sha, "wrong job source");
 }
-export function assertLandedPullRequest(pr, { landed, original }) {
+export function assertLandedPullRequest(pr: PullRequest, { landed, original }: LandedRecord): void {
   assert.equal(pr.number, landed.pr);
   assert.equal(pr.merged, true, "unmerged record cannot certify candidate");
   assert.equal(pr.base.ref, "main");
@@ -102,31 +393,40 @@ export function assertLandedPullRequest(pr, { landed, original }) {
   assert.equal(pr.head.sha, original.binding.headSha);
   assert.equal(pr.merge_commit_sha, landed.mergeCommit);
 }
-export function assertObservationSequence(raw, bound, observed, sealed) {
+export function assertObservationSequence(
+  raw: Pick<RawScore, "capturedAt">,
+  bound: HostStep,
+  observed: HostStep,
+  sealed: HostStep,
+): void {
+  const capturedAt = raw.capturedAt ?? "";
   assert.ok(
     Date.parse(observed.started_at) >= Date.parse(bound.completed_at) &&
-      Date.parse(observed.completed_at) > Date.parse(raw.capturedAt) &&
+      Date.parse(observed.completed_at) > Date.parse(capturedAt) &&
       Date.parse(observed.completed_at) <= Date.parse(sealed.started_at),
     "stale Waffle observation",
   );
 }
-export function oracleAt(root, sourceSha) {
+export function oracleAt(root: string, sourceSha: string): Oracle {
   fullSha(sourceSha);
   const bytes = gitBytes(root, ["show", `${sourceSha}:docs/evidence/own-shell-oracle.json`]);
-  const pins = JSON.parse(git(root, ["show", `${sourceSha}:sources.lock.json`]));
+  const pins: unknown = JSON.parse(git(root, ["show", `${sourceSha}:sources.lock.json`]));
+  assertRecord(pins);
+  assertRecord(pins.shellScoreboard);
   assert.equal(
     bytesDigest(bytes),
     pins.shellScoreboard.oracleSha256,
     "trusted source oracle checksum",
   );
-  const oracle = JSON.parse(bytes.toString("utf8"));
+  const oracle: unknown = JSON.parse(bytes.toString("utf8"));
+  assertOracle(oracle);
   verifyOracle(oracle);
   return oracle;
 }
-function documentation(path) {
+function documentation(path: string): boolean {
   return path === "README.md" || path === "AGENTS.md" || /^docs\/.+\.md$/.test(path);
 }
-export function scoringInputs(root, sourceSha) {
+export function scoringInputs(root: string, sourceSha: string): string[] {
   fullSha(sourceSha);
   const records = git(root, ["ls-tree", "-r", "-z", sourceSha]).split("\0").filter(Boolean);
   return records.filter((record) => {
@@ -134,7 +434,7 @@ export function scoringInputs(root, sourceSha) {
     return !record.startsWith("100644 blob ") || !documentation(path);
   });
 }
-function inputEquivalence(root, left, right) {
+function inputEquivalence(root: string, left: string, right: string) {
   const beforeInputsSha256 = digest(scoringInputs(root, left));
   const sourceInputsSha256 = digest(scoringInputs(root, right));
   return {
@@ -143,16 +443,16 @@ function inputEquivalence(root, left, right) {
     sourceInputsSha256,
   };
 }
-export function sourceEquivalent(root, left, right) {
+export function sourceEquivalent(root: string, left: string, right: string): boolean {
   return inputEquivalence(root, left, right).equivalent;
 }
-export function firstParent(root, sourceSha) {
+export function firstParent(root: string, sourceSha: string): string {
   const parents = git(root, ["rev-list", "--parents", "-n", "1", fullSha(sourceSha)]).split(" ");
   assert.equal(parents[0], sourceSha);
   if (!parents[1]) throw new FloorPrerequisite("missing-main-predecessor", sourceSha);
   return fullSha(parents[1]);
 }
-export function assertMainRun(run, sourceSha, attempt) {
+export function assertMainRun(run: HostRun, sourceSha: string, attempt: number): void {
   assert.equal(run.repository?.id, authority.repositoryId, "wrong host repository");
   assert.equal(run.head_repository?.id, authority.repositoryId, "wrong head repository");
   assert.equal(run.workflow_id, authority.workflowId, "wrong workflow ID");
@@ -163,7 +463,7 @@ export function assertMainRun(run, sourceSha, attempt) {
   assert.equal(run.run_attempt, positive(attempt), "wrong run attempt");
   positive(run.id);
 }
-function successfulStep(job, name) {
+function successfulStep(job: HostJob, name: string): HostStep {
   const selected = job.steps.filter((step) => step.name === name);
   assert.equal(selected.length, 1, `missing/ambiguous producer step ${name}`);
   const step = selected[0];
@@ -175,7 +475,7 @@ function successfulStep(job, name) {
   );
   return step;
 }
-function assertJobIdentity(job, run) {
+function assertJobIdentity(job: HostJob, run: HostRun): void {
   assert.equal(job.run_id, run.id, "wrong producer run");
   assert.equal(job.run_attempt, run.run_attempt, "old producer attempt");
   assert.equal(job.head_sha, run.head_sha, "wrong producer source");
@@ -189,7 +489,15 @@ export function assertUploader({
   workflow,
   logs,
   testedSource = run.head_sha,
-}) {
+}: {
+  run: HostRun;
+  job: HostJob;
+  artifact: HostArtifact;
+  kind: ArtifactKind;
+  workflow: string;
+  logs: string;
+  testedSource?: string;
+}): UploaderEvidence {
   const contract = contracts[kind];
   assert.ok(contract, "unknown artifact kind");
   assert.equal(job.name, contract.job, "wrong producer job");
@@ -199,7 +507,7 @@ export function assertUploader({
   assert.equal(job.status, "completed", "unfinished producer");
   assert.ok(
     kind === "floor"
-      ? ["success", "failure"].includes(job.conclusion)
+      ? ["success", "failure"].includes(job.conclusion ?? "")
       : job.conclusion === "success",
     "cancelled/failed raw producer",
   );
@@ -208,32 +516,39 @@ export function assertUploader({
   const uploaded = successfulStep(job, contract.upload);
   assert.ok(observed.number < uploaded.number, "upload must follow complete observation");
   for (const step of job.steps) {
-    if (["success", "skipped"].includes(step.conclusion)) continue;
+    if (["success", "skipped"].includes(step.conclusion ?? "")) continue;
     assert.ok(
       kind === "floor" && step.name === "Enforce qualification" && step.conclusion === "failure",
       "unexpected failed producer step",
     );
   }
-  const definition = parse(workflow);
+  const definition: unknown = parse(workflow);
+  assertRecord(definition);
+  assertRecord(definition.jobs);
   const expression = `${contract.prefix}-\${{ github.sha }}-\${{ github.run_id }}-\${{ github.run_attempt }}`;
-  const uploaders = Object.entries(definition.jobs).flatMap(([owner, value]) =>
-    (value.steps ?? [])
-      .filter(
-        (step) => step.uses === "actions/upload-artifact@v4" && step.with?.name === expression,
-      )
-      .map((step) => ({ owner, step })),
-  );
+  const uploaders = Object.entries(definition.jobs).flatMap(([owner, value]) => {
+    assertRecord(value);
+    const steps = Array.isArray(value.steps) ? value.steps : [];
+    return steps.flatMap((step) => {
+      assertRecord(step);
+      if (step.uses !== "actions/upload-artifact@v4") return [];
+      assertRecord(step.with);
+      if (step.with.name !== expression) return [];
+      return [{ owner, step }];
+    });
+  });
   assert.equal(uploaders.length, 1, "reviewed workflow must have one unique uploader expression");
   const uploader = uploaders[0];
   assert.equal(uploader.owner, contract.job, "wrong reviewed uploader owner");
-  if (contract.uploadId) {
+  assertRecord(uploader.step.with);
+  if ("uploadId" in contract && contract.uploadId) {
     assert.equal(uploader.step.id, contract.uploadId, "wrong reviewed upload step ID");
     assert.equal(uploader.step.name, undefined, "observation upload step must be unnamed");
   } else assert.equal(uploader.step.name, contract.upload, "wrong reviewed upload step");
   assert.equal(
     uploader.step.with["if-no-files-found"],
-    contract.optionalFile ? "ignore" : "error",
-    contract.optionalFile
+    "optionalFile" in contract && contract.optionalFile ? "ignore" : "error",
+    "optionalFile" in contract && contract.optionalFile
       ? "observation uploader must tolerate missing files"
       : "uploader must require a file",
   );
@@ -261,7 +576,17 @@ export function assertUploader({
   };
 }
 
-function assertUploadLog({ artifact, uploaded, logs, name }) {
+function assertUploadLog({
+  artifact,
+  uploaded,
+  logs,
+  name,
+}: {
+  artifact: HostArtifact;
+  uploaded: HostStep;
+  logs: string;
+  name: string;
+}): void {
   const created = Date.parse(artifact.created_at);
   assert.ok(
     created >= Date.parse(uploaded.started_at) &&
@@ -302,10 +627,15 @@ with zipfile.ZipFile(io.BytesIO(sys.stdin.buffer.read())) as z:
  if names.count(target)!=1 or z.getinfo(target).file_size>16777216: raise ValueError('missing/oversized JSON member')
  if sys.argv[2]=='exact' and names!=[target]: raise ValueError('unexpected archive members')
  sys.stdout.buffer.write(z.read(target))`;
-export function artifactJson(bytes, artifact, member, exact = true) {
+export function artifactJson(
+  bytes: Buffer,
+  artifact: Pick<HostArtifact, "digest">,
+  member: string,
+  exact = true,
+): unknown {
   assert.ok(bytes.byteLength <= 16 * 1024 * 1024, "artifact archive too large");
   assert.equal(`sha256:${bytesDigest(bytes)}`, artifact.digest, "archive digest mismatch");
-  return JSON.parse(
+  const value: unknown = JSON.parse(
     execFileSync("python3", ["-c", unzipJson, member, exact ? "exact" : "bootstrap"], {
       input: bytes,
       encoding: "utf8",
@@ -313,11 +643,12 @@ export function artifactJson(bytes, artifact, member, exact = true) {
       stdio: ["pipe", "pipe", "pipe"],
     }),
   );
+  return value;
 }
-export function githubClient(token) {
+export function githubClient(token: string | undefined): GithubClient {
   assert.ok(token, "missing read-only workflow token");
-  const cache = new Map();
-  async function fetchResponse(path, type) {
+  const cache = new Map<string, Promise<unknown>>();
+  async function fetchResponse(path: string, type: ResponseType): Promise<unknown> {
     assert.ok(path.startsWith("/") && !path.includes(".."), "invalid host API path");
     const response = await fetch(`https://api.github.com/repos/${authority.repository}${path}`, {
       headers: {
@@ -332,32 +663,54 @@ export function githubClient(token) {
     assert.ok(bytes.length <= 32 * 1024 * 1024, "oversized host response");
     if (type === "bytes") return bytes;
     if (type === "text") return bytes.toString("utf8");
-    return JSON.parse(bytes.toString("utf8"));
+    const value: unknown = JSON.parse(bytes.toString("utf8"));
+    return value;
   }
-  function request(path, type = "json") {
+  function request(path: string, type: "bytes"): Promise<Buffer>;
+  function request(path: string, type: "text"): Promise<string>;
+  function request(path: string, type?: "json"): Promise<unknown>;
+  function request(path: string, type: ResponseType = "json"): Promise<unknown> {
     const key = `${type}:${path}`;
-    if (!cache.has(key)) cache.set(key, fetchResponse(path, type));
-    return cache.get(key);
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const pending = fetchResponse(path, type);
+    cache.set(key, pending);
+    return pending;
   }
   return { request };
 }
-export function mainEvidence({ root, oracle, client }) {
-  const cache = new Map();
-  async function collect(sourceSha) {
-    if (cache.has(sourceSha)) return cache.get(sourceSha);
-    const listing = await client.request(
+export function mainEvidence({
+  root,
+  oracle,
+  client,
+}: {
+  root: string;
+  oracle: Oracle;
+  client: GithubClient;
+}) {
+  const cache = new Map<string, EvidenceSet>();
+  async function collect(sourceSha: string): Promise<EvidenceSet> {
+    const cached = cache.get(sourceSha);
+    if (cached) return cached;
+    const listing = await requestWorkflowRuns(
+      client,
       `/actions/workflows/${authority.workflowId}/runs?event=push&head_sha=${fullSha(sourceSha)}&per_page=100`,
     );
     if (listing.total_count > 100) throw new FloorPrerequisite("too-many-source-runs", sourceSha);
-    const result = { floors: [], scores: [], evidence: [] };
+    const result: EvidenceSet = { floors: [], scores: [], evidence: [] };
     for (const run of listing.workflow_runs) await collectRun(run, sourceSha, result);
     cache.set(sourceSha, result);
     return result;
   }
-  async function collectRun(summary, sourceSha, result) {
+  async function collectRun(
+    summary: HostRunSummary,
+    sourceSha: string,
+    result: EvidenceSet,
+  ): Promise<void> {
     if (summary.run_attempt > 32)
       throw new FloorPrerequisite("too-many-source-attempts", sourceSha);
-    const artifacts = await client.request(
+    const artifacts = await requestArtifacts(
+      client,
       `/actions/runs/${positive(summary.id)}/artifacts?per_page=100`,
     );
     if (artifacts.total_count > 100)
@@ -365,21 +718,34 @@ export function mainEvidence({ root, oracle, client }) {
     for (let attempt = 1; attempt <= summary.run_attempt; attempt++)
       await collectAttempt(summary.id, attempt, sourceSha, artifacts.artifacts, result);
   }
-  async function collectAttempt(runId, attempt, sourceSha, artifacts, result) {
-    const run = await client.request(`/actions/runs/${runId}/attempts/${attempt}`);
+  async function collectAttempt(
+    runId: number,
+    attempt: number,
+    sourceSha: string,
+    artifacts: HostArtifact[],
+    result: EvidenceSet,
+  ): Promise<void> {
+    const run = await requestRun(client, `/actions/runs/${runId}/attempts/${attempt}`);
     assertMainRun(run, sourceSha, attempt);
     assert.equal(run.id, runId, "host run ID mismatch");
-    const jobs = await client.request(
+    const jobs = await requestJobs(
+      client,
       `/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,
     );
     assert.ok(jobs.total_count <= 100, "too many producer jobs");
     const scores = result.scores.length;
-    for (const kind of ["raw", "floor"])
-      await collectArtifact(run, jobs.jobs, artifacts, kind, result);
+    const kinds: ("raw" | "floor")[] = ["raw", "floor"];
+    for (const kind of kinds) await collectArtifact(run, jobs.jobs, artifacts, kind, result);
     if (result.scores.length === scores)
       await collectObservation(run, jobs.jobs, artifacts, result);
   }
-  async function collectArtifact(run, jobs, artifacts, kind, result) {
+  async function collectArtifact(
+    run: HostRun,
+    jobs: HostJob[],
+    artifacts: HostArtifact[],
+    kind: "raw" | "floor",
+    result: EvidenceSet,
+  ): Promise<void> {
     const contract = contracts[kind];
     const matches = artifacts.filter(
       (artifact) =>
@@ -399,14 +765,25 @@ export function mainEvidence({ root, oracle, client }) {
     const evidence = assertUploader({ run, job, artifact, kind, workflow, logs });
     const bytes = await client.request(`/actions/artifacts/${artifact.id}/zip`, "bytes");
     const value = artifactJson(bytes, artifact, kind === "raw" ? "raw.json" : "floor.json");
-    assert.equal(value.sourceSha, run.head_sha, "payload source mismatch");
-    assert.deepEqual(
-      value.run,
-      { runId: run.id, attempt: run.run_attempt },
-      "payload attempt mismatch",
-    );
-    if (kind === "floor") result.floors.push(validateFloor(oracle, value));
-    else admitRaw(value, run.head_sha, result);
+    if (kind === "floor") {
+      assertMainFloor(value);
+      assert.equal(value.sourceSha, run.head_sha, "payload source mismatch");
+      assert.deepEqual(
+        value.run,
+        { runId: run.id, attempt: run.run_attempt },
+        "payload attempt mismatch",
+      );
+      result.floors.push(validateFloor(oracle, value));
+    } else {
+      assertRawScore(value);
+      assert.equal(value.sourceSha, run.head_sha, "payload source mismatch");
+      assert.deepEqual(
+        value.run,
+        { runId: run.id, attempt: run.run_attempt },
+        "payload attempt mismatch",
+      );
+      admitRaw(value, run.head_sha, result);
+    }
     result.evidence.push({
       kind,
       sourceSha: run.head_sha,
@@ -414,7 +791,12 @@ export function mainEvidence({ root, oracle, client }) {
       payloadSha256: digest(value),
     });
   }
-  async function collectObservation(run, jobs, artifacts, result) {
+  async function collectObservation(
+    run: HostRun,
+    jobs: HostJob[],
+    artifacts: HostArtifact[],
+    result: EvidenceSet,
+  ): Promise<void> {
     if (run.status !== "completed" || run.conclusion !== "failure") return;
     const sealers = jobs.filter((job) => job.name === contracts.raw.job);
     if (sealers.length !== 1) return;
@@ -475,6 +857,7 @@ export function mainEvidence({ root, oracle, client }) {
     const bytes = await client.request(`/actions/artifacts/${artifact.id}/zip`, "bytes");
     const input = artifactJson(bytes, artifact, "scoreboard-input.json", false);
     const score = artifactJson(bytes, artifact, "own-shell-current.json", false);
+    assertRecord(input);
     assert.equal(input.sourceSha, run.head_sha, "observation source mismatch");
     assert.deepEqual(
       input.run,
@@ -486,7 +869,8 @@ export function mainEvidence({ root, oracle, client }) {
       digest(scoringInputs(root, run.head_sha)),
       "observation inputs mismatch",
     );
-    const beforeSha = fullSha(input.selected?.beforeSha);
+    assertRecord(input.selected);
+    const beforeSha = fullSha(input.selected.beforeSha);
     assert.deepEqual(
       input.selected,
       { kind: "main-push", sourceSha: run.head_sha, beforeSha },
@@ -497,12 +881,14 @@ export function mainEvidence({ root, oracle, client }) {
       beforeSha,
       "invalid main predecessor",
     );
+    assert.ok(typeof input.capturedAt === "string", "missing observation capture time");
     const capturedAt = Date.parse(input.capturedAt);
     assert.ok(
       capturedAt >= Date.parse(bind.started_at) &&
         capturedAt < Date.parse(bind.completed_at) + 1000,
       "observation capture outside bind step",
     );
+    assertScore(score);
     validateOwnScore(oracle, score);
     result.scores.push(score);
     result.evidence.push({
@@ -515,7 +901,7 @@ export function mainEvidence({ root, oracle, client }) {
       gate: { jobId: scoreboards[0].id, conclusion: "failure" },
     });
   }
-  function admitRaw(value, sourceSha, result) {
+  function admitRaw(value: RawScore<unknown>, sourceSha: string, result: EvidenceSet): void {
     assert.equal(value.schema, 1);
     assert.equal(value.kind, "raw-score");
     assert.equal(
@@ -530,8 +916,17 @@ export function mainEvidence({ root, oracle, client }) {
   return { collect };
 }
 
-export async function admitQualificationRaw({ root, client, raw }) {
-  const run = await client.request(
+export async function admitQualificationRaw<Floor>({
+  root,
+  client,
+  raw,
+}: {
+  root: string;
+  client: GithubClient;
+  raw: RawScore<Floor>;
+}): Promise<UploaderEvidence> {
+  const run = await requestRun(
+    client,
     `/actions/runs/${positive(raw.run.runId)}/attempts/${positive(raw.run.attempt)}`,
   );
   assert.equal(run.id, raw.run.runId, "host raw run ID mismatch");
@@ -547,13 +942,14 @@ export async function admitQualificationRaw({ root, client, raw }) {
   assert.equal(run.event, raw.selected.kind === "pull-request" ? "pull_request" : "push");
   assert.equal(run.run_attempt, raw.run.attempt);
   if (run.event === "push") assertMainRun(run, raw.sourceSha, raw.run.attempt);
-  const jobs = await client.request(
+  const jobs = await requestJobs(
+    client,
     `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,
   );
   assert.ok(jobs.total_count <= 100);
   const producers = jobs.jobs.filter((job) => job.name === contracts.raw.job);
   assert.equal(producers.length, 1, "missing unique raw producer");
-  const listing = await client.request(`/actions/runs/${run.id}/artifacts?per_page=100`);
+  const listing = await requestArtifacts(client, `/actions/runs/${run.id}/artifacts?per_page=100`);
   assert.ok(listing.total_count <= 100);
   const artifacts = listing.artifacts.filter(
     (item) => item.name === `own-shell-raw-${raw.sourceSha}-${run.id}-${run.run_attempt}`,
@@ -579,13 +975,32 @@ export async function admitQualificationRaw({ root, client, raw }) {
   return evidence;
 }
 
-export async function resolveFloor({ oracle, sourceSha, collect, parent, equivalent, anchor }) {
+interface PendingEdge extends EvidenceSet {
+  sourceSha: string;
+  beforeSha: string;
+  inputs: ReturnType<typeof inputEquivalence>;
+}
+export async function resolveFloor({
+  oracle,
+  sourceSha,
+  collect,
+  parent,
+  equivalent,
+  anchor,
+}: {
+  oracle: Oracle;
+  sourceSha: string;
+  collect: (sourceSha: string) => Promise<EvidenceSet>;
+  parent: (sourceSha: string) => string;
+  equivalent: (before: string, current: string) => ReturnType<typeof inputEquivalence>;
+  anchor: () => Promise<MainFloor>;
+}): Promise<MainFloor> {
   fullSha(sourceSha);
-  const pending = [];
+  const pending: PendingEdge[] = [];
   let current = sourceSha;
   for (let depth = 0; depth <= 32; depth++) {
     const found = await collect(current);
-    let base;
+    let base: MainFloor | undefined;
     if (current === bootstrap.sourceSha) base = await anchor();
     else if (found.floors.length)
       base = accumulateFloor({
@@ -604,7 +1019,8 @@ export async function resolveFloor({ oracle, sourceSha, collect, parent, equival
     pending.push({ sourceSha: current, beforeSha: before, inputs, ...found });
     current = before;
   }
-  function finish(base, found, pending) {
+  throw new FloorPrerequisite("floor-gap-too-wide", sourceSha);
+  function finish(base: MainFloor, found: EvidenceSet, pending: PendingEdge[]): MainFloor {
     let floor = accumulateFloor({
       oracle,
       sourceSha: base.sourceSha,
@@ -634,13 +1050,22 @@ export async function resolveFloor({ oracle, sourceSha, collect, parent, equival
     return floor;
   }
 }
-export async function resolveMainFloor({ root, sourceSha, client }) {
+export async function resolveMainFloor({
+  root,
+  sourceSha,
+  client,
+}: {
+  root: string;
+  sourceSha: string;
+  client: GithubClient;
+}): Promise<{ oracle: Oracle; floor: MainFloor }> {
   const oracle = oracleAt(root, bootstrap.sourceSha);
   const { collect } = mainEvidence({ root, oracle, client });
-  async function anchor() {
-    const run = await client.request(`/actions/runs/${bootstrap.runId}/attempts/1`);
+  async function anchor(): Promise<MainFloor> {
+    const run = await requestRun(client, `/actions/runs/${bootstrap.runId}/attempts/1`);
     assertMainRun(run, bootstrap.sourceSha, 1);
-    const jobs = await client.request(
+    const jobs = await requestJobs(
+      client,
       `/actions/runs/${bootstrap.runId}/attempts/1/jobs?per_page=100`,
     );
     const producer = jobs.jobs.find((job) => job.id === bootstrap.jobId);
@@ -658,8 +1083,9 @@ export async function resolveMainFloor({ root, sourceSha, client }) {
     const uploaded = successfulStep(producer, "Run actions/upload-artifact@v4");
     assert.equal(observed.number, bootstrap.observationStep);
     assert.equal(uploaded.number, bootstrap.uploadStep);
-    const artifact = await client.request(`/actions/artifacts/${bootstrap.artifactId}`);
+    const artifact = await requestArtifact(client, `/actions/artifacts/${bootstrap.artifactId}`);
     assert.equal(artifact.name, "own-shell-current");
+    assert.ok(artifact.workflow_run, "missing bootstrap artifact run");
     assert.equal(artifact.workflow_run.head_repository_id, authority.repositoryId);
     assert.equal(artifact.workflow_run.id, bootstrap.runId);
     assert.equal(artifact.workflow_run.head_sha, bootstrap.sourceSha);
@@ -668,11 +1094,9 @@ export async function resolveMainFloor({ root, sourceSha, client }) {
     const logs = await client.request(`/actions/jobs/${producer.id}/logs`, "text");
     assertUploadLog({ artifact, uploaded, logs, name: "own-shell-current" });
     const bytes = await client.request(`/actions/artifacts/${bootstrap.artifactId}/zip`, "bytes");
-    return bootstrapFloor(
-      oracle,
-      bootstrap.sourceSha,
-      artifactJson(bytes, artifact, "own-shell-current.json", false),
-    );
+    const score = artifactJson(bytes, artifact, "own-shell-current.json", false);
+    assertScore(score);
+    return bootstrapFloor(oracle, bootstrap.sourceSha, score);
   }
   const floor = await resolveFloor({
     oracle,

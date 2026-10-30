@@ -14,10 +14,19 @@ import {
   foldCandidate,
   prepareCandidate,
   recomputeAcceptedGains,
+  assertAcceptedRecord,
+} from "./shell-scoreboard-accepted-gains.ts";
+import type {
+  AcceptedGainRecord,
+  AcceptedRawScore,
+  HistoricalAcceptedRawScore,
+  PreparedCandidate,
 } from "./shell-scoreboard-accepted-gains.ts";
 import { authority } from "./shell-scoreboard-main.ts";
 import { qualification } from "./shell-scoreboard-floor.ts";
+import type { MainFloor, Qualification } from "./shell-scoreboard-floor.ts";
 import { digest } from "./shell-scoreboard.ts";
+import type { PullRequestBinding, RunBinding } from "./shell-scoreboard.ts";
 import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
 
 const merge = "f6e3a9e67d56332b0476f3608e198bf74e8e12f3";
@@ -61,12 +70,23 @@ function blocked() {
     head_sha: merge,
     status: "completed",
     conclusion: name === "native" ? "failure" : "skipped",
-    steps: [{ name: "Rust quality and native tests", conclusion: "failure" }],
+    steps: [
+      {
+        name: "Rust quality and native tests",
+        status: "completed",
+        conclusion: "failure",
+        started_at: "2026-10-25T00:00:00Z",
+        completed_at: "2026-10-25T00:01:00Z",
+        number: 1,
+      },
+    ],
   }));
+  const artifacts: { name: string; [key: string]: unknown }[] = [];
   const logs = `2026-10-25T03:22:28Z ---- ${testName} stdout ----\n2026-10-25T03:22:28Z \n2026-10-25T03:22:28Z thread '${testName}' (3805) panicked at engine/src/interpreter/command_builtin/tests.rs:644:9:\n2026-10-25T03:22:28Z assertion \`left == right\` failed\n2026-10-25T03:22:28Z   left: 151\n2026-10-25T03:22:28Z  right: 103\n2026-10-25T03:22:28Z test result: FAILED. 442 passed; 1 failed; 0 ignored;`;
-  return { run, jobs, artifacts: [], logs };
+  return { run, jobs, artifacts, logs };
 }
-const terminal = (value) => assertTerminalBlock(value.run, value.jobs, value.artifacts, value.logs);
+const terminal = (value: ReturnType<typeof blocked>) =>
+  assertTerminalBlock(value.run, value.jobs, value.artifacts, value.logs);
 test("A02 exact terminal native failure, skipped producers and absence are mandatory", () => {
   assert.doesNotThrow(() => terminal(blocked()));
   for (const change of [
@@ -112,7 +132,7 @@ test("A02 exact terminal native failure, skipped producers and absence are manda
     (v) => {
       v.jobs[0].head_sha = "f".repeat(40);
     },
-  ]) {
+  ] satisfies ((value: ReturnType<typeof blocked>) => void)[]) {
     const value = blocked();
     change(value);
     assert.throws(() => terminal(value), assert.AssertionError);
@@ -137,7 +157,19 @@ test("A04 exact immutable blob prefix rejects delete/edit/reorder/duplicate and 
   assert.throws(() => assertRecordAppend(old.concat([added]), old.concat([added]), added.path));
 });
 function history() {
-  const run = { id: 1, run_attempt: 2, head_sha: "h", status: "completed", conclusion: "success" };
+  const run = {
+    id: 1,
+    run_attempt: 2,
+    repository: { id: authority.repositoryId },
+    head_repository: { id: authority.repositoryId },
+    workflow_id: authority.workflowId,
+    path: authority.workflowPath,
+    event: "pull_request",
+    head_branch: "fixture",
+    head_sha: "h",
+    status: "completed",
+    conclusion: "success",
+  };
   const names = [
     "prepare",
     "layers",
@@ -150,7 +182,8 @@ function history() {
     "browser",
     "shell",
   ];
-  const jobs = names.map((name) => ({
+  const jobs = names.map((name, index) => ({
+    id: index + 1,
     name,
     run_id: 1,
     run_attempt: 2,
@@ -159,11 +192,13 @@ function history() {
     conclusion: "success",
     started_at: "2026-10-25T00:00:00Z",
     completed_at: "2026-10-25T00:01:00Z",
+    steps: [],
   }));
   return { run, jobs, mergedAt: "2026-10-25T00:02:00Z" };
 }
 test("A07 each of the original ten jobs must be green on the original run before merge", () => {
-  const check = (v) => assertHistoricalJobs(v.run, v.jobs, historicalWorkflow, v.mergedAt);
+  const check = (value: ReturnType<typeof history>) =>
+    assertHistoricalJobs(value.run, value.jobs, historicalWorkflow, value.mergedAt);
   assert.doesNotThrow(() => check(history()));
   for (let i = 0; i < 10; i++) {
     for (const patch of [
@@ -223,8 +258,14 @@ test("A07 current scheduling and extra or duplicate jobs cannot expand historica
       /missing\/extra historical job/,
     );
 });
-function inputs() {
-  const binding = {
+interface RecomputeInputs {
+  record: AcceptedGainRecord;
+  raw: HistoricalAcceptedRawScore;
+  receipt: Qualification;
+  base: MainFloor & { run: RunBinding; lostIds: string[] };
+}
+function inputs(): RecomputeInputs {
+  const binding: PullRequestBinding = {
     kind: "pull-request",
     headSha: "h",
     testedMergeSha: "c",
@@ -233,28 +274,33 @@ function inputs() {
   };
   const score = fixture.score(["a", "x"]);
   const base = { ...fixture.floor(["a", "y"]), run: { runId: 2, attempt: 1 }, lostIds: [] };
-  const raw = {
+  const raw: HistoricalAcceptedRawScore = {
     schema: 1,
     kind: "raw-score",
     sourceSha: "c",
     selected: binding,
     run: { runId: 1, attempt: 2 },
+    capturedAt: "2026-10-25T00:00:00Z",
     inputsSha256: "inputs",
     resultSha256: digest(score),
     score,
     floor: fixture.floor(["a"]),
   };
   const receipt = qualification(fixture.oracle, raw.floor, score, binding);
-  const record = {
+  const record: AcceptedGainRecord = {
     original: {
-      binding,
-      run: raw.run,
+      binding: structuredClone(binding),
+      run: structuredClone(raw.run),
       inputsSha256: "inputs",
       resultSha256: raw.resultSha256,
       capturedFloorSha256: raw.floor.floorSha256,
     },
     landed: { firstParent: base.sourceSha },
-    baseFloor: { sourceSha: base.sourceSha, run: base.run, floorSha256: base.floorSha256 },
+    baseFloor: {
+      sourceSha: base.sourceSha,
+      run: structuredClone(base.run),
+      floorSha256: base.floorSha256,
+    },
     gains: ["x"],
     gainsSha256: digest(["x"]),
     rowIdentitySha256: digest(
@@ -262,18 +308,19 @@ function inputs() {
     ),
     skipMembershipSha256: digest([]),
   };
-  return JSON.parse(JSON.stringify({ record, raw, receipt, base }));
+  return { record, raw, receipt, base };
 }
-const recompute = (v) => recomputeAcceptedGains(fixture.oracle, v.record, v.raw, v.receipt, v.base);
+const recompute = (value: RecomputeInputs) =>
+  recomputeAcceptedGains(fixture.oracle, value.record, value.raw, value.receipt, value.base);
 test("A09 original qualification recomputes gains, unions all base IDs, and never emits main authority", () => {
   const value = inputs();
   const before = structuredClone(value);
   const result = recompute(value);
   assert.deepEqual(result.ids, ["a", "x", "y"]);
   assert.equal(result.kind, "AcceptedGainFloor");
-  assert.equal(result.sourceSha, undefined);
-  assert.equal(result.score, undefined);
-  assert.equal(result.raw, undefined);
+  assert.equal("sourceSha" in result, false);
+  assert.equal("score" in result, false);
+  assert.equal("raw" in result, false);
   assert.deepEqual(value, before);
   assert.ok(Object.isFrozen(result.ids));
 });
@@ -348,7 +395,7 @@ test("A08/A09/A10/A13 changed provenance, frozen judging inputs, stored gain mem
     (v) => {
       v.raw.floor = fixture.floor(["a", "y"]);
     },
-  ]) {
+  ] satisfies ((value: RecomputeInputs) => void)[]) {
     const value = inputs();
     change(value);
     const changed = structuredClone(value);
@@ -357,8 +404,17 @@ test("A08/A09/A10/A13 changed provenance, frozen judging inputs, stored gain mem
   }
 });
 test("A11 a serialized or caller-manufactured preparation cannot fold", async () => {
-  for (const value of [{}, { floor: { kind: "AcceptedGainFloor", ids: ["a"] } }])
-    await assert.rejects(foldCandidate(value, {}), /forged preparation/);
+  const value = inputs();
+  const accepted = recompute(value);
+  const raw: AcceptedRawScore = { ...value.raw, floor: accepted };
+  const prepared: PreparedCandidate = {
+    floor: accepted,
+    sourceSha: raw.sourceSha,
+    selected: raw.selected,
+    run: raw.run,
+  };
+  for (const candidate of [prepared, { ...prepared, floor: { ...accepted, ids: ["a"] } }])
+    await assert.rejects(foldCandidate(candidate, raw), /forged preparation/);
 });
 test("A01 authenticated read errors never become evidence absence", async () => {
   const root = new URL("..", import.meta.url).pathname;
@@ -369,10 +425,10 @@ test("A01 authenticated read errors never become evidence absence", async () => 
     "digest-invalid",
     "transport-unavailable",
   ]) {
-    const seen = [];
+    const seen: string[] = [];
     const failure = new Error(reason);
     const client = {
-      request: async (path) => {
+      request: async (path: string) => {
         seen.push(path);
         throw failure;
       },
@@ -381,7 +437,13 @@ test("A01 authenticated read errors never become evidence absence", async () => 
       prepareCandidate({
         root,
         client,
-        selected: { kind: "pull-request", mainSha: merge },
+        selected: {
+          kind: "pull-request",
+          headSha: "h",
+          testedMergeSha: merge,
+          baseSha: "a".repeat(40),
+          mainSha: merge,
+        },
         sourceSha: merge,
         run: { runId: 1, attempt: 1 },
       }),
@@ -392,13 +454,15 @@ test("A01 authenticated read errors never become evidence absence", async () => 
 });
 
 function landed() {
-  const record = JSON.parse(
-    readFileSync(new URL(`../scoreboard/accepted-gains/${merge}.json`, import.meta.url)),
+  const record: unknown = JSON.parse(
+    readFileSync(new URL(`../scoreboard/accepted-gains/${merge}.json`, import.meta.url), "utf8"),
   );
+  assertAcceptedRecord(record);
   const pr = {
     number: 102,
     merged: true,
     merge_commit_sha: merge,
+    merged_at: "2026-10-25T00:02:00Z",
     base: { ref: "main", repo: { id: authority.repositoryId } },
     head: { sha: record.original.binding.headSha, repo: { id: authority.repositoryId } },
   };
@@ -414,7 +478,8 @@ function landed() {
   return { record, pr, facts };
 }
 test("A05/A06 landed identity rejects self-certification, different trees, topology and composition", () => {
-  const check = (v) => assertLandedIdentity(v.record, v.pr, v.facts);
+  const check = (value: ReturnType<typeof landed>) =>
+    assertLandedIdentity(value.record, value.pr, value.facts);
   assert.doesNotThrow(() => check(landed()));
   for (const change of [
     (v) => {
@@ -459,7 +524,7 @@ test("A05/A06 landed identity rejects self-certification, different trees, topol
     (v) => {
       v.record.original.binding.mainSha = "other";
     },
-  ]) {
+  ] satisfies ((value: ReturnType<typeof landed>) => void)[]) {
     const value = landed();
     change(value);
     assert.throws(() => check(value), assert.AssertionError);
@@ -494,7 +559,8 @@ function fresh() {
   return { raw, producer };
 }
 test("A12 observation must follow captured preparation and finish before sealing", () => {
-  const check = (v) => assertFreshObservation(v.raw, v.producer);
+  const check = (value: ReturnType<typeof fresh>) =>
+    assertFreshObservation(value.raw, value.producer);
   assert.doesNotThrow(() => check(fresh()));
   for (const change of [
     (v) => {
@@ -518,7 +584,7 @@ test("A12 observation must follow captured preparation and finish before sealing
     (v) => {
       v.producer.steps[2].status = "in_progress";
     },
-  ]) {
+  ] satisfies ((value: ReturnType<typeof fresh>) => void)[]) {
     const value = fresh();
     change(value);
     assert.throws(() => check(value), assert.AssertionError);

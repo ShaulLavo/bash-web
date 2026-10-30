@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  assertOracle,
+  assertRecord,
+  assertScore,
   sealOracle,
   identityFor,
   summarize,
   compareScores,
   verifyOracle,
 } from "./shell-scoreboard.ts";
+import type { ComparableScore, Oracle } from "./shell-scoreboard.ts";
 
-function fixture() {
+function fixture(): Oracle {
   return sealOracle({
     schema: 1,
     oracle: { version: "GNU bash 5.3.15", sha256: "oracle-binary" },
@@ -24,7 +28,7 @@ function fixture() {
     })),
   });
 }
-function score(oracle, outcomes = ["pass", "pass", "pass"]) {
+function score(oracle: Oracle, outcomes: string[] = ["pass", "pass", "pass"]): ComparableScore {
   return {
     identity: identityFor(oracle),
     cases: oracle.cases.map((item, index) => ({
@@ -81,6 +85,7 @@ test("identity changes and incomplete/duplicate results are rejected", () => {
   for (const key of ["caseSet", "oracle", "environment", "sources"]) {
     const oracle = fixture();
     const next = score(oracle);
+    assertRecord(next.identity);
     next.identity[key] = "changed";
     assert.throws(() => compareScores(score(oracle), next), /incomparable/);
   }
@@ -93,20 +98,23 @@ test("identity changes and incomplete/duplicate results are rejected", () => {
 });
 
 test("oracle bytes, code, skips and source pins participate in identity", () => {
-  for (const change of [
-    (o) => {
-      o.cases[0].code = "false";
+  const changes: ((oracle: Oracle) => void)[] = [
+    (oracle) => {
+      oracle.cases[0].code = "false";
     },
-    (o) => {
-      o.cases[0].bash.stdout = "AA==";
+    (oracle) => {
+      const bash = oracle.cases[0].bash;
+      assert.ok(bash);
+      bash.stdout = "AA==";
     },
-    (o) => {
-      o.cases[0].excluded = "new skip";
+    (oracle) => {
+      oracle.cases[0].excluded = "new skip";
     },
-    (o) => {
-      o.sources.oils = "changed";
+    (oracle) => {
+      oracle.sources.oils = "changed";
     },
-  ]) {
+  ];
+  for (const change of changes) {
     const oracle = fixture();
     change(oracle);
     assert.throws(() => verifyOracle(oracle), /identity/);
@@ -133,16 +141,30 @@ test("category counts and unchanged skips are explicit", () => {
 test("corpus notices retain the pinned revisions and license bytes", async () => {
   const { readFile } = await import("node:fs/promises");
   const { bytesDigest } = await import("./shell-scoreboard.ts");
-  const pins = JSON.parse(await readFile(new URL("../sources.lock.json", import.meta.url), "utf8"));
-  const revisions = {
-    oils: pins.oils.revision,
-    "brush-suite": pins.brush.revision,
-    "bashkit-suite": pins.bashkitTerminal.revision,
-  };
-  for (const [corpus, pin] of Object.entries(pins.shellScoreboard.corpora)) {
-    assert.equal(pin.revision, revisions[corpus]);
-    const bytes = await readFile(new URL(`../${pin.licenseFile}`, import.meta.url));
-    assert.equal(bytesDigest(bytes), pin.licenseSha256);
+  const pins: unknown = JSON.parse(
+    await readFile(new URL("../sources.lock.json", import.meta.url), "utf8"),
+  );
+  assertRecord(pins);
+  assertRecord(pins.shellScoreboard);
+  assertRecord(pins.shellScoreboard.corpora);
+  const revisions: Record<string, string> = {};
+  for (const [corpus, key] of [
+    ["oils", "oils"],
+    ["brush-suite", "brush"],
+    ["bashkit-suite", "bashkitTerminal"],
+  ]) {
+    const pin: unknown = pins[key];
+    assertRecord(pin);
+    assert.ok(typeof pin.revision === "string");
+    revisions[corpus] = pin.revision;
+  }
+  for (const [corpus, value] of Object.entries(pins.shellScoreboard.corpora)) {
+    assertRecord(value);
+    assert.equal(value.revision, revisions[corpus]);
+    assert.equal(typeof value.licenseFile, "string");
+    assert.equal(typeof value.licenseSha256, "string");
+    const bytes = await readFile(new URL(`../${value.licenseFile}`, import.meta.url));
+    assert.equal(bytesDigest(bytes), value.licenseSha256);
   }
 });
 
@@ -164,6 +186,7 @@ test("score diagnostics bound prefixes while retaining long stream identity", as
   const stdout = Buffer.alloc(4096, 255);
   const diagnostic = compactResult({ status: 7, stdout, stderr: Buffer.from([0, 255]) });
   assert.equal(diagnostic.status, 7);
+  assert.ok(typeof diagnostic.stdout !== "string");
   assert.equal(Buffer.from(diagnostic.stdout.base64, "base64").length, 240);
   assert.equal(diagnostic.stdout.bytes, stdout.length);
   assert.equal(diagnostic.stdout.sha256, bytesDigest(stdout));
@@ -173,13 +196,21 @@ test("score diagnostics bound prefixes while retaining long stream identity", as
 test("committed oracle and baseline preserve exact identities, skips and counts", async () => {
   const { readFile } = await import("node:fs/promises");
   const { bytesDigest, validateScore } = await import("./shell-scoreboard.ts");
-  const pins = JSON.parse(await readFile(new URL("../sources.lock.json", import.meta.url), "utf8"));
+  const pins: unknown = JSON.parse(
+    await readFile(new URL("../sources.lock.json", import.meta.url), "utf8"),
+  );
+  assertRecord(pins);
+  assertRecord(pins.shellScoreboard);
+  assert.equal(typeof pins.shellScoreboard.oracleFile, "string");
+  assert.equal(typeof pins.shellScoreboard.baselineFile, "string");
   const bytes = await readFile(new URL(`../${pins.shellScoreboard.oracleFile}`, import.meta.url));
   assert.equal(bytesDigest(bytes), pins.shellScoreboard.oracleSha256);
-  const oracle = JSON.parse(bytes);
-  const baseline = JSON.parse(
+  const oracle: unknown = JSON.parse(bytes.toString("utf8"));
+  const baseline: unknown = JSON.parse(
     await readFile(new URL(`../${pins.shellScoreboard.baselineFile}`, import.meta.url), "utf8"),
   );
+  assertOracle(oracle);
+  assertScore(baseline);
   verifyOracle(oracle);
   validateScore(oracle, baseline);
   compareScores(baseline, baseline, { requireMembership: true });

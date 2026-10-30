@@ -2,7 +2,18 @@ import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { bytesDigest, digest, verifyOracle, validateScore } from "./shell-scoreboard.ts";
+import type { ChildProcess } from "node:child_process";
+import {
+  assertOracle,
+  assertRecord,
+  assertScore,
+  bytesDigest,
+  digest,
+  isRecord,
+  verifyOracle,
+  validateScore,
+} from "./shell-scoreboard.ts";
+import type { Oracle, OracleIdentity, Score } from "./shell-scoreboard.ts";
 
 export const oraclePath = "docs/evidence/own-shell-oracle.json";
 export const baselinePath = "docs/evidence/own-shell-baseline.json";
@@ -27,32 +38,80 @@ export const authorizedRuntimeTransition = Object.freeze({
   receiptSha256: "ad938096623d3e8dd3bd6bd0d1e7be7e56f99db1e50005319af6e4b822929a2a",
 });
 
+interface ScoreboardPins {
+  shellScoreboard?: { oracleSha256?: string };
+  [key: string]: unknown;
+}
+interface ReceiptChange {
+  id: string;
+  change: string;
+  class: string;
+  reason: string;
+  plan?: string;
+  [key: string]: unknown;
+}
+export interface MigrationReceipt {
+  schema: number;
+  target: string;
+  from: { environment: string };
+  to: { environment: string };
+  changes: ReceiptChange[];
+  [key: string]: unknown;
+}
+
+function assertPins(value: unknown): asserts value is ScoreboardPins {
+  assertRecord(value);
+  if (value.shellScoreboard === undefined) return;
+  assertRecord(value.shellScoreboard);
+  if (value.shellScoreboard.oracleSha256 === undefined) return;
+  assert.equal(typeof value.shellScoreboard.oracleSha256, "string", "invalid scoreboard pin");
+}
+function assertReceipt(value: unknown): asserts value is MigrationReceipt {
+  assertRecord(value);
+  assert.equal(typeof value.schema, "number", "invalid instrument receipt schema");
+  assert.equal(typeof value.target, "string", "invalid instrument receipt target");
+  assertRecord(value.from);
+  assert.equal(typeof value.from.environment, "string", "invalid instrument receipt source");
+  assertRecord(value.to);
+  assert.equal(typeof value.to.environment, "string", "invalid instrument receipt target");
+  assert.ok(Array.isArray(value.changes), "invalid instrument receipt changes");
+  for (const change of value.changes) {
+    assertRecord(change);
+    assert.equal(typeof change.id, "string", "invalid receipt case");
+    assert.equal(typeof change.change, "string", "invalid receipt change");
+    assert.equal(typeof change.class, "string", "invalid receipt classification");
+    assert.equal(typeof change.reason, "string", "invalid receipt reason");
+  }
+}
+
 // Filter before fork startup, not only after the launcher has loaded Node hooks.
-export function migrationEnvironment() {
+export function migrationEnvironment(): Record<string, string> {
+  const names = [
+    "PATH",
+    "HOME",
+    "CARGO_HOME",
+    "NPM_CONFIG_CACHE",
+    "npm_config_cache",
+    "RUSTUP_HOME",
+    "WASI_SDK_PATH",
+    "WASI_LIBC_SCRATCH_ROOT",
+    "TMPDIR",
+    "RUNNER_TEMP",
+    "SYSTEMROOT",
+    "BASH_COMPAT_JOBS",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "NO_PROXY",
+  ];
   return Object.fromEntries(
-    [
-      "PATH",
-      "HOME",
-      "CARGO_HOME",
-      "NPM_CONFIG_CACHE",
-      "npm_config_cache",
-      "RUSTUP_HOME",
-      "WASI_SDK_PATH",
-      "WASI_LIBC_SCRATCH_ROOT",
-      "TMPDIR",
-      "RUNNER_TEMP",
-      "SYSTEMROOT",
-      "BASH_COMPAT_JOBS",
-      "HTTPS_PROXY",
-      "HTTP_PROXY",
-      "NO_PROXY",
-    ]
-      .filter((name) => process.env[name] !== undefined)
-      .map((name) => [name, process.env[name]]),
+    names.flatMap((name): [string, string][] => {
+      const value = process.env[name];
+      return value === undefined ? [] : [[name, value]];
+    }),
   );
 }
 
-function baseFile(root, ref, path) {
+function baseFile(root: string, ref: string, path: string): Buffer {
   assert.match(ref, /^[a-f0-9]{40}$/, "BASH_COMPAT_BASE_REF must be a full commit SHA");
   const env = { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" };
   assert.equal(
@@ -74,28 +133,36 @@ function baseFile(root, ref, path) {
 }
 
 // Read the target branch's baseline, never a path chosen by the candidate's pin.
-export function baseBranchBaseline(root, ref) {
+export function baseBranchBaseline(root: string, ref: string | undefined): Score | null {
   if (!ref) return null;
-  const pins = JSON.parse(baseFile(root, ref, "sources.lock.json"));
+  const pins: unknown = JSON.parse(baseFile(root, ref, "sources.lock.json").toString("utf8"));
+  assertPins(pins);
   if (!pins.shellScoreboard) return null; // First baseline only. Later omissions fail closed.
-  return JSON.parse(baseFile(root, ref, baselinePath));
+  const baseline: unknown = JSON.parse(baseFile(root, ref, baselinePath).toString("utf8"));
+  assertScore(baseline);
+  return baseline;
 }
 
-function targetEvidence(root, ref, candidateOracle) {
-  const pins = JSON.parse(baseFile(root, ref, "sources.lock.json"));
+function targetEvidence(root: string, ref: string, candidateOracle: Oracle) {
+  const pins: unknown = JSON.parse(baseFile(root, ref, "sources.lock.json").toString("utf8"));
+  assertPins(pins);
+  assert.ok(pins.shellScoreboard, "missing target scoreboard pin");
+  assert.equal(typeof pins.shellScoreboard.oracleSha256, "string", "target oracle checksum");
   const bytes = baseFile(root, ref, oraclePath);
   assert.equal(bytesDigest(bytes), pins.shellScoreboard.oracleSha256, "target oracle checksum");
-  const oracle = JSON.parse(bytes);
-  const baseline = JSON.parse(baseFile(root, ref, baselinePath));
+  const oracle: unknown = JSON.parse(bytes.toString("utf8"));
+  const baseline: unknown = JSON.parse(baseFile(root, ref, baselinePath).toString("utf8"));
+  assertOracle(oracle);
+  assertScore(baseline);
   verifyOracle(oracle);
   verifyOracle(candidateOracle);
   validateScore(oracle, baseline);
   return { pins, oracle, baseline };
 }
 
-export function migrationEvidence(root, ref, candidateOracle) {
+export function migrationEvidence(root: string, ref: string, candidateOracle: Oracle) {
   const { pins, oracle, baseline } = targetEvidence(root, ref, candidateOracle);
-  const withoutObservations = ({ oracle: _observations, ...identity }) => identity;
+  const withoutObservations = ({ oracle: _observations, ...identity }: OracleIdentity) => identity;
   assert.deepEqual(
     withoutObservations(candidateOracle.identity),
     withoutObservations(oracle.identity),
@@ -104,21 +171,20 @@ export function migrationEvidence(root, ref, candidateOracle) {
   return { pins, oracle, baseline };
 }
 
-function sameExceptEnvironment(target, candidate) {
-  const strip = ({ environment: _environment, identity, ...rest }) => ({
+function sameExceptEnvironment(target: Oracle, candidate: Oracle): boolean {
+  const strip = ({ environment: _environment, identity, ...rest }: Oracle) => ({
     ...rest,
     identity: { ...identity, environment: undefined },
   });
   return JSON.stringify(strip(target)) === JSON.stringify(strip(candidate));
 }
 
-/**
- * @param {string} root
- * @param {string} ref
- * @param {any} candidateOracle
- * @param {any} [receipt] the committed receipt unless supplied (tests only)
- */
-export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt = undefined) {
+export function instrumentMigrationEvidence(
+  root: string,
+  ref: string,
+  candidateOracle: Oracle,
+  receipt: MigrationReceipt | undefined = undefined,
+) {
   const transition =
     ref === authorizedRuntimeTransition.target
       ? authorizedRuntimeTransition
@@ -139,7 +205,8 @@ export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt 
   );
   const receiptPath =
     transition === authorizedRuntimeTransition ? runtimeReceiptPath : instrumentReceiptPath;
-  const recorded = receipt ?? JSON.parse(readFileSync(resolve(root, receiptPath), "utf8"));
+  const recorded: unknown = receipt ?? JSON.parse(readFileSync(resolve(root, receiptPath), "utf8"));
+  assertReceipt(recorded);
   assert.equal(recorded.schema, 1, "instrument receipt schema");
   assert.deepEqual(
     {
@@ -159,7 +226,7 @@ export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt 
       .filter((item) => !item.excluded && item.kind === "builtins-only")
       .map((item) => item.id),
   );
-  const seen = new Set();
+  const seen = new Set<string>();
   for (const change of recorded.changes) {
     assert.ok(scored.has(change.id) && !seen.has(change.id), `receipt case ${change.id}`);
     seen.add(change.id);
@@ -172,9 +239,13 @@ export function instrumentMigrationEvidence(root, ref, candidateOracle, receipt 
   return { pins, oracle, baseline, receipt: recorded };
 }
 
-export function assertInstrumentChanges(before, after, receipt) {
+export function assertInstrumentChanges(
+  before: Score,
+  after: Score,
+  receipt: MigrationReceipt,
+): void {
   const outcome = new Map(after.cases.map((item) => [item.id, item.outcome]));
-  const changes = [];
+  const changes: string[] = [];
   for (const item of before.cases) {
     const next = outcome.get(item.id);
     if (item.outcome === "pass" && next !== "pass") changes.push(`${item.id}:lost`);
@@ -187,20 +258,25 @@ export function assertInstrumentChanges(before, after, receipt) {
   );
 }
 
-const activeMigrations = new Set();
+const activeMigrations = new Set<ChildProcess>();
 
 // Cancellation owns only launchers created here; the trusted three-argument input stays unchanged.
 // Their promises settle after the launcher has drained its consumers and removed its scratch.
-export function cancelTargetMigrations() {
+export function cancelTargetMigrations(): void {
   for (const child of activeMigrations) child.kill("SIGTERM");
 }
 
 // The launcher owns an isolated rebuild, not an evidence/artifact path supplied by the candidate.
 // Its IPC connection also gives it a parent-death notification for teardown.
-export async function targetBranchBaseline(root, ref, oracle) {
+export async function targetBranchBaseline(
+  root: string,
+  ref: string | undefined,
+  oracle: Oracle,
+): Promise<Score | null> {
   assert.equal(arguments.length, 3, "target baseline accepts no supplied artifacts or options");
   const baseline = baseBranchBaseline(root, ref);
   if (!baseline) return null;
+  assert.ok(ref, "missing immutable base SHA");
   if (baseline.identity.oracle === oracle.identity.oracle) {
     if (baseline.identity.environment === oracle.identity.environment) {
       validateScore(oracle, baseline);
@@ -210,15 +286,15 @@ export async function targetBranchBaseline(root, ref, oracle) {
   } else migrationEvidence(root, ref, oracle);
   for (const name of ["BASH_COMPAT_SHELL_WASM", "BASH_COMPAT_BASELINE", "BASH_COMPAT_ORACLE"])
     assert.equal(process.env[name], undefined, `oracle migration rejects supplied ${name}`);
-  return new Promise((resolve, reject) => {
+  return new Promise<Score>((resolve, reject) => {
     const child = fork(new URL("./shell-scoreboard-migration.ts", import.meta.url), [root, ref], {
       stdio: ["ignore", "inherit", "inherit", "ipc"],
       env: migrationEnvironment(),
       execArgv: [],
     });
     activeMigrations.add(child);
-    let result;
-    child.on("message", (message) => {
+    let result: unknown;
+    child.on("message", (message: unknown) => {
       result = message;
     });
     child.once("error", (error) => {
@@ -227,11 +303,15 @@ export async function targetBranchBaseline(root, ref, oracle) {
     });
     child.once("exit", (code, signal) => {
       activeMigrations.delete(child);
-      if (code !== 0 || !result?.score)
-        return reject(new Error(result?.error ?? `target rebuild failed (${signal ?? code})`));
+      const score = isRecord(result) ? result.score : undefined;
+      const message =
+        isRecord(result) && typeof result.error === "string" ? result.error : undefined;
+      if (code !== 0 || !score)
+        return reject(new Error(message ?? `target rebuild failed (${signal ?? code})`));
       try {
-        validateScore(oracle, result.score);
-        resolve(result.score);
+        assertScore(score);
+        validateScore(oracle, score);
+        resolve(score);
       } catch (error) {
         reject(error);
       }
