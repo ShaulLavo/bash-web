@@ -931,6 +931,12 @@ export function mainEvidence({
   return { collect };
 }
 
+function qualificationEvent(selected: Binding): string {
+  if (selected.kind === "pull-request") return "pull_request";
+  if (selected.kind === "workflow-dispatch") return "workflow_dispatch";
+  return "push";
+}
+
 export async function admitQualificationRaw<Floor>({
   root,
   client,
@@ -946,7 +952,7 @@ export async function admitQualificationRaw<Floor>({
   );
   assert.equal(run.id, raw.run.runId, "host raw run ID mismatch");
   assert.equal(run.repository?.id, authority.repositoryId);
-  if (raw.selected.kind === "main-push")
+  if (raw.selected.kind !== "pull-request")
     assert.equal(run.head_repository?.id, authority.repositoryId);
   assert.equal(run.workflow_id, authority.workflowId);
   assert.equal(run.path, authority.workflowPath);
@@ -954,7 +960,7 @@ export async function admitQualificationRaw<Floor>({
     run.head_sha,
     raw.selected.kind === "pull-request" ? raw.selected.headSha : raw.sourceSha,
   );
-  assert.equal(run.event, raw.selected.kind === "pull-request" ? "pull_request" : "push");
+  assert.equal(run.event, qualificationEvent(raw.selected));
   assert.equal(run.run_attempt, raw.run.attempt);
   if (run.event === "push") assertMainRun(run, raw.sourceSha, raw.run.attempt);
   const jobs = await requestJobs(

@@ -32,7 +32,13 @@ import {
   assertScore,
   digest,
 } from "./shell-scoreboard.ts";
-import type { Binding, MainPushBinding, Oracle, RunBinding } from "./shell-scoreboard.ts";
+import type {
+  Binding,
+  DispatchBinding,
+  MainPushBinding,
+  Oracle,
+  RunBinding,
+} from "./shell-scoreboard.ts";
 import {
   assertAcceptedFloor,
   assertAcceptedRaw,
@@ -146,7 +152,8 @@ function targetBinding({
   event,
   eventName,
   sourceSha,
-}: QualificationInput): MainPushBinding | PullRequestTargetBinding {
+  mainSha,
+}: QualificationInput): MainPushBinding | PullRequestTargetBinding | DispatchBinding {
   assert.equal(event.repository?.id, authority.repositoryId, "wrong event repository");
   assert.equal(
     git(root, ["rev-parse", "HEAD"]),
@@ -164,6 +171,15 @@ function targetBinding({
     );
     return { kind: "main-push", sourceSha, beforeSha };
   }
+  if (eventName === "workflow_dispatch") {
+    const beforeSha = fullSha(mainSha ?? git(root, ["rev-parse", "refs/remotes/origin/main"]));
+    const base = git(root, ["merge-base", beforeSha, sourceSha]);
+    assert.ok(
+      base === beforeSha || sourceEquivalent(root, base, beforeSha),
+      "dispatch does not include current main scoring inputs",
+    );
+    return { kind: "workflow-dispatch", sourceSha, beforeSha };
+  }
   assert.equal(eventName, "pull_request", "unsupported qualification event");
   const pull = event.pull_request;
   assert.ok(pull, "missing pull request event");
@@ -178,9 +194,14 @@ function targetBinding({
   assert.ok(baseHistory.includes(eventBaseSha), "event base is not in tested base history");
   return { kind: "pull-request", headSha, testedMergeSha: sourceSha, baseSha };
 }
+function capturedMain(selected: Binding): string | undefined {
+  if (selected.kind === "pull-request") return selected.mainSha;
+  if (selected.kind === "workflow-dispatch") return selected.beforeSha;
+  return undefined;
+}
 function sourceBinding(input: QualificationInput): Binding {
   const selected = targetBinding(input);
-  if (selected.kind === "main-push") return selected;
+  if (selected.kind !== "pull-request") return selected;
   const { root, event, sourceSha } = input;
   const mainSha = fullSha(input.mainSha);
   assert.ok(event.pull_request, "missing pull request event");
@@ -238,7 +259,10 @@ async function binding(
   assert.equal(run.run_attempt, attempt);
   let mainSha = pinnedMain;
   let observedMainAfter: string | null = null;
-  if (process.env.GITHUB_EVENT_NAME === "pull_request") {
+  if (
+    process.env.GITHUB_EVENT_NAME === "pull_request" ||
+    process.env.GITHUB_EVENT_NAME === "workflow_dispatch"
+  ) {
     const main = await client.request("/git/ref/heads/main");
     assertRecord(main);
     assertRecord(main.object);
@@ -282,7 +306,7 @@ export async function prepareQualification({
   );
   let floor: MainFloor | AcceptedGainFloor | null = null;
   if (
-    bound.selected.kind === "pull-request" ||
+    bound.selected.kind !== "main-push" ||
     target === "f6e3a9e67d56332b0476f3608e198bf74e8e12f3" ||
     terminalRecoveryTarget(root, target)
   ) {
@@ -322,7 +346,7 @@ export function sealRaw({
       event: eventFromEnvironment(),
       eventName: process.env.GITHUB_EVENT_NAME,
       sourceSha: prepared.sourceSha,
-      mainSha: prepared.selected.kind === "pull-request" ? prepared.selected.mainSha : undefined,
+      mainSha: capturedMain(prepared.selected),
     }),
     "prepared source binding mismatch",
   );
@@ -356,11 +380,7 @@ export async function foldQualification({
 }): Promise<Qualification> {
   const raw = json(rawPath);
   assertQualificationRaw(raw);
-  const bound = await binding(
-    root,
-    client,
-    raw.selected.kind === "pull-request" ? raw.selected.mainSha : undefined,
-  );
+  const bound = await binding(root, client, capturedMain(raw.selected));
   assert.equal(raw.schema, 1);
   assert.equal(raw.kind, "raw-score");
   assert.equal(raw.sourceSha, process.env.GITHUB_SHA);
@@ -380,8 +400,10 @@ export async function foldQualification({
   mkdirSync(output, { recursive: true });
   if (raw.floor?.kind === "AcceptedGainFloor")
     return foldAcceptedCandidate({ root, client, raw, bound, oracle, output });
-  if (bound.selected.kind === "pull-request") {
-    const { floor } = await resolveMainFloor({ root, sourceSha: bound.selected.mainSha, client });
+  if (bound.selected.kind !== "main-push") {
+    const target =
+      bound.selected.kind === "pull-request" ? bound.selected.mainSha : bound.selected.beforeSha;
+    const { floor } = await resolveMainFloor({ root, sourceSha: target, client });
     assert.ok(raw.floor, "missing captured pull request floor");
     validateFloor(oracle, raw.floor);
     assert.equal(raw.floor.sourceSha, floor.sourceSha);
@@ -524,7 +546,8 @@ async function main(): Promise<void> {
       eventName: process.env.GITHUB_EVENT_NAME,
       sourceSha: fullSha(process.env.GITHUB_SHA),
       mainSha:
-        args[0] === "BASH_COMPAT_BASE_REF" && process.env.GITHUB_EVENT_NAME === "pull_request"
+        args[0] === "BASH_COMPAT_BASE_REF" &&
+        ["pull_request", "workflow_dispatch"].includes(process.env.GITHUB_EVENT_NAME ?? "")
           ? git(root, ["rev-parse", "refs/remotes/origin/main"])
           : undefined,
     });
