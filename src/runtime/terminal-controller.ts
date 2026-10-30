@@ -38,13 +38,6 @@ type Group = {
   restore?: Group;
   active: boolean;
 };
-type Drain = {
-  kind: "drain" | "restore";
-  group: TerminalGroup;
-  member: TerminalMember;
-  consumed: number;
-  restore: Group;
-};
 function pending(cell: State["jobPending"]): boolean {
   try {
     return controlLoad(cell) !== 0;
@@ -315,51 +308,16 @@ export function createTerminalController(
       }
     });
   };
-  const setupDiscard = (): Promise<Drain> =>
+  const selectDeferred = () =>
     execute((journal) =>
       terminalResult(() => {
-        const restore = bridge.cancelled() && interruptTarget ? editor : resumeTarget(selected);
-        const group = terminalValue(journal.createGroup("cooked"));
-        const member = terminalValue(journal.admitExisting(group, root.pid)).member;
-        terminalValue(journal.select(group));
-        terminalValue(journal.mode("raw"));
-        const cursor: Drain = { kind: "drain", group, member, consumed: 0, restore };
-        journal.publish();
-        return cursor;
-      }),
-    );
-  const drain = async (cursor: Drain) => {
-    const bytes = new Uint8Array(4096);
-    while (cursor.kind === "drain") {
-      const observed = producer.observe();
-      const count = await execute((journal) => {
-        const count = producer.available() ? journal.read([bytes]) : 0;
-        if (count > 0) cursor.consumed += count;
-        if (count < 0 && count !== -6) return { kind: "error", code: "CLOSED" };
+        const next = deferred;
+        if (!next) return;
+        let target = resumeTarget(next);
+        if (target !== selected) target = selectRestoreTarget(journal, target);
+        if (target === editor && target !== selected) terminalValue(journal.select(editor.group));
         journal.publish(() => {
-          if (count === 0) cursor.kind = "restore";
-        });
-        return { kind: "ok", value: count };
-      });
-      if (count === -6) terminalValue(await observed.wait({ signal: tasks.signal }));
-    }
-  };
-  const restoreDiscard = (cursor: Drain) =>
-    execute((journal) =>
-      terminalResult(() => {
-        const target = selectRestoreTarget(journal, cursor.restore);
-        const replacing = target === editor;
-        const removed = replacing
-          ? { group: journal.editor, member: journal.rootMember }
-          : { group: cursor.group, member: cursor.member };
-        if (replacing) journal.replaceEditor(cursor.group, cursor.member);
-        terminalValue(journal.removeMember(removed.member));
-        terminalValue(journal.retireGroup(removed.group, "cancelled"));
-        const next = deferred?.active ? deferred : undefined;
-        if (next) terminalValue(journal.select(next.group));
-        journal.publish(() => {
-          if (replacing) resetEditor();
-          selected = next ?? (replacing ? editor : target);
+          selected = target;
           deferred = undefined;
         });
       }),
@@ -391,9 +349,9 @@ export function createTerminalController(
     void tasks.run(async () => {
       let completed = false;
       try {
-        const cursor = await setupDiscard();
-        await drain(cursor);
-        await restoreDiscard(cursor);
+        terminalValue(await producer.flushInput(tasks.signal));
+        // Admission can defer another target before the preceding handoff promise settles.
+        while (deferred) await selectDeferred();
         finishDiscard();
         await retireGroups();
         bridge.signal();
