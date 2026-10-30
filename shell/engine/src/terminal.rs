@@ -121,7 +121,6 @@ fn paint_text(bytes: &mut Vec<u8>, line: &[u8]) {
 pub struct Editor {
     line: Vec<u8>,
     cursor: usize,
-    preferred_column: Option<usize>,
     escape: Escape,
     history: Vec<Vec<u8>>,
     history_at: Option<usize>,
@@ -135,7 +134,6 @@ impl Editor {
     pub fn clear(&mut self) {
         self.line.clear();
         self.cursor = 0;
-        self.preferred_column = None;
         self.escape = Escape::None;
         self.paste = None;
         self.discard_utf8 = 0;
@@ -167,34 +165,6 @@ impl Editor {
     pub fn finish(&mut self, geometry: Geometry, interrupted: bool) -> Vec<u8> {
         self.display.resize(geometry);
         self.display.finish(interrupted)
-    }
-    fn hard_line(&self, cursor: usize) -> std::ops::Range<usize> {
-        let start = self.line[..cursor]
-            .iter()
-            .rposition(|&byte| byte == b'\n')
-            .map_or(0, |at| at + 1);
-        let end = self.line[cursor..]
-            .iter()
-            .position(|&byte| byte == b'\n')
-            .map_or(self.line.len(), |at| cursor + at);
-        start..end
-    }
-    fn vertical(&mut self, up: bool) {
-        let current = self.hard_line(self.cursor);
-        let neighbor = if up {
-            current.start.checked_sub(1)
-        } else {
-            (current.end < self.line.len()).then_some(current.end + 1)
-        };
-        let Some(neighbor) = neighbor else {
-            self.history(up);
-            return;
-        };
-        let column = *self
-            .preferred_column
-            .get_or_insert_with(|| display::text_column(&self.line[current.start..self.cursor]));
-        let target = self.hard_line(neighbor);
-        self.cursor = target.start + display::text_cursor(&self.line[target], column);
     }
     fn previous(&self) -> usize {
         let mut at = self.cursor.saturating_sub(1);
@@ -231,7 +201,6 @@ impl Editor {
         at
     }
     fn meta(&mut self, byte: u8) -> Action {
-        self.preferred_column = None;
         match byte {
             b'b' => self.cursor = self.previous_word(),
             b'f' => self.cursor = self.next_word(),
@@ -250,10 +219,9 @@ impl Editor {
     fn csi(&mut self, parameters: Parameters, byte: u8) -> Action {
         use Parameters::{Empty, First, Modified, Third};
         if matches!((parameters, byte), (Empty, b'A' | b'B')) {
-            self.vertical(byte == b'A');
+            self.history(byte == b'A');
             return Action::Redraw;
         }
-        self.preferred_column = None;
         match (parameters, byte) {
             (Third(27, 2, 13), b'~') | (Modified(13, 2), b'u') => {
                 return self.insert(b'\n');
@@ -264,8 +232,8 @@ impl Editor {
             }
             (Empty, b'D') if self.cursor > 0 => self.cursor = self.previous(),
             (Empty, b'C') if self.cursor < self.line.len() => self.cursor = self.next(),
-            (Empty, b'H') | (First(1), b'~') => self.cursor = self.hard_line(self.cursor).start,
-            (Empty, b'F') | (First(4), b'~') => self.cursor = self.hard_line(self.cursor).end,
+            (Empty, b'H') | (First(1), b'~') => self.cursor = 0,
+            (Empty, b'F') | (First(4), b'~') => self.cursor = self.line.len(),
             (First(3), b'~') if self.cursor < self.line.len() => {
                 self.line.drain(self.cursor..self.next());
             }
@@ -313,7 +281,6 @@ impl Editor {
             (Some(at), false) if at + 1 < self.history.len() => Some(at + 1),
             _ => None,
         };
-        self.preferred_column = None;
         self.history_at = next;
         self.line = next
             .map(|at| self.history[at].clone())
@@ -368,9 +335,6 @@ impl Editor {
         }
         if !matches!(self.escape, Escape::None) {
             return self.feed_escape(byte);
-        }
-        if !matches!(byte, 16 | 14) {
-            self.preferred_column = None;
         }
         match byte {
             2 => self.csi(Parameters::Empty, b'D'),
@@ -775,3 +739,6 @@ mod tests {
         assert_eq!(editor.feed(4), Action::Eof);
     }
 }
+
+#[cfg(test)]
+mod readline_tests;

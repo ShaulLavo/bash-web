@@ -14,11 +14,13 @@ A command holds at most 64 KiB. A paste drops its remaining text after reaching 
 
 ## Navigation
 
-Ctrl+A and Home move to the beginning of the current hard line. Ctrl+E and End move to its end. Cmd+Left and Cmd+Right work the same way when the host maps them to Ctrl+A and Ctrl+E.
+Ctrl+A and Home move to the beginning of the whole command buffer. Ctrl+E and End move to its end. Native macOS Ghostty maps Cmd+Left and Cmd+Right to Ctrl+A and Ctrl+E. LF, blank lines and soft wraps do not add navigation boundaries.
 
-Up and Down move between LF-delimited lines in the command buffer before browsing history. They keep the logical display column across shorter lines, using the terminal's scalar widths and eight-column tab stops, without splitting UTF-8. Horizontal movement or an edit resets that preferred column. Up on the first hard line and Down on the last hard line retain the existing whole-entry history navigation and draft restoration. Ctrl+P and Ctrl+N share the arrow behavior.
+Up and Down browse whole history entries from any position in the buffer. Down after the newest entry restores the unsubmitted draft with its cursor at the end. Ctrl+P and Ctrl+N share the arrow behavior. Option+Left and Option+Right move by word through the whole buffer.
 
-Soft wrapping does not add editing boundaries. A wrapped command without an LF still has one hard line. Home moves to its start, and Up browses history. This contract does not claim visual-row navigation or native shell parity for soft wraps.
+The navigation fixture in `tests/terminal/readline-navigation.json` records real GNU Bash 5.3.20 and its runtime-linked Readline 8.3 library. `scripts/readline-reference.py` regenerates it through isolated PTYs with no inputrc and the Emacs keymap. It pins binary hashes, default key bindings, native Ghostty source bytes and each observed buffer and byte cursor. Its Unicode control proves that Bash's `bind -x` cursor uses character offsets before converting them to UTF-8 bytes. Regeneration is Linux-pinned and uses read-only memory from its own children, `nm` and `pacman`. It has no portable fallback. The separate frozen Bash 5.3.15 execution corpus is unchanged.
+
+This is selected navigation parity, not a complete Readline implementation. Shift+Enter newline insertion remains an explicit product policy. Default Bash instead treats parts of that unbound sequence as text. Unsupported modified escape sequences are consumed safely here rather than inserting their tail, as default Bash does for Shift+arrows.
 
 ## Display
 
