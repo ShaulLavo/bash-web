@@ -569,15 +569,7 @@ test("page discard preserves the active foreground selection", async (context) =
 for (const during of ["new foreground", "second interrupt"] as const) {
   test(`discard preserves flushed input and acknowledgement while handling ${during}`, async (context) => {
     const f = await fixture(context);
-    const rootTerminal = createShellTerminals(
-      { runtimeProcess: f.root },
-      f.bridge.buffer,
-      createTerminalAdmission(),
-      f.bridge,
-      () => {},
-    );
-    assert.ok(rootTerminal);
-    context.after(() => rootTerminal.dispose());
+    const rootTerminal = attachRootTerminal(context, f);
     Atomics.store(f.bridge.state, control.phase, 1);
     assert.equal(f.bridge.send(new Uint8Array(8192).fill(65)), 8192);
     const flushInput = f.authority.flushInput.bind(f.authority);
@@ -768,15 +760,7 @@ test("discard preserves editor membership until exactly one ordinary exit cleanu
   });
   await f.start(child);
   assert.ok(member);
-  const root = createShellTerminals(
-    { runtimeProcess: f.root },
-    f.bridge.buffer,
-    createTerminalAdmission(),
-    f.bridge,
-    () => {},
-  );
-  assert.ok(root);
-  context.after(() => root.dispose());
+  const root = attachRootTerminal(context, f);
   Atomics.store(f.bridge.state, control.phase, 1);
   const before = await f.authority.control(() => ({ kind: "ok", value: undefined }));
   assert.ok(before.receipt.state?.kind === "open");
@@ -888,6 +872,19 @@ async function foregroundFixture(context: TestContext) {
   const child = f.reserve();
   await f.start(child);
   return Object.assign(f, { child });
+}
+
+function attachRootTerminal(context: TestContext, f: Awaited<ReturnType<typeof fixture>>) {
+  const terminal = createShellTerminals(
+    { runtimeProcess: f.root },
+    f.bridge.buffer,
+    createTerminalAdmission(),
+    f.bridge,
+    () => {},
+  );
+  assert.ok(terminal);
+  context.after(() => terminal.dispose());
+  return terminal;
 }
 
 function attachChildTerminal(
@@ -1022,15 +1019,7 @@ test("queued stale acknowledgement cannot clear the next generation interrupt", 
 for (const operation of ["readiness", "tryRead", "prepare"] as const) {
   test(`a root prompt parked behind discard resumes through ${operation}`, async (context) => {
     const f = await fixture(context);
-    const root = createShellTerminals(
-      { runtimeProcess: f.root },
-      f.bridge.buffer,
-      createTerminalAdmission(),
-      f.bridge,
-      () => {},
-    );
-    assert.ok(root);
-    context.after(() => root.dispose());
+    const root = attachRootTerminal(context, f);
     f.bridge.publishPrompt(0);
     root.ready();
     Atomics.store(f.bridge.state, control.phase, 2);
@@ -1048,11 +1037,26 @@ for (const operation of ["readiness", "tryRead", "prepare"] as const) {
     const waiting = Atomics.load(f.bridge.state, control.wake);
     await barrier(f.bridge);
     assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
-    assert.ok(Atomics.load(f.bridge.state, control.wake) > waiting, "the completed flush woke the root");
+    assert.ok(
+      Atomics.load(f.bridge.state, control.wake) > waiting,
+      "the completed flush woke the root",
+    );
+    root.resolve(1).readiness();
+    root.resolve(2).readiness();
+    assert.equal(
+      Atomics.load(f.bridge.state, control.cancel),
+      1,
+      "output polling does not prepare root input",
+    );
+    assert.equal(terminalValue(controls.snapshot()).mode, "cooked");
     if (operation === "prepare") root.prepare();
     if (operation === "tryRead") assert.equal(input.tryRead!([new Uint8Array(1)]), -6);
     if (operation !== "tryRead") assert.equal(input.readiness().readable, false);
-    assert.equal(Atomics.load(f.bridge.state, control.cancel), 0, "root polling acknowledges the flushed prompt");
+    assert.equal(
+      Atomics.load(f.bridge.state, control.cancel),
+      0,
+      "root polling acknowledges the flushed prompt",
+    );
     assert.equal(terminalValue(controls.snapshot()).mode, "raw");
     assert.equal(f.input.available(), 0);
     assert.equal(f.bridge.readPrompt()?.status, 130);
