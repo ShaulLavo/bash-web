@@ -10,6 +10,7 @@ import {
   authority,
   fullSha,
   git,
+  hasStepTimes,
   mainEvidence,
   oracleAt,
   requestArtifacts,
@@ -22,6 +23,7 @@ import {
 } from "./shell-scoreboard-main.ts";
 import type {
   ArtifactKind,
+  CompletedHostStep,
   GithubClient,
   HostJob,
   HostRun,
@@ -576,10 +578,11 @@ export async function prepareTerminalRecovery({
     evidence: required.evidence,
   };
 }
-function successfulStep(job: Pick<HostJob, "steps">, label: string): HostJob["steps"][number] {
+function successfulStep(job: Pick<HostJob, "steps">, label: string): CompletedHostStep {
   const step = unique(job.steps, (item) => item.name === label, label);
   assert.equal(step.status, "completed");
   assert.equal(step.conclusion, "success");
+  assert.ok(hasStepTimes(step), "missing evidence time");
   assert.ok(time(step.completed_at) >= time(step.started_at));
   return step;
 }

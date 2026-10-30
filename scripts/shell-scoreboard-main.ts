@@ -66,10 +66,14 @@ export interface HostStep {
   name: string;
   status: string;
   conclusion: string | null;
-  started_at: string;
-  completed_at: string;
+  started_at: string | null;
+  completed_at: string | null;
   number: number;
   [key: string]: unknown;
+}
+export interface CompletedHostStep extends HostStep {
+  started_at: string;
+  completed_at: string;
 }
 export interface HostJob {
   id: number;
@@ -209,8 +213,14 @@ function assertHostStep(value: unknown): asserts value is HostStep {
     value.conclusion === null || typeof value.conclusion === "string",
     "invalid step conclusion",
   );
-  assert.equal(typeof value.started_at, "string", "missing step start");
-  assert.equal(typeof value.completed_at, "string", "missing step completion");
+  assert.ok(
+    value.started_at === null || typeof value.started_at === "string",
+    "invalid step start",
+  );
+  assert.ok(
+    value.completed_at === null || typeof value.completed_at === "string",
+    "invalid step completion",
+  );
   positive(value.number);
 }
 function assertHostJob(value: unknown): asserts value is HostJob {
@@ -395,9 +405,9 @@ export function assertLandedPullRequest(pr: PullRequest, { landed, original }: L
 }
 export function assertObservationSequence(
   raw: Pick<RawScore, "capturedAt">,
-  bound: HostStep,
-  observed: HostStep,
-  sealed: HostStep,
+  bound: CompletedHostStep,
+  observed: CompletedHostStep,
+  sealed: CompletedHostStep,
 ): void {
   const capturedAt = raw.capturedAt ?? "";
   assert.ok(
@@ -463,16 +473,21 @@ export function assertMainRun(run: HostRun, sourceSha: string, attempt: number):
   assert.equal(run.run_attempt, positive(attempt), "wrong run attempt");
   positive(run.id);
 }
-function successfulStep(job: HostJob, name: string): HostStep {
+export function hasStepTimes(step: HostStep): step is CompletedHostStep {
+  return (
+    step.started_at !== null &&
+    step.completed_at !== null &&
+    Number.isFinite(Date.parse(step.started_at)) &&
+    Number.isFinite(Date.parse(step.completed_at))
+  );
+}
+function successfulStep(job: HostJob, name: string): CompletedHostStep {
   const selected = job.steps.filter((step) => step.name === name);
   assert.equal(selected.length, 1, `missing/ambiguous producer step ${name}`);
   const step = selected[0];
   assert.equal(step.status, "completed", `unfinished ${name}`);
   assert.equal(step.conclusion, "success", `unsuccessful ${name}`);
-  assert.ok(
-    Number.isFinite(Date.parse(step.started_at)) && Number.isFinite(Date.parse(step.completed_at)),
-    "missing host step times",
-  );
+  assert.ok(hasStepTimes(step), "missing host step times");
   return step;
 }
 function assertJobIdentity(job: HostJob, run: HostRun): void {
@@ -583,7 +598,7 @@ function assertUploadLog({
   name,
 }: {
   artifact: HostArtifact;
-  uploaded: HostStep;
+  uploaded: CompletedHostStep;
   logs: string;
   name: string;
 }): void {

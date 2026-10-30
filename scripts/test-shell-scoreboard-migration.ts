@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { waffleBuildFixture } from "../tests/helpers/waffle-build-inputs.ts";
-import { execFileSync, fork, spawn } from "node:child_process";
+import { execFileSync, fork, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -661,27 +661,45 @@ for (const descendant of [false, true]) {
   }
 }
 
+function putCompatibilityEntrypoint(put: FixtureContext["put"]): void {
+  // Only the compiler and archived target scorer are stand-ins. The candidate entrypoint,
+  // trusted baseline launcher, migration supervisor and group draining are shipped code.
+  for (const name of [
+    "bash-compat.ts",
+    "compat-programs.ts",
+    "bash-compat-helpers.ts",
+    "bash-compat-runner.ts",
+    "shell-scoreboard.ts",
+    "shell-scoreboard-base.ts",
+    "shell-scoreboard-migration.ts",
+    "shell-process-group.ts",
+    "wasi-build.ts",
+    "waffle-release-inputs.ts",
+    "verify-wasi-guests.ts",
+  ])
+    put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
+}
+function runCompatibility(repo: string, runner: string) {
+  return spawnSync(process.execPath, [resolve(repo, "scripts/bash-compat.ts")], {
+    env: {
+      ...process.env,
+      BASH_COMPAT_MODE: "frozen",
+      BASH_COMPAT_ENGINES: "own-shell",
+      BASH_COMPAT_SCRATCH: runner,
+      BASH_COMPAT_TIMEOUT_MS: "10000",
+      BASH_COMPAT_BASE_REF: "HEAD",
+      BASH_COMPAT_RECORD: "0",
+      BASH_COMPAT_SKIP_BUILD: "1",
+    },
+    encoding: "utf8",
+  });
+}
 const signals: NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
 for (const signal of signals) {
   test(`${signal} on the compatibility entrypoint awaits its active migration`, async () => {
     await fixture(
       async ({ repo, runner, put }) => {
-        // Only the compiler and archived target scorer are stand-ins. The candidate entrypoint,
-        // trusted baseline launcher, migration supervisor and group draining are shipped code.
-        for (const name of [
-          "bash-compat.ts",
-          "compat-programs.ts",
-          "bash-compat-helpers.ts",
-          "bash-compat-runner.ts",
-          "shell-scoreboard.ts",
-          "shell-scoreboard-base.ts",
-          "shell-scoreboard-migration.ts",
-          "shell-process-group.ts",
-          "wasi-build.ts",
-          "waffle-release-inputs.ts",
-          "verify-wasi-guests.ts",
-        ])
-          put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
+        putCompatibilityEntrypoint(put);
         const child = spawn(process.execPath, [resolve(repo, "scripts/bash-compat.ts")], {
           env: {
             ...process.env,
@@ -748,6 +766,29 @@ ${Buffer.concat(errors)}`,
     );
   });
 }
+
+test("frozen validation skips non-runnable missing observations but rejects eligible ones", async () => {
+  for (const eligible of [false, true]) {
+    await fixture(
+      async ({ repo, runner, put, update, next }) => {
+        putCompatibilityEntrypoint(put);
+        const changed = structuredClone(next.cases[0]);
+        delete changed.bash;
+        if (!eligible) changed.kind = "needs-commands";
+        update(sealOracle({ ...next, cases: [changed] }));
+        const result = runCompatibility(repo, runner);
+        assert.notEqual(result.status, 0);
+        if (eligible) {
+          assert.match(result.stderr, /invalid oracle status/);
+          return;
+        }
+        assert.doesNotMatch(result.stderr, /Missing oracle observation/);
+        assert.match(result.stderr, /BASH_COMPAT_BASE_REF must be a full commit SHA/);
+      },
+      { entrypoint: true },
+    );
+  }
+});
 
 test("archive setup failure removes scratch acquired before extraction", async () => {
   await fixture(

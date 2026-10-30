@@ -1095,6 +1095,37 @@ test("a skipped sealer with a raw artifact is rejected instead of borrowing it",
   });
 });
 
+test("pending unrelated steps do not block selected producer evidence", async () => {
+  await withObservationRepo(async ({ root, sourceSha }) => {
+    const input = hostedObservation({ root, sourceSha });
+    input.jobs[0].steps.push(
+      {
+        name: "Run npm run test:browser",
+        number: 14,
+        status: "in_progress",
+        conclusion: null,
+        started_at: "2026-10-30T01:25:17Z",
+        completed_at: null,
+      },
+      {
+        name: "Run actions/upload-artifact@v4",
+        number: 15,
+        status: "pending",
+        conclusion: null,
+        started_at: null,
+        completed_at: null,
+      },
+    );
+    const evidence = mainEvidence({ root, oracle, client: hostedClient(sourceSha, [input]) });
+    assert.equal((await evidence.collect(sourceSha)).scores.length, 1);
+    input.jobs[2].steps[1].completed_at = null;
+    await assert.rejects(
+      mainEvidence({ root, oracle, client: hostedClient(sourceSha, [input]) }).collect(sourceSha),
+      /missing host step times/,
+    );
+  });
+});
+
 test("observation payload tampering fails closed", async () => {
   const cases: [string, (input: HostedObservation) => void, RegExp][] = [
     ["wrong attempt", (input) => (input.input.run.attempt = 2), /observation attempt mismatch/],

@@ -96,24 +96,11 @@ interface OracleCase {
   kind?: CaseKind;
   excluded?: string;
   needs?: string[];
-  bash: PackedResult;
-  [key: string]: unknown;
-}
-
-interface CaptureRecord {
-  id: string;
-  corpus: Corpus;
-  file: string;
-  line: number;
-  name: string;
-  category: string;
-  code: string;
-  kind?: CaseKind;
-  excluded?: string;
-  needs?: string[];
   bash?: PackedResult;
   [key: string]: unknown;
 }
+
+type CaptureRecord = OracleCase;
 
 interface Oracle extends CoreOracle {
   sources: Record<Corpus, { revision: string }> & Record<string, unknown>;
@@ -195,7 +182,6 @@ function assertBashOracle(value: CoreOracle): asserts value is Oracle {
     assert.equal(typeof item.line, "number", "Invalid oracle case line");
     assert.equal(typeof item.name, "string", "Invalid oracle case name");
     assert.equal(typeof item.code, "string", "Invalid oracle case code");
-    assert.ok(item.bash, "Missing oracle observation");
   }
 }
 function validatedOracle(value: unknown): Oracle {
@@ -1567,6 +1553,7 @@ async function runFrozen() {
   let done = 0;
   await mapLimit(oracle.cases, jobs, async (item, index) => {
     if (cancelled || item.excluded || item.kind !== "builtins-only") return;
+    assert.ok(item.bash, "Missing oracle observation");
     const actual = normalizeResult(await pool.run(item.code));
     if (cancelled) return;
     const expected = { status: item.bash.status, stdout: Buffer.from(item.bash.stdout, "base64") };

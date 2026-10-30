@@ -12,6 +12,7 @@ import {
   authority,
   fullSha,
   git,
+  hasStepTimes,
   mainEvidence,
   oracleAt,
   requestArtifact,
@@ -25,6 +26,7 @@ import {
 } from "./shell-scoreboard-main.ts";
 import type {
   ArtifactKind,
+  CompletedHostStep,
   GithubClient,
   HostArtifact,
   HostJob,
@@ -187,10 +189,11 @@ export function unique<T>(items: T[], predicate: (item: T) => boolean, name: str
   assert.equal(found.length, 1, `missing/ambiguous ${name}`);
   return found[0];
 }
-function step(job: Pick<HostJob, "steps">, name: string): HostJob["steps"][number] {
+function step(job: Pick<HostJob, "steps">, name: string): CompletedHostStep {
   const value = unique(job.steps, (item) => item.name === name, name);
   assert.equal(value.status, "completed", `unfinished ${name}`);
   assert.equal(value.conclusion, "success", `failed ${name}`);
+  assert.ok(hasStepTimes(value), "missing evidence time");
   assert.ok(time(value.completed_at) >= time(value.started_at), "invalid step interval");
   return value;
 }
