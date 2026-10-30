@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { verifyStrippedWasiGuest } from "./verify-family-guests.ts";
+import { stripNames } from "./capture-family-symbols.ts";
 
 const integer = (value: number): number[] => {
   const bytes: number[] = [];
@@ -132,5 +135,67 @@ test("direct Rust adapter imports prove scanner omission without hiding libc", (
   fixture((path, sdk) => {
     writeFileSync(path, moduleBytes(4096, true, true));
     verifyWasiGuest(path, sdk);
+  });
+});
+
+test("capture removes only complete name sections and preserves every other encoded byte", () => {
+  const extra = Buffer.from(section(0, text("names").concat([1, 2, 3])));
+  const named = Buffer.concat([moduleBytes(4096), extra]);
+  const stripped = Buffer.concat([moduleBytes(4096, false), extra]);
+  assert.deepEqual(stripNames(named).bytes, stripped);
+});
+
+function strippedProof(bytes: Uint8Array) {
+  return {
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    nameOffset: bytes.byteLength,
+    symbols: {
+      __wasi_fd_prestat_get: 0,
+      __wasi_fd_fdstat_get: 1,
+      __wasilibc_populate_preopens: 2,
+    },
+  };
+}
+
+test("release symbol proof restores inspection without changing the shipped guest", () => {
+  fixture((path, sdk) => {
+    const bytes = moduleBytes(4096, false);
+    writeFileSync(path, bytes);
+    verifyStrippedWasiGuest(path, strippedProof(bytes), sdk);
+    assert.deepEqual(readFileSync(path), Buffer.from(bytes));
+  });
+});
+
+test("a symbol proof cannot admit different guest bytes", () => {
+  fixture((path, sdk) => {
+    const bytes = moduleBytes(4096, false);
+    writeFileSync(path, moduleBytes(65536, false));
+    assert.throws(
+      () => verifyStrippedWasiGuest(path, strippedProof(bytes), sdk),
+      /differs from its symbol proof/,
+    );
+  });
+});
+
+test("restored release symbols still require the actual scanner fdstat call", () => {
+  fixture((path, sdk, setDisassembly) => {
+    const bytes = moduleBytes(4096, false);
+    writeFileSync(path, bytes);
+    setDisassembly("  call 0\n  call 11\n");
+    assert.throws(
+      () => verifyStrippedWasiGuest(path, strippedProof(bytes), sdk),
+      /scanner does not call __wasi_fd_fdstat_get/,
+    );
+  });
+});
+
+test("restored release symbols still require the original guest memory cap", () => {
+  fixture((path, sdk) => {
+    const bytes = moduleBytes(65536, false);
+    writeFileSync(path, bytes);
+    assert.throws(
+      () => verifyStrippedWasiGuest(path, strippedProof(bytes), sdk),
+      /guest memory cap changed/,
+    );
   });
 });

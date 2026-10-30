@@ -40,7 +40,7 @@ function readFunctionNameSubsection(data: Reader, names: Map<string, number>) {
   }
 }
 
-function functionNames(module: WebAssembly.Module) {
+export function functionNames(module: WebAssembly.Module) {
   const names = new Map<string, number>();
   for (const section of WebAssembly.Module.customSections(module, "name")) {
     const reader = new Reader(new Uint8Array(section));
