@@ -508,13 +508,13 @@ test("a departed restore ancestor preserves a live outer group and its sibling",
   assert.equal(byte[0], 67);
 });
 
-test("a PROCESS_GONE control failure outside ancestor selection still fails a live root", async (context) => {
+test("a PROCESS_GONE flush failure still fails a live root", async (context) => {
   await liveControlFailure(context, new TerminalOperationError("PROCESS_GONE"));
 });
 
 async function liveControlFailure(context: TestContext, failure: Error) {
   const f = await fixture(context, { expectedFailures: [failure] });
-  context.mock.method(f.authority, "control", async () => {
+  context.mock.method(f.authority, "flushInput", async () => {
     throw failure;
   });
   f.bridge.interrupt();
@@ -533,8 +533,40 @@ async function barrier(bridge: SharedBridge) {
   }
 }
 
+test("page discard preserves the active foreground selection", async (context) => {
+  const f = await foregroundFixture(context);
+  await f.flush();
+  const baseline = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.ok(baseline.receipt.state?.kind === "open");
+  const selection = baseline.receipt.state.snapshot.selection;
+  assert.notEqual(selection, null);
+  const runControl = f.authority.control.bind(f.authority);
+  const selections: (typeof selection | undefined)[] = [];
+  context.mock.method(f.authority, "control", async (...args: Parameters<typeof runControl>) => {
+    const result = await runControl(...args);
+    const state = result.receipt.state;
+    selections.push(state?.kind === "open" ? state.snapshot.selection : undefined);
+    return result;
+  });
+  await f.flush();
+  assert.ok(selections.length > 0);
+  assert.ok(
+    selections.every((value) => value === selection),
+    "ordinary controls preserve selection",
+  );
+  selections.length = 0;
+  f.bridge.interrupt();
+  assert.equal(f.bridge.discardInput(), false);
+  await f.flush();
+  assert.ok(selections.length > 0);
+  assert.ok(
+    selections.every((value) => value === selection),
+    `discard displaced the active foreground selection: before=${selection}, during=${selections}`,
+  );
+});
+
 for (const during of ["new foreground", "second interrupt"] as const) {
-  test(`discard preserves completed drain and reset while handling ${during}`, async (context) => {
+  test(`discard preserves flushed input and acknowledgement while handling ${during}`, async (context) => {
     const f = await fixture(context);
     const rootTerminal = createShellTerminals(
       { runtimeProcess: f.root },
@@ -547,20 +579,24 @@ for (const during of ["new foreground", "second interrupt"] as const) {
     context.after(() => rootTerminal.dispose());
     Atomics.store(f.bridge.state, control.phase, 1);
     assert.equal(f.bridge.send(new Uint8Array(8192).fill(65)), 8192);
-    const controlTurn = f.authority.control.bind(f.authority);
-    let setup = true;
+    const flushInput = f.authority.flushInput.bind(f.authority);
+    let first = true;
     let child: ReturnType<typeof f.reserve> | undefined;
-    context.mock.method(f.authority, "control", async (...args: Parameters<typeof controlTurn>) => {
-      const result = await controlTurn(...args);
-      if (!setup) return result;
-      setup = false;
-      if (during === "second interrupt") f.bridge.interrupt();
-      else {
-        child = f.reserve();
-        await f.start(child);
-      }
-      return result;
-    });
+    context.mock.method(
+      f.authority,
+      "flushInput",
+      async (...args: Parameters<typeof flushInput>) => {
+        const result = await flushInput(...args);
+        if (!first) return result;
+        first = false;
+        if (during === "second interrupt") f.bridge.interrupt();
+        else {
+          child = f.reserve();
+          await f.start(child);
+        }
+        return result;
+      },
+    );
     f.bridge.interrupt();
     assert.equal(f.bridge.discardInput(), false);
     await barrier(f.bridge);
@@ -583,6 +619,35 @@ for (const during of ["new foreground", "second interrupt"] as const) {
     assert.equal(f.input.available(), 0);
   });
 }
+
+test("discard preserves bytes accepted after the committed flush without replay", async (context) => {
+  const f = await foregroundFixture(context);
+  const childTerminal = attachChildTerminal(context, f, f.child.transport);
+  assert.equal(f.bridge.send(Uint8Array.of(65)), 1);
+  const flushInput = f.authority.flushInput.bind(f.authority);
+  const flushed = context.mock.method(
+    f.authority,
+    "flushInput",
+    async (...args: Parameters<typeof flushInput>) => {
+      const result = await flushInput(...args);
+      assert.equal(result.receipt.phase, "committed");
+      assert.equal(f.input.push(Uint8Array.of(66)), 1);
+      return result;
+    },
+  );
+  f.bridge.interrupt();
+  assert.equal(f.bridge.discardInput(), false);
+  await barrier(f.bridge);
+  await f.flush();
+  assert.equal(flushed.mock.calls.length, 1);
+  assert.equal(f.input.available(), 1);
+  f.controller.interruptDelegated(1n);
+  await f.flush();
+  const byte = new Uint8Array(1);
+  assert.equal(childTerminal.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], 66);
+  assertInput(f, childTerminal, 67);
+});
 
 test("input observation resumes after an empty foreign Session releases only the input lock", async (context) => {
   const f = await fixture(context);
@@ -690,7 +755,7 @@ test("an exit arriving during retirement is joined and cleaned without repeating
   assert.deepEqual(new Set(f.launched), new Set([first.pid, second.pid]));
 });
 
-test("exit after committed editor retirement reconciles the removed member without double cleanup", async (context) => {
+test("discard preserves editor membership until exactly one ordinary exit cleanup", async (context) => {
   const f = await fixture(context);
   const child = f.reserve(workerProcessState(f.root).job);
   let member: TerminalMember | undefined;
@@ -712,12 +777,17 @@ test("exit after committed editor retirement reconciles the removed member witho
   assert.ok(root);
   context.after(() => root.dispose());
   Atomics.store(f.bridge.state, control.phase, 1);
+  const before = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.ok(before.receipt.state?.kind === "open");
+  assert.ok(before.receipt.state.selection);
+  const lease = before.receipt.state.selection.lease;
   f.bridge.interrupt();
   f.bridge.discardInput();
   await barrier(f.bridge);
   root.resolve(0).readiness();
   const receipt = await f.authority.control(() => ({ kind: "ok", value: undefined }));
-  assert.ok(["removed", "stale"].includes(receipt.receipt.member(member)));
+  assert.equal(receipt.receipt.member(member), "bound");
+  assert.equal(receipt.receipt.lease(lease), true);
   let removals = 0;
   const remove = f.authority.removeMember.bind(f.authority);
   context.mock.method(f.authority, "removeMember", (...args: Parameters<typeof remove>) => {
@@ -727,12 +797,16 @@ test("exit after committed editor retirement reconciles the removed member witho
   f.supervisor.exit(child.pid, 0);
   await f.supervisor.waitForExit(f.root.pid, child.pid);
   await f.flush();
-  assert.equal(removals, 0, "a committed retired group already removed this membership");
+  assert.equal(removals, 1, "discard leaves membership for ordinary exit cleanup");
   assert.equal(f.bridge.send(Uint8Array.of(65)), 1);
   assert.equal(root.resolve(0).tryRead!([new Uint8Array(1)]), 1);
 });
 
-function holdControl(context: TestContext, authority: RootDescendantPreparation["terminal"]) {
+function holdControl(
+  context: TestContext,
+  authority: RootDescendantPreparation["terminal"],
+  operation: "control" | "flushInput" = "control",
+) {
   let reached!: () => void;
   let release!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -741,12 +815,21 @@ function holdControl(context: TestContext, authority: RootDescendantPreparation[
   const blocked = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const run = authority.control.bind(authority);
-  context.mock.method(authority, "control", async (...args: Parameters<typeof run>) => {
-    reached();
-    await blocked;
-    return run(...args);
-  });
+  if (operation === "control") {
+    const run = authority.control.bind(authority);
+    context.mock.method(authority, "control", async (...args: Parameters<typeof run>) => {
+      reached();
+      await blocked;
+      return run(...args);
+    });
+  } else {
+    const flushInput = authority.flushInput.bind(authority);
+    context.mock.method(authority, "flushInput", async (...args: Parameters<typeof flushInput>) => {
+      reached();
+      await blocked;
+      return flushInput(...args);
+    });
+  }
   return { started, release };
 }
 
@@ -755,7 +838,11 @@ for (const operation of ["cleanup", "discard"] as const) {
     const f = await fixture(context);
     const child = f.reserve();
     await f.start(child);
-    const held = holdControl(context, f.authority);
+    const held = holdControl(
+      context,
+      f.authority,
+      operation === "cleanup" ? "control" : "flushInput",
+    );
     if (operation === "cleanup") f.supervisor.exit(child.pid, 0);
     else {
       f.bridge.interrupt();
@@ -783,7 +870,7 @@ test("an unexpected task failure while the root is live still reaches the root f
 
 test("runtime disposal before task completion is shutdown rather than a new root failure", async (context) => {
   const f = await fixture(context);
-  const held = holdControl(context, f.authority);
+  const held = holdControl(context, f.authority, "flushInput");
   f.bridge.interrupt();
   f.bridge.discardInput();
   await held.started;

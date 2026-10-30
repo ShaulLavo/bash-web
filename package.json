@@ -113,10 +113,10 @@
     "test:python:browser": "node scripts/test-own-shell-python.ts --browser"
   },
   "dependencies": {
-    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.7/waffle-python-0.0.7.tgz",
-    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.7/waffle-base-0.0.7.tgz",
-    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.7/waffle-git-0.0.7.tgz",
-    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.7/waffle-ripgrep-0.0.7.tgz"
+    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.12/waffle-python-0.0.12.tgz",
+    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.12/waffle-base-0.0.12.tgz",
+    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.12/waffle-git-0.0.12.tgz",
+    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.12/waffle-ripgrep-0.0.12.tgz"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
@@ -131,11 +131,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.99/waffle-0.0.99.tgz",
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.104/waffle-0.0.104.tgz",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.99/waffle-0.0.99.tgz"
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.104/waffle-0.0.104.tgz"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -145,7 +145,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.99": true
+    "waffle@0.0.104": true
   },
   "trustedDependencies": [
     "waffle",

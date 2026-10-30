@@ -127,6 +127,9 @@ function acquireTerminalProducer(
     }
     cache = { kind: "open", editor: next, selection: state.selection };
   };
+  const reconcileCurrent = (receipt: TerminalControlReceipt): undefined => {
+    if (cache.kind === "open") reconcile(receipt, cache.editor);
+  };
   const metadata = (terminalContext: TerminalContext): TerminalMetadata => ({
     terminalContext,
     terminalInput: input.buffer,
@@ -148,8 +151,9 @@ function acquireTerminalProducer(
     memberStatus: (member: TerminalMember) => lastReceipt?.member(member) ?? "unknown",
     wake: () => display.outputDrained(),
     metadata,
-    reconcile(receipt: TerminalControlReceipt): undefined {
-      if (cache.kind === "open") reconcile(receipt, cache.editor);
+    reconcile: reconcileCurrent,
+    flushInput(signal?: AbortSignal) {
+      return authority.flushInput({ signal, settled: reconcileCurrent });
     },
     begin(turn: TerminalControlTurn) {
       let next = current().editor;
@@ -186,9 +190,6 @@ function acquireTerminalProducer(
         retireGroup: (group: TerminalGroup, reason: TerminalReason) =>
           authority.retireGroup({ group, reason }),
         select,
-        replaceEditor(group: TerminalGroup, member: TerminalMember) {
-          next = { group, member };
-        },
         restoreEditor(mode: TerminalMode): TerminalResult<void> {
           return terminalResult(() => {
             const group = terminalValue(authority.createGroup({ initialMode: mode }));
@@ -207,9 +208,6 @@ function acquireTerminalProducer(
             const snapshot = terminalValue(controls.snapshot());
             terminalValue(controls.setMode({ expected: snapshot.selection, mode }));
           });
-        },
-        read(chunks: readonly Uint8Array[]) {
-          return stream.tryRead!(chunks);
         },
         publish(operation: (receipt: TerminalControlReceipt) => undefined = () => {}) {
           turn.publish((receipt) => {
