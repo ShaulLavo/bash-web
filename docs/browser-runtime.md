@@ -64,10 +64,12 @@ supply authoritative handles and leases when preparation commits or rolls back.
 Kernel rollback owns provisional resources. Committed membership uses ordinary
 child-exit cleanup even when adapter entry fails.
 
-Foreground selection, input discard and restoration use that same authority.
-Discard consumes a bounded prefix per turn and releases the turn before waiting
-for an input observation. Quiescence stops new controller tasks, aborts and joins
-control and input waits, then disposes terminal state before physical worker stop.
+Foreground selection and restoration use that same authority. Input discard awaits
+one bounded Waffle flush without changing selection, mode, membership or leases.
+Deferred foreground admission uses a separate control turn. Root stdin polls and
+reads apply pending prompt preparation before entering their terminal turn.
+Quiescence stops new controller tasks, aborts and joins control and input waits,
+then disposes terminal state before physical worker stop.
 Aborting one root's wait does not cancel a shared input transport. The runtime and
 all page and worker helpers must come from the same compatible package artifact.
 
