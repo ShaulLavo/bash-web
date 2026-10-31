@@ -2,7 +2,7 @@
   // Package exports, HTML, Vite/Playwright config and package scripts are discovered by Knip.
   // These roots are loaded dynamically by the runtime-test driver and compatibility pool.
   "entry": [
-    "src/{runtime,browser}/*.test.ts",
+    "src/{runtime,browser,prompt}/*.test.ts",
     "tests/*.unit.ts",
     "tests/helpers/git-consumer.ts",
     "scripts/bash-compat-worker.mjs",

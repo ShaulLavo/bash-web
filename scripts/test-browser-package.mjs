@@ -36,6 +36,7 @@ test("browser entry uses one required immutable Waffle peer and matching develop
   assert.equal(pkg.allowScripts?.[`waffle@${sources.waffle.version}`], true);
   assert.equal(pkg.exports["."], "./src/index.ts");
   assert.equal(pkg.exports["./shell"], "./src/shell.ts");
+  assert.equal(pkg.exports["./prompt"], "./src/prompt/index.ts");
   assert.ok(pkg.files.includes("src"));
 });
 

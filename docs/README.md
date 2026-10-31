@@ -12,6 +12,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 ## Understand
 
 - [How bash-web works](concepts/architecture.md): See the parts and why they sit where they do
+- [Prompt provider](prompt.md): Build a bounded Starship-shaped prompt from Waffle filesystem data
 - [Status and limits](status.md): Check platforms, bash compatibility numbers, gaps, and limits
 - [001 Borrowed runtime](adr/001-shell-is-a-wasm-program-on-a-borrowed-runtime.md): Why `createShell` takes a runtime
 - [002 Own engine](adr/002-own-engine-instead-of-forking-bashkit.md): Why the engine is not Bashkit's interpreter
