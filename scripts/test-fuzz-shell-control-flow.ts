@@ -1,3 +1,4 @@
+import { recordedCases, observation } from "./fuzz-test-observation.ts";
 import assert from "node:assert/strict";
 import {
   chmodSync,
@@ -38,18 +39,9 @@ import {
   values,
 } from "./fuzz-shell-control-flow.ts";
 import type { Fixture } from "./fuzz-shell-control-flow.ts";
-import type { ProcessResult } from "./fuzz-shell-results.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
-const observation = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
-  status: 0,
-  signal: null,
-  timedOut: false,
-  error: null,
-  stdout: Buffer.from("ok\n"),
-  stderr: Buffer.alloc(0),
-  ...patch,
-});
+
 function fixtureFor(count = 0): Fixture {
   const cases = generateCases(1, count);
   return {
@@ -63,17 +55,7 @@ function fixtureFor(count = 0): Fixture {
     oracleArgs: ["-c", "SCRIPT"],
     provenance: "oracle-only",
     coverage: coverage(cases),
-    cases: cases.map((item) => ({
-      case: item,
-      bash: {
-        status: 0,
-        signal: null,
-        timedOut: false,
-        error: null,
-        stdoutBase64: "",
-        stderrBase64: "",
-      },
-    })),
+    cases: recordedCases(cases),
   };
 }
 const path = "shell-control-flow-seed-1.json";

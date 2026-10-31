@@ -1,3 +1,4 @@
+import { recordedCases, observation as processResult } from "./fuzz-test-observation.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -19,18 +20,8 @@ import {
   spelling,
   validateFixture,
 } from "./fuzz-shell-substitution-boundaries.ts";
-import type { ProcessResult } from "./fuzz-shell-results.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: 2000 };
-const processResult = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
-  status: 0,
-  signal: null,
-  timedOut: false,
-  error: null,
-  stdout: Buffer.from("ok\n"),
-  stderr: Buffer.alloc(0),
-  ...patch,
-});
 
 test("seeded generation is deterministic and bounded", () => {
   for (const seed of [0, 1, 42, 0xffffffff]) {
@@ -193,17 +184,7 @@ test("strict fixture validation accepts regenerated synthetic observations", () 
     timeoutMs: 2000,
     bash: "GNU bash, version 5.3.15(1)-release (test)",
     coverage: coverage(cases),
-    cases: cases.map((item) => ({
-      case: item,
-      bash: {
-        status: 0,
-        signal: null,
-        timedOut: false,
-        error: null,
-        stdoutBase64: "",
-        stderrBase64: "",
-      },
-    })),
+    cases: recordedCases(cases),
   };
   assert.equal(
     validateFixture("shell-substitutions-seed-1.json", fixture, options).length,

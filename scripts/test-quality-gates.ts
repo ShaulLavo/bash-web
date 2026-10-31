@@ -4,7 +4,16 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSyn
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import type { ProgramPackage } from "waffle/programs";
-import { duplicateArgs, duplicateModes } from "./check-duplicates.ts";
+import {
+  assertBaselineShrinks,
+  duplicateArgs,
+  duplicateBaseRef,
+  duplicateComparison,
+  duplicateModes,
+  parseDuplicateBaseline,
+  shrinkDuplicateBaseline,
+  validateDuplicatePlans,
+} from "./check-duplicates.ts";
 import { checkJavaScript, type JavaScriptException } from "./check-javascript.ts";
 import { compatibilityPrograms } from "./compat-programs.ts";
 import { selectBasePackages } from "./waffle-compat.ts";
@@ -231,3 +240,126 @@ for (const mode of duplicateModes) {
       );
     }));
 }
+
+const cloneId = "0123456789abcdef";
+function explainedBaseline() {
+  return {
+    version: 1,
+    fingerprints: { [cloneId]: 1 },
+    reasons: {
+      [cloneId]: {
+        kind: "fixture",
+        reason: "Independent parser failure inputs in the miniature probe.",
+      },
+    },
+  };
+}
+
+for (const reason of [undefined, "", "   ", "first line\nsecond line"]) {
+  test(`duplicate baselines reject a missing or blank reason ${JSON.stringify(reason)}`, () => {
+    const baseline = explainedBaseline();
+    const reasons = { [cloneId]: { kind: "fixture", reason } };
+    assert.throws(() => parseDuplicateBaseline({ ...baseline, reasons }), /one-line reason/);
+  });
+}
+
+test("every baseline fingerprint needs its own reason, including new entries", () => {
+  const baseline = explainedBaseline();
+  assert.throws(() => parseDuplicateBaseline({ ...baseline, reasons: {} }), /Missing reason/);
+  assert.throws(
+    () =>
+      parseDuplicateBaseline({
+        ...baseline,
+        fingerprints: { ...baseline.fingerprints, fedcba9876543210: 1 },
+      }),
+    /Missing reason.*fedcba9876543210/,
+  );
+  assert.throws(() => parseDuplicateBaseline({ ...baseline, fingerprints: {} }), /Reason without/);
+  assert.throws(
+    () =>
+      parseDuplicateBaseline({
+        ...baseline,
+        reasons: { [cloneId]: { kind: "intentional", reason: "Ordinary production code." } },
+      }),
+    /Reason kind/,
+  );
+});
+
+test("record only removes fingerprints and lowers multiplicities without inventing reasons", () => {
+  const baseline = parseDuplicateBaseline(explainedBaseline());
+  assert.deepEqual(shrinkDuplicateBaseline(baseline, {}), {
+    version: 1,
+    fingerprints: {},
+    reasons: {},
+  });
+  assert.deepEqual(shrinkDuplicateBaseline(baseline, { [cloneId]: 1 }), baseline);
+  assert.throws(() => shrinkDuplicateBaseline(baseline, { [cloneId]: 2 }), /cannot grow/);
+  assert.throws(() => shrinkDuplicateBaseline(baseline, { fedcba9876543210: 1 }), /cannot grow/);
+  assert.throws(() => assertBaselineShrinks({ [cloneId]: 1 }, {}), /cannot grow/);
+});
+
+test("duplicate baseline selection uses the immutable tested parent in shallow CI", () => {
+  assert.equal(duplicateBaseRef({}), "origin/main");
+  assert.equal(duplicateBaseRef({ GITHUB_ACTIONS: "true" }), "HEAD^");
+  assert.equal(
+    duplicateBaseRef({ GITHUB_ACTIONS: "true", DUPLICATES_BASE_REF: "a-tested-base" }),
+    "a-tested-base",
+  );
+});
+
+test("unreadable chosen duplicate baselines fail closed instead of using another ref", () =>
+  fixture((directory) => {
+    runGit(directory, ["init", "-q"]);
+    writeRepoFile(directory, "baseline.json", JSON.stringify(explainedBaseline()));
+    runGit(directory, ["add", "baseline.json"]);
+    runGit(directory, [
+      "-c",
+      "user.name=Quality probe",
+      "-c",
+      "user.email=quality@example.invalid",
+      "commit",
+      "-qm",
+      "Record baseline",
+    ]);
+    assert.deepEqual(duplicateComparison(directory, "baseline.json", "HEAD"), { [cloneId]: 1 });
+    writeRepoFile(directory, "baseline.json", JSON.stringify({ fingerprints: {} }));
+    assert.deepEqual(duplicateComparison(directory, "baseline.json", "HEAD"), { [cloneId]: 1 });
+    runGit(directory, ["add", "baseline.json"]);
+    runGit(directory, [
+      "-c",
+      "user.name=Quality probe",
+      "-c",
+      "user.email=quality@example.invalid",
+      "commit",
+      "-qm",
+      "Remove clone",
+    ]);
+    assert.deepEqual(
+      duplicateComparison(directory, "baseline.json", duplicateBaseRef({ GITHUB_ACTIONS: "true" })),
+      { [cloneId]: 1 },
+    );
+    assert.deepEqual(duplicateComparison(directory, "baseline.json", "HEAD"), {});
+    assert.throws(() => duplicateComparison(directory, "baseline.json", "missing-chosen-ref"));
+    assert.throws(() => duplicateComparison(directory, "missing-baseline.json", "HEAD"));
+  }));
+
+test("deferred duplicates require an existing Approved removal item", () =>
+  fixture((directory) => {
+    const baseline = parseDuplicateBaseline({
+      ...explainedBaseline(),
+      reasons: {
+        [cloneId]: {
+          kind: "deferred",
+          reason: "Share the parser setup after its owning migration lands.",
+          plan: "plans/cleanup.md#parser",
+        },
+      },
+    });
+    assert.throws(() => validateDuplicatePlans(baseline, directory), /ENOENT/);
+    writeRepoFile(directory, "plans/cleanup.md", 'Status: Idea\n<a id="parser"></a>\n');
+    assert.throws(() => validateDuplicatePlans(baseline, directory), /must be Approved/);
+    writeRepoFile(directory, "plans/cleanup.md", "Status: Approved\n");
+    assert.throws(() => validateDuplicatePlans(baseline, directory), /Missing removal item/);
+    writeRepoFile(directory, "plans/cleanup.md", 'Status: Approved\n<a id="parser"></a>\n');
+    validateDuplicatePlans(baseline, directory);
+  }));

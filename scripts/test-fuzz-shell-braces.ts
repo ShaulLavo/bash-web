@@ -1,3 +1,4 @@
+import { recordedCases, observation as result } from "./fuzz-test-observation.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -40,28 +41,9 @@ function fixtureFor(seed = 1): Fixture {
       tags: Array.from(new Set(cases.flatMap((item) => item.tags))).sort(),
     },
     // Synthetic in-memory validator inputs only; never recorded oracle fixtures.
-    cases: cases.map((item) => ({
-      case: item,
-      bash: {
-        status: 0,
-        signal: null,
-        timedOut: false,
-        error: null,
-        stdoutBase64: "",
-        stderrBase64: "",
-      },
-    })),
+    cases: recordedCases(cases),
   };
 }
-const result = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
-  status: 0,
-  signal: null,
-  timedOut: false,
-  error: null,
-  stdout: Buffer.from("ok\n"),
-  stderr: Buffer.alloc(0),
-  ...patch,
-});
 
 test("default seeds retain 3000 original paired cases and append the complete boundary matrix", (t) => {
   t.diagnostic(

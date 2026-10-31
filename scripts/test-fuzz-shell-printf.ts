@@ -1,3 +1,5 @@
+import * as fuzzer from "./fuzz-shell-printf.ts";
+import { syntheticFixture } from "./fuzz-test-observation.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -6,7 +8,6 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   boundaryEscapes,
-  coverage,
   defaultCount,
   defaultTimeoutMs,
   environment,
@@ -47,33 +48,7 @@ const observation = (patch = {}) => ({
   stderr: Buffer.alloc(0),
   ...patch,
 });
-function fixtureFor(): Fixture {
-  const cases = generateCases(1, 0);
-  return {
-    schema: 1,
-    sourceHash: fingerprint(),
-    sourceHashes: sourceHashes(),
-    seed: 1,
-    count: 0,
-    timeoutMs: defaultTimeoutMs,
-    bash: "GNU bash, version 5.3.15(1)-release (test)",
-    oraclePath: "/usr/bin/bash",
-    environment,
-    provenance: "oracle-only",
-    coverage: coverage(cases),
-    cases: cases.map((item) => ({
-      case: item,
-      bash: {
-        status: 0,
-        signal: null,
-        timedOut: false,
-        error: null,
-        stdoutBase64: "",
-        stderrBase64: "",
-      },
-    })),
-  };
-}
+const fixtureFor = () => syntheticFixture(fuzzer);
 
 test("deterministic finite grammar has distinct substantive seeded cases", () => {
   for (const seed of [0, 1, 42, 0xffffffff]) {
