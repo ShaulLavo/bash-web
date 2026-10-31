@@ -321,3 +321,84 @@ fn mapfile_rejected_target_leaves_shared_input_unread() {
         assert_eq!(*rig.calls.borrow(), vec![vec!["unread"]]);
     }
 }
+
+#[test]
+fn mapfile_input_errors_overlay_and_write_only_files_follow_eof_policy() {
+    use shell_engine::io::Endpoint;
+    let rig = Rig::new(Limits::default());
+    input(
+        &rig,
+        Endpoint::host(std::rc::Rc::new(BrokenInput(Endpoint::bytes(
+            b"x\ny\npart".to_vec(),
+        )))),
+    );
+    assert_eq!(
+        rig.run("a=(o0 o1 o2 o3 o4); mapfile -t -O 1 a; args \"${a[@]}\""),
+        0
+    );
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["o0", "x", "y", "part", "o4"]]
+    );
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(old keep); mapfile -t a 0>output; args \"$?\" \"${a[@]}\"; a=(old keep); mapfile -t -O 1 a 0>output; args \"$?\" \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["0"], vec!["0", "old", "keep"]]
+    );
+}
+
+#[test]
+fn mapfile_projected_targets_and_despecialized_funcname() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("f() { for name in FUNCNAME BASH_SOURCE BASH_LINENO BASH_ARGC BASH_ARGV; do mapfile -t \"$name\" <<< x; args \"$name\" \"$?\"; done; }; f; mapfile -t PIPESTATUS <<< x; args \"$?\"; unset FUNCNAME; mapfile -t FUNCNAME <<< ordinary; args \"${FUNCNAME[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![
+            vec!["FUNCNAME", "1"],
+            vec!["BASH_SOURCE", "1"],
+            vec!["BASH_LINENO", "1"],
+            vec!["BASH_ARGC", "1"],
+            vec!["BASH_ARGV", "1"],
+            vec!["2"],
+            vec!["ordinary"]
+        ]
+    );
+}
+
+#[test]
+fn mapfile_local_prefix_restore_and_exported_arrays() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("a=(global); f() { local a; a=(L1 L2); a=1 mapfile -t -O 1 a <<< z; args \"${a[@]}\"; }; f; args \"${a[@]}\"; export a; mapfile -t a <<< value; args \"${a[@]}\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![vec!["L1", "L2"], vec!["global"], vec!["value"]]
+    );
+}
+
+#[test]
+fn mapfile_ifs_policy_and_getopts_cursor_are_explicit() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("getopts ab opt -a -b; mapfile -t OPTIND <<< 7; args \"$?\" \"$opt\" \"${OPTIND[0]}\"; getopts ab opt -a -b; args \"$opt\" \"$OPTIND\"; mapfile -t IFS <<< :; v=a:b; args $v; set -- a b; args \"$*\""), 0);
+    assert_eq!(
+        *rig.calls.borrow(),
+        vec![
+            vec!["0", "a", "7"],
+            vec!["b", "3"],
+            vec!["a:b"],
+            vec!["a:b"]
+        ]
+    );
+}
+
+#[test]
+fn mapfile_ten_thousand_record_overlay_does_not_copy_each_record() {
+    let rig = Rig::new(Limits::default());
+    let source = format!(
+        "mapfile -t a <<EOF\n{}EOF\nmapfile -O 0 -t a <<EOF\n{}EOF\nargs \"${{#a[@]}}\" \"${{a[0]}}\" \"${{a[9999]}}\"",
+        "old\n".repeat(10_000),
+        "new\n".repeat(10_000)
+    );
+    assert_eq!(rig.run(&source), 0);
+    assert_eq!(*rig.calls.borrow(), vec![vec!["10000", "new", "new"]]);
+}

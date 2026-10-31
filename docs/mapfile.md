@@ -34,8 +34,18 @@ builtin prefixes use the shared state model.
 The engine stores UTF-8 strings rather than arbitrary bytes, so raw bytes in a
 stored value are outside this feature. `PIPESTATUS` follows the engine's
 separate pipeline-status producer policy and is rejected, unlike GNU Bash.
-`IFS` and `OPTIND` publication follows the engine's existing state hooks rather
-than Bash's full special-variable behavior.
+`IFS` refreshes the engine's existing views. An array-valued `IFS` disables field
+splitting and joins `"$*"` with element zero. GNU Bash instead splits on element
+zero and keeps `"$*"` space-joined for this operation. `OPTIND` publication does
+not reset the hidden getopts cursor, matching GNU Bash 5.3.15.
+
+Create an indexed local with `local a; a=(...)`. The declaration layer does not
+yet support `local a=(...)`. Nameref cycles and chains beyond eight links return
+status 1 rather than Bash's warning and success. The five projected stack arrays
+reject with status 1. After `unset FUNCNAME`, that name becomes an ordinary target.
+
+INT trap actions do not run in this engine. Tests inspect the completed prefix
+before interruption and read it again in the same session after interruption.
 
 ## Verification
 

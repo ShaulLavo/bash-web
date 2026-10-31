@@ -2501,12 +2501,12 @@
       "shell/engine/src/builtins/mapfile/records.rs",
       "shell/engine/src/state/producer.rs",
       "shell/engine/src/state.rs",
-      "shell/engine/src/state/binding.rs",
-      "shell/engine/src/state/call_stack.rs"
+      "shell/engine/src/state/binding.rs"
     ],
     "testDestinations": [
       "shell/engine/tests/words/mapfile.rs",
-      "scripts/test-own-shell-mapfile.ts"
+      "scripts/test-own-shell-mapfile.ts",
+      "scripts/fixtures/shell-mapfile.json"
     ],
     "documentation": [
       "docs/mapfile.md",

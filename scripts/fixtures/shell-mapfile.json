@@ -60,6 +60,566 @@
       "script": "mapfile -c -0 a <<EOF\nx\nEOF\nprintf 's=%s n=%s\\n' \"$?\" \"${#a[@]}\"",
       "status": 0,
       "stdoutBase64": "cz0xIG49MAo="
+    },
+    {
+      "id": "eof-tail",
+      "script": "printf 'first\\nlast' | { mapfile -t a; printf '%s:<%s>:<%s>\\n' \"${#a[@]}\" \"${a[0]}\" \"${a[1]}\"; }",
+      "status": 0,
+      "stdoutBase64": "Mjo8Zmlyc3Q+OjxsYXN0Pgo="
+    },
+    {
+      "id": "nul-prefix",
+      "script": "printf 'x\\0\\377\\n' | { mapfile -t a; printf '%s:<%s>\\n' \"${#a[@]}\" \"${a[0]}\"; }",
+      "status": 0,
+      "stdoutBase64": "MTo8eD4K"
+    },
+    {
+      "id": "positive-count-unread",
+      "script": "printf 'one\\ntwo\\nrest\\n' | { mapfile -n 2 -t a; read -r rest; printf '%s:<%s>:<%s>:<%s>\\n' \"${#a[@]}\" \"${a[0]}\" \"${a[1]}\" \"$rest\"; }",
+      "status": 0,
+      "stdoutBase64": "Mjo8b25lPjo8dHdvPjo8cmVzdD4K"
+    },
+    {
+      "id": "skip-all",
+      "script": "a=(old); mapfile -s 9 -t a <<EOF\nx\ny\nEOF\nprintf '%s:%s\\n' \"$?\" \"${#a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "MDowCg=="
+    },
+    {
+      "id": "overlay-zero-keeps-higher",
+      "script": "a=(old keep third); mapfile -O 0 -t a <<< new; printf '%s:%s:%s\\n' \"${a[0]}\" \"${a[1]}\" \"${a[2]}\"",
+      "status": 0,
+      "stdoutBase64": "bmV3OmtlZXA6dGhpcmQK"
+    },
+    {
+      "id": "prefix",
+      "script": "a=(x y); a=1 mapfile -t a <<< z; printf '%s:%s\\n' \"${a[0]}\" \"${a[1]}\"",
+      "status": 0,
+      "stdoutBase64": "eDp5Cg=="
+    },
+    {
+      "id": "local-prefix",
+      "script": "f() { local a; a=(L1 L2); a=1 mapfile -t -O 1 a <<< z; printf '%s:%s\\n' \"${a[0]}\" \"${a[1]}\"; }; f",
+      "status": 0,
+      "stdoutBase64": "TDE6TDIK"
+    },
+    {
+      "id": "nameref",
+      "script": "declare -n r=a; mapfile -t r <<< value; printf '<%s>\\n' \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "PHZhbHVlPgo="
+    },
+    {
+      "id": "readonly-input-unread",
+      "script": "printf 'unread\\n' | { readonly a=old; mapfile a; code=$?; read -r next; printf '%s:<%s>:<%s>\\n' \"$code\" \"$a\" \"$next\"; }",
+      "status": 0,
+      "stdoutBase64": "MTo8b2xkPjo8dW5yZWFkPgo="
+    },
+    {
+      "id": "indexed-nameref-unread",
+      "script": "printf 'unread\\n' | { a=(old keep); declare -n r='a[1]'; mapfile r; code=$?; read -r next; printf '%s:<%s>:<%s>:<%s>\\n' \"$code\" \"${a[0]}\" \"${a[1]}\" \"$next\"; }",
+      "status": 0,
+      "stdoutBase64": "MTo8b2xkPjo8a2VlcD46PHVucmVhZD4K"
+    },
+    {
+      "id": "optind-cursor",
+      "script": "getopts ab opt -a -b; mapfile -t OPTIND <<< 7; printf '%s %s %s\\n' \"$?\" \"$opt\" \"${OPTIND[0]}\"; getopts ab opt -a -b; printf '%s %s\\n' \"$opt\" \"$OPTIND\"",
+      "status": 0,
+      "stdoutBase64": "MCBhIDcKYiAzCg=="
+    },
+    {
+      "id": "negative-origin-real-null",
+      "script": "a=(old keep); mapfile -O -1 a </dev/null; printf '%s:<%s>:<%s>\\n' \"$?\" \"${a[0]}\" \"${a[1]}\"",
+      "status": 0,
+      "stdoutBase64": "MTo8b2xkPjo8a2VlcD4K"
+    },
+    {
+      "id": "extra-operands",
+      "script": "mapfile -t a ignored <<< value; printf '%s:<%s>\\n' \"$?\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MDo8dmFsdWU+Cg=="
+    },
+    {
+      "id": "numeric-n-0",
+      "script": "a=(old keep); mapfile -n '0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-1",
+      "script": "a=(old keep); mapfile -n '+0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-2",
+      "script": "a=(old keep); mapfile -n '-0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-3",
+      "script": "a=(old keep); mapfile -n '1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-4",
+      "script": "a=(old keep); mapfile -n '+1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-5",
+      "script": "a=(old keep); mapfile -n ' 1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-6",
+      "script": "a=(old keep); mapfile -n '1 ' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-7",
+      "script": "a=(old keep); mapfile -n '\t1\r' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-8",
+      "script": "a=(old keep); mapfile -n '4294967295' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-9",
+      "script": "a=(old keep); mapfile -n '4294967296' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-10",
+      "script": "a=(old keep); mapfile -n '-1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-11",
+      "script": "a=(old keep); mapfile -n '' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-12",
+      "script": "a=(old keep); mapfile -n '+' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-13",
+      "script": "a=(old keep); mapfile -n '-' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-14",
+      "script": "a=(old keep); mapfile -n '1.0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-15",
+      "script": "a=(old keep); mapfile -n '0x1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-16",
+      "script": "a=(old keep); mapfile -n '1junk' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-n-17",
+      "script": "a=(old keep); mapfile -n '18446744073709551616' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-0",
+      "script": "a=(old keep); mapfile -s '0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-1",
+      "script": "a=(old keep); mapfile -s '+0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-2",
+      "script": "a=(old keep); mapfile -s '-0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-3",
+      "script": "a=(old keep); mapfile -s '1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-4",
+      "script": "a=(old keep); mapfile -s '+1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-5",
+      "script": "a=(old keep); mapfile -s ' 1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-6",
+      "script": "a=(old keep); mapfile -s '1 ' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-7",
+      "script": "a=(old keep); mapfile -s '\t1\r' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-8",
+      "script": "a=(old keep); mapfile -s '4294967295' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-9",
+      "script": "a=(old keep); mapfile -s '4294967296' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-10",
+      "script": "a=(old keep); mapfile -s '-1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-11",
+      "script": "a=(old keep); mapfile -s '' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-12",
+      "script": "a=(old keep); mapfile -s '+' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-13",
+      "script": "a=(old keep); mapfile -s '-' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-14",
+      "script": "a=(old keep); mapfile -s '1.0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-15",
+      "script": "a=(old keep); mapfile -s '0x1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-16",
+      "script": "a=(old keep); mapfile -s '1junk' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-s-17",
+      "script": "a=(old keep); mapfile -s '18446744073709551616' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-0",
+      "script": "a=(old keep); mapfile -O '0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-1",
+      "script": "a=(old keep); mapfile -O '+0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-2",
+      "script": "a=(old keep); mapfile -O '-0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-3",
+      "script": "a=(old keep); mapfile -O '1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-4",
+      "script": "a=(old keep); mapfile -O '+1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-5",
+      "script": "a=(old keep); mapfile -O ' 1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-6",
+      "script": "a=(old keep); mapfile -O '1 ' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-7",
+      "script": "a=(old keep); mapfile -O '\t1\r' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-8",
+      "script": "a=(old keep); mapfile -O '4294967295' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-9",
+      "script": "a=(old keep); mapfile -O '4294967296' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-10",
+      "script": "a=(old keep); mapfile -O '-1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-11",
+      "script": "a=(old keep); mapfile -O '' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-12",
+      "script": "a=(old keep); mapfile -O '+' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-13",
+      "script": "a=(old keep); mapfile -O '-' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-14",
+      "script": "a=(old keep); mapfile -O '1.0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-15",
+      "script": "a=(old keep); mapfile -O '0x1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-16",
+      "script": "a=(old keep); mapfile -O '1junk' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-O-17",
+      "script": "a=(old keep); mapfile -O '18446744073709551616' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-0",
+      "script": "a=(old keep); mapfile -c '0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-1",
+      "script": "a=(old keep); mapfile -c '+0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-2",
+      "script": "a=(old keep); mapfile -c '-0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-3",
+      "script": "a=(old keep); mapfile -c '1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-4",
+      "script": "a=(old keep); mapfile -c '+1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-5",
+      "script": "a=(old keep); mapfile -c ' 1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-6",
+      "script": "a=(old keep); mapfile -c '1 ' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-7",
+      "script": "a=(old keep); mapfile -c '\t1\r' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-8",
+      "script": "a=(old keep); mapfile -c '4294967295' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-9",
+      "script": "a=(old keep); mapfile -c '4294967296' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-10",
+      "script": "a=(old keep); mapfile -c '-1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-11",
+      "script": "a=(old keep); mapfile -c '' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-12",
+      "script": "a=(old keep); mapfile -c '+' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-13",
+      "script": "a=(old keep); mapfile -c '-' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-14",
+      "script": "a=(old keep); mapfile -c '1.0' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-15",
+      "script": "a=(old keep); mapfile -c '0x1' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-16",
+      "script": "a=(old keep); mapfile -c '1junk' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "numeric-c-17",
+      "script": "a=(old keep); mapfile -c '18446744073709551616' a <<EOF\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MToyOjxvbGQ+Cg=="
+    },
+    {
+      "id": "missing-d",
+      "script": "mapfile -d; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    },
+    {
+      "id": "missing-n",
+      "script": "mapfile -n; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    },
+    {
+      "id": "missing-O",
+      "script": "mapfile -O; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    },
+    {
+      "id": "missing-s",
+      "script": "mapfile -s; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    },
+    {
+      "id": "missing-u",
+      "script": "mapfile -u; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    },
+    {
+      "id": "missing-c",
+      "script": "mapfile -c; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo="
+    },
+    {
+      "id": "bad-earlier-number",
+      "script": "a=(old); mapfile -n bad -n 0 a <<< value; printf '%s:<%s>\\n' \"$?\" \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "MTo8b2xkPgo="
+    },
+    {
+      "id": "last-valid-number",
+      "script": "mapfile -n 1 -n 2 -t a <<EOF\na\nb\nc\nEOF\nprintf '%s:%s:<%s>\\n' \"$?\" \"${#a[@]}\" \"${a[1]}\"",
+      "status": 0,
+      "stdoutBase64": "MDoyOjxiPgo="
     }
-  ]
+  ],
+  "oracleExecutableSha256": "575e03ac834b739349a4484de481abcd06a6f7193cefc795260a32a1943f20a5",
+  "oraclePackageSha256": "2c14ce3c72790ec6b344267b39f04f921bbb34f0c1399460e71492547f6b6c65"
 }

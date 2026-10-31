@@ -232,7 +232,11 @@ async fn option_value<'a>(
     }
     let converted = number(value, context, work).await;
     let converted = match converted {
-        Ok(number) if flag != b'c' || number != 0 => number,
+        Ok(number)
+            if (flag != b'c' || number != 0) && (flag != b'u' || number <= i32::MAX as u32) =>
+        {
+            number
+        }
         Ok(_) | Err(1) => {
             complain(name, &[value, ": ", numeric_diagnostic(flag)], fds, context).await?;
             return Err(1);
@@ -347,10 +351,10 @@ async fn reject(
 }
 
 async fn complain(name: &str, parts: &[&str], fds: &FdTable, context: &Context) -> Result<(), i32> {
-    diagnose(fds, name, context).await?;
-    diagnose(fds, ": ", context).await?;
-    for part in parts {
-        diagnose(fds, part, context).await?;
+    for part in [name, ": "].into_iter().chain(parts.iter().copied()) {
+        if diagnose(fds, part, context).await == Err(130) {
+            return Err(130);
+        }
     }
     Ok(())
 }

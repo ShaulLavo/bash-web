@@ -121,11 +121,8 @@ impl State {
         match (mode, self.variables.get_mut(target)) {
             (IndexedMode::Overlay, Some(Binding::Indexed(_))) => {}
             (IndexedMode::Overlay, Some(binding @ Binding::Scalar(_))) => {
-                let Binding::Scalar(value) = std::mem::replace(binding, String::new().into())
-                else {
-                    unreachable!()
-                };
-                *binding = Binding::Indexed(Rc::new(Indexed::from_scalar(value)));
+                let scalar = std::mem::replace(binding, String::new().into());
+                *binding = Binding::Indexed(Rc::new(scalar.into_indexed()));
             }
             _ => {
                 self.variables.insert(
@@ -571,5 +568,106 @@ mod tests {
         drop(future);
         assert_eq!(memory.observation().0, 0);
         assert_eq!(state.borrow().variables["a"], saved);
+    }
+
+    #[test]
+    fn readonly_alias_does_not_block_a_writable_resolved_target() {
+        let state = State::default().shared();
+        state
+            .borrow_mut()
+            .declare_nameref("alias".into(), "a".into(), false)
+            .unwrap();
+        state.borrow_mut().readonly.insert("alias".into());
+        let mut work = work();
+        let mut producer = finish(State::begin_indexed_producer(
+            &state,
+            "alias",
+            IndexedMode::Replace,
+            0,
+            &Cancel::new(),
+            &mut work,
+        ))
+        .unwrap_or_else(|_| panic!("resolved target is writable"));
+        push(&mut producer, &state, "value", &mut work).unwrap_or_else(|_| panic!("writable"));
+        assert_eq!(values(&state), ["value"]);
+        state.borrow_mut().readonly.insert("a".into());
+        assert!(matches!(
+            push(&mut producer, &state, "rejected", &mut work),
+            Err(ProducerError::Rejected(Rejection::Readonly))
+        ));
+        assert_eq!(values(&state), ["value"]);
+    }
+
+    #[test]
+    fn exact_unicode_capacity_and_unmappable_failure_keep_previous_elements() {
+        let state = State::default().shared();
+        state
+            .borrow_mut()
+            .case_attributes
+            .insert("a".into(), CaseMapping::Upper);
+        state
+            .borrow_mut()
+            .assign_parameter("LC_ALL".into(), "C.UTF-8".into())
+            .unwrap();
+        let mut work = work();
+        let mut producer = begin(&state, IndexedMode::Replace, 0, &mut work);
+        push(&mut producer, &state, "µ", &mut work).unwrap_or_else(|_| panic!("mapped Latin-1"));
+        assert_eq!(
+            state.borrow().variables["a"].slot(0).map(String::capacity),
+            Some("Μ".len())
+        );
+        assert!(matches!(
+            push(&mut producer, &state, "中", &mut work),
+            Err(ProducerError::Exec(Error::Status(2)))
+        ));
+        assert_eq!(values(&state), ["Μ"]);
+    }
+
+    #[test]
+    fn cursor_overflow_is_rejected_before_mutation() {
+        let state = State::default().shared();
+        let mut work = work();
+        let mut producer = begin(&state, IndexedMode::Overlay, i64::MAX, &mut work);
+        assert!(matches!(
+            push(&mut producer, &state, "absent", &mut work),
+            Err(ProducerError::Exec(Error::Status(2)))
+        ));
+        assert!(values(&state).is_empty());
+    }
+
+    #[test]
+    fn rejected_direct_targets_leave_dynamic_views_and_local_tickets_unchanged() {
+        let memory = StorageBudget::new(32_768);
+        let state = State::with_memory(memory.clone()).shared();
+        let frame = FunctionFrame::enter(state.clone(), Vec::new(), 100).unwrap();
+        state.borrow_mut().local("a".into(), "keep".into()).unwrap();
+        state.borrow_mut().readonly("a".into(), None).unwrap();
+        state.borrow_mut().star_separator = StarSeparator::Snapshot {
+            separator: Some(' '),
+            scope: 0,
+        };
+        state.borrow_mut().ifs_members = None;
+        let used = memory.observation().0;
+        let held = state.borrow().held_local_value("a");
+        let pressure = memory.admit(32_768 - used).unwrap();
+        let mut work = Work::new(0, 0, 0);
+        let result = finish(State::begin_indexed_producer(
+            &state,
+            "a",
+            IndexedMode::Replace,
+            0,
+            &Cancel::new(),
+            &mut work,
+        ));
+        assert!(matches!(
+            result,
+            Err(ProducerError::Rejected(Rejection::Readonly))
+        ));
+        assert_eq!(state.borrow().held_local_value("a"), held);
+        assert!(state.borrow().ifs_members.is_none());
+        assert_eq!(values(&state), ["keep"]);
+        drop(pressure);
+        drop(frame);
+        assert_eq!(memory.observation().0, 0);
     }
 }
