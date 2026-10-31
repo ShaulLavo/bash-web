@@ -13,12 +13,7 @@ export function renderGitStatus(input: SegmentInput, config: GitStatusConfig): P
   if (stash.present === undefined) return unknown(config);
   if (stash.present)
     text += marker(stash.count ?? 1, config.stashed, config.counts && stash.count !== undefined);
-  const kinds: readonly (keyof StatusCounts)[] = [
-    "deleted",
-    "modified",
-    "typeChanged",
-    "untracked",
-  ];
+  const kinds: readonly (keyof StatusCounts)[] = ["deleted", "modified", "typeChanged"];
   for (const kind of kinds) text += marker(counts[kind], config[kind], config.counts);
   if (value.objects) {
     const { staged, aheadBehind } = value.objects;

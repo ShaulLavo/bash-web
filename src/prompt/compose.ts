@@ -45,20 +45,20 @@ export interface ComposeInput {
 const renderers: Partial<
   Record<SegmentName, (input: SegmentInput, config: never) => Piece[] | undefined>
 > = {
-  directory: (input, config) => renderDirectory(input, config),
-  git_branch: (input, config) => renderGitBranch(input, config),
-  git_commit: (input, config) => renderGitCommit(input, config),
-  git_state: (input, config) => renderGitState(input, config),
-  package: (input, config) => renderPackage(input, config),
-  bun: (input, config) => renderBun(input, config),
-  nodejs: (input, config) => renderNodejs(input, config),
-  python: (input, config) => renderPython(input, config),
-  env_var: (input, config) => renderEnvVar(input, config),
-  cmd_duration: (input, config) => renderCmdDuration(input, config),
-  jobs: (input, config) => renderJobs(input, config),
-  status: (input, config) => renderStatus(input, config),
-  line_break: (input, config) => renderLineBreak(input, config),
-  character: (input, config) => renderCharacter(input, config),
+  directory: renderDirectory,
+  git_branch: renderGitBranch,
+  git_commit: renderGitCommit,
+  git_state: renderGitState,
+  package: renderPackage,
+  bun: renderBun,
+  nodejs: renderNodejs,
+  python: renderPython,
+  env_var: renderEnvVar,
+  cmd_duration: renderCmdDuration,
+  jobs: renderJobs,
+  status: renderStatus,
+  line_break: renderLineBreak,
+  character: renderCharacter,
 };
 
 function sequenceEnd(text: string, offset: number, osc: boolean): number {

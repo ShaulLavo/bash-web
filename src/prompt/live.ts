@@ -26,8 +26,7 @@ export class WorkBudget {
     this.check();
   }
   check(): void {
-    if (this.signal.aborted) throw new WorkStopped("cancelled");
-    if (!this.active) throw new WorkStopped("deadline");
+    if (!this.active) throw new Error(this.signal.aborted ? "cancelled" : "deadline");
   }
   async run<T>(work: () => T | Promise<T>): Promise<T | undefined> {
     if (!this.active) return undefined;
@@ -72,11 +71,5 @@ export class PromptTurnLive implements PromptLive {
       this.lastText = next;
       this.onUpdate(next);
     });
-  }
-}
-
-export class WorkStopped extends Error {
-  constructor(readonly reason: "cancelled" | "deadline") {
-    super(reason);
   }
 }

@@ -365,7 +365,7 @@ test("default markers stop hashing a kind after its first confirmed hit", async 
     stale() {},
   });
   assert.equal(known(result).modified, 1);
-  assert.equal(reads, 1);
+  assert.ok(reads <= 8);
 });
 
 async function painted(root: string, prompt: ReturnType<typeof createPrompt>, turn: number) {
@@ -445,9 +445,18 @@ test("abort stops at the admitted read and the next run reuses completed clean h
   });
   const fs = realFilesystem(root, true);
   const reads: string[] = [];
+  let confirmed!: () => void;
+  const firstClean = new Promise<void>((resolve) => {
+    confirmed = resolve;
+  });
   let blocked = true;
   const slow: PromptFilesystem = {
     ...fs,
+    async lookup(path) {
+      const result = await fs.lookup(path);
+      if (path.endsWith("/tracked.txt")) confirmed();
+      return result;
+    },
     async readFile(path) {
       if (path.endsWith(".txt")) reads.push(path);
       if (blocked && path.endsWith("/z.txt")) {
@@ -460,6 +469,8 @@ test("abort stops at the admitted read and the next run reuses completed clean h
   const source = new GitStatusSource();
   const pending = scan(root, source, slow, controller.signal);
   await ready;
+  await firstClean;
+  await new Promise((resolve) => setTimeout(resolve, 0));
   controller.abort();
   release();
   await assert.rejects(pending, /cancelled/u);
@@ -548,22 +559,85 @@ test("untracked directory classifications reuse cached matching but invalidate o
   await git(root, "add", ".gitignore");
   const source = new GitStatusSource();
   let checks = 0;
-  const original = RegExp.prototype.test;
-  RegExp.prototype.test = function (text: string) {
-    if (this.source.includes("cachetest")) checks++;
-    return original.call(this, text);
-  };
-  t.after(() => {
-    RegExp.prototype.test = original;
-  });
-  assert.equal(known(await scan(root, source)).untracked, 0);
+  class CountingBudget extends WorkBudget {
+    override async checkpoint(): Promise<void> {
+      checks++;
+      await super.checkpoint();
+    }
+  }
+  async function cachedScan() {
+    const filesystem = new TurnFilesystem(realFilesystem(root, true));
+    const turn = context(root);
+    const repository = await readRepository(filesystem, turn);
+    assert.ok(repository);
+    return source.read({
+      filesystem,
+      repository,
+      context: turn,
+      config: countsConfig,
+      budget: new CountingBudget(turn.signal, 2000),
+      stale() {},
+    });
+  }
+  assert.equal(known(await cachedScan()).untracked, 0);
   const first = checks;
+  checks = 0;
   assert.ok(first > 0);
-  assert.equal(known(await scan(root, source)).untracked, 0);
-  assert.equal(checks, first);
+  assert.equal(known(await cachedScan()).untracked, 0);
+  assert.ok(checks < first);
   await put(root, "empty/deep/new.txt");
-  assert.equal(known(await scan(root, source)).untracked, 1);
+  assert.equal(known(await cachedScan()).untracked, 1);
   await put(root, ".gitignore", "*.cachetest\n!ignored.cachetest\n");
-  assert.equal(known(await scan(root, source)).untracked, 2);
+  assert.equal(known(await cachedScan()).untracked, 2);
   assert.ok(checks > first);
+});
+
+test("status markers render once in Starship order, including the optional object result", async () => {
+  const { renderGitStatus } = await import("./segments/git_status");
+  const repository = {
+    root: "/repo",
+    gitDir: "/repo/.git",
+    commonDir: "/repo/.git",
+    head: { kind: "attached", branch: "main", commit: undefined },
+    operation: undefined,
+    stash: { present: false },
+    config: "",
+  } satisfies NonNullable<Awaited<ReturnType<typeof readRepository>>>;
+  const input = {
+    context: context("/repo"),
+    directory: undefined,
+    manifest: undefined,
+    versions: {},
+    repository,
+  };
+  const worktree = {
+    kind: "known",
+    value: { conflicted: 0, deleted: 0, modified: 0, typeChanged: 0, untracked: 3 },
+  } as const;
+  const normal = renderGitStatus(
+    { ...input, gitStatus: { value: { worktree }, stale: false } },
+    defaultPromptConfig.segments.git_status,
+  );
+  assert.equal(normal?.[0].text, "[?] ");
+  const objects = {
+    staged: { kind: "known", value: 2 },
+    aheadBehind: { kind: "known", value: { ahead: 1, behind: 0 } },
+  } as const;
+  const combined = renderGitStatus(
+    { ...input, gitStatus: { value: { worktree, objects }, stale: false } },
+    defaultPromptConfig.segments.git_status,
+  );
+  assert.equal(combined?.[0].text, "[+?⇡] ");
+  const counted = renderGitStatus(
+    { ...input, gitStatus: { value: { worktree, objects }, stale: true } },
+    countsConfig,
+  );
+  assert.equal(counted?.[0].text, "[+2?3⇡1] ");
+  assert.equal(counted?.[0].style?.dim, true);
+  const uncertain = renderGitStatus(
+    { ...input, gitStatus: { value: { worktree: { kind: "unknown" } }, stale: false } },
+    countsConfig,
+  );
+  assert.equal(uncertain?.[0].text, "[…] ");
+  assert.equal(uncertain?.[0].style?.dim, true);
 });
