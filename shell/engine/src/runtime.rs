@@ -377,6 +377,7 @@ impl Runtime {
         }
         // An admission sweep can consume a job observed by a parked group drain.
         // Wake those observers locally: polling its now-reaped ABI ID is invalid.
+        // The readiness key is the runtime job ID, not the shell's logical group.
         self.0.support.notify(4, job);
         Ok(())
     }

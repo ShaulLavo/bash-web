@@ -3415,15 +3415,35 @@ fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
     let (group, source, direct, job) = inherited_input(&executor, &runtime, &fake);
     let done = executor.spawn(runtime.wait_group(group));
     executor.drive(64);
-    let parked_waiters = runtime.0.support.waiter_count();
-    assert!(parked_waiters > 0);
+    assert_ne!(u64::from(job), group);
+    let mut reaped_job = Box::pin(runtime.0.support.ready(4, job));
+    assert!(reaped_job.as_mut().now_or_never().is_none());
+    let mut unrelated = [
+        (2, job),
+        (4, u32::try_from(group).unwrap()),
+        (4, job + 1),
+        (5, job),
+        (6, job),
+    ]
+    .map(|(kind, id)| Box::pin(runtime.0.support.ready(kind, id)));
+    assert!(
+        unrelated
+            .iter_mut()
+            .all(|wait| wait.as_mut().now_or_never().is_none())
+    );
     fake.descendant_gates.borrow()[&(direct as u32 + 1)].cancel();
     executor.drive(64);
     let sibling = runtime.allocate_group();
     let pid = runtime.spawn(request(&runtime, "sleep", sibling)).unwrap();
     assert!(fake.reaped_jobs.borrow().contains(&job));
     assert!(!done.is_finished(), "sweep only wakes the cleanup owner");
-    assert!(runtime.0.support.waiter_count() < parked_waiters);
+    assert_eq!(reaped_job.as_mut().now_or_never(), Some(()));
+    assert!(
+        unrelated
+            .iter_mut()
+            .all(|wait| wait.as_mut().now_or_never().is_none())
+    );
+    drop(unrelated);
     assert_eq!(runtime.0.inputs.borrow().len(), 1);
     assert!(runtime.0.inputs.borrow()[0].users.contains(&group));
     assert!(runtime.0.input_slots.get() > 0);
