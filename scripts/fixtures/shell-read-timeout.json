@@ -1,0 +1,349 @@
+{
+  "schema": 1,
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/home/user",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C"
+  },
+  "packageSha256": "2c14ce3c72790ec6b344267b39f04f921bbb34f0c1399460e71492547f6b6c65",
+  "cases": [
+    {
+      "id": "numeric-0",
+      "script": "x=old; read -t '' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-1",
+      "script": "x=old; read -t '.' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-2",
+      "script": "x=old; read -t '+.' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-3",
+      "script": "x=old; read -t '-.' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-4",
+      "script": "x=old; read -t '+' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-5",
+      "script": "x=old; read -t '-' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-6",
+      "script": "x=old; read -t '0' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-7",
+      "script": "x=old; read -t '-0' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-8",
+      "script": "x=old; read -t '+0' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-9",
+      "script": "x=old; read -t '0.5' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-10",
+      "script": "x=old; read -t '-0.0000001' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-11",
+      "script": "x=old; read -t '-0.000001' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAtMC4wMDAwMDE6IGludmFsaWQgdGltZW91dCBzcGVjaWZpY2F0aW9uCg=="
+    },
+    {
+      "id": "numeric-12",
+      "script": "x=old; read -t '4294967295' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-13",
+      "script": "x=old; read -t '4294967296' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-14",
+      "script": "x=old; read -t '4294967297' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-15",
+      "script": "x=old; read -t '4294967296.5' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-16",
+      "script": "x=old; read -t '9223372036854775807' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-17",
+      "script": "x=old; read -t '9223372036854775808' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiA5MjIzMzcyMDM2ODU0Nzc1ODA4OiBpbnZhbGlkIHRpbWVvdXQgc3BlY2lmaWNhdGlvbgo="
+    },
+    {
+      "id": "numeric-18",
+      "script": "x=old; read -t '18446744073709551615' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAxODQ0Njc0NDA3MzcwOTU1MTYxNTogaW52YWxpZCB0aW1lb3V0IHNwZWNpZmljYXRpb24K"
+    },
+    {
+      "id": "numeric-19",
+      "script": "x=old; read -t '18446744073709551616' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-20",
+      "script": "x=old; read -t '18446744073709551617' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-21",
+      "script": "x=old; read -t '-9223372036854775808' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAtOTIyMzM3MjAzNjg1NDc3NTgwODogaW52YWxpZCB0aW1lb3V0IHNwZWNpZmljYXRpb24K"
+    },
+    {
+      "id": "numeric-22",
+      "script": "x=old; read -t '-9223372036854775809' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-23",
+      "script": "x=old; read -t '-18446744073709551616' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "numeric-24",
+      "script": "x=old; read -t '-18446744073709551617' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAtMTg0NDY3NDQwNzM3MDk1NTE2MTc6IGludmFsaWQgdGltZW91dCBzcGVjaWZpY2F0aW9uCg=="
+    },
+    {
+      "id": "numeric-25",
+      "script": "x=old; read -t '-4294967296' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAtNDI5NDk2NzI5NjogaW52YWxpZCB0aW1lb3V0IHNwZWNpZmljYXRpb24K"
+    },
+    {
+      "id": "numeric-26",
+      "script": "x=old; read -t '1e2' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAxZTI6IGludmFsaWQgdGltZW91dCBzcGVjaWZpY2F0aW9uCg=="
+    },
+    {
+      "id": "numeric-27",
+      "script": "x=old; read -t '0x1' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAweDE6IGludmFsaWQgdGltZW91dCBzcGVjaWZpY2F0aW9uCg=="
+    },
+    {
+      "id": "numeric-28",
+      "script": "x=old; read -t ' 1' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAgMTogaW52YWxpZCB0aW1lb3V0IHNwZWNpZmljYXRpb24K"
+    },
+    {
+      "id": "numeric-29",
+      "script": "x=old; read -t '1 ' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAxIDogaW52YWxpZCB0aW1lb3V0IHNwZWNpZmljYXRpb24K"
+    },
+    {
+      "id": "numeric-30",
+      "script": "x=old; read -t '1.2.3' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAxLjIuMzogaW52YWxpZCB0aW1lb3V0IHNwZWNpZmljYXRpb24K"
+    },
+    {
+      "id": "numeric-31",
+      "script": "x=old; read -t '99999999999999999999999999999999999999999999999999' x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiA5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTogaW52YWxpZCB0aW1lb3V0IHNwZWNpZmljYXRpb24K"
+    },
+    {
+      "id": "missing",
+      "script": "read -t; printf \"%s\\n\" \"$?\"",
+      "status": 0,
+      "stdoutBase64": "Mgo=",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiAtdDogb3B0aW9uIHJlcXVpcmVzIGFuIGFyZ3VtZW50CnJlYWQ6IHVzYWdlOiByZWFkIFstRWVyc10gWy1hIGFycmF5XSBbLWQgZGVsaW1dIFstaSB0ZXh0XSBbLW4gbmNoYXJzXSBbLU4gbmNoYXJzXSBbLXAgcHJvbXB0XSBbLXQgdGltZW91dF0gWy11IGZkXSBbbmFtZSAuLi5dCg=="
+    },
+    {
+      "id": "invalid-first",
+      "script": "x=old; read -tbad -t0 x <<<hello; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtvbGRdCg==",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiBiYWQ6IGludmFsaWQgdGltZW91dCBzcGVjaWZpY2F0aW9uCg=="
+    },
+    {
+      "id": "last-valid",
+      "script": "x=old; read -t1 -t0 x <<<hello; printf \"%s[%s]\\n\" \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "ready-invalid-name",
+      "script": "read -t0 1bad <<<hello; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "ready-preserves",
+      "script": "{ x=old; read -t0 x; printf '%s[%s]\\n' \"$?\" \"$x\"; read -r x; printf '[%s]\\n' \"$x\"; } <<<hello",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCltoZWxsb10K",
+      "stderrBase64": ""
+    },
+    {
+      "id": "ready-write-file",
+      "script": "read -t0 -u3 3>write-only; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "ready-write-null",
+      "script": "read -t0 -u3 3>/dev/null; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "MAo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "ready-write-pipe",
+      "script": "x=$(read -t0 -u1; printf '%s' \"$?\"); printf '%s\\n' \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": ""
+    },
+    {
+      "id": "ready-missing",
+      "script": "read -t0 -u99; printf '%s\\n' \"$?\"",
+      "status": 0,
+      "stdoutBase64": "MQo=",
+      "stderrBase64": "L3Vzci9iaW4vYmFzaDogbGluZSAxOiByZWFkOiA5OTogaW52YWxpZCBmaWxlIGRlc2NyaXB0b3I6IEJhZCBmaWxlIGRlc2NyaXB0b3IK"
+    },
+    {
+      "id": "tmout-explicit-zero",
+      "script": "TMOUT=0.2; x=old; read -t0 x <<<hello; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MFtvbGRdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "regular-long",
+      "script": "printf '%065536d!\\n' 0 >input; exec 3<input; exec 4<&3; LC_ALL=C read -rN65536 -t0.000001 -u3 x; s=$?; read -r -u4 tail; printf '%s:%s:%s\\n' \"$s\" \"${#x}\" \"$tail\"",
+      "status": 0,
+      "stdoutBase64": "MDo2NTUzNjohCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "tmout-bad",
+      "script": "TMOUT='bad'; read x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "tmout-0",
+      "script": "TMOUT='0'; read x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "tmout--1",
+      "script": "TMOUT='-1'; read x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "tmout-4294967296",
+      "script": "TMOUT='4294967296'; read x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    },
+    {
+      "id": "tmout-0.5",
+      "script": "TMOUT='0.5'; read x </dev/null; printf '%s[%s]\\n' \"$?\" \"$x\"",
+      "status": 0,
+      "stdoutBase64": "MVtdCg==",
+      "stderrBase64": ""
+    }
+  ]
+}

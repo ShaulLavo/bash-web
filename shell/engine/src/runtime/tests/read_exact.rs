@@ -279,3 +279,77 @@ fn raw_exact_ready_input_yields_and_cancels_with_bounded_consumption() {
     );
     shutdown_session(&executor, &runtime, &fake, session);
 }
+
+#[test]
+fn timed_read_removes_runtime_waiter_after_timeout_and_cancellation() {
+    for cancelled in [false, true] {
+        timed_runtime_cleanup(cancelled);
+    }
+}
+
+fn timed_runtime_cleanup(cancelled: bool) {
+    let (executor, fake, runtime) = setup();
+    let (reader, writer) = io::pipe();
+    fake.fds.borrow_mut().insert(0, reader.clone());
+    let session = runtime_session(&executor, &runtime);
+    let before = runtime.0.support.waiter_count();
+    let job = session.start("read -t60 x").unwrap();
+    for _ in 0..1000 {
+        executor.drive(1);
+        if executor.next_deadline().is_some() && runtime.0.support.waiter_count() > before {
+            break;
+        }
+    }
+    assert_eq!(runtime.0.support.waiter_count(), before + 1);
+    assert_eq!(executor.fire_timers(executor.next_deadline().unwrap()), 1);
+    assert_eq!(writer.write(b"tail\n").now_or_never(), Some(Ok(5)));
+    if cancelled {
+        session.interrupt();
+    }
+    assert_eq!(
+        finish(&executor, &runtime, job),
+        if cancelled { 130 } else { 142 }
+    );
+    assert_eq!(runtime.0.support.waiter_count(), before);
+    assert!(executor.next_deadline().is_none());
+    let mut bytes = [0; 5];
+    assert_eq!(reader.read(&mut bytes).now_or_never(), Some(Ok(5)));
+    assert_eq!(&bytes, b"tail\n");
+    assert!(reader.read(&mut bytes).now_or_never().is_none());
+    assert_eq!(
+        finish(&executor, &runtime, session.start("true").unwrap()),
+        0
+    );
+    shutdown_session(&executor, &runtime, &fake, session);
+}
+
+#[test]
+fn timed_runtime_regular_read_ignores_deadline_across_cooperative_turns() {
+    let (executor, fake, runtime) = setup();
+    fake.fs.write_file("/regular", &vec![b'x'; 65536]).unwrap();
+    fake.fds.borrow_mut().insert(
+        0,
+        fake.fs
+            .open("/regular", &io::OpenOptions::default())
+            .unwrap(),
+    );
+    let session = runtime_session(&executor, &runtime);
+    let job = session
+        .start("LC_ALL=C; read -rN65536 -t0.000001 x")
+        .unwrap();
+    for _ in 0..10000 {
+        executor.drive(1);
+        assert!(executor.next_deadline().is_none());
+        assert_eq!(
+            executor.fire_timers(std::time::Instant::now() + std::time::Duration::from_secs(60)),
+            0
+        );
+        if job.is_finished() {
+            break;
+        }
+        runtime.poll(0).unwrap();
+    }
+    assert_eq!(finish(&executor, &runtime, job), 0);
+    assert_eq!(value(&session, "x").unwrap().len(), 65536);
+    shutdown_session(&executor, &runtime, &fake, session);
+}

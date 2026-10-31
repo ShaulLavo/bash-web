@@ -561,9 +561,7 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
             break job.now_or_never().unwrap();
         }
         if !executor.drive(0).runnable {
-            // This stand-alone embedding has no external readiness provider.
-            // Browser integration supplies one rather than adding a polling loop.
-            session.interrupt();
+            standalone_idle(&executor, &session);
         }
     };
     let shutdown = session.shutdown();
@@ -573,6 +571,15 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
     }
     executor.drive(256);
     std::process::exit(code);
+}
+
+fn standalone_idle(executor: &Executor, session: &Session) {
+    // This embedding has no external wake provider; all I/O is executor-local.
+    if let Some(deadline) = executor.next_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        return;
+    }
+    session.interrupt();
 }
 
 fn drain(endpoint: &Endpoint, output: &mut impl Write, session: &Session) {

@@ -2417,10 +2417,14 @@
     "baseRevision": "1bdbacd6c11ca7be31a55a2b3964239eabf10482",
     "paths": [
       "shell/engine/src/builtins/read.rs",
+      "shell/engine/src/builtins/read/timeout.rs",
       "shell/engine/src/builtins.rs",
       "shell/engine/src/builtins/printf.rs",
       "shell/engine/src/interpreter.rs",
       "shell/engine/tests/words/read_count.rs",
+      "shell/engine/tests/words/read_timeout.rs",
+      "scripts/test-own-shell-read-timeout.ts",
+      "scripts/fixtures/shell-read-timeout.json",
       "tests/external-commands.spec.ts"
     ],
     "implementation": "Original incremental counted input with one-byte reads, bounded UTF-8 validation, escape/continuation processing, NUL skipping, scalar IFS-whitespace trimming, count validation and exact-boundary stopping. Reuses the existing local locale selector and state/endpoint/work admission. Shared live buffer admission remains retained through assignment; cancellation and errors drop it. The later shellReadScalar adaptation extends this reader to ordinary logical lines and multiple destinations.",
