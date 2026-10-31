@@ -21,6 +21,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 ## Look up
 
 - [API reference](reference/api.md): `createShell`, `Shell`, `SharedBridge`, shell registration, and `waffle-base` composition
+- [Browser sessions](session.md): Typed terminal sessions, input queues, submission, prompt receipts, and disposal
 - [Browser integration](browser-runtime.md): Asset contract, storage, `PATH` lookup, test scope, source provenance
 - [Async shell core](shell-engine.md): Execution contract, bounds, supported syntax
 - [Shell workspace](shell-workspace.md): Parser crate, runtime ABI for interactive and [named-file](script-files.md) execution, the CLI; [WASI utility processes](wasi-process.md) for child execution

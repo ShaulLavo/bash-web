@@ -8,7 +8,7 @@ import type {
 } from "ghostty-webgpu";
 import terminalWasmUrl from "ghostty-webgpu/ghostty-vt.wasm?url";
 import terminalBridgeUrl from "ghostty-webgpu/bridge.wasm?url";
-import { BrowserSession } from "./session";
+import { BrowserSession } from "bash-web/session";
 import {
   createStartupDiagnostics,
   markStartup,
@@ -16,11 +16,10 @@ import {
   type StartupSnapshot,
 } from "../runtime/startup-diagnostics";
 import { VfsError, type Runtime, type SharedFilesystemState } from "waffle";
-import { createStorageStartup, waitForStorage } from "./storage";
+import { createStorageStartup, waitForStorage } from "../runtime/storage";
 import { acquireBrowserRuntime, type BrowserHostOptions } from "./runtime";
 export type { BrowserHostOptions, BrowserRuntimeLease } from "./runtime";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
-import { TerminalNewlines } from "../index";
 import "./style.css";
 
 interface BrowserTestAccess {
@@ -43,6 +42,7 @@ interface BrowserTestAccess {
   metrics(): BrowserSession["metrics"] | undefined;
   outputTimings(): readonly TerminalOutputTiming[];
   runtimeSnapshot(): ReturnType<BrowserSession["runtimeSnapshot"]>;
+  submit(command: string): Promise<void>;
   restart(): Promise<void>;
   dispose(): Promise<void>;
   crash(): void;
@@ -234,7 +234,13 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
 
     function wireTerminal(current: Terminal, expectedGeneration: number) {
       subscriptions = [
-        current.onData((bytes) => session?.input(bytes)),
+        current.onData((bytes) => {
+          try {
+            session?.input(bytes);
+          } catch (cause) {
+            receiveState(`warning: ${errorText(cause)}`, expectedGeneration);
+          }
+        }),
         current.onResize(({ cols, rows }) => {
           session?.resize(cols, rows);
           render();
@@ -347,11 +353,10 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       onStartupStage: StartupObserver,
     ) {
       const grid = current.appearance.grid;
-      // Newline conversion belongs only at the final display sink, never in pipes or files.
-      const newlines = new TerminalNewlines();
       performance.mark("bash:session-start");
       const pending = BrowserSession.create({
         runtime: pageRuntime,
+        lineEditor: query.get("lineEditor") === "zsh" ? { mode: "zsh" } : undefined,
         onStartupStage,
         signal: controller.signal,
         trace: query.get("trace") === "1",
@@ -362,12 +367,15 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
           if (generation !== expectedGeneration || handle.signal.aborted) return;
           try {
             hasOutput = true;
-            newlines.write(bytes, (chunk) => current.write(chunk));
+            current.write(bytes);
           } catch (cause) {
             fail(cause, expectedGeneration);
           }
         },
-        onState: (nextState) => receiveState(nextState, expectedGeneration),
+        onState: (nextState, detail) =>
+          receiveState(detail ? `${nextState}: ${detail}` : nextState, expectedGeneration),
+        onStorageState: (nextState) =>
+          receiveState(nextState.status === "waiting" ? "waiting" : "starting", expectedGeneration),
       });
       pendingSession = pending;
       let created: BrowserSession;
@@ -430,6 +438,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
           firstFrameMs,
           startup: diagnostics.snapshot(),
         }),
+        submit: (command) =>
+          session ? session.submit(command) : Promise.reject(new Error("Shell is closed")),
         metrics: () => session?.metrics,
         runtimeSnapshot: () => session?.runtimeSnapshot(),
         outputTimings: () => outputTimings,

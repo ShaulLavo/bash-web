@@ -11,10 +11,10 @@ import { FilesystemError, type FilesystemConnection } from "waffle/fs/protocol";
 import { FilesystemService } from "waffle/fs/service";
 import { withVfsImplementation } from "../../node_modules/waffle/fs/vfs-internal.ts";
 import { MemoryBackend } from "waffle/fs/backend";
-import { BrowserSession } from "./session";
+import { BrowserSession } from "bash-web/session";
 import { acquireBrowserRuntime, type BrowserHostOptions } from "./runtime";
 import { createStartupDiagnostics } from "../runtime/startup-diagnostics";
-import { createStorageStartup, STORAGE_READY_TIMEOUT_MS, waitForStorage } from "./storage";
+import { createStorageStartup, STORAGE_READY_TIMEOUT_MS, waitForStorage } from "../runtime/storage";
 
 function opfs(options: Omit<SharedFilesystemOptions, "mode"> = {}) {
   return withVfsImplementation("opfs-memory", { mode: "fast", ...options });
@@ -171,8 +171,9 @@ test("shell startup timeout starts only after storage is ready", async (context)
     rows: 24,
     startupTimeoutMs: 10,
     onOutput() {},
-    onState(state) {
-      states.push(state);
+    onState() {},
+    onStorageState(state) {
+      states.push(state.status);
     },
   });
   const rejection = assert.rejects(starting, /Shell startup exceeded/).then(() => {

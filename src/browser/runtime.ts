@@ -1,6 +1,6 @@
 import { createRuntime, VfsError, type Runtime, type VfsMode } from "waffle";
 import type { StartupObserver } from "../runtime/startup-diagnostics";
-import type { StorageStartup } from "./storage";
+import type { StorageStartup } from "../runtime/storage";
 
 export type BrowserRuntimeLease = {
   runtime: Runtime;

@@ -24,7 +24,7 @@ declare global {
 }
 
 const fixtureSource = `
-import { BrowserSession } from "./src/browser/session";
+import { BrowserSession } from "bash-web/session";
 import { SharedBridge } from "./src/bridge";
 const output = [], states = [], consumed = [];
 let turns = 0, disposed = 0, maximumDelivery = 0, acknowledgements = 0, terminalBytes = -1;
@@ -33,7 +33,7 @@ SharedBridge.prototype.drain = function(...args) { turns++; return drain.apply(t
 const session = await BrowserSession.create({
   runtime: {filesystem:{state:{status:"ready"}}}, cols:80, rows:24,
   onOutput(bytes) { maximumDelivery = Math.max(maximumDelivery,bytes.length); for(const byte of bytes) output.push(byte); },
-  onState(state) { states.push(state); if(state === "exited" || state.startsWith("failed:")) terminalBytes = output.length; }
+  onState(state) { states.push(state); if(state === "exited" || state === "failed") terminalBytes = output.length; }
 });
 const workerURL = URL.createObjectURL(new Blob([PRODUCER], {type:"text/javascript"}));
 const worker = new Worker(workerURL,{type:"module"});
@@ -61,11 +61,13 @@ window.sessionDrain = {
 
 const stub = `
 export { SharedBridge } from "./src/bridge";
+export { TerminalNewlines } from "./src/shell-terminal-output";
+import { waitForPrompt } from "./src/shell-prompt";
 export function runtimeSnapshot() { return {}; }
 export async function createShell({terminal}) {
   globalThis.drainBridge = terminal;
-  Atomics.store(terminal.state,11,1);
-  return {process:{wasmBytes:0},done:new Promise(()=>{}),interrupt(){},async dispose(){}};
+  terminal.publishPrompt(0);
+  return {process:{wasmBytes:0},done:new Promise(()=>{}),waitForPrompt(options) {return waitForPrompt(terminal, options);},interrupt(){},async dispose(){}};
 }
 `;
 
@@ -76,7 +78,7 @@ let bridge;
 onmessage = ({data}) => {
   if(data.kind === "init") {bridge = new SharedBridge(data.buffer); postMessage({}); return;}
   if(data.kind === "write") bridge.write(new Uint8Array(data.bytes));
-  if(data.kind === "burst") for(let i=0;i<1000;i++) bridge.tryWrite([Uint8Array.of(i%256)]);
+  if(data.kind === "burst") for(let i=0;i<1000;i++) bridge.tryWrite([Uint8Array.of(32+i%200)]);
   if(data.kind === "phase") shellTerminalImports(bridge.buffer).phase(data.bytes[0], 0);
   if(data.kind === "consume") {const bytes = new Uint8Array(65536);const count = bridge.tryRead([bytes]);postMessage({bytes:Array.from(bytes.subarray(0,Math.max(0,count)))});return;}
   if(data.kind === "receive") {postMessage({bytes:Array.from(bridge.receive(65536))}); return;}
@@ -114,7 +116,7 @@ test.beforeAll(async () => {
       {
         name: "shell-admission-fixture",
         setup(builder) {
-          builder.onResolve({ filter: /^\.\.\/index$/ }, () => ({
+          builder.onResolve({ filter: /^\.\/index$/ }, () => ({
             path: "shell-admission-fixture",
             namespace: "fixture",
           }));
@@ -190,7 +192,7 @@ test("burst output coalesces and each delivery stays bounded", async ({ page }) 
   await page.evaluate(() => window.sessionDrain.action("burst"));
   await expect.poll(() => page.evaluate(() => window.sessionDrain.output.length)).toBe(1000);
   expect(await page.evaluate(() => window.sessionDrain.output)).toEqual(
-    Array.from({ length: 1000 }, (_, i) => i % 256),
+    Array.from({ length: 1000 }, (_, i) => 32 + (i % 200)),
   );
   expect(await page.evaluate(() => window.sessionDrain.turns)).toBeLessThan(before + 20);
   expect(await page.evaluate(() => window.sessionDrain.maximumDelivery)).toBeLessThanOrEqual(32768);
@@ -256,15 +258,15 @@ for (const kind of ["exit", "fail"]) {
       (kind) =>
         window.sessionDrain.action(
           kind,
-          Array.from({ length: 100000 }, (_, i) => i % 251),
+          Array.from({ length: 100000 }, (_, i) => 32 + (i % 200)),
         ),
       kind,
     );
     await expect.poll(() => page.evaluate(() => window.sessionDrain.output.length)).toBe(100000);
     expect(await page.evaluate(() => window.sessionDrain.output)).toEqual(
-      Array.from({ length: 100000 }, (_, i) => i % 251),
+      Array.from({ length: 100000 }, (_, i) => 32 + (i % 200)),
     );
-    expect(await page.evaluate(() => window.sessionDrain.states.at(-1))).toMatch(/exited|failed:/);
+    expect(await page.evaluate(() => window.sessionDrain.states.at(-1))).toMatch(/exited|failed/);
     expect(await page.evaluate(() => window.sessionDrain.terminalBytes)).toBe(100000);
   });
 }

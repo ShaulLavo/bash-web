@@ -1,5 +1,5 @@
 import type { Runtime, SharedFilesystemState, SharedFilesystemStateObserver } from "waffle";
-import { markStartup, type StartupObserver } from "../runtime/startup-diagnostics.ts";
+import { markStartup, type StartupObserver } from "./startup-diagnostics.ts";
 
 type Listener = (state: SharedFilesystemState) => void;
 type Observation = {

@@ -7,7 +7,7 @@ import {
   createFilesystemIdentity,
   reapFilesystem,
 } from "waffle/fs/protocol";
-import { BrowserSession } from "./session";
+import { BrowserSession } from "bash-web/session";
 import { acquireBrowserRuntime } from "./runtime";
 
 function pendingRuntime(context: TestContext) {
