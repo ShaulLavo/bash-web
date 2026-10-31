@@ -90,7 +90,7 @@ export function realFilesystem(boundary?: string, detailed = false): PromptFiles
 }
 
 export async function git(cwd: string, ...args: string[]): Promise<string> {
-  const result = await execFile("git", args, {
+  const command = execFile("git", args, {
     cwd,
     env: {
       ...process.env,
@@ -104,7 +104,8 @@ export async function git(cwd: string, ...args: string[]): Promise<string> {
       GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
     },
   });
-  return result.stdout.trim();
+  command.child.stdin?.end();
+  return (await command).stdout.trim();
 }
 
 export async function fixture(t: TestContext, name: string): Promise<string> {
