@@ -4,14 +4,11 @@
     "001ccce038f75855": 1,
     "004c0440ddd7464a": 1,
     "0076d082fe35dba7": 1,
-    "01a1ce3962e6a0ae": 1,
     "02a3a4ec08607ddf": 1,
-    "02beeda670384192": 1,
     "03e405bda45e8005": 1,
     "0424aabc5636df65": 1,
     "0441c0e8b4b8b742": 1,
     "04c191c88d7c9fa1": 1,
-    "05145b86ac08d784": 1,
     "063da0b647ae94e2": 1,
     "06489e4a40aa3ee9": 2,
     "064a1b7f8a043ae5": 1,
@@ -56,7 +53,6 @@
     "2c11d2109a56326e": 1,
     "2cad2d33e140a265": 1,
     "2d4cf2af23ae0569": 1,
-    "2d8269c741eb18cc": 1,
     "334d9f201aeefe42": 1,
     "340d74fd9b38a04f": 1,
     "341df31e8c31c4ed": 1,
@@ -88,7 +84,6 @@
     "461d999d6e3029aa": 1,
     "4633028ff88de7e3": 1,
     "46c9ca77debaab81": 1,
-    "46ec3629aa57b724": 1,
     "470c20da6ac4871b": 1,
     "471ef5d266a491dc": 1,
     "48234c260f73d9f4": 1,
@@ -104,9 +99,7 @@
     "51cc303ac692d778": 1,
     "51d96186585ce431": 1,
     "5237db2239df0469": 1,
-    "532ac133230607b0": 1,
     "53c83e6773e988ee": 1,
-    "545166671e0946ab": 1,
     "5875ad86bdbba02d": 1,
     "591c82b1595b8c9f": 1,
     "5a54752c4c6d8241": 1,
@@ -140,7 +133,6 @@
     "6cbee886b7b091b8": 1,
     "6ccc5b1a5edd789c": 1,
     "6eb3db8b9af4b6be": 1,
-    "6fcfe0abf8356888": 1,
     "7012078e4ce22671": 1,
     "70abc20b8b554904": 1,
     "718660df9c447f5a": 1,
@@ -258,7 +250,6 @@
     "c43885686ced2207": 1,
     "c455ee7322492bb9": 1,
     "c6362f06201ff7b5": 1,
-    "c6aa7d026232abf4": 1,
     "c6cc10c6c94597de": 1,
     "c6de007e0fdf07bb": 1,
     "c775d05eb9060e77": 1,
@@ -324,5 +315,1441 @@
     "fc36f05d8f36d89b": 1,
     "fc8650956a280a20": 1,
     "fe348c24ac71f467": 1
+  },
+  "reasons": {
+    "001ccce038f75855": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for tests/external-commands.spec.ts:10-19 (open); tests/shell.spec.ts:10-17 (lines); preserve scenario-specific failure evidence."
+    },
+    "004c0440ddd7464a": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1435-1443 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:1487-1495 (parse_trailing_redirects); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "0076d082fe35dba7": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1794-1807 (background_eval_parser_routes_consuming_interrupt_to_the_current_foreground); shell/engine/src/runtime/tests.rs:1844-1853 (nested_capture_eval_parser_interrupts_foreground_without_stopping_background); preserve scenario-specific failure evidence."
+    },
+    "02a3a4ec08607ddf": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:661-671 (validateFixtureIdentity); scripts/fuzz-shell-control-flow.ts:1077-1087 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "03e405bda45e8005": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/ast_copy.rs:297-304 (admit); shell/engine/src/ast_copy.rs:307-314 (admit); The copies operate on transactional bindings and memory accounting. Targeted failure-at-each-allocation tests are needed before extraction; a mechanical helper substitution is not enough evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-state"
+    },
+    "0424aabc5636df65": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4927-4937 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5072-5082 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "0441c0e8b4b8b742": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1087-1095 (validateFixture); scripts/fuzz-shell-functions.ts:642-650 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "04c191c88d7c9fa1": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1329-1336 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:4231-4238 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "063da0b647ae94e2": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:99-104 (optionsFor); scripts/fuzz-shell-readonly.ts:52-57 (optionsFor); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "06489e4a40aa3ee9": {
+      "kind": "deferred",
+      "reason": "Remove repeated production logic at scripts/fuzz-shell-functions.ts:702-711; scripts/fuzz-shell-job-lifetime.ts:354-363; scripts/fuzz-shell-path.ts:773-782; follow the referenced removal item and its ownership/provenance constraints.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "064a1b7f8a043ae5": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:2189-2194 (selected_unsupported_operands_and_operator_targets_fail_without_dispatch); shell/engine/tests/words/braces.rs:258-263 (brace_range_and_product_bounds_are_checked_before_enumerating_huge_counts); preserve scenario-specific failure evidence."
+    },
+    "06a858a1c47f7560": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:1194-1203 (interrupting_the_deepest_compound_eval_drains_the_execution_chain); shell/engine/tests/words/command.rs:1460-1469 (interrupting_nested_eval_unwinds_admission_without_undoing_completed_effects); preserve scenario-specific failure evidence."
+    },
+    "087ba04d428cf505": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-job-lifetime.ts:90-106 (fuzz-shell-job-lifetime); scripts/fuzz-shell-printf.ts:303-319 (fuzz-shell-printf); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "08dd17ed2851bbe8": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1407-1415 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:1512-1520 (parse_trailing_redirects); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "092c882bd96c5686": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:861-867 (case_matching_yields_cancels_and_restores_local_and_positional_frames); shell/engine/tests/words.rs:1359-1365 (trim_matching_yields_cancels_and_restores_local_and_positional_frames); preserve scenario-specific failure evidence."
+    },
+    "0ab088af8fa38b45": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/interpreter.rs:2716-2729 (start); shell/engine/src/interpreter.rs:2838-2851 (process_body); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
+      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
+    },
+    "0cd12d7cf782bf8c": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:728-808 (main); scripts/fuzz-shell-printf.ts:560-640 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "0d90ff4c0c3cb40e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:896-914 (case_pattern_scanning_and_nested_token_admission_yield_and_cancel); shell/engine/tests/words.rs:1341-1359 (trim_pattern_scanning_and_token_admission_yield_and_cancel); preserve scenario-specific failure evidence."
+    },
+    "0e25d042083b5072": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/executor.rs:326-333 (with_probe); shell/engine/src/executor.rs:428-435 (default); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "0e273a1b3da8cb5f": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:619-628 (coverage); scripts/fuzz-shell-substitution-boundaries.ts:514-524 (coverage); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "0e8bdc2688087b49": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1240-1251 (main); scripts/fuzz-shell-functions.ts:712-723 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "0f197f1f9e6675b8": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/state/bindings_tests.rs:265-272 (dropping_a_pending_builtin_restores_nested_function_bindings_and_refunds_storage); shell/engine/src/state/bindings_tests.rs:304-311 (partial_builtin_admission_rolls_back_before_returning_the_error); preserve scenario-specific failure evidence."
+    },
+    "1136ba7be486cfc5": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:613-624 (optionsFor); scripts/fuzz-shell-path.ts:684-695 (optionsFor); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "11371444ed1e6b1a": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:5075-5083 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5172-5180 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "11da20f3a1435317": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/arithmetic.rs:748-754 (future_frame_and_scalar_snapshot_storage_are_admitted_before_growth); shell/engine/src/arithmetic.rs:816-822 (recursive_cycles_are_domain_errors_but_parser_depth_is_resource_failure); preserve scenario-specific failure evidence."
+    },
+    "12c5d8032a211740": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:599-608 (generateCases); scripts/fuzz-shell-printf.ts:444-452 (generateCases); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "17c1a89875ab49e6": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:2237-2250 (parse_while); shell/parser/src/parser/mod.rs:2275-2288 (parse_until); Parser provenance lives in protected sources.lock.json. These branches deliberately differ in error text and grammar entry points; characterize invalid syntax before extraction in a dedicated parser change.",
+      "plan": "plans/008-duplicate-baseline.md#parser-loops"
+    },
+    "19bdcb80f12b9fdc": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:452-459 (scalar_replace_snapshots_storage_raw_fields_and_work_are_shared); shell/engine/tests/words.rs:830-837 (case_matching_reparsing_and_redirects_share_work_without_a_candidate_cap); preserve scenario-specific failure evidence."
+    },
+    "19e9f48087c98207": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1058-1068 (parseFixture); scripts/fuzz-shell-job-lifetime.ts:265-277 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "1b5ea281280c3900": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4316-4324 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4329-4337 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "1b8820efb5ab59ee": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/namerefs.rs:350-356 (reference_metadata_admission_and_function_cancellation_preserve_bindings); shell/engine/tests/words/scalar_refs.rs:334-340 (effective_ifs_restores_after_fatal_reads_and_cancellation); preserve scenario-specific failure evidence."
+    },
+    "1bd45fb44ff62661": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:2333-2339 (parse_case); shell/parser/src/parser/mod.rs:4713-4719 (is_current_word); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "1c89841e9cb767de": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1240-1251 (main); scripts/fuzz-shell-job-lifetime.ts:364-375 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "1c9fce33ddc7ec1f": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:637-646 (parseFixture); scripts/fuzz-shell-job-lifetime.ts:249-258 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "1cf095d9eff44084": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:2702-2712 (runtime_signal_forms); shell/engine/src/runtime/tests.rs:2757-2765 (interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers); preserve scenario-specific failure evidence."
+    },
+    "1e3a2fce47903b50": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:905-914 (case_pattern_scanning_and_nested_token_admission_yield_and_cancel); shell/engine/tests/words/indirect.rs:319-328 (indirect_scans_and_value_emission_yield_cancel_and_restore_function_frames); preserve scenario-specific failure evidence."
+    },
+    "202cf5d6b040b3f5": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:451-459 (scalar_replace_snapshots_storage_raw_fields_and_work_are_shared); shell/engine/tests/words.rs:1301-1309 (trim_matching_and_operand_reparsing_share_command_work); preserve scenario-specific failure evidence."
+    },
+    "20320fefbe33f3ae": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/expand/glob.rs:891-903 (completion_matches); shell/engine/src/interpreter/conditional/regex.rs:769-781 (matches); preserve scenario-specific failure evidence."
+    },
+    "2080ada5f7f7a01e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions at shell/engine/tests/words.rs:1392-1401; shell/engine/tests/words.rs:869-878; shell/engine/tests/words.rs:923-932; preserve scenario-specific failure evidence."
+    },
+    "21ff09937964f407": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:639-669 (main); scripts/fuzz-shell-readonly.ts:303-333 (main); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "241560c73c4834e9": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/process.rs:594-605 (kill_group); shell/engine/src/runtime.rs:1254-1265 (kill_group); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "25262ba421525b6a": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:114-122 (optionsFor); scripts/fuzz-shell-braces.ts:153-161 (optionsFor); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "275acab1ac6ab2b4": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions at shell/engine/tests/words.rs:1397-1404; shell/engine/tests/words.rs:525-532; shell/engine/tests/words.rs:928-935; preserve scenario-specific failure evidence."
+    },
+    "27652b37464b43fd": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions at shell/engine/tests/words/command.rs:1102-1107; shell/engine/tests/words/command.rs:1142-1147; shell/engine/tests/words/command.rs:1269-1274; preserve scenario-specific failure evidence."
+    },
+    "2858364e59b4f24b": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:504-513 (parseFixture); scripts/fuzz-shell-substitution-boundaries.ts:524-533 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "299b555c275d0d39": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/process.rs:618-639 (detach_group); shell/engine/src/runtime.rs:1286-1307 (detach_group); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "29a29b9125718f4b": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:2140-2145 (parse_arithmetic_for_inner); shell/parser/src/parser/mod.rs:2898-2903 (collect_conditional_regex_pattern); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "2af72d46f958c349": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:869-878 (case_matching_yields_cancels_and_restores_local_and_positional_frames); shell/engine/tests/words/indirect.rs:313-322 (indirect_scans_and_value_emission_yield_cancel_and_restore_function_frames); preserve scenario-specific failure evidence."
+    },
+    "2b4befc249c018d1": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:716-728 (main); scripts/fuzz-shell-job-lifetime.ts:368-380 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "2c11d2109a56326e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-functions.ts:281-287 (shared runner drains timed); scripts/test-fuzz-shell-job-lifetime.ts:294-300 (CLI retains strict bounded options and mutually exclusive modes); preserve scenario-specific failure evidence."
+    },
+    "2cad2d33e140a265": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/lexer.rs:1058-1074 (read_word_from); shell/parser/src/parser/lexer.rs:1179-1195 (read_word_from); The lexer is protected parser-provenance code. Command substitution and expansion have different quote contexts; a shared transition helper needs the parser API and substitution-boundary regressions together.",
+      "plan": "plans/008-duplicate-baseline.md#parser-scanner"
+    },
+    "2d4cf2af23ae0569": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:121-142 (optionsFor); scripts/fuzz-shell-substitution-boundaries.ts:232-241 (optionsFor); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "334d9f201aeefe42": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:99-109 (fuzz-shell-braces); scripts/fuzz-shell-substitution-boundaries.ts:76-86 (fuzz-shell-substitution-boundaries); These source modules participate in frozen fixture source hashes. Their migration cannot safely land here without the prohibited fixture metadata changes.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-models"
+    },
+    "340d74fd9b38a04f": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/namerefs.rs:218-228 (reference_cycles_are_bounded_and_unset_under_nounset); shell/engine/tests/words/namerefs.rs:308-319 (nameref_depth_overflow_stays_distinct_from_cycles_under_nounset); preserve scenario-specific failure evidence."
+    },
+    "341df31e8c31c4ed": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/runtime/wasi.rs:228-233 (stat); shell/engine/src/runtime/wasi.rs:266-271 (open_dir); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "3713eb4518c4258e": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:756-763 (tick); shell/parser/src/parser/mod.rs:780-787 (tick_units); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "38175ab65a0a8dfd": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/process.rs:672-681 (wait_group); shell/engine/src/runtime.rs:1406-1415 (wait_group); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "386d0a9d5a16e17c": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/interpreter.rs:1302-1316 (sequence_body); shell/engine/src/interpreter/reader.rs:141-155 (run); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
+      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
+    },
+    "38b802926746a28e": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/ast.rs:450-468 (fmt); shell/parser/src/parser/print_cmd.rs:496-514 (stream_parts); Parser provenance updates are prohibited here. Budget and printer paths enforce allocation/work limits, so the cleanup needs existing bounded-printer and parser failure tests rather than relabeling these production copies as fixtures.",
+      "plan": "plans/008-duplicate-baseline.md#parser-budget-ast"
+    },
+    "39522d2940861044": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/ast.rs:394-403 (fmt); shell/parser/src/parser/print_cmd.rs:427-436 (stream_parts); Parser provenance updates are prohibited here. Budget and printer paths enforce allocation/work limits, so the cleanup needs existing bounded-printer and parser failure tests rather than relabeling these production copies as fixtures.",
+      "plan": "plans/008-duplicate-baseline.md#parser-budget-ast"
+    },
+    "39aca5f22fe3eac6": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:624-642 (validateFixture); scripts/fuzz-shell-printf.ts:465-483 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "3b3b4172098cb614": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:637-650 (parseFixture); scripts/fuzz-shell-control-flow.ts:1043-1056 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "3f6a58428560deeb": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-functions.ts:87-92 (finite deterministic functions grammar keeps fixed cases separate from seeded semantic tuples); scripts/test-fuzz-shell-printf.ts:84-89 (deterministic finite grammar has distinct substantive seeded cases); preserve scenario-specific failure evidence."
+    },
+    "3fc00f66b58beb07": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/interpreter.rs:1795-1802 (while_command); shell/engine/src/interpreter/control.rs:374-381 (arithmetic_for_body); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
+      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
+    },
+    "3fe846292ca937fd": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:920-936 (main); scripts/fuzz-shell-substitution-boundaries.ts:820-836 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "40115f8cfcd30546": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:865-878 (ensureQueued); scripts/fuzz-shell-substitution-boundaries.ts:758-771 (ensureQueued); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "40392ea0ef62b086": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1327-1336 (main); scripts/fuzz-shell-functions.ts:795-804 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "409276e90334fa54": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1261-1270 (typed_exec_failure_uses_redirected_stderr_while_weak_endpoint_is_live); shell/engine/src/runtime/tests.rs:1290-1299 (synchronous_fork_failure_uses_parent_stderr_and_not_command_redirection); preserve scenario-specific failure evidence."
+    },
+    "412c9c33dce6fada": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:669-688 (execute); scripts/fuzz-shell-job-lifetime.ts:325-344 (execute); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "41720d26acd87cea": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/conditional.rs:268-279 (conditional_long_work_yields_and_cancellation_does_not_leak); shell/engine/tests/words/regex.rs:153-164 (regex_long_match_yields_interrupts_and_recovers_without_processes); preserve scenario-specific failure evidence."
+    },
+    "418b3e94c60a1e39": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/tests/api.rs:11-16 (argument); shell/parser/tests/api.rs:440-445 (replacement_operands_keep_bare_braces_and_single_quote_backslashes_bounded); preserve scenario-specific failure evidence."
+    },
+    "427f5cc780a84c30": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/state.rs:1397-1402 (readonly); shell/engine/src/state.rs:1414-1419 (export); The copies operate on transactional bindings and memory accounting. Targeted failure-at-each-allocation tests are needed before extraction; a mechanical helper substitution is not enough evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-state"
+    },
+    "428f4fc51f733e99": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1262-1270 (typed_exec_failure_uses_redirected_stderr_while_weak_endpoint_is_live); shell/engine/src/runtime/tests.rs:1332-1340 (fork_failure_preserves_enclosing_parent_shell_stderr); preserve scenario-specific failure evidence."
+    },
+    "42e0421710d03419": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:930-937 (long_running_loop_remains_interruptible_after_cumulative_work_would_exhaust); shell/engine/tests/words/command.rs:955-962 (sustained_arithmetic_replay_yields_cancels_and_preserves_background); preserve scenario-specific failure evidence."
+    },
+    "438437735b69b793": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4303-4309 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4380-4386 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "43902743a9afca8e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:947-954 (sustained_arithmetic_replay_yields_cancels_and_preserves_background); shell/engine/tests/words/command.rs:1326-1333 (sequential_eval_loops_cross_the_former_allowance_and_interrupt_without_killing_background); preserve scenario-specific failure evidence."
+    },
+    "43f58ec692c77ce8": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for src/runtime/terminal.test.ts:22-27 (shared terminal input and output stay bounded); tests/terminal.unit.ts:55-60 (terminal immediate operations return EAGAIN without entering a blocking path); preserve scenario-specific failure evidence."
+    },
+    "4442240b509ff601": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:946-958 (run); scripts/fuzz-shell-path.ts:642-654 (run); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "460076390d9033ab": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:611-624 (coverage); scripts/fuzz-shell-printf.ts:452-465 (coverage); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "460aa345fe971532": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1884-1889 (wait_group_observes_descendants_and_abandoned_group_confirms_cleanup); shell/engine/src/runtime/tests.rs:2141-2146 (killing_dynamic_background_group_rejects_new_members_and_isolates_siblings); preserve scenario-specific failure evidence."
+    },
+    "461d999d6e3029aa": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4251-4259 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4431-4439 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "4633028ff88de7e3": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1836-1844 (background_eval_parser_routes_consuming_interrupt_to_the_current_foreground); shell/engine/src/runtime/tests.rs:1871-1879 (nested_capture_eval_parser_interrupts_foreground_without_stopping_background); preserve scenario-specific failure evidence."
+    },
+    "46c9ca77debaab81": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-functions.ts:287-296 (shared runner drains timed); scripts/test-fuzz-shell-job-lifetime.ts:300-309 (CLI retains strict bounded options and mutually exclusive modes); preserve scenario-specific failure evidence."
+    },
+    "470c20da6ac4871b": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:915-920 (main); scripts/fuzz-shell-substitution-boundaries.ts:812-816 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "471ef5d266a491dc": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand.rs:1829-1845 (pattern_operand); shell/engine/src/expand/replacement.rs:153-169 (replace); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "48234c260f73d9f4": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:7018-7026 (cond_or); shell/parser/src/parser/mod.rs:7069-7077 (cond_term); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "4829c6c75f39d55c": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:716-728 (main); scripts/fuzz-shell-printf.ts:548-560 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "49997267e595ea8f": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/process.rs:643-649 (wait_group); shell/engine/src/process.rs:659-665 (wait_group); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "49f2630b2f7160b1": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/tests/api.rs:207-214 (lexical_escape_metadata_survives_assignment_slicing_and_token_lookahead); shell/parser/tests/api.rs:857-864 (mixed_assignment_literals_do_not_decode_source_backslashes_as_glob_escapes); preserve scenario-specific failure evidence."
+    },
+    "4a1e7a1f5e3f8942": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/print_cmd.rs:1037-1046 (reconstruct_word); shell/parser/src/parser/print_cmd.rs:1584-1593 (reconstruct_word); Parser provenance updates are prohibited here. Budget and printer paths enforce allocation/work limits, so the cleanup needs existing bounded-printer and parser failure tests rather than relabeling these production copies as fixtures.",
+      "plan": "plans/008-duplicate-baseline.md#parser-budget-ast"
+    },
+    "4d0bb1df41677594": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:120-129 (optionsFor); scripts/fuzz-shell-substitution-boundaries.ts:231-240 (optionsFor); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "4e35b27e39554812": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/state.rs:2873-2878 (saved_local_reference_targets_are_snapshot_payloads); shell/engine/src/state.rs:3439-3444 (snapshot_admits_saved_local_and_prefix_payloads_before_copying); preserve scenario-specific failure evidence."
+    },
+    "4e9fd7cd85990f3c": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/interpreter.rs:4800-4809 (borrowed_arithmetic_replay_admits_its_frame_and_releases_it_on_drop); shell/engine/src/interpreter.rs:4848-4857 (borrowed_arithmetic_replay_keeps_command_storage_admission); preserve scenario-specific failure evidence."
+    },
+    "50aaf68be93377af": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:686-698 (validateFixture); scripts/fuzz-shell-substitution-boundaries.ts:582-594 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "516e90a2afca5634": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:646-693 (validateFixture); scripts/fuzz-shell-printf.ts:487-531 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "51cc303ac692d778": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/control.rs:272-278 (closed_descriptor_redirects_diagnose_without_unconditionally_aborting); shell/engine/tests/words/control.rs:281-287 (closed_descriptor_redirects_diagnose_without_unconditionally_aborting); preserve scenario-specific failure evidence."
+    },
+    "51d96186585ce431": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for tests/pipelines.acceptance.spec.ts:12-17 (pipelines.acceptance.spec); tests/runtime-shell.spec.ts:5-10 (runtime-shell.spec); preserve scenario-specific failure evidence."
+    },
+    "5237db2239df0469": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:3378-3387 (is_assignment); shell/parser/src/parser/mod.rs:3398-3407 (is_assignment); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "53c83e6773e988ee": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/ast.rs:1508-1515 (command_variants_constructible); shell/parser/src/parser/budget.rs:417-424 (rejects_too_many_command_nodes); preserve scenario-specific failure evidence."
+    },
+    "5875ad86bdbba02d": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:2671-2676 (capture_eof_can_precede_group_descendant_reaping_but_keeps_a_cleanup_owner); shell/engine/src/runtime/tests.rs:3022-3028 (natural_foreground_completion_does_not_wait_for_inherited_members); preserve scenario-specific failure evidence."
+    },
+    "591c82b1595b8c9f": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7234-7239 (test_parse_redirect_out); shell/parser/src/parser/mod.rs:7248-7253 (test_parse_redirect_append); preserve scenario-specific failure evidence."
+    },
+    "5a54752c4c6d8241": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:521-529 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words.rs:555-563 (scalar_replace_search_and_emission_yield_cancel_and_restore_frames); preserve scenario-specific failure evidence."
+    },
+    "5ac0e56a9066f970": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:698-705 (validateFixture); scripts/fuzz-shell-substitution-boundaries.ts:594-601 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "5b19725950e196cc": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:669-687 (execute); scripts/fuzz-shell-path.ts:740-758 (execute); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "5c2958faeba05f0d": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/interpreter.rs:5948-5961 (review_resource_pipeline_publishes_stage_codes_before_unwinding_and_recovers); shell/engine/src/interpreter.rs:6016-6030 (review_live_execution_diagnostics_do_not_invent_function_context); preserve scenario-specific failure evidence."
+    },
+    "5cdb9b20a1f7a890": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/namerefs.rs:350-356 (reference_metadata_admission_and_function_cancellation_preserve_bindings); shell/engine/tests/words/scalar_refs.rs:155-161 (cancelling_after_resolved_attributes_restores_the_local_target); preserve scenario-specific failure evidence."
+    },
+    "5d7fe009a5198f3d": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:594-608 (execute); scripts/fuzz-shell-readonly.ts:259-273 (execute); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "5e5dd3c60d4f9aa1": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/io.rs:737-745 (open); shell/engine/src/io.rs:845-853 (write_file); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "5f16af179fc35550": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/subst_scan.rs:601-613 (feed_arithmetic); shell/parser/src/parser/subst_scan.rs:631-643 (feed_parameter); The lexer is protected parser-provenance code. Command substitution and expansion have different quote contexts; a shared transition helper needs the parser API and substitution-boundary regressions together.",
+      "plan": "plans/008-duplicate-baseline.md#parser-scanner"
+    },
+    "5f94218b2725e3b3": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4997-5004 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5591-5598 (scan_word_parts); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "606b48116a4df88e": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/interpreter/command_builtin.rs:544-551 (query); shell/engine/src/interpreter/command_builtin.rs:553-560 (query); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
+      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
+    },
+    "64485f0881600adf": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/expand/case_pattern.rs:95-101 (matches); shell/engine/src/expand/case_pattern.rs:155-161 (first_field_selection_still_evaluates_suffix_assignments); preserve scenario-specific failure evidence."
+    },
+    "669aee7aced54f7f": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:637-660 (parseFixture); scripts/fuzz-shell-substitution-boundaries.ts:533-556 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "66b21b5951360ac5": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7165-7172 (test_parse_simple_command); shell/parser/src/parser/mod.rs:7420-7425 (test_nested_expansion_in_array_subscript); preserve scenario-specific failure evidence."
+    },
+    "67356bfe910cb6c6": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/streaming.rs:182-191 (foreground_interrupt_leaves_background_alive_and_controllable); shell/engine/tests/streaming.rs:470-479 (isolated_foreground_interrupt_reaps_its_background_but_not_roots); preserve scenario-specific failure evidence."
+    },
+    "6741fc917a14872e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/tests/command_print.rs:152-166 (request_work_cancellation_and_deadlines_precede_reconstruction); shell/parser/tests/command_print.rs:290-303 (bounded_function_names_and_bodies_are_admitted_before_copying); preserve scenario-specific failure evidence."
+    },
+    "67c77ae088c317a4": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/ast.rs:1104-1116 (word_display_parameter_expansion_replace); shell/parser/src/parser/ast.rs:1121-1133 (word_display_parameter_expansion_replace); preserve scenario-specific failure evidence."
+    },
+    "67e8010ea5cabcb3": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1221-1230 (ensureQueued); scripts/fuzz-shell-job-lifetime.ts:350-359 (ensureQueued); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "6800ed9be9bff98e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/process.rs:919-925 (dropping_wait_observers_does_not_retain_inprocess_host); shell/engine/src/process.rs:981-987 (dropped_pending_finish_preserves_abandon_cleanup); preserve scenario-specific failure evidence."
+    },
+    "681d649bb28fb64f": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:2315-2322 (inherited_shell_bootstrap_preserves_extra_and_sparse_logical_bindings); shell/engine/src/runtime/tests.rs:2360-2367 (noninteractive_shell_preserves_closed_stdio_and_requires_only_used_descriptors); preserve scenario-specific failure evidence."
+    },
+    "682bc3d1c3fa884b": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:584-593 (execute); scripts/fuzz-shell-readonly.ts:250-259 (execute); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "687292491864bb94": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/interpreter.rs:5041-5048 (with_limits); shell/engine/src/interpreter/command_builtin/tests.rs:111-118 (new); preserve scenario-specific failure evidence."
+    },
+    "69229c0bb541d112": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-job-lifetime.ts:198-205 (generateCases); scripts/fuzz-shell-printf.ts:432-439 (generateCases); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "69747488cb62d732": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:891-902 (main); scripts/fuzz-shell-substitution-boundaries.ts:783-794 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "6b146e2ab78cbade": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:759-816 (main); scripts/fuzz-shell-path.ts:828-885 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "6b2891ef389fac09": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:624-642 (validateFixture); scripts/fuzz-shell-job-lifetime.ts:280-298 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "6b6977d022f42e4e": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/arithmetic.rs:292-301 (expression); shell/engine/src/arithmetic.rs:456-465 (unary); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "6ba5806f97fcd3b4": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4818-4827 (parse_braced_parameter); shell/parser/src/parser/mod.rs:4876-4885 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "6bc401e8aba87983": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:1134-1145 (eval_accepts_sixteen_active_readers_and_rejects_the_seventeenth); shell/engine/tests/words/command.rs:1159-1170 (compound_eval_accepts_execution_depth_256_and_rejects_257); preserve scenario-specific failure evidence."
+    },
+    "6cbee886b7b091b8": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-process.ts:46-57 (run); scripts/fuzz-shell-results.ts:64-75 (fuzz-shell-results); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "6ccc5b1a5edd789c": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:660-686 (validateFixtureIdentity); scripts/fuzz-shell-substitution-boundaries.ts:556-582 (validateFixtureIdentity); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "6eb3db8b9af4b6be": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:883-894 (case_pattern_scanning_and_nested_token_admission_yield_and_cancel); shell/engine/tests/words.rs:1328-1339 (trim_pattern_scanning_and_token_admission_yield_and_cancel); preserve scenario-specific failure evidence."
+    },
+    "7012078e4ce22671": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:142-148 (optionsFor); scripts/fuzz-shell-substitution-boundaries.ts:257-263 (optionsFor); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "70abc20b8b554904": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-job-lifetime.ts:181-190 (fixture validation rejects source); scripts/test-fuzz-shell-printf.ts:194-203 (fixture validation rejects identity); preserve scenario-specific failure evidence."
+    },
+    "718660df9c447f5a": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1486-1514 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:4392-4420 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "71dcb4e690e52479": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:1182-1189 (interrupting_the_deepest_compound_eval_drains_the_execution_chain); shell/engine/tests/words/command.rs:1286-1294 (interrupting_deep_function_tasks_restores_frames_and_drains_the_leaf); preserve scenario-specific failure evidence."
+    },
+    "72cf1ccdf24113c7": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:515-526 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words.rs:1386-1397 (trim_rhs_cancellation_restores_valid_external_prefix_frames); preserve scenario-specific failure evidence."
+    },
+    "73af38e62905c10b": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/printf.rs:375-380 (printf_small_invocation_is_one_write_and_large_output_uses_4096_byte_records); shell/engine/tests/words/printf.rs:472-477 (printf_aliased_stderr_writes_diagnostic_before_buffered_stdout); preserve scenario-specific failure evidence."
+    },
+    "73e799a8fa60c6c8": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1865-1873 (parse_for); shell/parser/src/parser/mod.rs:1987-1995 (parse_select); Parser provenance lives in protected sources.lock.json. These branches deliberately differ in error text and grammar entry points; characterize invalid syntax before extraction in a dedicated parser change.",
+      "plan": "plans/008-duplicate-baseline.md#parser-loops"
+    },
+    "744031deaedb7685": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:3037-3042 (parameter_diagnostic_fields_follow_inner_quotes_and_ifs_in_every_context); shell/engine/tests/words.rs:3170-3175 (errors_selected_inside_trim_leave_pattern_context); preserve scenario-specific failure evidence."
+    },
+    "754f2c1b267b8c1e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/interpreter/command_builtin/tests.rs:249-258 (lookup_live_storage_has_exact_peak_boundaries_and_recovers_after_rejection); shell/engine/src/interpreter/command_builtin/tests.rs:266-275 (lookup_keeps_a_nonexecutable_fallback_charged_while_searching); preserve scenario-specific failure evidence."
+    },
+    "756a43e25f483ee1": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:1144-1151 (eval_accepts_sixteen_active_readers_and_rejects_the_seventeenth); shell/engine/tests/words/command.rs:1271-1278 (limit); preserve scenario-specific failure evidence."
+    },
+    "78c6555cba389b83": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:629-639 (main); scripts/fuzz-shell-readonly.ts:293-303 (main); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "79b30820468265aa": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:469-484 (parse_substitution_token_with_limits); shell/parser/src/parser/mod.rs:523-538 (parse_backtick_body_with_limits); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "7aedceb89b528788": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:2140-2145 (parse_arithmetic_for_inner); shell/parser/src/parser/mod.rs:2655-2660 (parse_conditional); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "7b69905b3727c6cf": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:504-513 (parseFixture); scripts/fuzz-shell-braces.ts:628-637 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "7bb2ca80021efb81": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:3540-3546 (review_followup_subshell_failure_does_not_close_enclosing_group); shell/engine/src/runtime/tests.rs:3691-3697 (aborted_subshell_leaves_descendants_to_enclosing_invocation_cleanup); preserve scenario-specific failure evidence."
+    },
+    "7e201cd92502e643": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/process.rs:981-986 (dropped_pending_finish_preserves_abandon_cleanup); shell/engine/src/process.rs:1191-1196 (dropped_group_transfers_confirmed_cleanup_to_executor); preserve scenario-specific failure evidence."
+    },
+    "7e3fd5390a29cbf4": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:770-777 (shrink); scripts/fuzz-shell-substitution-boundaries.ts:657-664 (shrink); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "7e4bec2fdf25c072": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/runtime.rs:898-905 (open_dir); shell/engine/src/runtime.rs:921-928 (stat); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "7f8bb3e0771fd0d3": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7207-7212 (test_parse_variable); shell/parser/src/parser/mod.rs:7510-7515 (test_single_quoted_segment_concatenation_stays_literal); preserve scenario-specific failure evidence."
+    },
+    "81eb8faf39564b89": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:9-27 (fuzz-shell-arithmetic); scripts/fuzz-shell-readonly.ts:9-27 (fuzz-shell-readonly); These source modules participate in frozen fixture source hashes. Their migration cannot safely land here without the prohibited fixture metadata changes.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-models"
+    },
+    "8223a10c9294e83b": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/runtime.rs:1052-1058 (spawn); shell/engine/src/runtime.rs:1128-1134 (spawn); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "8349bddfabd5cc9f": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/interpreter.rs:5664-5674 (function_memory_background_calls_share_pool_with_next_session_start_and_refund); shell/engine/tests/words/functions.rs:157-167 (park); preserve scenario-specific failure evidence."
+    },
+    "840db1969be75dab": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:588-593 (generateCases); scripts/fuzz-shell-path.ts:520-525 (generateCases); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "8416138b04d098cb": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:129-143 (randomFor); scripts/fuzz-shell-substitution-boundaries.ts:287-301 (randomFor); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "8478281e51986e16": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:580-593 (generateCases); scripts/fuzz-shell-job-lifetime.ts:187-202 (generateCases); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "8504fbcf18bed85c": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1240-1251 (main); scripts/fuzz-shell-printf.ts:544-555 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "8607bf0ec69beaf1": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1263-1275 (main); scripts/fuzz-shell-job-lifetime.ts:385-396 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "8617b0d879532e20": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/print_cmd.rs:33-46 (function_string_bounded); shell/parser/src/parser/print_cmd.rs:1611-1624 (command_string); Parser provenance updates are prohibited here. Budget and printer paths enforce allocation/work limits, so the cleanup needs existing bounded-printer and parser failure tests rather than relabeling these production copies as fixtures.",
+      "plan": "plans/008-duplicate-baseline.md#parser-budget-ast"
+    },
+    "86c63ffd408d772c": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:732-737 (unsupported_case_targets_transformations_and_selected_patterns_fail_closed); shell/engine/tests/words.rs:1196-1201 (unsupported_trim_targets_and_selected_patterns_fail_without_dispatch); preserve scenario-specific failure evidence."
+    },
+    "87fce1c6d0ba8b2b": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:27-42 (fuzz-shell-arithmetic); scripts/fuzz-shell-readonly.ts:27-42 (fuzz-shell-readonly); These source modules participate in frozen fixture source hashes. Their migration cannot safely land here without the prohibited fixture metadata changes.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-models"
+    },
+    "88f9872096175bb2": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand.rs:2880-2887 (pattern); shell/engine/src/expand.rs:2892-2899 (conditional_pattern); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "8a3b5455fd344b81": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1283-1295 (main); scripts/fuzz-shell-functions.ts:750-762 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "8b7663f4a941e83a": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:114-119 (optionsFor); scripts/fuzz-shell-words.ts:173-178 (parseArgs); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "8b7f2c482fb68ed2": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/compat.rs:54-67 (resolve); shell/engine/src/io.rs:919-932 (open_dir); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "8c01855dcb4d9644": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-functions.ts:267-272 (CLI enforces finite count); scripts/test-fuzz-shell-job-lifetime.ts:284-289 (CLI retains strict bounded options and mutually exclusive modes); preserve scenario-specific failure evidence."
+    },
+    "8c4cea960488b2a5": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/interpreter/control.rs:98-104 (for_body); shell/engine/src/interpreter/control.rs:387-393 (arithmetic_for_body); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
+      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
+    },
+    "8cefc1df885ff6e8": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/lexer.rs:1350-1361 (read_word_from); shell/parser/src/parser/lexer.rs:1678-1689 (read_continuation_into); The lexer is protected parser-provenance code. Command substitution and expansion have different quote contexts; a shared transition helper needs the parser API and substitution-boundary regressions together.",
+      "plan": "plans/008-duplicate-baseline.md#parser-scanner"
+    },
+    "8db4b04b6a224791": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command_metadata.rs:12-17 (metadata_query_baseline_keeps_keywords_builtins_and_standins_distinct); shell/engine/tests/words/command_metadata.rs:26-31 (metadata_query_baseline_keeps_keywords_builtins_and_standins_distinct); preserve scenario-specific failure evidence."
+    },
+    "8e153cdfb43a61a3": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1087-1095 (validateFixture); scripts/fuzz-shell-job-lifetime.ts:298-306 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "8f45b949e83e765b": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-functions.ts:209-215 (fixture validation rejects every identity and unhealthy); scripts/test-fuzz-shell-path.ts:436-442 (fixture identity rejects schema); preserve scenario-specific failure evidence."
+    },
+    "8f8f56cfbd70024d": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1240-1251 (main); scripts/fuzz-shell-path.ts:783-794 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "902b9e0b5cd45b18": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/printf.rs:260-274 (printf_unicode_boundaries_preserve_bash_c_locale_spelling); shell/engine/tests/words/printf.rs:294-308 (printf_utf8_unicode_includes_non_scalar_and_legacy_encoding_bytes); preserve scenario-specific failure evidence."
+    },
+    "9037e482551f2b44": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:2468-2476 (failed_spawn_and_redirect_never_leave_a_buffered_input_writer); shell/engine/src/runtime/tests.rs:2749-2757 (interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers); preserve scenario-specific failure evidence."
+    },
+    "903fa22218f09c4a": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:716-726 (main); scripts/fuzz-shell-path.ts:787-797 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "9059a1921c09f596": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:3110-3120 (name); shell/parser/src/parser/mod.rs:3141-3151 (definition); Parser provenance lives in protected sources.lock.json. These branches deliberately differ in error text and grammar entry points; characterize invalid syntax before extraction in a dedicated parser change.",
+      "plan": "plans/008-duplicate-baseline.md#parser-loops"
+    },
+    "91811e7ae92b1b7e": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:43-50 (fuzz-shell-arithmetic); scripts/fuzz-shell-readonly.ts:42-49 (fuzz-shell-readonly); These source modules participate in frozen fixture source hashes. Their migration cannot safely land here without the prohibited fixture metadata changes.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-models"
+    },
+    "93432e35574440e8": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1407-1415 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:1460-1468 (parse_trailing_redirects); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "93df1a7e12361b9d": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:2897-2903 (collect_conditional_regex_pattern); shell/parser/src/parser/mod.rs:2977-2983 (parse_arithmetic_command); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "94ce5f30995bea23": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:2-24 (fuzz-shell-functions); scripts/fuzz-shell-job-lifetime.ts:2-24 (fuzz-shell-job-lifetime); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "95786c2b39617a6e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1722-1731 (runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace); shell/engine/src/runtime/tests.rs:2067-2077 (background_brace_sequence_kill_and_wait_cover_later_runtime_members); preserve scenario-specific failure evidence."
+    },
+    "959b6f8f86e9ce29": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:523-541 (parseFixture); scripts/fuzz-shell-readonly.ts:199-217 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "96d3ce64a4288677": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/scalar_refs.rs:129-147 (resolved_attributes_restore_with_the_target_local_frame); shell/engine/tests/words/scalar_refs.rs:162-180 (cancelling_after_resolved_attributes_restores_the_local_target); preserve scenario-specific failure evidence."
+    },
+    "96ed98775fe4118f": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/arithmetic.rs:210-219 (evaluate); shell/engine/src/arithmetic.rs:247-256 (evaluate_program); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "9716a9844a570eae": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:865-873 (ensureQueued); scripts/fuzz-shell-printf.ts:531-539 (ensureQueued); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "97eb3165fbf4d9fe": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:3540-3545 (review_followup_subshell_failure_does_not_close_enclosing_group); shell/engine/src/runtime/tests.rs:3627-3632 (fork_failure_subshell_status_is_254_but_outer_reader_continues); preserve scenario-specific failure evidence."
+    },
+    "986b798f40de9f80": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/compat.rs:53-65 (resolve); shell/engine/src/io.rs:685-697 (stat); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "9922b214eb352a77": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/builtins/printf.rs:1051-1056 (printf_buffer_rejects_insufficient_shared_live_memory_before_printf_output); shell/engine/tests/words.rs:48-53 (new); preserve scenario-specific failure evidence."
+    },
+    "99afb09848365a32": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-bash-compat-audit.ts:96-104 (read); scripts/test-bash-compat-runner.ts:45-54 (Bash capture uses real stdout pipe without changing shell input or status); preserve scenario-specific failure evidence."
+    },
+    "9bcbb53d23ed5b4e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7618-7624 (test_array_append_assignment_with_equal_in_subscript_parses_as_assignment); shell/parser/src/parser/mod.rs:7636-7642 (test_assoc_append_assignment_with_equal_in_subscript_parses_as_assignment); preserve scenario-specific failure evidence."
+    },
+    "9cafed0d0348cd87": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/printf.rs:254-260 (printf_unicode_boundaries_preserve_bash_c_locale_spelling); shell/engine/tests/words/printf.rs:288-294 (printf_utf8_unicode_includes_non_scalar_and_legacy_encoding_bytes); preserve scenario-specific failure evidence."
+    },
+    "9cc9154677170f7d": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7234-7239 (test_parse_redirect_out); shell/parser/src/parser/mod.rs:7261-7266 (test_parse_redirect_in); preserve scenario-specific failure evidence."
+    },
+    "9d02043b3ab8bf85": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1904-1910 (wait_group_observes_descendants_and_abandoned_group_confirms_cleanup); shell/engine/src/runtime/tests.rs:1960-1966 (dropping_detached_wait_observer_preserves_runtime_reaper); preserve scenario-specific failure evidence."
+    },
+    "9f47b28b2f8e30fa": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1434-1462 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:4341-4369 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "a14e91386e0c2705": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/lexer.rs:1527-1535 (read_single_quoted_string); shell/parser/src/parser/lexer.rs:2306-2314 (read_double_quoted_string); The lexer is protected parser-provenance code. Command substitution and expansion have different quote contexts; a shared transition helper needs the parser API and substitution-boundary regressions together.",
+      "plan": "plans/008-duplicate-baseline.md#parser-scanner"
+    },
+    "a36ee5716fe6c12c": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:3655-3667 (subshell_pipeline_interrupt_preserves_foreground_group_and_stops_all_stages); shell/engine/src/runtime/tests.rs:3678-3690 (successful_subshell_substitution_keeps_invocation_interrupt_owner); preserve scenario-specific failure evidence."
+    },
+    "a3b2e3baecd08cba": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:5071-5086 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5120-5135 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "a3c2055b433e4064": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7593-7600 (test_assignment_with_plus_equal_in_value_parses_as_assignment); shell/parser/src/parser/mod.rs:7628-7635 (test_assoc_append_assignment_with_equal_in_subscript_parses_as_assignment); preserve scenario-specific failure evidence."
+    },
+    "a3db3e93c1a8f49e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:869-878 (case_matching_yields_cancels_and_restores_local_and_positional_frames); shell/engine/tests/words.rs:899-908 (case_pattern_scanning_and_nested_token_admission_yield_and_cancel); preserve scenario-specific failure evidence."
+    },
+    "a407c51f4df00341": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4251-4259 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4264-4272 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "a6c8001e23dc19f7": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:504-513 (parseFixture); scripts/fuzz-shell-readonly.ts:184-193 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "a7b5c12f9be4c03d": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:953-962 (main); scripts/fuzz-shell-substitution-boundaries.ts:860-869 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "a81771c40051774b": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:437-443 (interrupt_cancels_transitively_transferred_background_descendants); shell/engine/tests/words/command.rs:1458-1462 (interrupting_nested_eval_unwinds_admission_without_undoing_completed_effects); preserve scenario-specific failure evidence."
+    },
+    "a834ada0f4f43630": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/interpreter.rs:2689-2694 (start); shell/engine/src/interpreter.rs:2829-2834 (process_body); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
+      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
+    },
+    "a872f3ba804b0591": {
+      "kind": "fixture",
+      "reason": "Independent acceptance-guest ABI declarations at shell/engine/src/runtime/wasi.rs:22-27 (proc_start_status); tests/guest/src/main.rs:32-37 (proc_spawn); sharing engine bindings would couple the guest to the implementation it verifies."
+    },
+    "a8be62a7b2a0c948": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:6820-6827 (heredoc_body_parts); shell/parser/src/parser/mod.rs:6907-6914 (heredoc_body_escapes); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "a8e1cbc8110f410e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for src/runtime/terminal.test.ts:99-104 (a crashed terminal section fails its bridge closed without stealing its ring lock); tests/terminal.unit.ts:238-243 (unrecoverable crashed holder fails terminal closed without unsafe lock reclamation); preserve scenario-specific failure evidence."
+    },
+    "a97cfaedff5cae37": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:4-26 (fuzz-shell-braces); scripts/fuzz-shell-substitution-boundaries.ts:2-24 (fuzz-shell-substitution-boundaries); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "a99ba257e8c66ce8": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4927-4937 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5214-5224 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "ab3c4e4814f7454b": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:3166-3175 (errors_selected_inside_trim_leave_pattern_context); shell/engine/tests/words.rs:3197-3206 (diagnostic_trim_results_split_independently_of_outer_and_pattern_quotes); preserve scenario-specific failure evidence."
+    },
+    "ab3f76b0bf4db72c": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/ast.rs:1262-1269 (command_list_with_operators); shell/parser/src/parser/ast.rs:1508-1515 (command_variants_constructible); preserve scenario-specific failure evidence."
+    },
+    "ab971cd262e37fbf": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:120-128 (optionsFor); scripts/fuzz-shell-control-flow.ts:970-978 (optionsFor); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "ac1181c32a6e2530": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand/pattern.rs:374-380 (matches_pathname); shell/engine/src/expand/pattern.rs:502-508 (remove); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "ac96c720d253cbb9": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/state.rs:3081-3091 (star_separator_is_fixed_size_snapshot_state_and_does_not_replace_live_ifs); shell/engine/src/state.rs:3235-3245 (star_separator_restores_locals_and_refreshes_at_function_return); preserve scenario-specific failure evidence."
+    },
+    "ace27d1e6572fb8c": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4316-4324 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4367-4375 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "ae9c9ed22bda9a76": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-functions.ts:82-92 (finite deterministic functions grammar keeps fixed cases separate from seeded semantic tuples); scripts/test-fuzz-shell-path.ts:130-140 (finite PATH grammar is deterministic); preserve scenario-specific failure evidence."
+    },
+    "af33925050e07326": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand/pattern.rs:119-124 (normalize); shell/engine/src/expand/pattern.rs:148-153 (normalize_glob); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "aff0417917253b84": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1103-1108 (validateFixture); scripts/fuzz-shell-results.ts:165-170 (validateResultBytes); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "b009d47745c1d36e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/interpreter.rs:5674-5685 (function_memory_background_calls_share_pool_with_next_session_start_and_refund); shell/engine/src/interpreter.rs:5950-5961 (review_resource_pipeline_publishes_stage_codes_before_unwinding_and_recovers); preserve scenario-specific failure evidence."
+    },
+    "b0c3385aae063fb6": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/print_cmd.rs:33-43 (function_string_bounded); shell/parser/src/parser/print_cmd.rs:1645-1655 (comsub_commands_bounded); Parser provenance updates are prohibited here. Budget and printer paths enforce allocation/work limits, so the cleanup needs existing bounded-printer and parser failure tests rather than relabeling these production copies as fixtures.",
+      "plan": "plans/008-duplicate-baseline.md#parser-budget-ast"
+    },
+    "b123cc345d45a404": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:646-660 (validateFixture); scripts/fuzz-shell-job-lifetime.ts:302-316 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "b1d225db13c964a7": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:524-529 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words/arithmetic.rs:448-453 (cancelling_positional_slice_emission_keeps_writes_and_unwinds_function_arguments); preserve scenario-specific failure evidence."
+    },
+    "b2e1b20900c0e84a": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/runtime/wasi.rs:199-204 (mkdir); shell/engine/src/runtime/wasi.rs:227-232 (stat); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "b333dd07fb719dda": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1328-1336 (main); scripts/fuzz-shell-substitution-boundaries.ts:853-861 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "b3a32263c5e4a424": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:559-564 (scalar_replace_search_and_emission_yield_cancel_and_restore_frames); shell/engine/tests/words.rs:874-879 (case_matching_yields_cancels_and_restores_local_and_positional_frames); preserve scenario-specific failure evidence."
+    },
+    "b49b1e9cea3dfac9": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions at shell/engine/tests/words.rs:2341-2346; shell/engine/tests/words.rs:2859-2864; shell/engine/tests/words.rs:2924-2929; preserve scenario-specific failure evidence."
+    },
+    "b53ae5e2a487c21c": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/lexer.rs:859-874 (read_word_or_fd_redirect); shell/parser/src/parser/lexer.rs:892-907 (read_word_or_fd_redirect); The lexer is protected parser-provenance code. Command substitution and expansion have different quote contexts; a shared transition helper needs the parser API and substitution-boundary regressions together.",
+      "plan": "plans/008-duplicate-baseline.md#parser-scanner"
+    },
+    "b633857465faffe6": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/nounset.rs:361-369 (cancellation_before_a_later_unbound_read_has_no_partial_dispatch_or_diagnostic); shell/engine/tests/words/readonly.rs:103-111 (cancelled_expansion_restores_local_attributes_and_preserves_global_readonly); preserve scenario-specific failure evidence."
+    },
+    "b66e6c56b62f6e1b": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:869-878 (case_matching_yields_cancels_and_restores_local_and_positional_frames); shell/engine/tests/words/indirect.rs:337-347 (indirect_rhs_cancellation_keeps_completed_effects_and_restores_prefixes); preserve scenario-specific failure evidence."
+    },
+    "b70d5d0edffec428": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/arithmetic.rs:263-271 (evaluate_program); shell/engine/src/arithmetic.rs:309-317 (expression); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "b70fc4dd57610ee8": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/namerefs.rs:258-266 (nameref_depth_eight_resolves_but_nine_reads_as_unset_without_resource_failure); shell/engine/tests/words/namerefs.rs:292-300 (nameref_depth_overflow_stays_distinct_from_cycles_under_nounset); preserve scenario-specific failure evidence."
+    },
+    "b7a6ffb91d832612": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for tests/external-commands.spec.ts:8-21 (open); tests/pipelines.acceptance.spec.ts:17-29 (open); preserve scenario-specific failure evidence."
+    },
+    "b86c968d6f2ac612": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1347-1355 (main); scripts/fuzz-shell-printf.ts:641-648 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "b91fdb4cfae73a2f": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4251-4259 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4290-4298 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "b9a8e521a199d3e2": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7457-7462 (test_ansi_c_quoted_dollar_is_literal_and_quoted); shell/parser/src/parser/mod.rs:7484-7489 (test_ansi_c_quoted_nul_before_dollar_stays_literal); preserve scenario-specific failure evidence."
+    },
+    "ba5345930f023d71": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:609-625 (main); scripts/fuzz-shell-readonly.ts:274-289 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "bc7fd43fa47d490d": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:728-758 (main); scripts/fuzz-shell-path.ts:799-827 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "bc80d585807e2408": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1306-1318 (main); scripts/fuzz-shell-functions.ts:774-786 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "bda32bf2052f6381": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:6799-6804 (heredoc_body_parts); shell/parser/src/parser/mod.rs:6885-6890 (heredoc_body_escapes); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "c15edc4d1368f1f4": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/interpreter.rs:1261-1271 (parse_failure); shell/engine/src/interpreter.rs:2253-2262 (expansion_failure); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
+      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
+    },
+    "c1ecccec567672fe": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/printf.rs:375-383 (printf_small_invocation_is_one_write_and_large_output_uses_4096_byte_records); shell/engine/tests/words/printf.rs:400-408 (printf_repeated_format_and_percent_b_stop_each_flush_at_invocation_end); preserve scenario-specific failure evidence."
+    },
+    "c25c34ed99e4e3e0": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:578-588 (matrixCases); scripts/fuzz-shell-path.ts:510-520 (matrixCases); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "c2727c3cf7858e2c": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/process.rs:981-987 (dropped_pending_finish_preserves_abandon_cleanup); shell/engine/src/process.rs:1083-1089 (pid_kill_leaves_descendants_for_group_cleanup_without_background); preserve scenario-specific failure evidence."
+    },
+    "c29414022126b095": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:5075-5083 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5217-5225 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "c3d6386bf2aed9eb": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/set_positionals.rs:81-87 (set_function_frames_restore_after_return_and_fatal_expansion); shell/engine/tests/words/set_positionals.rs:116-120 (cancellation_after_set_restores_caller_positionals); preserve scenario-specific failure evidence."
+    },
+    "c43885686ced2207": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/tests/api.rs:260-268 (lexical_escape_work_uses_parser_and_shared_request_limits); shell/parser/tests/api.rs:1304-1312 (substitution_boundary_scanning_is_charged_to_parser_fuel); preserve scenario-specific failure evidence."
+    },
+    "c455ee7322492bb9": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1222-1230 (ensureQueued); scripts/fuzz-shell-functions.ts:699-707 (ensureQueued); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "c6362f06201ff7b5": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:612-617 (main); scripts/fuzz-shell-control-flow.ts:1224-1229 (ensureQueued); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "c6cc10c6c94597de": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4929-4937 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5171-5179 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "c6de007e0fdf07bb": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand/operand.rs:19-24 (scalar_name); shell/parser/src/parser/lexer.rs:421-426 (keeps_assignment_position); The lexer is protected parser-provenance code. Command substitution and expansion have different quote contexts; a shared transition helper needs the parser API and substitution-boundary regressions together.",
+      "plan": "plans/008-duplicate-baseline.md#parser-scanner"
+    },
+    "c775d05eb9060e77": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:547-570 (replay); scripts/fuzz-shell-readonly.ts:222-245 (replay); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "c96920543ce64d5d": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:1614-1622 (length_counting_yields_and_cancellation_restores_function_frames); shell/engine/tests/words.rs:1641-1649 (length_rhs_yields_and_cancellation_restores_prefix_frames); preserve scenario-specific failure evidence."
+    },
+    "c97efaddd6825445": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:5173-5183 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5218-5228 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "cb4a5ecc71889154": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for src/browser/storage.test.ts:376-381 (a queued ownership wait gets a fresh recovery budget only after the lock grant); src/browser/storage.test.ts:579-584 (a borrowed session bounds acquired recovery without disposing its runtime); preserve scenario-specific failure evidence."
+    },
+    "cb6118b7c2ca23f3": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7593-7600 (test_assignment_with_plus_equal_in_value_parses_as_assignment); shell/parser/src/parser/mod.rs:7610-7617 (test_array_append_assignment_with_equal_in_subscript_parses_as_assignment); preserve scenario-specific failure evidence."
+    },
+    "cb7d121a8c707252": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:873-883 (case_matching_yields_cancels_and_restores_local_and_positional_frames); shell/engine/tests/words.rs:1373-1383 (trim_matching_yields_cancels_and_restores_local_and_positional_frames); preserve scenario-specific failure evidence."
+    },
+    "cd36d7310b13ae64": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:524-529 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words/readonly.rs:107-113 (cancelled_expansion_restores_local_attributes_and_preserves_global_readonly); preserve scenario-specific failure evidence."
+    },
+    "cd3add9b066c88be": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:148-158 (optionsFor); scripts/fuzz-shell-substitution-boundaries.ts:263-273 (optionsFor); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "cdbcbc4ae03a18ee": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1087-1095 (validateFixture); scripts/fuzz-shell-path.ts:713-721 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "cdcb3e67bf49fe9e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/process.rs:981-987 (dropped_pending_finish_preserves_abandon_cleanup); shell/engine/src/process.rs:1148-1154 (pid_kill_leaves_orphan_after_intermediate_reaping_until_group_cleanup); preserve scenario-specific failure evidence."
+    },
+    "ceae78c65ae45893": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-functions.ts:214-229 (fixture validation rejects every identity and unhealthy); scripts/test-fuzz-shell-job-lifetime.ts:187-202 (fixture validation rejects source); preserve scenario-specific failure evidence."
+    },
+    "d0c3d0bc1d952f04": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4251-4259 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4277-4285 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "d123d154741e033a": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4927-4941 (parse_braced_parameter); shell/parser/src/parser/mod.rs:4956-4969 (parse_braced_parameter); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "d1abb8c0d8ce4de5": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/budget.rs:373-380 (rejects_huge_brace_range); shell/parser/src/parser/budget.rs:493-500 (command_substitution_in_word_checked); preserve scenario-specific failure evidence."
+    },
+    "d2988392171b9f77": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/runtime/tests.rs:1732-1738 (background_persists_and_foreground_interrupt_is_checked_in_budget); shell/engine/src/runtime_main.rs:109-115 (main); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "d364cfad2f9bcfbd": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1407-1415 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:1421-1429 (parse_trailing_redirects); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "d3d0b4ea9a63fd70": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/state.rs:464-472 (snapshot); shell/engine/src/state.rs:1830-1838 (snapshot_clone); The copies operate on transactional bindings and memory accounting. Targeted failure-at-each-allocation tests are needed before extraction; a mechanical helper substitution is not enough evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-state"
+    },
+    "d4d5fdfe7f325c41": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1031-1040 (parseFixture); scripts/fuzz-shell-job-lifetime.ts:238-247 (parseFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "d693be26d8c63a5f": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:13-38 (fuzz-shell-functions); scripts/fuzz-shell-printf.ts:13-38 (fuzz-shell-printf); These source modules participate in frozen fixture source hashes. Their migration cannot safely land here without the prohibited fixture metadata changes.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-models"
+    },
+    "d6a37e6c1ed75e79": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:702-711 (ensureQueued); scripts/fuzz-shell-printf.ts:534-543 (ensureQueued); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "d6d740c421443d1c": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/executor.rs:532-537 (registration_is_updated_and_removed_on_drop); shell/engine/src/io.rs:1531-1536 (drop); preserve scenario-specific failure evidence."
+    },
+    "d771acaab7109c01": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1346-1355 (main); scripts/fuzz-shell-functions.ts:808-816 (main); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "d77d56b716658ba2": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:105-141 (optionsFor); scripts/fuzz-shell-readonly.ts:58-94 (optionsFor); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "d7a9a855d3226682": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1222-1230 (ensureQueued); scripts/fuzz-shell-path.ts:770-778 (ensureQueued); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
+    },
+    "d857f3d569e5f75b": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:677-685 (validateFixture); scripts/fuzz-shell-control-flow.ts:1089-1097 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "d8624646400eeedf": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:521-529 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words.rs:2280-2288 (selected_operand_scanning_yields_and_cancellation_restores_local_frames); preserve scenario-specific failure evidence."
+    },
+    "d8d396f35a391529": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:524-529 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words/set_positionals.rs:113-118 (cancellation_after_set_restores_caller_positionals); preserve scenario-specific failure evidence."
+    },
+    "da110f4daf875852": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:2749-2757 (interrupt_and_shutdown_drain_live_capture_and_blocked_input_writers); shell/engine/src/runtime/tests.rs:3207-3215 (interrupt_and_shutdown_drain_real_inherited_members_and_input_pumps); preserve scenario-specific failure evidence."
+    },
+    "ddd8682eb87baae9": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/parser/src/parser/subst_scan.rs:1058-1067 (quoted_heredoc_delimiters_remove_only_double_quote_escapes); shell/parser/tests/api.rs:1465-1474 (quoted_heredoc_delimiters_preserve_substitution_and_operand_boundaries); preserve scenario-specific failure evidence."
+    },
+    "de43bf7a3fe108d6": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:2299-2305 (inherited_shell_bootstrap_preserves_extra_and_sparse_logical_bindings); shell/engine/src/runtime/tests.rs:2348-2354 (noninteractive_shell_preserves_closed_stdio_and_requires_only_used_descriptors); preserve scenario-specific failure evidence."
+    },
+    "df23970e71f69987": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/state.rs:3081-3091 (star_separator_is_fixed_size_snapshot_state_and_does_not_replace_live_ifs); shell/engine/src/state.rs:3145-3155 (ifs_field_binding_ignores_later_local_shadows_and_refreshes_on_return); preserve scenario-specific failure evidence."
+    },
+    "dff8a0bd7e011a8c": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1075-1087 (validateFixture); scripts/fuzz-shell-functions.ts:630-642 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "e395208fc692e248": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-braces.ts:158-180 (optionsFor); scripts/fuzz-shell-substitution-boundaries.ts:273-295 (optionsFor); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "e40460b079bef175": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for tests/runtime-shell.spec.ts:752-759 (an accumulating consumer cannot make the shell or transport buffer its input); tests/runtime-shell.spec.ts:828-833 (a slow terminal applies backpressure without growing the shell or output queue); preserve scenario-specific failure evidence."
+    },
+    "e62d1512947fb93a": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1176-1184 (typed_start_failure_keeps_redirected_stderr_until_diagnostic); shell/engine/src/runtime/tests.rs:1256-1264 (typed_exec_failure_uses_redirected_stderr_while_weak_endpoint_is_live); preserve scenario-specific failure evidence."
+    },
+    "e70a596b250fc815": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:741-816 (main); scripts/fuzz-shell-job-lifetime.ts:393-468 (main); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "e8dab78a603c020a": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:802-809 (case_snapshots_patterns_output_and_fields_share_limits); shell/engine/tests/words.rs:1260-1267 (trim_snapshots_patterns_results_and_fields_share_bounds); preserve scenario-specific failure evidence."
+    },
+    "e8fab7ef708b5932": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:408-416 (parse_expanded_word_with_limits); shell/parser/src/parser/mod.rs:473-481 (parse_substitution_token_with_limits); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "e93231f8fc5bf274": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:578-593 (matrixCases); scripts/fuzz-shell-printf.ts:421-436 (matrixCases); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-options"
+    },
+    "e96631dbad7bdb2d": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for scripts/test-fuzz-shell-job-lifetime.ts:171-176 (strict byte); scripts/test-fuzz-shell-path.ts:426-433 (all transitive harness sources are pinned and raw bytes); preserve scenario-specific failure evidence."
+    },
+    "e96c888adad9b3b3": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-control-flow.ts:1087-1095 (validateFixture); scripts/fuzz-shell-printf.ts:483-491 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "e984239b844957d0": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:521-528 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words.rs:1895-1902 (declaration_raw_capture_yields_and_can_be_cancelled_before_dispatch); preserve scenario-specific failure evidence."
+    },
+    "ebedf3b6df948e02": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-arithmetic.ts:496-504 (generate); scripts/fuzz-shell-readonly.ts:177-184 (run); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "ec19bc18f66e1829": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1722-1731 (runtime_pipeline_builtins_external_and_fs_share_descriptor_namespace); shell/engine/src/runtime/tests.rs:1993-2003 (external_after_builtin_pipeline_starts_a_fresh_runtime_job); preserve scenario-specific failure evidence."
+    },
+    "ec512a52858de846": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/command.rs:924-930 (long_running_loop_remains_interruptible_after_cumulative_work_would_exhaust); shell/engine/tests/words/command.rs:948-954 (sustained_arithmetic_replay_yields_cancels_and_preserves_background); preserve scenario-specific failure evidence."
+    },
+    "ee13f271cd79b703": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:646-666 (validateFixture); scripts/fuzz-shell-path.ts:717-737 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "f0b4f9f5bdf21d2e": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:2013-2018 (long_splitting_yields_and_cancellation_restores_frames); shell/engine/tests/words/set_positionals.rs:114-118 (cancellation_after_set_restores_caller_positionals); preserve scenario-specific failure evidence."
+    },
+    "f0f8e7fec84c4234": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:513-526 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words.rs:915-928 (case_rhs_cancellation_restores_external_prefix_frames); preserve scenario-specific failure evidence."
+    },
+    "f1135644c696ec8f": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:791-797 (case_snapshots_patterns_output_and_fields_share_limits); shell/engine/tests/words.rs:1249-1255 (trim_snapshots_patterns_results_and_fields_share_bounds); preserve scenario-specific failure evidence."
+    },
+    "f18df3d3df7708ef": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:3758-3765 (while redirect); shell/engine/tests/words.rs:3948-3955 (partial redirect restores locals); preserve scenario-specific failure evidence."
+    },
+    "f1ddb8424940147a": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:867-873 (case_matching_yields_cancels_and_restores_local_and_positional_frames); shell/engine/tests/words.rs:1367-1373 (trim_matching_yields_cancels_and_restores_local_and_positional_frames); preserve scenario-specific failure evidence."
+    },
+    "f26165403148ee8d": {
+      "kind": "deferred",
+      "reason": "Remove scripts/fuzz-shell-functions.ts:624-642 (validateFixture); scripts/fuzz-shell-path.ts:695-713 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
+      "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
+    },
+    "f2b5ff31d69c36fa": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/printf.rs:456-468 (concurrent_small_printf_writers_never_split_marker_records); shell/engine/tests/words/printf.rs:555-567 (concurrent_printf_writers_on_one_engine_pipe_keep_each_marker_whole); preserve scenario-specific failure evidence."
+    },
+    "f633f30a6b37d90d": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/interpreter/command_builtin/tests.rs:61-67 (detach_group); shell/engine/tests/words/session.rs:70-78 (detach_group); preserve scenario-specific failure evidence."
+    },
+    "f6e4744859f335e2": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/state.rs:3081-3091 (star_separator_is_fixed_size_snapshot_state_and_does_not_replace_live_ifs); shell/engine/src/state.rs:3264-3274 (star_separator_access_still_admits_reference_work_and_cancellation); preserve scenario-specific failure evidence."
+    },
+    "f7329072f3d906f0": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1942-1953 (parse_for); shell/parser/src/parser/mod.rs:2019-2030 (parse_select); Parser provenance lives in protected sources.lock.json. These branches deliberately differ in error text and grammar entry points; characterize invalid syntax before extraction in a dedicated parser change.",
+      "plan": "plans/008-duplicate-baseline.md#parser-loops"
+    },
+    "f851dd81af618b14": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/state.rs:3690-3695 (function_memory_assignment_only_prefix_commit_charges_owner_not_temporary_scope); shell/engine/src/state.rs:3711-3716 (function_memory_multi_assignment_commit_failure_restores_all_bindings_atomically); preserve scenario-specific failure evidence."
+    },
+    "f8578049c417a310": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/state.rs:2905-2911 (scalar_reference_depth_cycles_and_access_cancellation_use_constant_storage); shell/engine/src/state.rs:3038-3044 (cancelled_or_cyclic_attribute_resolution_creates_no_attributes); preserve scenario-specific failure evidence."
+    },
+    "fa163c85b5e7ca34": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1177-1189 (typed_start_failure_keeps_redirected_stderr_until_diagnostic); shell/engine/src/runtime/tests.rs:3602-3610 (review_followup_closed_stderr_does_not_use_core_fallback); preserve scenario-specific failure evidence."
+    },
+    "fa7e901225ee500f": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:1894-1922 (parse_for); shell/parser/src/parser/mod.rs:2045-2072 (parse_select_words); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "fc36f05d8f36d89b": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words/namerefs.rs:178-186 (rejected_isolated_state_copies_keep_the_last_async_identity_and_caller_state); shell/engine/tests/words/namerefs.rs:206-214 (cancelling_isolated_state_admission_launches_no_child_and_restores_the_caller); preserve scenario-specific failure evidence."
+    },
+    "fc8650956a280a20": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:4316-4324 (parse_simple_redirect); shell/parser/src/parser/mod.rs:4418-4426 (parse_simple_redirect); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
+      "plan": "plans/008-duplicate-baseline.md#parser-redirects"
+    },
+    "fe348c24ac71f467": {
+      "kind": "fixture",
+      "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:3038-3043 (parameter_diagnostic_fields_follow_inner_quotes_and_ifs_in_every_context); shell/engine/tests/words.rs:3202-3207 (diagnostic_trim_results_split_independently_of_outer_and_pattern_quotes); preserve scenario-specific failure evidence."
+    }
   }
 }

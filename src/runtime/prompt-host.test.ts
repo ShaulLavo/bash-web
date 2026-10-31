@@ -218,3 +218,42 @@ test("a late first answer is dropped but later updates still repair the prompt",
   shell.host.stop();
   assert.ok(lives[1]!.signal.aborted, "stopping the host ends the prompt on screen");
 });
+
+test("variable names that overflow the names area keep only whole names that fit", async (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const cases: [string, string[], string][] = [
+    ["one oversized name", ["A".repeat(2048)], ""],
+    ["an oversized first name", ["B".repeat(1500), "HOME"], ""],
+    ["names past the limit", ["C".repeat(600), "D".repeat(600)], "C".repeat(600)],
+  ];
+  for (const [name, variables, expected] of cases) {
+    const shell = fixture({ variables, render: () => "> " });
+    const length = shell.guest.imports.prompt_names(0, 1024);
+    assert.equal(
+      decoder.decode(new Uint8Array(shell.memory.buffer, 0, length).slice()),
+      expected,
+      name,
+    );
+    await shell.request(1);
+    assert.equal(await shell.reply(1), "> ", `${name}: the prompt still renders`);
+    shell.host.stop();
+  }
+  assert.equal(errors.mock.callCount(), 3, "one diagnostic per shell");
+});
+
+test("a thenable's then is read once and its answer is used", async () => {
+  let reads = 0;
+  const answer = Promise.resolve("OK> ");
+  const thenable = {
+    get then() {
+      reads++;
+      if (reads > 1) throw new Error("then was read twice");
+      return answer.then.bind(answer);
+    },
+  };
+  const shell = fixture({ variables: [], render: () => thenable as PromiseLike<string> });
+  await shell.request(1);
+  assert.equal(await shell.reply(1), "OK> ");
+  assert.equal(reads, 1);
+  shell.host.stop();
+});

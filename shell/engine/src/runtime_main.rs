@@ -395,8 +395,16 @@ mod guest {
             }
             Ok(())
         }
+        /// Another writer's output makes the editor's screen model stale. Check before
+        /// a key can draw: completing a paste or escape may apply a deferred prompt.
+        fn check_output(&mut self) {
+            if self.host.as_ref().is_some_and(|host| host.moved()) {
+                self.editor.foreign_output();
+            }
+        }
         async fn paint(&mut self, byte: u8) -> Result<Action, IoError> {
             self.editor.resize(geometry());
+            self.check_output();
             match self.editor.feed(byte) {
                 Action::Echo(byte) => {
                     self.write(&[byte]).await?;
@@ -413,14 +421,12 @@ mod guest {
         }
         /// Applies text the page pushed for this prompt, if any, and recounts a resize.
         async fn refresh(&mut self) -> Result<(), IoError> {
-            let Some(host) = self.host.as_deref_mut() else {
+            if self.host.is_none() {
                 return Ok(());
-            };
-            self.editor.resize(geometry());
-            if host.moved() {
-                self.editor.foreign_output();
             }
-            let Some(prompt) = host.update() else {
+            self.editor.resize(geometry());
+            self.check_output();
+            let Some(prompt) = self.host.as_deref_mut().and_then(PromptHost::update) else {
                 return Ok(());
             };
             let Some(bytes) = self.editor.replace_prompt(prompt) else {
