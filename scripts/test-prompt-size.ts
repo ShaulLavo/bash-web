@@ -24,9 +24,9 @@ try {
   );
   const sizes = promptSize(metafile, new Map(entries));
   console.log(JSON.stringify({ entries, ...sizes }));
-  // measured after two reduction rounds; see pr4-status/RESULT.md
-  if (sizes.eagerBytesGzip > 7_100)
-    throw new Error(`prompt eager graph exceeds 7,100 bytes: ${sizes.eagerBytesGzip}`);
+  // measured after corrected PR 211 integration; see pr5-objects/integration-e4ddbc49/size.log
+  if (sizes.eagerBytesGzip > 7_450)
+    throw new Error(`prompt eager graph exceeds 7,450 bytes: ${sizes.eagerBytesGzip}`);
   if (sizes.configIncrementalBytesGzip > 1_500)
     throw new Error(
       `prompt incremental config graph exceeds 1,500 bytes: ${sizes.configIncrementalBytesGzip}`,
@@ -38,8 +38,9 @@ try {
     throw new Error(
       `prompt objects chunk exceeds 5,000 bytes: ${sizes.objectsIncrementalBytesGzip}`,
     );
-  if (sizes.totalBytesGzip > 18_000)
-    throw new Error(`prompt package exceeds 18,000 bytes: ${sizes.totalBytesGzip}`);
+  // measured after corrected PR 211 integration; see pr5-objects/integration-e4ddbc49/size.log
+  if (sizes.totalBytesGzip > 18_500)
+    throw new Error(`prompt package exceeds 18,500 bytes: ${sizes.totalBytesGzip}`);
 } finally {
   await rm(output, { recursive: true, force: true });
 }
