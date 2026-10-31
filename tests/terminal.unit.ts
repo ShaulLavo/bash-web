@@ -32,6 +32,26 @@ const codec = (bridge: SharedBridge, descriptors?: DescriptorTable) => {
   });
 };
 
+test("output wake publication is edge-triggered while bytes remain queued", () => {
+  const bridge = new SharedBridge();
+  const initialWake = Atomics.load(bridge.state, control.wake);
+
+  assert.equal(bridge.tryWrite([Uint8Array.of(1)]), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 1);
+  assert.equal(bridge.tryWrite([Uint8Array.of(2)]), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 1);
+
+  assert.deepEqual(bridge.drain(), Uint8Array.of(1, 2));
+  assert.equal(bridge.tryWrite([Uint8Array.of(3)]), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 3);
+  assert.equal(bridge.write(Uint8Array.of(4)), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 3);
+
+  assert.deepEqual(bridge.drain(), Uint8Array.of(3, 4));
+  assert.equal(bridge.write(Uint8Array.of(5)), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 5);
+});
+
 test("terminal immediate operations return EAGAIN without entering a blocking path", () => {
   const bridge = new SharedBridge();
   const input = createBridgeTerminal(bridge.buffer, 0);
