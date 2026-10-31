@@ -1,9 +1,10 @@
 import { build } from "esbuild";
 import { gzipSync } from "node:zlib";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const output = await mkdtemp(join("/work/tmp", "bash-web-prompt-size-"));
+const output = await mkdtemp(join(tmpdir(), "bash-web-prompt-size-"));
 try {
   await build({
     entryPoints: ["src/prompt/index.ts"],
