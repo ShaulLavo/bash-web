@@ -19,7 +19,6 @@
     "0ab088af8fa38b45": 1,
     "0cd12d7cf782bf8c": 1,
     "0d90ff4c0c3cb40e": 1,
-    "0e25d042083b5072": 1,
     "0e273a1b3da8cb5f": 1,
     "0e8bdc2688087b49": 1,
     "0f197f1f9e6675b8": 1,
@@ -55,7 +54,6 @@
     "2d4cf2af23ae0569": 1,
     "334d9f201aeefe42": 1,
     "340d74fd9b38a04f": 1,
-    "341df31e8c31c4ed": 1,
     "3713eb4518c4258e": 1,
     "38175ab65a0a8dfd": 1,
     "386d0a9d5a16e17c": 1,
@@ -80,7 +78,6 @@
     "43f58ec692c77ce8": 1,
     "4442240b509ff601": 1,
     "460076390d9033ab": 1,
-    "460aa345fe971532": 1,
     "461d999d6e3029aa": 1,
     "4633028ff88de7e3": 1,
     "46c9ca77debaab81": 1,
@@ -108,7 +105,6 @@
     "5c2958faeba05f0d": 1,
     "5cdb9b20a1f7a890": 1,
     "5d7fe009a5198f3d": 1,
-    "5e5dd3c60d4f9aa1": 1,
     "5f16af179fc35550": 1,
     "5f94218b2725e3b3": 1,
     "606b48116a4df88e": 1,
@@ -150,7 +146,6 @@
     "7bb2ca80021efb81": 1,
     "7e201cd92502e643": 1,
     "7e3fd5390a29cbf4": 1,
-    "7e4bec2fdf25c072": 1,
     "7f8bb3e0771fd0d3": 1,
     "81eb8faf39564b89": 1,
     "8223a10c9294e83b": 1,
@@ -166,7 +161,6 @@
     "88f9872096175bb2": 1,
     "8a3b5455fd344b81": 1,
     "8b7663f4a941e83a": 1,
-    "8b7f2c482fb68ed2": 1,
     "8c01855dcb4d9644": 1,
     "8c4cea960488b2a5": 1,
     "8cefc1df885ff6e8": 1,
@@ -188,7 +182,6 @@
     "96ed98775fe4118f": 1,
     "9716a9844a570eae": 1,
     "97eb3165fbf4d9fe": 1,
-    "986b798f40de9f80": 1,
     "9922b214eb352a77": 1,
     "99afb09848365a32": 1,
     "9bcbb53d23ed5b4e": 1,
@@ -224,7 +217,6 @@
     "b0c3385aae063fb6": 1,
     "b123cc345d45a404": 1,
     "b1d225db13c964a7": 1,
-    "b2e1b20900c0e84a": 1,
     "b333dd07fb719dda": 1,
     "b3a32263c5e4a424": 1,
     "b49b1e9cea3dfac9": 2,
@@ -272,7 +264,6 @@
     "d4d5fdfe7f325c41": 1,
     "d693be26d8c63a5f": 1,
     "d6a37e6c1ed75e79": 1,
-    "d6d740c421443d1c": 1,
     "d771acaab7109c01": 1,
     "d77d56b716658ba2": 1,
     "d7a9a855d3226682": 1,
@@ -400,11 +391,6 @@
     "0d90ff4c0c3cb40e": {
       "kind": "fixture",
       "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:896-914 (case_pattern_scanning_and_nested_token_admission_yield_and_cancel); shell/engine/tests/words.rs:1341-1359 (trim_pattern_scanning_and_token_admission_yield_and_cancel); preserve scenario-specific failure evidence."
-    },
-    "0e25d042083b5072": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/executor.rs:326-333 (with_probe); shell/engine/src/executor.rs:428-435 (default); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
-      "plan": "plans/008-duplicate-baseline.md#neutral-support"
     },
     "0e273a1b3da8cb5f": {
       "kind": "deferred",
@@ -567,11 +553,6 @@
       "kind": "fixture",
       "reason": "Independent test setup or assertions for shell/engine/tests/words/namerefs.rs:218-228 (reference_cycles_are_bounded_and_unset_under_nounset); shell/engine/tests/words/namerefs.rs:308-319 (nameref_depth_overflow_stays_distinct_from_cycles_under_nounset); preserve scenario-specific failure evidence."
     },
-    "341df31e8c31c4ed": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/runtime/wasi.rs:228-233 (stat); shell/engine/src/runtime/wasi.rs:266-271 (open_dir); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
-      "plan": "plans/008-duplicate-baseline.md#neutral-support"
-    },
     "3713eb4518c4258e": {
       "kind": "deferred",
       "reason": "Remove shell/parser/src/parser/mod.rs:756-763 (tick); shell/parser/src/parser/mod.rs:780-787 (tick_units); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
@@ -683,10 +664,6 @@
       "kind": "deferred",
       "reason": "Remove scripts/fuzz-shell-functions.ts:611-624 (coverage); scripts/fuzz-shell-printf.ts:452-465 (coverage); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
       "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
-    },
-    "460aa345fe971532": {
-      "kind": "fixture",
-      "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:1884-1889 (wait_group_observes_descendants_and_abandoned_group_confirms_cleanup); shell/engine/src/runtime/tests.rs:2141-2146 (killing_dynamic_background_group_rejects_new_members_and_isolates_siblings); preserve scenario-specific failure evidence."
     },
     "461d999d6e3029aa": {
       "kind": "deferred",
@@ -809,11 +786,6 @@
       "kind": "deferred",
       "reason": "Remove scripts/fuzz-shell-arithmetic.ts:594-608 (execute); scripts/fuzz-shell-readonly.ts:259-273 (execute); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
       "plan": "plans/008-duplicate-baseline.md#fuzz-options"
-    },
-    "5e5dd3c60d4f9aa1": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/io.rs:737-745 (open); shell/engine/src/io.rs:845-853 (write_file); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
-      "plan": "plans/008-duplicate-baseline.md#neutral-support"
     },
     "5f16af179fc35550": {
       "kind": "deferred",
@@ -1001,11 +973,6 @@
       "reason": "Remove scripts/fuzz-shell-braces.ts:770-777 (shrink); scripts/fuzz-shell-substitution-boundaries.ts:657-664 (shrink); The affected fuzzer sources are part of frozen source fingerprints. Their process teardown and recording contracts also need the existing failure probes, not a rushed rewrite of all drivers in this short track.",
       "plan": "plans/008-duplicate-baseline.md#fuzz-execution"
     },
-    "7e4bec2fdf25c072": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/runtime.rs:898-905 (open_dir); shell/engine/src/runtime.rs:921-928 (stat); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
-      "plan": "plans/008-duplicate-baseline.md#neutral-support"
-    },
     "7f8bb3e0771fd0d3": {
       "kind": "fixture",
       "reason": "Independent test setup or assertions for shell/parser/src/parser/mod.rs:7207-7212 (test_parse_variable); shell/parser/src/parser/mod.rs:7510-7515 (test_single_quoted_segment_concatenation_stays_literal); preserve scenario-specific failure evidence."
@@ -1077,11 +1044,6 @@
       "kind": "deferred",
       "reason": "Remove scripts/fuzz-shell-arithmetic.ts:114-119 (optionsFor); scripts/fuzz-shell-words.ts:173-178 (parseArgs); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
       "plan": "plans/008-duplicate-baseline.md#fuzz-options"
-    },
-    "8b7f2c482fb68ed2": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/compat.rs:54-67 (resolve); shell/engine/src/io.rs:919-932 (open_dir); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
-      "plan": "plans/008-duplicate-baseline.md#neutral-support"
     },
     "8c01855dcb4d9644": {
       "kind": "fixture",
@@ -1179,11 +1141,6 @@
     "97eb3165fbf4d9fe": {
       "kind": "fixture",
       "reason": "Independent test setup or assertions for shell/engine/src/runtime/tests.rs:3540-3545 (review_followup_subshell_failure_does_not_close_enclosing_group); shell/engine/src/runtime/tests.rs:3627-3632 (fork_failure_subshell_status_is_254_but_outer_reader_continues); preserve scenario-specific failure evidence."
-    },
-    "986b798f40de9f80": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/compat.rs:53-65 (resolve); shell/engine/src/io.rs:685-697 (stat); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
-      "plan": "plans/008-duplicate-baseline.md#neutral-support"
     },
     "9922b214eb352a77": {
       "kind": "fixture",
@@ -1341,11 +1298,6 @@
     "b1d225db13c964a7": {
       "kind": "fixture",
       "reason": "Independent test setup or assertions for shell/engine/tests/words.rs:524-529 (scalar_replace_rhs_cancellation_restores_prefix_frames); shell/engine/tests/words/arithmetic.rs:448-453 (cancelling_positional_slice_emission_keeps_writes_and_unwinds_function_arguments); preserve scenario-specific failure evidence."
-    },
-    "b2e1b20900c0e84a": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/runtime/wasi.rs:199-204 (mkdir); shell/engine/src/runtime/wasi.rs:227-232 (stat); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
-      "plan": "plans/008-duplicate-baseline.md#neutral-support"
     },
     "b333dd07fb719dda": {
       "kind": "deferred",
@@ -1562,10 +1514,6 @@
       "kind": "deferred",
       "reason": "Remove scripts/fuzz-shell-functions.ts:702-711 (ensureQueued); scripts/fuzz-shell-printf.ts:534-543 (ensureQueued); Fuzzer source files and shared helpers are hashed into frozen scripts/fixtures records. This lane may not change those records. Extraction needs a separate provenance-reviewed change that proves frozen case and oracle bytes stay identical.",
       "plan": "plans/008-duplicate-baseline.md#fuzz-options"
-    },
-    "d6d740c421443d1c": {
-      "kind": "fixture",
-      "reason": "Independent test setup or assertions for shell/engine/src/executor.rs:532-537 (registration_is_updated_and_removed_on_drop); shell/engine/src/io.rs:1531-1536 (drop); preserve scenario-specific failure evidence."
     },
     "d771acaab7109c01": {
       "kind": "deferred",
