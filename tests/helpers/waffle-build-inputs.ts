@@ -31,7 +31,15 @@ export function waffleBuildFixture(root: string, builder: string, patch: string)
   put("sources.lock.json", JSON.stringify({ waffle }));
   put(
     "node_modules/waffle/package.json",
-    JSON.stringify({ name: "waffle", version: waffle.version }),
+    JSON.stringify({
+      name: "waffle",
+      version: waffle.version,
+      exports: { "./program-build-tools": "./program-build-tools.mjs" },
+    }),
+  );
+  put(
+    "node_modules/waffle/program-build-tools.mjs",
+    `export * from ${JSON.stringify(import.meta.resolve("waffle/program-build-tools"))};\n`,
   );
   put("node_modules/waffle/scripts/build-wasi-libc.sh", builder);
   const staged = `.build/waffle-inputs/${waffle.revision}/packages/waffle`;

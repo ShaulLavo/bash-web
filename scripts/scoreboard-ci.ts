@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   accumulateFloor,
+  correctFalsePasses,
   assertMainFloor,
   bootstrap,
   qualification,
@@ -313,6 +314,7 @@ export async function prepareQualification({
     const prepared = await prepareCandidate({ root, client, ...bound, sourceSha });
     floor = prepared.floor.kind === "MainObservedFloor" ? prepared.floor.floor : prepared.floor;
   }
+  if (floor?.kind === "main-floor") floor = correctFalsePasses(trusted, floor);
   write(output, {
     ...bound,
     sourceSha,
@@ -412,7 +414,8 @@ export async function foldQualification({
   if (bound.selected.kind !== "main-push") {
     const target =
       bound.selected.kind === "pull-request" ? bound.selected.mainSha : bound.selected.beforeSha;
-    const { floor } = await resolveMainFloor({ root, sourceSha: target, client });
+    const resolved = await resolveMainFloor({ root, sourceSha: target, client });
+    const floor = correctFalsePasses(oracle, resolved.floor);
     assert.ok(raw.floor, "missing captured pull request floor");
     validateFloor(oracle, raw.floor);
     assert.equal(raw.floor.sourceSha, floor.sourceSha);
@@ -429,11 +432,12 @@ export async function foldQualification({
     write(resolve(output, "qualification.json"), result);
     return result;
   }
-  const { floor: previous } = await resolveMainFloor({
+  const { floor: previousRaw } = await resolveMainFloor({
     root,
     sourceSha: bound.selected.beforeSha,
     client,
   });
+  const previous = correctFalsePasses(oracle, previousRaw);
   // Resolve every first-parent edge, even a multi-commit push with a feature/revert.
   const currentEvidence = mainEvidence({ root, oracle, client });
   const current = await currentEvidence.collect(raw.sourceSha);
@@ -444,11 +448,14 @@ export async function foldQualification({
     ),
     "this exact completed raw producer/upload is required",
   );
-  const { floor: covered } = await resolveMainFloor({ root, sourceSha: raw.sourceSha, client });
+  const { floor: coveredRaw } = await resolveMainFloor({ root, sourceSha: raw.sourceSha, client });
+  const covered = correctFalsePasses(oracle, coveredRaw);
   const floor = accumulateFloor({
     oracle,
     sourceSha: raw.sourceSha,
-    predecessors: [previous, covered].concat(current.floors),
+    predecessors: [previous, covered].concat(
+      current.floors.map((floor) => correctFalsePasses(oracle, floor)),
+    ),
     scores: current.scores,
     evidence: covered.evidence,
   });

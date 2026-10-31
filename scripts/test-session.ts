@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { test, type TestContext } from "node:test";
+import { resolve } from "node:path";
 import { build } from "esbuild";
 import type { Runtime } from "waffle";
 import type { PromptProvider } from "bash-web";
@@ -56,6 +59,34 @@ const api: {
 } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].contents).toString("base64")}`
 );
+
+test("the public session entry typechecks for strict consumers", (context) => {
+  const root = resolve(import.meta.dirname, "..");
+  mkdirSync(resolve(root, ".scratch"), { recursive: true });
+  const scratch = mkdtempSync(resolve(root, ".scratch/session-consumer-"));
+  context.after(() => rmSync(scratch, { recursive: true, force: true }));
+  mkdirSync(resolve(scratch, "node_modules"), { recursive: true });
+  symlinkSync(root, resolve(scratch, "node_modules/bash-web"), "dir");
+  writeFileSync(resolve(scratch, "package.json"), '{"type":"module"}\n');
+  writeFileSync(
+    resolve(scratch, "tsconfig.json"),
+    JSON.stringify({
+      extends: resolve(root, "tsconfig.json"),
+      compilerOptions: { noUncheckedIndexedAccess: true },
+      include: ["index.ts"],
+    }),
+  );
+  writeFileSync(
+    resolve(scratch, "index.ts"),
+    'import type { BrowserSession, SessionOptions } from "bash-web/session";\n' +
+      "export type SessionFactory = (options: SessionOptions) => Promise<BrowserSession>;\n",
+  );
+  const result = spawnSync(resolve(root, "node_modules/.bin/tsc"), ["--project", scratch], {
+    cwd: scratch,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
 
 function fixture(
   context: TestContext,
