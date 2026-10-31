@@ -29,9 +29,10 @@ export interface InteractiveRun {
   terminal(guest: InteractiveGuest): WebAssembly.ModuleImports;
   /** Called when the guest waits: bytes to feed, `null` to end input, `undefined` for nothing. */
   next(output: string): Uint8Array | null | undefined;
+  onWait?(milliseconds: number): void;
 }
 
-export function runInteractive({ args, terminal, next }: InteractiveRun) {
+export function runInteractive({ args, terminal, next, onWait }: InteractiveRun) {
   const input = new api.PipeController({ relay: "manual" });
   const output: Uint8Array[] = [];
   const errors: Uint8Array[] = [];
@@ -86,7 +87,8 @@ export function runInteractive({ args, terminal, next }: InteractiveRun) {
       pid,
       service: supervisor,
       signals,
-      wait() {
+      wait(milliseconds) {
+        onWait?.(milliseconds);
         const bytes = next(Buffer.concat(output).toString());
         if (bytes === null) return feed.close();
         if (bytes && feed.tryWrite([bytes]) !== bytes.length)
