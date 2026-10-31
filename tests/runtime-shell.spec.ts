@@ -63,9 +63,7 @@ test("descriptor paths reopen actual shared terminals without owning their lifet
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
-test("the runtime provides /dev/null without creating a filesystem node", async ({
-  page,
-}) => {
+test("the runtime provides /dev/null without creating a filesystem node", async ({ page }) => {
   const baseline = await open(page);
   await command(
     page,
