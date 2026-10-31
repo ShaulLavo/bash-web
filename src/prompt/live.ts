@@ -2,6 +2,7 @@ import type { PromptLive } from "./types";
 
 export class WorkBudget {
   private deadline: number;
+  private yielded = performance.now();
   private readonly started: number;
   constructor(
     readonly signal: AbortSignal,
@@ -16,6 +17,17 @@ export class WorkBudget {
   }
   get active(): boolean {
     return !this.signal.aborted && this.clock() < this.deadline;
+  }
+  async checkpoint(): Promise<void> {
+    this.check();
+    if (performance.now() - this.yielded < 4) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    this.yielded = performance.now();
+    this.check();
+  }
+  check(): void {
+    if (this.signal.aborted) throw new WorkStopped("cancelled");
+    if (!this.active) throw new WorkStopped("deadline");
   }
   async run<T>(work: () => T | Promise<T>): Promise<T | undefined> {
     if (!this.active) return undefined;
@@ -60,5 +72,11 @@ export class PromptTurnLive implements PromptLive {
       this.lastText = next;
       this.onUpdate(next);
     });
+  }
+}
+
+export class WorkStopped extends Error {
+  constructor(readonly reason: "cancelled" | "deadline") {
+    super(reason);
   }
 }
