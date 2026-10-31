@@ -221,13 +221,13 @@ run_updater() {
 
 assert_support_revision() {
   local root=$1 revision=$2
-  test "$(rg -c "waffle-program-support.*rev = \"${revision}\"" "$root/shell/engine/Cargo.toml")" = 2
-  test "$(rg -c 'waffle-program-support.*rev =' "$root/shell/engine/Cargo.toml")" = 2
-  rg -q "waffle-program-support.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
-  rg -q "name = \"waffle-program-support\"" "$root/shell/Cargo.lock"
-  rg -q "waffle-coreutils.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
-  rg -q "waffle-grep.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
-  rg -q "rev=${revision}#${revision}" "$root/shell/Cargo.lock"
+  test "$(grep -Ec "waffle-program-support.*rev = \"${revision}\"" "$root/shell/engine/Cargo.toml")" = 2
+  test "$(grep -Ec 'waffle-program-support.*rev =' "$root/shell/engine/Cargo.toml")" = 2
+  grep -Eq "waffle-program-support.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
+  grep -Eq "name = \"waffle-program-support\"" "$root/shell/Cargo.lock"
+  grep -Eq "waffle-coreutils.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
+  grep -Eq "waffle-grep.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
+  grep -Eq "rev=${revision}#${revision}" "$root/shell/Cargo.lock"
 }
 
 assert_common_calls() {
@@ -261,9 +261,9 @@ run_no_runtime_fixture() {
   write_fixture "$root" 0.0.105 0.0.13
   write_stubs "$root"
   RELEASE_RUNTIME=0.0.105 RELEASE_PROGRAM=0.0.14 GIT_REF_MODE=annotated run_updater "$root"
-  test "$(rg -c "waffle-program-support.*${old_revision}" "$root/shell/engine/Cargo.toml")" = 2
-  test "$(rg -c "waffle-program-support.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
-  rg -q "rev=${old_revision}#${old_revision}" "$root/shell/Cargo.lock"
+  test "$(grep -Ec "waffle-program-support.*${old_revision}" "$root/shell/engine/Cargo.toml")" = 2
+  test "$(grep -Ec "waffle-program-support.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
+  grep -Eq "rev=${old_revision}#${old_revision}" "$root/shell/Cargo.lock"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
   jq -e '.wafflePrograms.runtime == (.waffle | {url: .specifier, bytes: .archiveBytes, sha256: .archiveSha256})' "$root/sources.lock.json" > /dev/null
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz"
