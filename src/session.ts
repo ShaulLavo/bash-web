@@ -314,8 +314,9 @@ export class BrowserSession {
       this.bridge.resumeInput();
     }
     if (this.bridge.cancelled()) return;
-    while (this.queued.length) {
+    while (true) {
       const bytes = this.queued[0];
+      if (!bytes) break;
       const chunk = bytes.subarray(0, INPUT_CHUNK);
       const accepted = this.bridge.send(chunk);
       if (!accepted) return;
