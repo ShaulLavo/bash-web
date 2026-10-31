@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
 import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { createPrompt } from "./index";
 import { TurnFilesystem } from "./fs";
-import { readRepository } from "./sources/repo";
+import { readRef, readRepository } from "./sources/repo";
+import { composePrompt } from "./compose";
+import { resolvePromptConfig } from "./config/defaults";
 import type { PromptContext, PromptFilesystem } from "./types";
 
 const execFile = promisify(execFileCallback);
@@ -23,7 +25,7 @@ function context(cwd: string, variables: ReadonlyMap<string, string> = new Map()
     rows: 24,
     lineEditor: "bash",
     ps1: "$ ",
-    variables: new Map<string, string>([["HOME", cwd], ...Array.from(variables)]),
+    variables: new Map<string, string>(Array.from(variables).concat([["HOME", cwd]])),
     signal: new AbortController().signal,
   };
 }
@@ -32,26 +34,36 @@ async function lookupDirectory(
   path: string,
   stat: Awaited<ReturnType<typeof lstat>>,
 ): Promise<Awaited<ReturnType<PromptFilesystem["lookup"]>>> {
-  const children = new Map();
-  for (const entry of await readdir(path, { withFileTypes: true })) {
-    const child = join(path, entry.name);
-    const childStat = await lstat(child);
-    children.set(
+  const entries = await readdir(path, { withFileTypes: true });
+  const children = new Map(
+    Array.from(entries, (entry) => [
       entry.name,
-      childStat.isDirectory()
-        ? { kind: "dir", ino: Number(childStat.ino), mtime: Number(childStat.mtimeMs) }
-        : { kind: "file", ino: Number(childStat.ino), mtime: Number(childStat.mtimeMs) },
-    );
-  }
+      {
+        kind: entry.isDirectory() ? ("dir" as const) : ("file" as const),
+        ino: 1,
+        mtime: 1,
+      },
+    ]),
+  );
   return { kind: "dir", ino: Number(stat.ino), mtime: Number(stat.mtimeMs), children };
 }
 
-function realFilesystem(): PromptFilesystem {
+function realFilesystem(boundary?: string): PromptFilesystem {
   return {
     async lookup(path) {
       try {
         const stat = await lstat(path);
-        if (stat.isDirectory()) return lookupDirectory(path, stat);
+        if (stat.isDirectory()) {
+          const entry = await lookupDirectory(path, stat);
+          if (
+            boundary &&
+            path !== boundary &&
+            boundary.startsWith(`${path}/`) &&
+            entry?.kind === "dir"
+          )
+            entry.children.delete(".git");
+          return entry;
+        }
         return { kind: "file", ino: Number(stat.ino), mtime: Number(stat.mtimeMs) };
       } catch {
         return undefined;
@@ -83,6 +95,16 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
     },
   });
   return result.stdout.trim();
+}
+
+async function fixture(t: TestContext, name: string): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), `bash-web-prompt-${name}-`));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  return root;
+}
+
+async function snapshot(path: string, variables?: ReadonlyMap<string, string>) {
+  return readRepository(new TurnFilesystem(realFilesystem()), context(path, variables));
 }
 
 async function makeRepository(root: string, name: string): Promise<string> {
@@ -119,8 +141,16 @@ async function renderGit(
       resolveUpdate();
     },
   });
-  if (!updates.length)
-    await Promise.race([updateReady, new Promise((resolve) => setTimeout(resolve, 1_900))]);
+  if (!updates.length && !result) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      updateReady,
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, 1_900);
+      }),
+    ]);
+    clearTimeout(timer);
+  }
   return updates.at(-1) ?? result ?? "";
 }
 
@@ -129,10 +159,7 @@ async function expectBranch(path: string, branch: string): Promise<void> {
 }
 
 test("reads attached, unborn and detached HEADs from a real repository", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "bash-web-prompt-git-head-"));
-  t.after(async () => {
-    await rm(root, { recursive: true, force: true });
-  });
+  const root = await fixture(t, "git-head");
   const repository = await makeCommittedRepository(root, "repo");
   await expectBranch(repository, "main");
 
@@ -148,10 +175,7 @@ test("reads attached, unborn and detached HEADs from a real repository", async (
 });
 
 test("reads linked worktrees, commondir stash state, and explicit git directories", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "bash-web-prompt-git-layout-"));
-  t.after(async () => {
-    await rm(root, { recursive: true, force: true });
-  });
+  const root = await fixture(t, "git-layout");
   const repository = await makeCommittedRepository(root, "repo");
   const linked = join(root, "linked");
   await git(repository, "worktree", "add", "-q", "-b", "linked", linked);
@@ -188,10 +212,7 @@ test("reads linked worktrees, commondir stash state, and explicit git directorie
 });
 
 test("keeps rebase precedence and reports progress from real git state", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "bash-web-prompt-git-state-"));
-  t.after(async () => {
-    await rm(root, { recursive: true, force: true });
-  });
+  const root = await fixture(t, "git-state");
   const repository = await makeRepository(root, "repo");
   await writeFile(join(repository, "conflict.txt"), "base\n");
   await git(repository, "add", "conflict.txt");
@@ -221,10 +242,7 @@ test("keeps rebase precedence and reports progress from real git state", async (
 });
 
 test("marks SHA-256 and reftable repositories unknown", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "bash-web-prompt-git-format-"));
-  t.after(async () => {
-    await rm(root, { recursive: true, force: true });
-  });
+  const root = await fixture(t, "git-format");
   const sha = join(root, "sha256");
   const reftable = join(root, "reftable");
   await execFile("git", ["init", "-q", "--object-format=sha256", sha]);
@@ -234,12 +252,9 @@ test("marks SHA-256 and reftable repositories unknown", async (t) => {
 });
 
 test("does not inspect unrelated paths when no repository exists", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "bash-web-prompt-git-none-"));
-  t.after(async () => {
-    await rm(root, { recursive: true, force: true });
-  });
+  const root = await fixture(t, "git-none");
   const paths: string[] = [];
-  const base = realFilesystem();
+  const base = realFilesystem(root);
   const filesystem: PromptFilesystem = {
     lookup: async (path) => {
       paths.push(path);
@@ -251,7 +266,236 @@ test("does not inspect unrelated paths when no repository exists", async (t) => 
     context(join(root, "nested"), new Map([["NO_COLOR", "1"]])),
     { signal: new AbortController().signal, update() {} },
   );
-  const expected = new Set([join(root, "nested"), root, "/tmp", "/"]);
-  assert.deepEqual(new Set(paths), expected);
+  const expected: string[] = [join(root, "nested")];
+  let path = root;
+  while (path !== "/") {
+    expected.push(path);
+    path = dirname(path);
+  }
+  expected.push("/");
+  assert.deepEqual(paths, expected);
   assert.ok(!paths.some((path) => path.includes("/.git/")));
+});
+
+test("discovers a new parent repository on the next prompt and chooses the nearest root", async (t) => {
+  const root = await fixture(t, "git-discovery");
+  const nested = join(root, "parent", "child");
+  await mkdir(nested, { recursive: true });
+  const fs = realFilesystem(root);
+  const read = () => readRepository(new TurnFilesystem(fs), context(nested));
+  assert.equal(await read(), undefined);
+  await git(root, "init", "-q", "-b", "parent", join(root, "parent"));
+  assert.equal((await read())?.root, dirname(nested));
+  await git(root, "init", "-q", "-b", "child", nested);
+  const child = await read();
+  assert.equal(child?.root, nested);
+  assert.deepEqual(child?.head, { kind: "attached", branch: "child", commit: undefined });
+});
+
+test("separate gitdir files and relative explicit paths match git", async (t) => {
+  const root = await fixture(t, "git-separate");
+  const tree = join(root, "tree");
+  const data = join(root, "metadata");
+  await git(root, "init", "-q", "-b", "separate", `--separate-git-dir=${data}`, tree);
+  await writeFile(join(tree, ".git"), `gitdir: ${relative(tree, data)}\n`);
+  assert.equal((await snapshot(tree))?.gitDir, data);
+  const explicit = await snapshot(
+    root,
+    new Map([
+      ["GIT_DIR", "tree/.git"],
+      ["GIT_WORK_TREE", "tree"],
+    ]),
+  );
+  assert.equal(explicit?.gitDir, data);
+  assert.equal(explicit?.root, tree);
+  assert.equal(
+    await git(root, "--git-dir=metadata", "--work-tree=tree", "symbolic-ref", "--short", "HEAD"),
+    "separate",
+  );
+  const noGitDir = await snapshot(tree, new Map([["GIT_WORK_TREE", "../elsewhere"]]));
+  assert.equal(noGitDir?.root, join(root, "elsewhere"));
+});
+
+test("resolves packed and symbolic HEAD refs without reading objects or following unsafe refs", async (t) => {
+  const root = await fixture(t, "git-refs");
+  const repo = await makeCommittedRepository(root, "repo");
+  const commit = await git(repo, "rev-parse", "HEAD");
+  await git(repo, "pack-refs", "--all", "--prune");
+  await git(repo, "symbolic-ref", "refs/heads/alias", "refs/heads/main");
+  await git(repo, "symbolic-ref", "HEAD", "refs/heads/alias");
+  assert.deepEqual((await snapshot(repo))?.head, { kind: "attached", branch: "alias", commit });
+  assert.equal(
+    await readRef(new TurnFilesystem(realFilesystem()), join(repo, ".git"), "refs/heads/alias"),
+    commit,
+  );
+  await writeFile(join(repo, ".git/refs/heads/alias"), "ref: refs/heads/alias\n");
+  assert.deepEqual((await snapshot(repo))?.head, { kind: "unknown" });
+  let reads = 0;
+  const filesystem: PromptFilesystem = {
+    lookup: async () => {
+      reads++;
+      return undefined;
+    },
+    readFile: async () => {
+      reads++;
+      return undefined;
+    },
+  };
+  assert.equal(
+    await readRef(new TurnFilesystem(filesystem), join(repo, ".git"), "refs/../../private"),
+    undefined,
+  );
+  assert.equal(reads, 0);
+});
+
+test("operation precedence and progress reject partial and invalid counts", async (t) => {
+  const root = await fixture(t, "git-precedence");
+  const repo = await makeCommittedRepository(root, "repo");
+  const dir = join(repo, ".git");
+  const commit = await git(repo, "rev-parse", "HEAD");
+  for (const [marker, kind] of [
+    ["BISECT_LOG", "bisect"],
+    ["REVERT_HEAD", "revert"],
+    ["CHERRY_PICK_HEAD", "cherry-pick"],
+    ["MERGE_HEAD", "merge"],
+  ]) {
+    await writeFile(join(dir, marker), `${commit}\n`);
+    assert.equal((await snapshot(repo))?.operation?.kind, kind);
+  }
+  const apply = join(dir, "rebase-apply");
+  await mkdir(apply);
+  await writeFile(join(apply, "next"), "2\n");
+  await writeFile(join(apply, "last"), "5\n");
+  assert.deepEqual((await snapshot(repo))?.operation, {
+    kind: "rebase",
+    progress: { current: 2, total: 5 },
+  });
+  await writeFile(join(apply, "applying"), "");
+  assert.equal((await snapshot(repo))?.operation?.kind, "am");
+  const merge = join(dir, "rebase-merge");
+  await mkdir(merge);
+  await writeFile(join(merge, "msgnum"), "7\n");
+  await writeFile(join(merge, "end"), "5\n");
+  assert.deepEqual((await snapshot(repo))?.operation, { kind: "rebase", progress: undefined });
+  await writeFile(join(merge, "msgnum"), "2\n");
+  assert.deepEqual((await snapshot(repo))?.operation, {
+    kind: "rebase",
+    progress: { current: 2, total: 5 },
+  });
+  await rm(join(merge, "end"));
+  assert.deepEqual((await snapshot(repo))?.operation, { kind: "rebase", progress: undefined });
+});
+
+test("stash distinguishes absent, loose, packed, missing logs and count boundaries", async (t) => {
+  const root = await fixture(t, "git-stash");
+  const repo = await makeCommittedRepository(root, "repo");
+  assert.deepEqual((await snapshot(repo))?.stash, { present: false });
+  await writeFile(join(repo, "tracked.txt"), "changed\n");
+  await git(repo, "stash", "push", "-m", "test");
+  assert.deepEqual((await snapshot(repo))?.stash, { present: true, count: 1 });
+  const log = join(repo, ".git/logs/refs/stash");
+  await writeFile(log, "x\n".repeat(32_768));
+  assert.deepEqual((await snapshot(repo))?.stash, { present: true, count: 32_768 });
+  await writeFile(log, "x\n".repeat(32_769));
+  assert.deepEqual((await snapshot(repo))?.stash, { present: true });
+  await rm(log);
+  await git(repo, "pack-refs", "--all", "--prune");
+  assert.deepEqual((await snapshot(repo))?.stash, { present: true });
+  await writeFile(join(repo, ".git/refs/stash"), "not an object id\n");
+  assert.deepEqual((await snapshot(repo))?.stash, { present: undefined });
+});
+
+test("linked worktree operation markers stay local while refs stay common", async (t) => {
+  const root = await fixture(t, "git-local");
+  const repo = await makeCommittedRepository(root, "repo");
+  const linked = join(root, "linked");
+  await git(repo, "worktree", "add", "-q", "-b", "linked", linked);
+  const local = await snapshot(linked);
+  assert.ok(local);
+  await writeFile(join(repo, ".git/MERGE_HEAD"), "common marker\n");
+  assert.equal((await snapshot(linked))?.operation, undefined);
+  await writeFile(join(local.gitDir, "CHERRY_PICK_HEAD"), "local marker\n");
+  assert.equal((await snapshot(linked))?.operation?.kind, "cherry-pick");
+});
+
+test("unknown metadata stays unknown, and configured segments never read Git objects", async (t) => {
+  const root = await fixture(t, "git-unknown");
+  const repo = await makeCommittedRepository(root, "repo");
+  const calls: string[] = [];
+  const base = realFilesystem();
+  const fs: PromptFilesystem = {
+    lookup: async (path) => {
+      calls.push(path);
+      return base.lookup(path);
+    },
+    readFile: async (path) => {
+      calls.push(path);
+      return base.readFile(path);
+    },
+  };
+  await readRepository(new TurnFilesystem(fs), context(repo));
+  assert.ok(!calls.some((path) => path.includes("/objects/") || path.endsWith("/index")));
+  await writeFile(join(repo, ".git/HEAD"), "ref: refs/heads/../../escape\n");
+  assert.deepEqual((await snapshot(repo))?.head, { kind: "unknown" });
+  await writeFile(join(repo, ".git", "commondir"), "\n");
+  assert.deepEqual((await snapshot(repo))?.stash, { present: undefined });
+  assert.ok(createPrompt({ filesystem: fs }).variables.includes("GIT_DIR"));
+  assert.ok(createPrompt({ filesystem: fs }).variables.includes("GIT_WORK_TREE"));
+});
+
+test("the three Git segments match every retained Starship git fixture", async (t) => {
+  const root = await fixture(t, "git-starship");
+  const attached = await makeCommittedRepository(root, "attached");
+  const unborn = await makeRepository(root, "unborn");
+  const detached = await makeCommittedRepository(root, "detached");
+  await git(detached, "checkout", "--detach");
+  const rebase = await makeCommittedRepository(root, "rebase");
+  await git(rebase, "checkout", "--detach");
+  await mkdir(join(rebase, ".git/rebase-merge"));
+  await writeFile(join(rebase, ".git/rebase-merge/msgnum"), "1\n");
+  await writeFile(join(rebase, ".git/rebase-merge/end"), "1\n");
+  const merge = await makeCommittedRepository(root, "merge");
+  await writeFile(join(merge, ".git/MERGE_HEAD"), `${await git(merge, "rev-parse", "HEAD")}\n`);
+  const cases = new Map([
+    ["git-clean", attached],
+    ["git-dirty", attached],
+    ["git-untracked", attached],
+    ["git-stashed", attached],
+    ["git-unborn", unborn],
+    ["git-detached", detached],
+    ["git-mid-rebase", rebase],
+    ["git-conflicted", merge],
+  ]);
+  const fixtureDir = join(process.cwd(), "src/prompt/fixtures/outputs");
+  let compared = 0;
+  for (const [name, path] of cases) {
+    const repository = await snapshot(path);
+    assert.ok(repository);
+    const actual = composePrompt({
+      context: context(path),
+      config: resolvePromptConfig({
+        newline: false,
+        layout: ["git_branch", "git_commit", "git_state"],
+      }),
+      repository,
+      directory: undefined,
+      manifest: undefined,
+      versions: {},
+      environment: {},
+    });
+    for (const variant of await readdir(join(fixtureDir, name))) {
+      const capture = await readFile(join(fixtureDir, name, variant), "utf8");
+      const start = capture.indexOf("on ");
+      assert.ok(start >= 0, `${name}/${variant}`);
+      const ends = ["\u001b[1;31m[", "took ", "\n"]
+        .map((marker) => capture.indexOf(marker, start))
+        .filter((index) => index >= 0);
+      let expected = capture.slice(start, Math.min(...ends));
+      if (repository.head.kind === "detached")
+        expected = expected.replace(/\([0-9a-f]{7}\)/u, `(${repository.head.commit.slice(0, 7)})`);
+      assert.equal(actual, expected, `${name}/${variant}`);
+      compared++;
+    }
+  }
+  assert.equal(compared, 48);
 });
