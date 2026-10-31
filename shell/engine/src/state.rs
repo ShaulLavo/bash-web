@@ -326,7 +326,7 @@ impl State {
     pub fn publish_status(&mut self, status: i32) {
         self.status = status;
     }
-    pub(crate) fn pipeline_status(&self) -> &[i32] {
+    pub fn pipeline_status(&self) -> &[i32] {
         &self.pipestatus
     }
     pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {

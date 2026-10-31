@@ -12,6 +12,7 @@ import {
 import { SharedBridge, control } from "../bridge";
 import { createExecutableQuery } from "./executable-query";
 import { shellTerminalImports } from "./guest-imports";
+import { promptGuest } from "./prompt-channel";
 import { createShellTerminals } from "./terminal-endpoints";
 import { createTerminalAdmission, type TerminalAdmission } from "./terminal-admission";
 import type { ShellWorkerData } from "./worker-launcher";
@@ -22,6 +23,8 @@ export interface ShellWorkerRequest extends RuntimeWorkerRequest {
   terminalAdmission?: TerminalAdmission;
   memoryUsage?: SharedArrayBuffer;
   shellOutput?: SharedArrayBuffer;
+  /** Only a shell created with a prompt provider has this channel. */
+  prompt?: SharedArrayBuffer;
 }
 export type ShellWorkerMessage =
   | RuntimeWorkerMessage
@@ -55,6 +58,11 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
   if (request.terminal && !terminals)
     throw new TypeError("Shell root requires terminal input metadata");
   const endpoint = (target: 0 | 1 | 2) => terminals?.resolve(target);
+  const prompt = promptGuest(
+    request.prompt,
+    () => memory,
+    () => (bridge ? Atomics.load(bridge.state, control.outputWrite) : 0),
+  );
   return {
     stdio:
       request.terminal && terminals
@@ -97,6 +105,23 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
             }
             shell.phase(phase, status);
             terminals?.phase(phase);
+            prompt.phase(phase);
+          },
+          prompt_names(pointer: number, capacity: number) {
+            checkActive();
+            return prompt.imports.prompt_names(pointer, capacity);
+          },
+          prompt(turn: number, context: number, length: number, pointer: number, capacity: number) {
+            checkActive();
+            return prompt.imports.prompt(turn, context, length, pointer, capacity);
+          },
+          prompt_update(turn: number, pointer: number, capacity: number) {
+            checkActive();
+            return prompt.imports.prompt_update(turn, pointer, capacity);
+          },
+          output_position() {
+            checkActive();
+            return prompt.imports.output_position();
           },
         },
       };

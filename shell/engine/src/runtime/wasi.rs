@@ -137,6 +137,12 @@ impl WasiAbi {
             proc_signal(signal, disposition)
         })
     }
+    /// Only a shell started with `--prompt-host` asks for SIGWINCH.
+    pub fn handle_window_changes(&self) -> Result<(), i32> {
+        register_handler(SIGWINCH, |signal, disposition| unsafe {
+            proc_signal(signal, disposition)
+        })
+    }
 }
 impl Abi for WasiAbi {
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {

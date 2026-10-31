@@ -98,9 +98,9 @@ for (const args of [
       const result = await invoke(context, args);
       assert.equal(result.status, 2);
       assert.equal(result.stdout, "");
-      assert.match(
+      assert.equal(
         result.stderr,
-        /usage: shell-runtime \[-i \[--line-editor bash\|zsh\] \| -c SCRIPT \[NAME \[ARG\.\.\.\]\]/,
+        "shell-runtime: usage: shell-runtime [-i [--line-editor bash|zsh] [--prompt-host] | -c SCRIPT [NAME [ARG...]] | FILE [ARG...]]\n",
       );
     },
   );

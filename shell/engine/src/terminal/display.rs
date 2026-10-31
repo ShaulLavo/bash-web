@@ -290,6 +290,12 @@ impl Display {
     pub fn echoes_appends(&self) -> bool {
         !self.margin
     }
+    /// Whether a repaint of `region` starts on a row still on screen. Rows above
+    /// `top` are in history, where cursor movement cannot reach them.
+    pub fn reaches(&self, region: &[u8]) -> bool {
+        first_difference(&self.shown, region)
+            .is_none_or(|offset| position(&region[..offset], self.geometry.columns).row >= self.top)
+    }
     /// The next render starts from a cleared screen with the prompt at the top.
     pub fn clear_screen(&mut self) {
         self.clear = true;

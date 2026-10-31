@@ -1641,6 +1641,40 @@ fn nonblocking_eagain_wait_registration_is_removed_when_cancelled() {
     assert_eq!(fake.closed.borrow().len(), 2);
 }
 #[test]
+fn a_cancelled_one_byte_read_leaves_every_byte_for_the_next_read() {
+    let (executor, _fake, runtime) = setup();
+    let (input, output) = runtime.pipe().unwrap();
+    let read = |cancel: &Cancel| {
+        let (input, cancel) = (input.clone(), cancel.clone());
+        executor.spawn(async move {
+            let mut byte = [0];
+            input
+                .read_cancelled(&mut byte, &cancel)
+                .await
+                .map(|_| byte[0])
+        })
+    };
+    let first = Cancel::new();
+    let parked = read(&first);
+    executor.drive(64);
+    first.cancel();
+    executor.drive(64);
+    assert_eq!(parked.now_or_never(), Some(Err(IoError::Cancelled)));
+    // Data and the cancellation land in the same turn: cancellation wins the tie.
+    let second = Cancel::new();
+    let racing = read(&second);
+    executor.drive(64);
+    output.write(b"ab").now_or_never().unwrap().unwrap();
+    second.cancel();
+    executor.drive(64);
+    assert_eq!(racing.now_or_never(), Some(Err(IoError::Cancelled)));
+    for expected in *b"ab" {
+        let next = read(&Cancel::new());
+        executor.drive(64);
+        assert_eq!(next.now_or_never(), Some(Ok(expected)));
+    }
+}
+#[test]
 fn partial_writes_epipe_and_dup_lifetime() {
     let (executor, fake, runtime) = setup();
     let (input, output) = runtime.pipe().unwrap();
@@ -2242,6 +2276,32 @@ fn sigint_registration_calls_runtime_with_handle_not_ignore() {
         }),
         Err(28)
     );
+}
+
+#[test]
+fn sigwinch_registration_handles_signal_28() {
+    let mut registered = None;
+    assert_eq!(
+        register_handler(SIGWINCH, |signal, disposition| {
+            registered = Some((signal, disposition));
+            0
+        }),
+        Ok(())
+    );
+    assert_eq!(registered, Some((28, SIGNAL_DISPOSITION_HANDLE)));
+}
+
+#[test]
+fn a_window_change_taken_at_a_checkpoint_is_kept_for_the_prompt_reader() {
+    let (_executor, fake, runtime) = setup();
+    assert!(!runtime.take_window_change());
+    fake.interrupt.set(SIGWINCH);
+    assert!(!runtime.take_interrupt(), "SIGWINCH is not an interrupt");
+    assert!(runtime.take_window_change());
+    assert!(!runtime.take_window_change(), "one wake per delivery");
+    fake.interrupt.set(SIGINT);
+    assert!(runtime.take_interrupt());
+    assert!(!runtime.take_window_change());
 }
 
 #[test]

@@ -28,6 +28,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [Guest libc and build provenance](wasi-libc.md): The patched wasi-libc every WASI guest links against
 - [Zsh line-editor mode](zsh-line-editor.md): Opt-in hard-line navigation without changing Bash execution
 - [Interactive terminal editing](terminal-editing.md): Multiline commands, Shift+Enter, bracketed paste and input limits
+- [Prompt hook](prompt-hook.md): Draw each interactive prompt from the page and update it in place
 - [Test guests](test-guests.md): `test-guest` and `test-spin` commands and the descriptor test matrix
 
 ### Builtin and feature behavior

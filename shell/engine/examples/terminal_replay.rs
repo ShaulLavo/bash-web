@@ -1,8 +1,9 @@
 //! Drives the interactive line editor the way `runtime_main.rs` does and prints the
 //! bytes it writes, so `scripts/test-terminal-display.ts` can replay them into
 //! libghostty-vt. Input lines: `prompt HEX`, `keys HEX`, `resize COLUMNS ROWS`,
-//! `output HEX` (command output), `cancel` (a host interrupt while reading) and
-//! `eof` (input ends while reading).
+//! `output HEX` (command output), `update HEX` (the page pushes new prompt text),
+//! `background HEX` (a background job writes while the prompt is up), `cancel` (a
+//! host interrupt while reading) and `eof` (input ends while reading).
 //! Output lines: `W HEX` (terminal bytes), `S HEX` (a submitted command),
 //! `R COLUMNS ROWS` (resize the terminal now) and `E` (end of input).
 #[path = "../src"]
@@ -75,6 +76,18 @@ fn main() {
                 vec![format!("R {columns} {rows}")]
             }
             "output" => vec![format!("W {argument}")],
+            "update" => {
+                editor.resize(geometry);
+                editor
+                    .replace_prompt(&unhex(argument))
+                    .map(|bytes| format!("W {}", hex(&bytes)))
+                    .into_iter()
+                    .collect()
+            }
+            "background" => {
+                editor.foreign_output();
+                vec![format!("W {argument}")]
+            }
             "cancel" => {
                 editor.clear();
                 vec![format!("W {}", hex(&editor.finish(geometry, true)))]
