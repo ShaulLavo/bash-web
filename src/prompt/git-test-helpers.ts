@@ -49,6 +49,28 @@ async function fileEntry(
   return { ...stat, kind: "file" };
 }
 
+async function collectChildren(
+  path: string,
+  entry: Extract<Entry, { kind: "dir" }>,
+  boundary: string | undefined,
+  detailed: boolean,
+): Promise<void> {
+  const aboveBoundary =
+    boundary && path !== boundary && boundary.startsWith(path.endsWith("/") ? path : `${path}/`);
+  for (const child of await readdir(path, { withFileTypes: true })) {
+    if (child.name === ".git" && aboveBoundary) continue;
+    entry.children.set(
+      child.name,
+      await fileEntry(
+        join(path, child.name),
+        detailed,
+        child.isDirectory(),
+        child.isSymbolicLink(),
+      ),
+    );
+  }
+}
+
 export function realFilesystem(boundary?: string, detailed = false): PromptFilesystem {
   return {
     async lookup(path) {
@@ -56,24 +78,7 @@ export function realFilesystem(boundary?: string, detailed = false): PromptFiles
         const stat = await lstat(path);
         const entry = await fileEntry(path, true, stat.isDirectory(), stat.isSymbolicLink());
         if (entry.kind !== "dir") return entry;
-        for (const child of await readdir(path, { withFileTypes: true })) {
-          if (
-            child.name === ".git" &&
-            boundary &&
-            path !== boundary &&
-            boundary.startsWith(path.endsWith("/") ? path : `${path}/`)
-          )
-            continue;
-          entry.children.set(
-            child.name,
-            await fileEntry(
-              join(path, child.name),
-              detailed,
-              child.isDirectory(),
-              child.isSymbolicLink(),
-            ),
-          );
-        }
+        await collectChildren(path, entry, boundary, detailed);
         return entry;
       } catch (error) {
         return missing(error);

@@ -160,16 +160,28 @@ async function readStash(
     const ref = await resolveRef(filesystem, commonDir, "refs/stash");
     if (ref.kind === "unknown") return { present: undefined };
     if (ref.kind === "missing") return { present: false };
-    const path = joinPath(commonDir, "logs/refs/stash");
-    const entry = await filesystem.lookup(path);
-    if (entry?.kind !== "file") return { present: true };
-    const bytes = await filesystem.readFile(path);
-    if (!bytes?.length || bytes.length > maxStashLogBytes) return { present: true };
-    let count = bytes[bytes.length - 1] === 10 ? 0 : 1;
-    for (const byte of bytes) if (byte === 10) count++;
-    return { present: true, count };
+    const count = await readStashCount(filesystem, joinPath(commonDir, "logs/refs/stash"));
+    return count === undefined ? { present: true } : { present: true, count };
   } catch {
     return { present: undefined };
+  }
+}
+
+async function readStashCount(
+  filesystem: TurnFilesystem,
+  path: string,
+): Promise<number | undefined> {
+  try {
+    const entry = await filesystem.lookup(path);
+    if (entry?.kind !== "file") return undefined;
+    const bytes = await filesystem.readFile(path);
+    if (!bytes?.length || bytes.length > maxStashLogBytes || bytes[bytes.length - 1] !== 10)
+      return undefined;
+    const lines = decoder.decode(bytes).slice(0, -1).split("\n");
+    const record = /^[0-9a-f]{40} [0-9a-f]{40} [^<>\n]+ <[^<>\n]*> [0-9]+ [+-][0-9]{4}\t[^\n]*$/u;
+    return lines.every((line) => record.test(line)) ? lines.length : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -177,8 +189,11 @@ function unsupportedFormat(config: string): boolean {
   let section = "";
   for (const raw of config.split(/\r?\n/u)) {
     const line = raw.trim();
-    if (line.startsWith("[")) section = line.toLowerCase();
-    if (section !== "[extensions]") continue;
+    if (line.startsWith("[")) {
+      const header = /^\[\s*([^\]\s]+)\s*\]\s*(?:[#;].*)?$/u.exec(line);
+      section = header?.[1].toLowerCase() ?? "";
+    }
+    if (section !== "extensions") continue;
     const match = /^(objectformat|refstorage)\s*=\s*"?([^"\s#;]+)"?/iu.exec(line);
     if (!match) continue;
     const supported = match[1].toLowerCase() === "objectformat" ? "sha1" : "files";
