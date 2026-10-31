@@ -1,4 +1,4 @@
-import { WorkStopped } from "../live";
+import { hex } from "./git-bytes";
 import type { PromptEntry } from "../fs";
 import { parseIndex } from "./index-file";
 import type { IndexEntry, ParsedIndex } from "./index-types";
@@ -109,8 +109,8 @@ export class GitStatusSource implements StatusSource {
       cache.last.set(cacheKey(request), result);
       return result;
     } catch (error) {
-      if (error instanceof WorkStopped && error.reason === "cancelled") throw error;
-      if (error instanceof WorkStopped) cache.timeouts++;
+      if (request.budget.signal.aborted) throw error;
+      if (!request.budget.active) cache.timeouts++;
       const kind = error instanceof Error ? error.message : "read failed";
       if (!cache.logged.has(kind)) {
         cache.logged.add(kind);
@@ -198,7 +198,7 @@ async function readRules(run: Run, path: string, base: string): Promise<IgnoreRu
   run.request.budget.check();
   if (!bytes) return [];
   if (bytes.length > 64 * 1024) throw new Error("ignore limit");
-  const rules = parseIgnore(decoder.decode(bytes), base);
+  const rules = await parseIgnore(decoder.decode(bytes), base, run.request.budget);
   await run.request.budget.checkpoint();
   return rules;
 }
@@ -243,30 +243,46 @@ async function trackedFiles(
   tree: Tree,
   directory: Directory | undefined,
 ): Promise<void> {
-  let index = 0;
+  const pending: Promise<void>[] = [];
   for (const [name, entry] of tree.files) {
-    if (index++ % 64 === 0) await run.request.budget.checkpoint();
-    if (
-      entry.stage ||
-      entry.assumeValid ||
-      entry.skipWorktree ||
-      (entry.mode & 0o170000) === 0o160000
-    )
-      continue;
-    const metadata = directory?.children.get(name);
-    if (!metadata) {
-      add(run, "deleted");
-      continue;
-    }
-    const expected = (entry.mode & 0o170000) === 0o120000 ? "symlink" : "file";
-    if (metadata.kind !== expected) {
-      add(run, "typeChanged");
-      continue;
-    }
-    if (!run.request.config.counts && run.counts.modified) continue;
-    const relative = path ? `${path}/${name}` : name;
-    if (!(await cleanFile(run, relative, entry, metadata))) add(run, "modified");
+    await run.request.budget.checkpoint();
+    pending.push(
+      checkTracked(run, path ? `${path}/${name}` : name, entry, directory?.children.get(name)),
+    );
+    if (pending.length < 8) continue;
+    await finishHashes(pending);
+    pending.length = 0;
   }
+  await finishHashes(pending);
+}
+async function finishHashes(pending: readonly Promise<void>[]): Promise<void> {
+  const results = await Promise.allSettled(pending);
+  for (const result of results) if (result.status === "rejected") throw result.reason;
+}
+async function checkTracked(
+  run: Run,
+  path: string,
+  entry: IndexEntry,
+  metadata: Metadata | undefined,
+): Promise<void> {
+  if (
+    entry.stage ||
+    entry.assumeValid ||
+    entry.skipWorktree ||
+    (entry.mode & 0o170000) === 0o160000
+  )
+    return;
+  if (!metadata) {
+    add(run, "deleted");
+    return;
+  }
+  const expected = (entry.mode & 0o170000) === 0o120000 ? "symlink" : "file";
+  if (metadata.kind !== expected) {
+    add(run, "typeChanged");
+    return;
+  }
+  if (!run.request.config.counts && run.counts.modified) return;
+  if (!(await cleanFile(run, path, entry, metadata))) add(run, "modified");
 }
 
 async function cleanFile(
@@ -292,9 +308,7 @@ async function cleanFile(
   blob.set(bytes, header.length);
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", blob));
   run.request.budget.check();
-  const clean =
-    Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("") === indexed.oid &&
-    !indexed.intentToAdd;
+  const clean = hex(digest) === indexed.oid && !indexed.intentToAdd;
   const confirmed = await run.request.filesystem.filesystem.lookup(pathAt(run, path));
   run.request.budget.check();
   if (!confirmed || stamp(confirmed) !== version) throw new Error("file changed while hashing");
@@ -324,7 +338,8 @@ async function untrackedNames(
     )
       continue;
     const relative = path ? `${path}/${name}` : name;
-    if (!ignored(relative, entry.kind === "dir", rules)) names.push(name);
+    if (!(await ignored(relative, entry.kind === "dir", rules, run.request.budget)))
+      names.push(name);
   }
   run.cache.untracked.set(path, { stamp: key, names });
   return names;
@@ -339,7 +354,7 @@ async function containsUntracked(
   if (++run.directories > 2000) throw new Error("directory limit");
   const directory = await run.request.filesystem.lookup(pathAt(run, path));
   run.request.budget.check();
-  if (directory?.kind !== "dir") throw new Error("directory changed during scan");
+  if (directory?.kind !== "dir") throw new Error("directory changed");
   const own = directory.children.get(".gitignore");
   const rules =
     own?.kind === "file"

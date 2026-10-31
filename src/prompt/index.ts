@@ -15,23 +15,22 @@ export function createPrompt(options: CreatePromptOptions): PromptProvider {
   const baseConfig = resolvePromptConfig(options.config);
   const variableNames = configuredVariables(baseConfig);
   const generations = new WeakMap<AbortSignal, number>();
-  let status: ReturnType<StatusLoader> | undefined;
-  const loadStatus: StatusLoader = Object.assign(
-    () => {
-      status ??= import("./sources/status").then(({ GitStatusSource, renderGitStatus }) => ({
-        source: new GitStatusSource(options.logger, async (...args) =>
-          (await import("./sources/objects")).readObjectStatus(...args),
-        ),
-        render: renderGitStatus,
-      }));
-      return status;
+  let status: ReturnType<StatusLoader["load"]> | undefined;
+  const loadStatus: StatusLoader = {
+    load() {
+      return (status ??= import("./sources/status").then(
+        ({ GitStatusSource, renderGitStatus }) => ({
+          source: new GitStatusSource(options.logger, async (...args) =>
+            (await import("./sources/objects")).readObjectStatus(...args),
+          ),
+          render: renderGitStatus,
+        }),
+      ));
     },
-    {
-      leave() {
-        void status?.then((source) => source.source.leave());
-      },
+    leave() {
+      void status?.then(({ source }) => source.leave());
     },
-  );
+  };
   const readers = new Map<string, Promise<PromptConfigReader>>();
   const loadConfigFile = (path: string) => {
     let reader = readers.get(path);

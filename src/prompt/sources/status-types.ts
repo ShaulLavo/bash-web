@@ -12,7 +12,7 @@ export interface StatusCounts {
   readonly typeChanged: number;
   readonly untracked: number;
 }
-export interface StatusValue {
+interface StatusValue {
   readonly worktree: Known<StatusCounts>;
   readonly objects?: ObjectStatus;
 }
@@ -33,7 +33,7 @@ export interface StatusSource {
   leave(): void;
 }
 export interface StatusLoader {
-  (): Promise<{ readonly source: StatusSource; readonly render: typeof renderGitStatus }>;
+  load(): Promise<{ readonly source: StatusSource; readonly render: typeof renderGitStatus }>;
   leave(): void;
 }
 export type ObjectReader = (

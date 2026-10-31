@@ -1,13 +1,23 @@
+import type { WorkBudget } from "../live";
 export interface IgnoreRule {
   readonly base: string;
   readonly negate: boolean;
   readonly directory: boolean;
-  readonly pattern: RegExp;
+  readonly pattern: {
+    readonly source: string;
+    test(path: string, budget: WorkBudget): Promise<boolean>;
+  };
 }
 
-export function parseIgnore(text: string, base: string): IgnoreRule[] {
+export async function parseIgnore(
+  text: string,
+  base: string,
+  budget: WorkBudget,
+): Promise<IgnoreRule[]> {
   const rules: IgnoreRule[] = [];
   for (const source of text.split(/\r?\n/u)) {
+    await budget.checkpoint();
+    if (source.length > 4096) throw new Error("ignore limit");
     const rule = parseRule(source, base);
     if (rule) rules.push(rule);
   }
@@ -29,7 +39,7 @@ function parseRule(source: string, base: string): IgnoreRule | undefined {
     base,
     negate,
     directory,
-    pattern: new RegExp(`^${anchored ? "" : "(?:.*/)?"}${glob(line)}$`, "u"),
+    pattern: compile(line, anchored),
   };
 }
 
@@ -39,13 +49,20 @@ function escaped(text: string, offset: number): boolean {
   return count % 2 === 1;
 }
 
-export function ignored(path: string, directory: boolean, rules: readonly IgnoreRule[]): boolean {
+export async function ignored(
+  path: string,
+  directory: boolean,
+  rules: readonly IgnoreRule[],
+  budget: WorkBudget,
+): Promise<boolean> {
   let result = false;
+  let index = 0;
   for (const rule of rules) {
+    if (index++ % 32 === 0) await budget.checkpoint();
     if (rule.directory && !directory) continue;
     if (rule.base && !path.startsWith(`${rule.base}/`)) continue;
     const relative = rule.base ? path.slice(rule.base.length + 1) : path;
-    if (rule.pattern.test(relative)) result = !rule.negate;
+    if (await rule.pattern.test(relative, budget)) result = !rule.negate;
   }
   return result;
 }
@@ -59,44 +76,116 @@ const classes: Readonly<Record<string, string>> = {
   graph: "\\x21-\\x7e",
   lower: "a-z",
   print: "\\x20-\\x7e",
-  punct: "!-/:-@[-`{-~",
+  punct: "!-/:-@\\[-`{-~",
   space: "\\s",
   upper: "A-Z",
   xdigit: "a-fA-F0-9",
 };
 
-function glob(pattern: string): string {
-  let result = "";
+type Token = string | RegExp | 0 | 1;
+function compile(source: string, anchored: boolean): IgnoreRule["pattern"] {
+  const parts = source.split("/").map((part) => (part === "**" ? part : tokens(part)));
+  return {
+    source: anchored ? `/${source}` : source,
+    test(path, budget) {
+      return matchParts(
+        parts,
+        anchored ? path.split("/") : [path.slice(path.lastIndexOf("/") + 1)],
+        budget,
+      );
+    },
+  };
+}
+function tokens(pattern: string): Token[] {
+  const result: Token[] = [];
   for (let index = 0; index < pattern.length; index++) {
     const char = pattern[index];
     if (char === "\\") {
-      result += literal(pattern[++index] ?? "\\");
-      continue;
-    }
-    if (char === "*") {
-      const end = starEnd(pattern, index);
-      const recursive =
-        end > index + 1 &&
-        (index === 0 || pattern[index - 1] === "/") &&
-        (end === pattern.length || pattern[end] === "/");
-      result += recursive ? (pattern[end] === "/" ? "(?:.*/)?" : ".*") : "[^/]*";
-      index = recursive && pattern[end] === "/" ? end : end - 1;
+      result.push(pattern[++index] ?? "\\");
       continue;
     }
     if (char === "[") {
       const bracket = bracketPattern(pattern, index);
-      result += bracket.text;
+      result.push(new RegExp(`^${bracket.text}$`, "u"));
       index = bracket.end;
       continue;
     }
-    result += char === "?" ? "[^/]" : literal(char);
+    result.push(char === "*" ? 0 : char === "?" ? 1 : char);
   }
   return result;
 }
+async function matchParts(
+  pattern: readonly (Token[] | "**")[],
+  path: readonly string[],
+  budget: WorkBudget,
+): Promise<boolean> {
+  let positions = new Set([0]);
+  for (let index = 0; index < pattern.length; index++) {
+    const next = new Set<number>();
+    for (const offset of positions) {
+      await budget.checkpoint();
+      await advance(
+        next,
+        pattern[index],
+        path,
+        offset,
+        index === pattern.length - 1 && index > 0,
+        budget,
+      );
+    }
+    positions = next;
+  }
+  return positions.has(path.length);
+}
 
-function starEnd(pattern: string, start: number): number {
-  while (pattern[start] === "*") start++;
-  return start;
+async function advance(
+  next: Set<number>,
+  pattern: Token[] | "**",
+  path: readonly string[],
+  offset: number,
+  trailing: boolean,
+  budget: WorkBudget,
+): Promise<void> {
+  if (pattern !== "**") {
+    if (offset < path.length && (await matchName(pattern, path[offset], budget)))
+      next.add(offset + 1);
+    return;
+  }
+  for (let index = offset + Number(trailing); index <= path.length; index++) next.add(index);
+}
+async function matchName(
+  tokens: readonly Token[],
+  name: string,
+  budget: WorkBudget,
+): Promise<boolean> {
+  let pattern = 0,
+    index = 0,
+    star = -1,
+    retry = 0;
+  let steps = 0;
+  while (index < name.length) {
+    if (steps++ % 256 === 0) await budget.checkpoint();
+    const token = tokens[pattern];
+    if (token === 0) {
+      star = pattern++;
+      retry = index;
+      continue;
+    }
+    if (
+      token === 1 ||
+      token === name[index] ||
+      (token instanceof RegExp && token.test(name[index]))
+    ) {
+      index++;
+      pattern++;
+      continue;
+    }
+    if (star < 0) return false;
+    pattern = star + 1;
+    index = ++retry;
+  }
+  while (tokens[pattern] === 0) pattern++;
+  return pattern === tokens.length;
 }
 
 function bracketPattern(pattern: string, start: number): { text: string; end: number } {
@@ -124,8 +213,4 @@ function bracketPattern(pattern: string, start: number): { text: string; end: nu
     content += pattern[index] === "[" ? "\\[" : pattern[index];
   }
   return { text: "\\[", end: start };
-}
-
-function literal(char: string): string {
-  return char.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

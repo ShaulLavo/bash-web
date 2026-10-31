@@ -1,3 +1,4 @@
+import { hex } from "./git-bytes";
 import type { WorkBudget } from "../live";
 import type { IndexEntry, ParsedIndex } from "./index-types";
 
@@ -70,6 +71,8 @@ function readEntry(
   path.set(bytes.subarray(offset, terminator), version === 4 ? prefix : 0);
   const name = decoder.decode(version === 4 ? path : bytes.subarray(offset, terminator));
   const mode = view.getUint32(start + 24);
+  if (![0o100644, 0o100755, 0o120000, 0o160000, 0o040000].includes(mode))
+    throw new Error("invalid index mode");
   if (
     !name ||
     name.startsWith("/") ||
@@ -80,9 +83,7 @@ function readEntry(
   return {
     entry: {
       path: name,
-      oid: Array.from(bytes.subarray(start + 40, start + 60), (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join(""),
+      oid: hex(bytes.subarray(start + 40, start + 60)),
       mode,
       stage: (flags >> 12) & 3,
       assumeValid: Boolean(flags & 0x8000),

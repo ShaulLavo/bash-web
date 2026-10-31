@@ -159,7 +159,7 @@ async function populateRepository(
     loader.leave();
     return;
   }
-  const loaded = await loader();
+  const loaded = await loader.load();
   state.statusRenderer = loaded.render;
   state.gitStatus = await loaded.source.read({
     filesystem,

@@ -52,3 +52,4 @@ One page per feature, each stating exactly what is supported and what is left ou
 
 Frozen records that scripts check live in [`evidence/`](evidence/README.md). They are not documentation.
 
+- [Background working-tree status](prompt-git-status.md)
