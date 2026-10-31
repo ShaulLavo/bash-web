@@ -3,10 +3,7 @@
 //! preview1 path_open, runtime pipes and inherited stdio share one namespace.
 use crate::{
     executor::{Cancel, Executor, JoinHandle},
-    io::{
-        DescriptorKind, Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError,
-        OpenOptions,
-    },
+    io::{Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError, OpenOptions},
     process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
 };
 use futures::{
@@ -14,83 +11,24 @@ use futures::{
     future::{LocalBoxFuture, WeakShared},
 };
 use serde::Serialize;
+pub use support::{PollEvent, Subscription};
+#[cfg(test)]
+use support::{decode_descriptor_kind, decode_filestat, decode_permissions};
+use waffle_program_support::runtime as support;
+
 type WaitFuture = LocalBoxFuture<'static, Result<(), ProcessError>>;
 type WaitRegistry = RefCell<BTreeMap<GroupId, WeakShared<WaitFuture>>>;
 
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet},
-    future::Future,
-    pin::Pin,
     rc::{Rc, Weak},
-    task::{Context, Poll, Waker},
 };
 
 #[cfg(target_os = "wasi")]
 mod wasi;
 #[cfg(target_os = "wasi")]
 pub use wasi::WasiAbi;
-
-/// Decode runtime_proc's append-only descriptor categories, not Preview1 types.
-#[cfg(any(target_os = "wasi", test))]
-fn decode_descriptor_kind(kind: u32) -> DescriptorKind {
-    match kind {
-        1 => DescriptorKind::Pipe,
-        2 => DescriptorKind::Terminal,
-        3 => DescriptorKind::Regular,
-        4 => DescriptorKind::Directory,
-        _ => DescriptorKind::Other,
-    }
-}
-
-/// Decode preview1's fixed 64-byte filestat record without relying on Rust
-/// layout/alignment. Preview1 exposes no Unix mode, owner or effective access
-/// information, so those capabilities remain absent rather than guessed.
-#[cfg(any(target_os = "wasi", test))]
-fn decode_filestat(bytes: &[u8; 64]) -> FileMetadata {
-    use crate::io::FileKind;
-    let u64_at = |offset| u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
-    FileMetadata {
-        kind: match bytes[16] {
-            1 => FileKind::BlockDevice,
-            2 => FileKind::CharacterDevice,
-            3 => FileKind::Directory,
-            4 => FileKind::Regular,
-            5 | 6 => FileKind::Socket,
-            7 => FileKind::Symlink,
-            _ => FileKind::Unknown,
-        },
-        size: u64_at(32),
-        mode: None,
-        device: Some(u64_at(0)),
-        inode: Some(u64_at(8)),
-        uid: None,
-        gid: None,
-        accessed_ns: Some(u64_at(40)),
-        modified_ns: Some(u64_at(48)),
-        readable: None,
-        writable: None,
-        executable: None,
-        owned_by_effective_uid: None,
-        owned_by_effective_gid: None,
-    }
-}
-
-/// The runtime_fs record is four little-endian u32s, independent of filestat.
-#[cfg(any(target_os = "wasi", test))]
-fn decode_permissions(metadata: &mut FileMetadata, bytes: &[u8; 16]) {
-    let word = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
-    metadata.mode = Some(crate::io::FileMode {
-        bits: word(0),
-        supported: word(4),
-    });
-    let access = word(8);
-    let supported = word(12);
-    let allowed = |bit| (supported & bit != 0).then_some(access & bit != 0);
-    metadata.readable = allowed(4);
-    metadata.writable = allowed(2);
-    metadata.executable = allowed(1);
-}
 
 const AGAIN: i32 = 6;
 // runtime/proc/signals.ts: DEFAULT=0, IGNORE=1, HANDLE=2. This is a
@@ -126,38 +64,6 @@ pub struct RuntimeSpawn {
     pub job: i32,
     pub fds: Vec<Binding>,
 }
-/// Wire records are encoded explicitly as little-endian, not by casting Rust
-/// structs. Both input and output records occupy exactly 16 bytes in guest RAM.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Subscription {
-    pub kind: u32,
-    pub id: u32,
-    pub userdata: u64,
-}
-impl Subscription {
-    pub fn encode(self) -> [u8; 16] {
-        let mut bytes = [0; 16];
-        bytes[..4].copy_from_slice(&self.kind.to_le_bytes());
-        bytes[4..8].copy_from_slice(&self.id.to_le_bytes());
-        bytes[8..].copy_from_slice(&self.userdata.to_le_bytes());
-        bytes
-    }
-}
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct PollEvent {
-    pub userdata: u64,
-    pub kind: u32,
-    pub flags: u32,
-}
-impl PollEvent {
-    pub fn decode(bytes: [u8; 16]) -> Self {
-        Self {
-            userdata: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
-            kind: u32::from_le_bytes(bytes[8..12].try_into().unwrap()),
-            flags: u32::from_le_bytes(bytes[12..].try_into().unwrap()),
-        }
-    }
-}
 /// The runtime_proc waits share one eight-byte little-endian terminal record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WaitResult {
@@ -180,10 +86,7 @@ impl WaitResult {
 /// Injectable boundary keeps native engine tests independent of WASM imports.
 /// Errnos are positive WASI errnos here; the WASM adapter decodes negative results.
 /// `wait_job` confirms descendant teardown and reaps runtime-owned tombstones.
-pub trait Abi {
-    /// The embedder's initial logical bindings, excluding private directory preopens
-    /// and descriptors subsequently allocated by this guest.
-    fn inherited_fds(&self) -> Vec<u32>;
+pub trait Abi: support::Abi {
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32>;
     fn access_take(&self, request: u32) -> Result<(), i32>;
     fn access_cancel(&self, request: u32);
@@ -197,37 +100,6 @@ pub trait Abi {
     fn wait_job(&self, job: u32) -> Result<WaitResult, i32>;
     fn kill(&self, pid: u32, signal: i32) -> Result<(), i32>;
     fn kill_job(&self, job: u32, signal: i32) -> Result<(), i32>;
-    fn pipe(&self) -> Result<(u32, u32), i32>;
-    fn fd_kind(&self, fd: u32) -> Result<DescriptorKind, i32>;
-    fn dup(&self, fd: u32) -> Result<u32, i32>;
-    fn close(&self, fd: u32);
-    /// One preview1 directory operation. Existing directories (never files)
-    /// are accepted only for mkdir -p; the caller walks parent components.
-    fn mkdir(&self, path: &str, allow_existing: bool) -> Result<(), i32>;
-    /// Metadata only: must not allocate descriptors or open the named node.
-    fn stat(&self, path: &str, follow_symlinks: bool) -> Result<FileMetadata, i32>;
-    /// Incremental directory operations; descriptor ownership stays with Runtime.
-    fn open_dir(&self, _path: &str) -> Result<u32, i32> {
-        Err(58)
-    }
-    fn read_dir(&self, _fd: u32, _cookie: u64, _output: &mut [u8]) -> Result<usize, i32> {
-        Err(58)
-    }
-    fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32>;
-    fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32>;
-    fn write(&self, fd: u32, input: &[u8]) -> Result<usize, i32>;
-    fn poll(
-        &self,
-        subscriptions: &[Subscription],
-        timeout: i32,
-        output: &mut [PollEvent],
-    ) -> Result<usize, i32>;
-    fn interrupted(&self) -> i32;
-}
-struct Waiter {
-    kind: u32,
-    id: u32,
-    waker: Waker,
 }
 struct Group {
     // Runtime jobs seal when their last member exits. A shell group may start
@@ -345,14 +217,12 @@ struct Child {
 struct State {
     abi: Rc<dyn Abi>,
     executor: Executor,
-    waiters: RefCell<BTreeMap<u64, Waiter>>,
-    next_waiter: Cell<u64>,
+    support: support::Runtime,
     next_group: Cell<GroupId>,
     groups: RefCell<BTreeMap<GroupId, Group>>,
     children: RefCell<BTreeMap<ProcessId, Rc<Child>>>,
     waits: WaitRegistry,
     input_slots: Rc<Cell<usize>>,
-    inherited_transferred: Cell<bool>,
     inputs: RefCell<Vec<InputPump>>,
     job_control: Cell<bool>,
     window_changed: Cell<bool>,
@@ -362,16 +232,14 @@ pub struct Runtime(Rc<State>);
 impl Runtime {
     pub fn new(abi: Rc<dyn Abi>, executor: Executor) -> Self {
         Self(Rc::new(State {
+            support: support::Runtime::new(abi.clone()),
             abi,
             executor,
-            waiters: RefCell::new(BTreeMap::new()),
-            next_waiter: Cell::new(1),
             next_group: Cell::new(1),
             groups: RefCell::new(BTreeMap::new()),
             children: RefCell::new(BTreeMap::new()),
             waits: RefCell::new(BTreeMap::new()),
             input_slots: Rc::new(Cell::new(0)),
-            inherited_transferred: Cell::new(false),
             inputs: RefCell::new(Vec::new()),
             job_control: Cell::new(true),
             window_changed: Cell::new(false),
@@ -385,41 +253,13 @@ impl Runtime {
     }
     /// Own one fd binding. Endpoint clones share it; the final clone closes it.
     pub fn endpoint(&self, fd: u32) -> Endpoint {
-        Endpoint::host(Rc::new(RuntimeEndpoint {
-            runtime: self.clone(),
-            fd,
-        }))
+        self.0.support.endpoint(fd)
     }
-    /// Bootstrap the shell's logical namespace with every inherited binding,
-    /// not just stdio. The caller retains ownership of the original bindings.
     pub fn stdio(&self) -> Result<FdTable, IoError> {
-        if self.0.inherited_transferred.get() {
-            return Err(IoError::BadDescriptor);
-        }
-        let mut fds = FdTable::default();
-        for fd in self.0.abi.inherited_fds() {
-            fds.insert(fd, self.endpoint(self.0.abi.dup(fd).map_err(io_error)?));
-        }
-        Ok(fds)
+        self.0.support.stdio()
     }
-    /// Transfer launch bindings to the guest once. Duplicate everything before
-    /// closing originals, so a failed bootstrap leaves the caller's handles intact.
-    /// Private preopens are absent from inherited_fds and remain ABI-owned.
     pub fn take_stdio(&self) -> Result<FdTable, IoError> {
-        let fds = self.stdio()?;
-        self.0.inherited_transferred.set(true);
-        for fd in self.0.abi.inherited_fds() {
-            self.0.abi.close(fd);
-        }
-        Ok(fds)
-    }
-    fn ready(&self, kind: u32, id: u32) -> Ready {
-        Ready {
-            runtime: self.clone(),
-            kind,
-            id,
-            token: None,
-        }
+        self.0.support.take_stdio()
     }
     fn access_future(
         &self,
@@ -444,7 +284,7 @@ impl Runtime {
                         guard.retired.set(true);
                         return Ok(());
                     }
-                    Err(AGAIN) => runtime.ready(5, request).await,
+                    Err(AGAIN) => runtime.0.support.ready(5, request).await,
                     Err(errno) => {
                         guard.retired.set(true);
                         return Err(ProcessError::Runtime(errno));
@@ -461,39 +301,7 @@ impl Runtime {
             .inputs
             .borrow_mut()
             .retain(|input| !input.join.is_finished());
-        let subscriptions: Vec<_> = self
-            .0
-            .waiters
-            .borrow()
-            .iter()
-            .map(|(&token, waiter)| Subscription {
-                kind: waiter.kind,
-                id: waiter.id,
-                userdata: token,
-            })
-            .collect();
-        let mut events = vec![PollEvent::default(); subscriptions.len()];
-        let count = self.0.abi.poll(&subscriptions, timeout, &mut events)?;
-        if count > events.len() {
-            return Err(28);
-        }
-        let mut wakers = Vec::new();
-        {
-            let mut waiters = self.0.waiters.borrow_mut();
-            for event in events.into_iter().take(count) {
-                if waiters
-                    .get(&event.userdata)
-                    .is_some_and(|waiter| waiter.kind == event.kind)
-                    && let Some(waiter) = waiters.remove(&event.userdata)
-                {
-                    wakers.push(waiter.waker);
-                }
-            }
-        }
-        for waker in wakers {
-            waker.wake();
-        }
-        Ok(count)
+        self.0.support.poll(timeout)
     }
     /// Dequeues handled signals until an interrupt or none is left. A SIGWINCH taken
     /// here, including at a budget checkpoint, is kept for `take_window_change`.
@@ -569,18 +377,7 @@ impl Runtime {
         }
         // An admission sweep can consume a job observed by a parked group drain.
         // Wake those observers locally: polling its now-reaped ABI ID is invalid.
-        let mut wakers = Vec::new();
-        self.0.waiters.borrow_mut().retain(|_, waiter| {
-            if waiter.kind == 4 && waiter.id == job {
-                wakers.push(waiter.waker.clone());
-                false
-            } else {
-                true
-            }
-        });
-        for waker in wakers {
-            waker.wake();
-        }
+        self.0.support.notify(4, job);
         Ok(())
     }
 
@@ -698,309 +495,36 @@ impl Drop for AccessGuard {
     }
 }
 
-struct Ready {
-    runtime: Runtime,
-    kind: u32,
-    id: u32,
-    token: Option<u64>,
-}
-impl Future for Ready {
-    type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        let this = self.get_mut();
-        if let Some(token) = this.token {
-            let mut waiters = this.runtime.0.waiters.borrow_mut();
-            match waiters.get_mut(&token) {
-                None => return Poll::Ready(()),
-                Some(waiter) => waiter.waker = cx.waker().clone(),
-            }
-        } else {
-            let token = this.runtime.0.next_waiter.get();
-            this.runtime
-                .0
-                .next_waiter
-                .set(token.checked_add(1).expect("reactor token exhausted"));
-            this.runtime.0.waiters.borrow_mut().insert(
-                token,
-                Waiter {
-                    kind: this.kind,
-                    id: this.id,
-                    waker: cx.waker().clone(),
-                },
-            );
-            this.token = Some(token);
-        }
-        Poll::Pending
-    }
-}
-impl Drop for Ready {
-    fn drop(&mut self) {
-        if let Some(token) = self.token {
-            self.runtime.0.waiters.borrow_mut().remove(&token);
-        }
-    }
-}
-struct RuntimeEndpoint {
-    runtime: Runtime,
-    fd: u32,
-}
-impl Drop for RuntimeEndpoint {
-    fn drop(&mut self) {
-        self.runtime.0.abi.close(self.fd);
-    }
-}
-impl HostEndpoint for RuntimeEndpoint {
-    fn runtime_fd(&self) -> Option<u32> {
-        Some(self.fd)
-    }
-    fn descriptor_kind(&self) -> Result<DescriptorKind, IoError> {
-        self.runtime.0.abi.fd_kind(self.fd).map_err(io_error)
-    }
-    fn read<'a>(&'a self, output: &'a mut [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
-        async move {
-            loop {
-                match self.runtime.0.abi.read(self.fd, output) {
-                    Err(AGAIN) => self.runtime.ready(0, self.fd).await,
-                    result => return result.map_err(io_error),
-                }
-            }
-        }
-        .boxed_local()
-    }
-    fn write<'a>(&'a self, input: &'a [u8]) -> LocalBoxFuture<'a, Result<usize, IoError>> {
-        async move {
-            loop {
-                match self.runtime.0.abi.write(self.fd, input) {
-                    Err(AGAIN) => self.runtime.ready(1, self.fd).await,
-                    result => return result.map_err(io_error),
-                }
-            }
-        }
-        .boxed_local()
-    }
-}
-const DIRECTORY_PAGE_BYTES: usize = crate::io::MAX_PATH_BYTES + 24;
-
-struct DirectoryPage {
-    bytes: Vec<u8>,
-    used: usize,
-    offset: usize,
-    cookie: u64,
-}
-
-impl DirectoryPage {
-    fn new() -> Result<Self, IoError> {
-        let mut bytes = Vec::new();
-        bytes
-            .try_reserve_exact(DIRECTORY_PAGE_BYTES)
-            .map_err(|_| IoError::LimitExceeded)?;
-        bytes.resize(DIRECTORY_PAGE_BYTES, 0);
-        Ok(Self {
-            bytes,
-            used: 0,
-            offset: 0,
-            cookie: 0,
-        })
-    }
-}
-
-enum DirectoryParse {
-    Entry(crate::io::DirectoryEntry),
-    Tail,
-}
-
-struct RuntimeDirectory {
-    runtime: Runtime,
-    fd: u32,
-    page: RefCell<DirectoryPage>,
-}
-
-impl RuntimeDirectory {
-    fn refill(&self, cookie: u64, page: &mut DirectoryPage) -> Result<(), IoError> {
-        let used = self
-            .runtime
-            .0
-            .abi
-            .read_dir(self.fd, cookie, &mut page.bytes)
-            .map_err(io_error)?;
-        if used > page.bytes.len() {
-            return Err(IoError::LimitExceeded);
-        }
-        page.used = used;
-        page.offset = 0;
-        page.cookie = cookie;
-        Ok(())
-    }
-
-    fn read(
-        &self,
-        cookie: u64,
-        output: &mut [u8],
-    ) -> Result<Option<crate::io::DirectoryEntry>, IoError> {
-        let mut page = self.page.borrow_mut();
-        loop {
-            if page.cookie != cookie || page.offset == page.used {
-                self.refill(cookie, &mut page)?;
-            }
-            if page.used == 0 {
-                return Ok(None);
-            }
-            let parsed = parse_directory_entry(&mut page, cookie, output)?;
-            if let DirectoryParse::Entry(entry) = parsed {
-                return Ok(Some(entry));
-            }
-            page.offset = page.used;
-        }
-    }
-}
-
-fn parse_directory_entry(
-    page: &mut DirectoryPage,
-    cookie: u64,
-    output: &mut [u8],
-) -> Result<DirectoryParse, IoError> {
-    let remaining = page.used - page.offset;
-    if remaining < 24 {
-        if page.offset == 0 {
-            return Err(IoError::LimitExceeded);
-        }
-        return Ok(DirectoryParse::Tail);
-    }
-    let header = page.offset;
-    let next_cookie = u64::from_le_bytes(page.bytes[header..header + 8].try_into().unwrap());
-    let length =
-        u32::from_le_bytes(page.bytes[header + 16..header + 20].try_into().unwrap()) as usize;
-    let end = (header + 24)
-        .checked_add(length)
-        .ok_or(IoError::LimitExceeded)?;
-    if end > page.used {
-        if page.offset == 0 {
-            return Err(IoError::LimitExceeded);
-        }
-        return Ok(DirectoryParse::Tail);
-    }
-    if next_cookie == cookie || length > output.len() {
-        return Err(IoError::LimitExceeded);
-    }
-    output[..length].copy_from_slice(&page.bytes[header + 24..end]);
-    page.offset = end;
-    page.cookie = next_cookie;
-    Ok(DirectoryParse::Entry(crate::io::DirectoryEntry {
-        next_cookie,
-        name: 0..length,
-    }))
-}
-
-impl Drop for RuntimeDirectory {
-    fn drop(&mut self) {
-        self.runtime.0.abi.close(self.fd);
-    }
-}
-impl crate::io::Directory for RuntimeDirectory {
-    fn read_entry<'a>(
-        &'a self,
-        cookie: u64,
-        output: &'a mut [u8],
-    ) -> LocalBoxFuture<'a, Result<Option<crate::io::DirectoryEntry>, IoError>> {
-        async move {
-            crate::executor::yield_now().await;
-            self.read(cookie, output)
-        }
-        .boxed_local()
-    }
-}
 impl FileSystem for Runtime {
     fn open_dir<'a>(
         &'a self,
         path: &'a str,
     ) -> LocalBoxFuture<'a, Result<Rc<dyn crate::io::Directory>, IoError>> {
-        async move {
-            if !path.starts_with('/')
-                || path.len() > crate::io::MAX_PATH_BYTES
-                || path.contains('\0')
-            {
-                return Err(IoError::InvalidPath);
-            }
-            crate::executor::yield_now().await;
-            let page = DirectoryPage::new()?;
-            let fd = self.0.abi.open_dir(path).map_err(io_error)?;
-            Ok(Rc::new(RuntimeDirectory {
-                runtime: self.clone(),
-                fd,
-                page: RefCell::new(page),
-            }) as Rc<dyn crate::io::Directory>)
-        }
-        .boxed_local()
+        self.0.support.open_dir(path)
     }
     fn stat<'a>(
         &'a self,
         path: &'a str,
         follow_symlinks: bool,
     ) -> LocalBoxFuture<'a, Result<FileMetadata, IoError>> {
-        async move {
-            if !path.starts_with('/')
-                || path.len() > crate::io::MAX_PATH_BYTES
-                || path.contains('\0')
-            {
-                return Err(IoError::InvalidPath);
-            }
-            crate::executor::yield_now().await;
-            self.0.abi.stat(path, follow_symlinks).map_err(io_error)
-        }
-        .boxed_local()
+        self.0.support.stat(path, follow_symlinks)
     }
     fn mkdir<'a>(
         &'a self,
         path: &'a str,
         parents: bool,
     ) -> LocalBoxFuture<'a, Result<(), IoError>> {
-        async move {
-            if !path.starts_with('/')
-                || path.len() > crate::io::MAX_PATH_BYTES
-                || path.contains('\0')
-            {
-                return Err(IoError::InvalidPath);
-            }
-            if parents {
-                for (index, _) in path.match_indices('/').filter(|(index, _)| *index > 0) {
-                    crate::executor::yield_now().await;
-                    self.0.abi.mkdir(&path[..index], true).map_err(io_error)?;
-                }
-            }
-            crate::executor::yield_now().await;
-            self.0.abi.mkdir(path, parents).map_err(io_error)
-        }
-        .boxed_local()
+        self.0.support.mkdir(path, parents)
     }
     fn pipe(&self) -> Result<(Endpoint, Endpoint), IoError> {
-        let (read, write) = self.0.abi.pipe().map_err(io_error)?;
-        Ok((self.endpoint(read), self.endpoint(write)))
+        self.0.support.pipe()
     }
     fn open<'a>(
         &'a self,
         path: &'a str,
         options: &'a OpenOptions,
     ) -> LocalBoxFuture<'a, Result<Endpoint, IoError>> {
-        async move {
-            self.0
-                .abi
-                .open(path, options)
-                .map(|fd| self.endpoint(fd))
-                .map_err(io_error)
-        }
-        .boxed_local()
-    }
-}
-fn io_error(errno: i32) -> IoError {
-    match errno {
-        8 | 76 => IoError::BadDescriptor,
-        64 => IoError::BrokenPipe,
-        44 => IoError::NotFound,
-        54 => IoError::NotDirectory,
-        58 => IoError::Unsupported,
-        28 | 37 => IoError::InvalidPath,
-        33 | 48 | 51 => IoError::LimitExceeded,
-        _ => IoError::Runtime(errno),
+        self.0.support.open(path, options)
     }
 }
 impl ProcessHost for Runtime {
@@ -1175,7 +699,7 @@ impl ProcessHost for Runtime {
                 match runtime.0.abi.start_status(pid as u32) {
                     Ok(0) => return Ok(()),
                     Ok(errno) => return Err(ProcessError::StartFailed(errno)),
-                    Err(AGAIN) => runtime.ready(6, pid as u32).await,
+                    Err(AGAIN) => runtime.0.support.ready(6, pid as u32).await,
                     Err(errno) => return Err(ProcessError::Runtime(errno)),
                 }
             }
@@ -1210,7 +734,7 @@ impl ProcessHost for Runtime {
                         }
                         return status.map_err(ProcessError::StartFailed);
                     }
-                    Err(AGAIN) => runtime.ready(2, pid as u32).await,
+                    Err(AGAIN) => runtime.0.support.ready(2, pid as u32).await,
                     Err(errno) => return Err(ProcessError::Runtime(errno)),
                 }
             }
@@ -1387,7 +911,7 @@ impl ProcessHost for Runtime {
                             loop {
                                 match runtime.try_reap_job(group, job) {
                                     Ok(()) => return (job, Ok(())),
-                                    Err(AGAIN) => runtime.ready(4, job).await,
+                                    Err(AGAIN) => runtime.0.support.ready(4, job).await,
                                     Err(errno) => return (job, Err(errno)),
                                 }
                             }

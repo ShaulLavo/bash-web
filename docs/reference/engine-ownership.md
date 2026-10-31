@@ -2,6 +2,26 @@
 
 Reference for who owns what inside `shell/engine/`: execution types, binding storage, parsing entry points, the command catalogue, and the frozen-runner completion fix. Each section records the source revision it started from and whether code was copied. Read it before moving code between engine modules. The allowed module graph is checked by `npm run check:layers` (see [Development](../development.md#engine-layer-gate)).
 
+## Neutral program support
+
+`lib.rs` re-exports the executor and I/O modules from the pinned
+`waffle-program-support` Git dependency. Waffle owns scheduling, cancellation,
+open descriptions, bounded pipes, filesystem metadata and directory paging,
+readiness registrations, and neutral WASI imports. No copies remain in the engine.
+
+The shell's `runtime` owns process groups, child collection, executable access,
+input pumps, job-control policy, and prompt signals. Its ABI extends Waffle's
+neutral ABI, and its reactor delegates to one support runtime. Reaping a shell job
+notifies matching kind 4 readiness registrations after updating the shell state.
+
+The local WASI wrapper reads `shell_terminal.inherited_fd` and passes those bindings
+to `WasiAbi::with_inherited_fds`. It does not query `runtime_proc.inherited_fd`.
+SIGWINCH handling remains opt-in for a hosted prompt. Stack observation is enabled
+only through the engine's development dependency, never its release dependency.
+
+The shared implementation is Waffle `a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee`.
+Native and WASI characterization tests pin the previous ownership and wake behavior.
+
 ## Shared execution ownership
 
 `exec` owns storage budgets and allocation guards, retained `Rc` source text,

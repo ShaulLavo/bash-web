@@ -152,7 +152,9 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
     verifyWasiGuest(
       resolve(target, wasiTarget, "release", `${binary}.wasm`),
       undefined,
-      binary === "shell-runtime" ? "waffle_program_support::runtime::wasi" : undefined,
+      ["shell-runtime", "argv-py", "printenv-py"].includes(binary)
+        ? "waffle_program_support::runtime::wasi"
+        : undefined,
     );
   }
 }

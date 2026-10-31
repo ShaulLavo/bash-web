@@ -1,4 +1,5 @@
 use super::*;
+use crate::io::DescriptorKind;
 use crate::{
     Limits, Session,
     executor::Cancel,
@@ -6,6 +7,8 @@ use crate::{
     process::{ChildExit, ProcessGroup},
 };
 use std::collections::BTreeSet;
+use support::Abi as _;
+use waffle_program_support::runtime::io_error;
 
 /// The calling shell's own job, as runtime_proc.job_of(0) reports it.
 const SHELL_JOB: u32 = 7;
@@ -198,6 +201,174 @@ impl Fake {
     }
 }
 
+impl support::Abi for Fake {
+    fn inherited_fds(&self) -> Vec<u32> {
+        self.inherited.borrow().clone()
+    }
+    fn pipe(&self) -> Result<(u32, u32), i32> {
+        let (read, write) = io::pipe();
+        Ok((self.fd(read), self.fd(write)))
+    }
+    fn fd_kind(&self, fd: u32) -> Result<DescriptorKind, i32> {
+        self.fds
+            .borrow()
+            .get(&fd)
+            .ok_or(8)?
+            .descriptor_kind()
+            .map_err(|_| 8)
+    }
+    fn dup(&self, fd: u32) -> Result<u32, i32> {
+        let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
+        Ok(self.fd(endpoint))
+    }
+    fn close(&self, fd: u32) {
+        self.closed.borrow_mut().push(fd);
+        self.fds.borrow_mut().remove(&fd);
+        self.directories.borrow_mut().remove(&fd);
+        self.wasi_directories.borrow_mut().remove(&fd);
+    }
+    fn mkdir(&self, path: &str, allow_existing: bool) -> Result<(), i32> {
+        self.fs
+            .mkdir(path, allow_existing)
+            .map_err(|error| match error {
+                IoError::AlreadyExists => 20,
+                IoError::NotDirectory => 54,
+                _ => 44,
+            })
+    }
+    fn stat(&self, path: &str, follow_symlinks: bool) -> Result<FileMetadata, i32> {
+        self.fs
+            .stat(path, follow_symlinks)
+            .map_err(|error| match error {
+                IoError::NotFound => 44,
+                IoError::NotDirectory => 54,
+                IoError::Unsupported => 58,
+                _ => 28,
+            })
+    }
+    fn open_dir(&self, path: &str) -> Result<u32, i32> {
+        if let Some(entries) = self.named_wasi_directories.borrow().get(path).cloned() {
+            let fd = self.next_fd.get();
+            self.next_fd.set(fd + 1);
+            self.wasi_directories.borrow_mut().insert(fd, entries);
+            return Ok(fd);
+        }
+        let directory = FileSystem::open_dir(&self.fs, path)
+            .now_or_never()
+            .unwrap()
+            .map_err(|error| match error {
+                IoError::NotFound => 44,
+                IoError::NotDirectory => 54,
+                _ => 28,
+            })?;
+        let fd = self.next_fd.get();
+        self.next_fd.set(fd + 1);
+        self.directories.borrow_mut().insert(fd, directory);
+        Ok(fd)
+    }
+    fn read_dir(&self, fd: u32, cookie: u64, output: &mut [u8]) -> Result<usize, i32> {
+        if self.wasi_directories.borrow().contains_key(&fd) {
+            return self.read_wasi_page(fd, cookie, output);
+        }
+        if output.len() < 24 {
+            return Err(48);
+        }
+        let directory = self.directories.borrow().get(&fd).cloned().ok_or(8)?;
+        let entry = directory
+            .read_entry(cookie, &mut output[24..])
+            .now_or_never()
+            .unwrap()
+            .map_err(|error| match error {
+                IoError::LimitExceeded => 48,
+                _ => 28,
+            })?;
+        let Some(entry) = entry else {
+            return Ok(0);
+        };
+        let length = entry.name.len();
+        output[..8].copy_from_slice(&entry.next_cookie.to_le_bytes());
+        output[16..20].copy_from_slice(&(length as u32).to_le_bytes());
+        Ok(24 + length)
+    }
+    fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
+        let Some(fd) = io::descriptor_number(path) else {
+            return Ok(self.fd(self.fs.open(path, options).map_err(|_| 44)?));
+        };
+        let mut fds = FdTable::default();
+        fds.insert(fd, self.fds.borrow().get(&fd).cloned().ok_or(44)?);
+        let endpoint = io::open_path(path, &fds, options)
+            .map_err(|_| 44)?
+            .open(&self.fs, options)
+            .now_or_never()
+            .unwrap()
+            .map_err(|_| 44)?;
+        Ok(self.fd(endpoint))
+    }
+    fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32> {
+        self.reads.borrow_mut().push((fd, output.len()));
+        let length = output.len().min(self.read_limit.get());
+        let output = &mut output[..length];
+        let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
+        endpoint
+            .read(output)
+            .now_or_never()
+            .ok_or(AGAIN)?
+            .map_err(|error| if error == IoError::BrokenPipe { 64 } else { 8 })
+    }
+    fn write(&self, fd: u32, input: &[u8]) -> Result<usize, i32> {
+        let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
+        endpoint
+            .write(input)
+            .now_or_never()
+            .ok_or(AGAIN)?
+            .map_err(|error| if error == IoError::BrokenPipe { 64 } else { 8 })
+    }
+    fn poll(
+        &self,
+        subscriptions: &[Subscription],
+        timeout: i32,
+        output: &mut [PollEvent],
+    ) -> Result<usize, i32> {
+        self.polls
+            .borrow_mut()
+            .push((timeout, subscriptions.to_vec()));
+        let ready = subscriptions.iter().filter(|sub| match sub.kind {
+            5 => self
+                .access_requests
+                .borrow()
+                .get(&sub.id)
+                .is_some_and(Option::is_some),
+            6 => self.start_status(sub.id) != Err(AGAIN),
+            _ => true,
+        });
+        let mut count = 0;
+        for (slot, sub) in output.iter_mut().zip(ready) {
+            count += 1;
+            *slot = PollEvent {
+                userdata: sub.userdata,
+                kind: sub.kind,
+                flags: 0,
+            };
+        }
+        Ok(count)
+    }
+    fn interrupted(&self) -> i32 {
+        if let Some(remaining) = self.interrupt_after.get() {
+            self.interrupt_after.set(remaining.checked_sub(1));
+            if remaining == 1 {
+                self.interrupt_after.set(None);
+                self.interrupt.set(2);
+            }
+        }
+        let signal = self.interrupt.replace(0);
+        if signal == 2 {
+            self.consumed_interrupts
+                .set(self.consumed_interrupts.get() + 1);
+        }
+        signal
+    }
+}
+
 impl Abi for Fake {
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
         if let Some(errno) = self.access_start_error.get() {
@@ -234,9 +405,6 @@ impl Abi for Fake {
     fn access_cancel(&self, request: u32) {
         self.access_cancelled.borrow_mut().push(request);
         self.access_requests.borrow_mut().remove(&request);
-    }
-    fn inherited_fds(&self) -> Vec<u32> {
-        self.inherited.borrow().clone()
     }
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32> {
         let errors = self.spawn_errors.borrow();
@@ -515,168 +683,6 @@ impl Abi for Fake {
         }
         Ok(())
     }
-    fn pipe(&self) -> Result<(u32, u32), i32> {
-        let (read, write) = io::pipe();
-        Ok((self.fd(read), self.fd(write)))
-    }
-    fn fd_kind(&self, fd: u32) -> Result<DescriptorKind, i32> {
-        self.fds
-            .borrow()
-            .get(&fd)
-            .ok_or(8)?
-            .descriptor_kind()
-            .map_err(|_| 8)
-    }
-    fn dup(&self, fd: u32) -> Result<u32, i32> {
-        let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
-        Ok(self.fd(endpoint))
-    }
-    fn close(&self, fd: u32) {
-        self.closed.borrow_mut().push(fd);
-        self.fds.borrow_mut().remove(&fd);
-        self.directories.borrow_mut().remove(&fd);
-        self.wasi_directories.borrow_mut().remove(&fd);
-    }
-    fn mkdir(&self, path: &str, allow_existing: bool) -> Result<(), i32> {
-        self.fs
-            .mkdir(path, allow_existing)
-            .map_err(|error| match error {
-                IoError::AlreadyExists => 20,
-                IoError::NotDirectory => 54,
-                _ => 44,
-            })
-    }
-    fn stat(&self, path: &str, follow_symlinks: bool) -> Result<FileMetadata, i32> {
-        self.fs
-            .stat(path, follow_symlinks)
-            .map_err(|error| match error {
-                IoError::NotFound => 44,
-                IoError::NotDirectory => 54,
-                IoError::Unsupported => 58,
-                _ => 28,
-            })
-    }
-    fn open_dir(&self, path: &str) -> Result<u32, i32> {
-        if let Some(entries) = self.named_wasi_directories.borrow().get(path).cloned() {
-            let fd = self.next_fd.get();
-            self.next_fd.set(fd + 1);
-            self.wasi_directories.borrow_mut().insert(fd, entries);
-            return Ok(fd);
-        }
-        let directory = FileSystem::open_dir(&self.fs, path)
-            .now_or_never()
-            .unwrap()
-            .map_err(|error| match error {
-                IoError::NotFound => 44,
-                IoError::NotDirectory => 54,
-                _ => 28,
-            })?;
-        let fd = self.next_fd.get();
-        self.next_fd.set(fd + 1);
-        self.directories.borrow_mut().insert(fd, directory);
-        Ok(fd)
-    }
-    fn read_dir(&self, fd: u32, cookie: u64, output: &mut [u8]) -> Result<usize, i32> {
-        if self.wasi_directories.borrow().contains_key(&fd) {
-            return self.read_wasi_page(fd, cookie, output);
-        }
-        if output.len() < 24 {
-            return Err(48);
-        }
-        let directory = self.directories.borrow().get(&fd).cloned().ok_or(8)?;
-        let entry = directory
-            .read_entry(cookie, &mut output[24..])
-            .now_or_never()
-            .unwrap()
-            .map_err(|error| match error {
-                IoError::LimitExceeded => 48,
-                _ => 28,
-            })?;
-        let Some(entry) = entry else {
-            return Ok(0);
-        };
-        let length = entry.name.len();
-        output[..8].copy_from_slice(&entry.next_cookie.to_le_bytes());
-        output[16..20].copy_from_slice(&(length as u32).to_le_bytes());
-        Ok(24 + length)
-    }
-    fn open(&self, path: &str, options: &OpenOptions) -> Result<u32, i32> {
-        let Some(fd) = io::descriptor_number(path) else {
-            return Ok(self.fd(self.fs.open(path, options).map_err(|_| 44)?));
-        };
-        let mut fds = FdTable::default();
-        fds.insert(fd, self.fds.borrow().get(&fd).cloned().ok_or(44)?);
-        let endpoint = io::open_path(path, &fds, options)
-            .map_err(|_| 44)?
-            .open(&self.fs, options)
-            .now_or_never()
-            .unwrap()
-            .map_err(|_| 44)?;
-        Ok(self.fd(endpoint))
-    }
-    fn read(&self, fd: u32, output: &mut [u8]) -> Result<usize, i32> {
-        self.reads.borrow_mut().push((fd, output.len()));
-        let length = output.len().min(self.read_limit.get());
-        let output = &mut output[..length];
-        let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
-        endpoint
-            .read(output)
-            .now_or_never()
-            .ok_or(AGAIN)?
-            .map_err(|error| if error == IoError::BrokenPipe { 64 } else { 8 })
-    }
-    fn write(&self, fd: u32, input: &[u8]) -> Result<usize, i32> {
-        let endpoint = self.fds.borrow().get(&fd).cloned().ok_or(8)?;
-        endpoint
-            .write(input)
-            .now_or_never()
-            .ok_or(AGAIN)?
-            .map_err(|error| if error == IoError::BrokenPipe { 64 } else { 8 })
-    }
-    fn poll(
-        &self,
-        subscriptions: &[Subscription],
-        timeout: i32,
-        output: &mut [PollEvent],
-    ) -> Result<usize, i32> {
-        self.polls
-            .borrow_mut()
-            .push((timeout, subscriptions.to_vec()));
-        let ready = subscriptions.iter().filter(|sub| match sub.kind {
-            5 => self
-                .access_requests
-                .borrow()
-                .get(&sub.id)
-                .is_some_and(Option::is_some),
-            6 => self.start_status(sub.id) != Err(AGAIN),
-            _ => true,
-        });
-        let mut count = 0;
-        for (slot, sub) in output.iter_mut().zip(ready) {
-            count += 1;
-            *slot = PollEvent {
-                userdata: sub.userdata,
-                kind: sub.kind,
-                flags: 0,
-            };
-        }
-        Ok(count)
-    }
-    fn interrupted(&self) -> i32 {
-        if let Some(remaining) = self.interrupt_after.get() {
-            self.interrupt_after.set(remaining.checked_sub(1));
-            if remaining == 1 {
-                self.interrupt_after.set(None);
-                self.interrupt.set(2);
-            }
-        }
-        let signal = self.interrupt.replace(0);
-        if signal == 2 {
-            self.consumed_interrupts
-                .set(self.consumed_interrupts.get() + 1);
-        }
-        signal
-    }
 }
 fn setup() -> (Executor, Rc<Fake>, Runtime) {
     let executor = Executor::new();
@@ -772,7 +778,7 @@ fn finish_group_and_check_idle(
     assert_no_runtime_waiters(executor, runtime, fake);
 }
 fn assert_no_runtime_waiters(executor: &Executor, runtime: &Runtime, fake: &Fake) {
-    assert!(runtime.0.waiters.borrow().is_empty());
+    assert_eq!(runtime.0.support.waiter_count(), 0);
     assert!(fake.access_requests.borrow().is_empty());
     assert_host_idle(executor, fake);
 }
@@ -813,6 +819,18 @@ fn finish<T: Clone + 'static>(
         runtime.poll(0).unwrap();
     }
     panic!("fake runtime failed to finish");
+}
+fn park_group_wait(
+    executor: &Executor,
+    runtime: &Runtime,
+    group: GroupId,
+) -> JoinHandle<Result<(), ProcessError>> {
+    let pending = executor.spawn(runtime.wait_group(group));
+    executor.drive(64);
+    runtime.poll(0).unwrap();
+    executor.drive(64);
+    assert!(!pending.is_finished());
+    pending
 }
 fn wait_record(kind: u32, value: i32) -> [u8; 8] {
     let mut bytes = [0; 8];
@@ -874,7 +892,7 @@ fn typed_start_failure_is_consumed_and_reaped_even_when_errno_is_again() {
         assert_eq!(runtime.retained_count(), 0);
         assert_eq!(fake.reaped_jobs.borrow().len(), 1);
         assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
-        assert!(runtime.0.waiters.borrow().is_empty());
+        assert_eq!(runtime.0.support.waiter_count(), 0);
         assert_eq!(executor.drive(64).pending, 0);
     }
 }
@@ -975,14 +993,7 @@ fn child_start_readiness_is_non_consuming_and_precedes_terminal_cleanup() {
         executor.drive(64);
         assert!(!started.is_finished());
         assert_eq!(fake.start_status(pid as u32), Err(AGAIN));
-        assert!(
-            runtime
-                .0
-                .waiters
-                .borrow()
-                .values()
-                .any(|waiter| waiter.kind == 6)
-        );
+        assert_eq!(runtime.0.support.waiter_count(), 1);
         gate.cancel();
         let expected = match outcome {
             WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno)),
@@ -1631,12 +1642,12 @@ fn nonblocking_eagain_wait_registration_is_removed_when_cancelled() {
     });
     executor.drive(64);
     assert!(!job.is_finished());
-    assert_eq!(runtime.0.waiters.borrow().len(), 1);
+    assert_eq!(runtime.0.support.waiter_count(), 1);
     assert!(fake.polls.borrow().is_empty(), "task must not call poll");
     cancel.cancel();
     executor.drive(64);
     assert_eq!(job.now_or_never(), Some(Err(IoError::Cancelled)));
-    assert!(runtime.0.waiters.borrow().is_empty());
+    assert_eq!(runtime.0.support.waiter_count(), 0);
     drop(output);
     assert_eq!(fake.closed.borrow().len(), 2);
 }
@@ -1916,19 +1927,8 @@ fn wait_group_observes_descendants_and_abandoned_group_confirms_cleanup() {
     let pid = runtime.spawn(request(&runtime, "exit", group)).unwrap();
     let job = pid as u32 + 900;
     fake.held_jobs.borrow_mut().insert(job);
-    let done = executor.spawn(runtime.wait_group(group));
-    executor.drive(64);
-    runtime.poll(0).unwrap();
-    executor.drive(64);
-    assert!(!done.is_finished());
-    assert!(
-        runtime
-            .0
-            .waiters
-            .borrow()
-            .values()
-            .any(|waiter| waiter.kind == 4)
-    );
+    let done = park_group_wait(&executor, &runtime, group);
+    assert_eq!(runtime.0.support.waiter_count(), 1);
     fake.held_jobs.borrow_mut().remove(&job);
     runtime.poll(0).unwrap();
     finish(&executor, &runtime, done).unwrap();
@@ -1959,7 +1959,7 @@ fn dropping_wait_observers_does_not_retain_runtime_or_readiness() {
             drop(wait);
         }
         assert_eq!(Rc::strong_count(&runtime.0), references, "polled={polled}");
-        assert!(runtime.0.waiters.borrow().is_empty());
+        assert_eq!(runtime.0.support.waiter_count(), 0);
         runtime.kill_group(group, 15).unwrap();
         finish(
             &executor,
@@ -1970,7 +1970,7 @@ fn dropping_wait_observers_does_not_retain_runtime_or_readiness() {
         assert_eq!(runtime.retained_count(), 0);
         assert!(runtime.0.groups.borrow().is_empty());
         assert!(runtime.0.waits.borrow().is_empty());
-        assert!(runtime.0.waiters.borrow().is_empty());
+        assert_eq!(runtime.0.support.waiter_count(), 0);
         assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
         for unobserved in 100..116 {
             drop(runtime.wait_group(unobserved));
@@ -1999,7 +1999,7 @@ fn dropping_detached_wait_observer_preserves_runtime_reaper() {
     assert_eq!(runtime.retained_count(), 0);
     assert!(runtime.0.groups.borrow().is_empty());
     assert!(runtime.0.waits.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
+    assert_eq!(runtime.0.support.waiter_count(), 0);
     assert!(fake.access_requests.borrow().is_empty());
     assert!(fake.fds.borrow().keys().all(|fd| *fd < 3));
     let weak = Rc::downgrade(&runtime.0);
@@ -2173,11 +2173,7 @@ fn killing_dynamic_background_group_rejects_new_members_and_isolates_siblings() 
         *fake.signals.borrow(),
         vec![(true, first_job, 15), (true, later_job, 15)]
     );
-    let done = executor.spawn(runtime.wait_group(group));
-    executor.drive(64);
-    runtime.poll(0).unwrap();
-    executor.drive(64);
-    assert!(!done.is_finished());
+    let done = park_group_wait(&executor, &runtime, group);
     assert_eq!(fake.wait(foreground_pid as u32), Err(AGAIN));
     assert_eq!(fake.wait(sibling_pid as u32), Err(AGAIN));
     fake.held_jobs.borrow_mut().remove(&first_job);
@@ -3353,7 +3349,7 @@ fn group_reaps_later_inherited_job_while_earlier_member_stays_live() {
     fake.descendant_gates.borrow()[&(first as u32 + 1)].cancel();
     assert_eq!(finish(&executor, &runtime, done), Ok(()));
     assert_eq!(*fake.reaped_jobs.borrow(), vec![later_job, first_job]);
-    assert!(runtime.0.waiters.borrow().is_empty());
+    assert_eq!(runtime.0.support.waiter_count(), 0);
     assert!(runtime.0.groups.borrow().is_empty());
     assert_host_idle(&executor, &fake);
 }
@@ -3368,7 +3364,7 @@ fn detaching_empty_runtime_group_returns_ready_without_a_reaper_task() {
     assert_eq!(executor.drive(64).polls, 0);
     assert!(runtime.0.groups.borrow().is_empty());
     assert!(runtime.0.waits.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
+    assert_eq!(runtime.0.support.waiter_count(), 0);
     assert!(fake.polls.borrow().is_empty());
 }
 
@@ -3419,28 +3415,15 @@ fn admission_sweep_wakes_parked_job_wait_without_releasing_its_input_pump() {
     let (group, source, direct, job) = inherited_input(&executor, &runtime, &fake);
     let done = executor.spawn(runtime.wait_group(group));
     executor.drive(64);
-    assert!(
-        runtime
-            .0
-            .waiters
-            .borrow()
-            .values()
-            .any(|waiter| waiter.kind == 4 && waiter.id == job)
-    );
+    let parked_waiters = runtime.0.support.waiter_count();
+    assert!(parked_waiters > 0);
     fake.descendant_gates.borrow()[&(direct as u32 + 1)].cancel();
     executor.drive(64);
     let sibling = runtime.allocate_group();
     let pid = runtime.spawn(request(&runtime, "sleep", sibling)).unwrap();
     assert!(fake.reaped_jobs.borrow().contains(&job));
     assert!(!done.is_finished(), "sweep only wakes the cleanup owner");
-    assert!(
-        !runtime
-            .0
-            .waiters
-            .borrow()
-            .values()
-            .any(|waiter| waiter.kind == 4 && waiter.id == job)
-    );
+    assert!(runtime.0.support.waiter_count() < parked_waiters);
     assert_eq!(runtime.0.inputs.borrow().len(), 1);
     assert!(runtime.0.inputs.borrow()[0].users.contains(&group));
     assert!(runtime.0.input_slots.get() > 0);
@@ -3818,7 +3801,7 @@ fn access_requests_retire_success_errors_and_submission_failures_without_spawnin
         assert_eq!(fake.access_paths.borrow()[index].1, path);
         assert_eq!(fake.access_paths.borrow()[index].2, "/captured");
         assert!(fake.access_requests.borrow().is_empty());
-        assert!(runtime.0.waiters.borrow().is_empty());
+        assert_eq!(runtime.0.support.waiter_count(), 0);
     }
     fake.access_start_error.set(Some(48));
     assert_eq!(
@@ -3839,7 +3822,7 @@ fn access_readiness_is_nonblocking_reactor_owned_and_cancel_removes_pending_or_r
     let mut future = runtime.access("pending".into(), "/captured".into());
     assert!(future.as_mut().now_or_never().is_none());
     let id = fake.access_paths.borrow()[0].0;
-    assert_eq!(runtime.0.waiters.borrow().len(), 1);
+    assert_eq!(runtime.0.support.waiter_count(), 1);
     assert!(
         fake.polls.borrow().is_empty(),
         "task must not call the reactor"
@@ -3853,7 +3836,7 @@ fn access_readiness_is_nonblocking_reactor_owned_and_cancel_removes_pending_or_r
         Some(Err(ProcessError::Runtime(2)))
     );
     assert!(fake.access_requests.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
+    assert_eq!(runtime.0.support.waiter_count(), 0);
     assert!(fake.access_cancelled.borrow().is_empty());
     for completed in [false, true] {
         let mut future = runtime.access("pending".into(), "/".into());
@@ -3866,7 +3849,7 @@ fn access_readiness_is_nonblocking_reactor_owned_and_cancel_removes_pending_or_r
         drop(future);
         assert_eq!(fake.access_cancelled.borrow().last(), Some(&id));
         assert!(fake.access_requests.borrow().is_empty());
-        assert!(runtime.0.waiters.borrow().is_empty());
+        assert_eq!(runtime.0.support.waiter_count(), 0);
     }
     assert!(fake.requests.borrow().is_empty());
 }
@@ -3888,7 +3871,7 @@ fn access_host_bound_rejects_new_requests_and_releases_capacity_on_drop() {
         Some(Err(ProcessError::Runtime(AGAIN)))
     );
     assert_eq!(fake.access_requests.borrow().len(), 64);
-    assert_eq!(runtime.0.waiters.borrow().len(), 64);
+    assert_eq!(runtime.0.support.waiter_count(), 64);
     drop(pending.pop());
     let mut replacement = runtime.access("pending".into(), "/".into());
     assert!(replacement.as_mut().now_or_never().is_none());
@@ -3896,7 +3879,7 @@ fn access_host_bound_rejects_new_requests_and_releases_capacity_on_drop() {
     drop(pending);
     assert_eq!(fake.access_cancelled.borrow().len(), 65);
     assert!(fake.access_requests.borrow().is_empty());
-    assert!(runtime.0.waiters.borrow().is_empty());
+    assert_eq!(runtime.0.support.waiter_count(), 0);
 }
 
 #[test]
@@ -4172,4 +4155,143 @@ fn delegated_waiting_interrupt_is_acknowledged_once_without_canceling_the_job() 
     let code = finish(&executor, &runtime, command);
     shutdown_session(&executor, &runtime, &fake, session);
     assert_eq!(code, 7);
+}
+
+mod support_contract {
+    use crate::{
+        executor::{Cancel, Executor},
+        io::{self, Endpoint, FdTable, IoError, MemoryFs, OpenOptions, PIPE_CAPACITY},
+    };
+    use futures::FutureExt;
+
+    #[test]
+    fn eof_requires_the_last_open_writer_description_to_close() {
+        let executor = Executor::new();
+        let (reader, writer) = io::pipe();
+        let mut descriptors = FdTable::default();
+        descriptors.insert(7, writer);
+        let inherited = descriptors.clone();
+        let read = executor.spawn(async move { reader.read(&mut [0]).await });
+        assert_eq!(executor.drive(8).pending, 1);
+        drop(descriptors.remove(7));
+        assert_eq!(executor.drive(8).polls, 0);
+        assert!(!read.is_finished());
+        drop(inherited);
+        assert_eq!(executor.drive(8).pending, 0);
+        assert_eq!(read.now_or_never(), Some(Ok(0)));
+    }
+
+    #[test]
+    fn full_pipe_parks_until_reader_drains_without_partial_atomic_records() {
+        let executor = Executor::new();
+        let (reader, writer) = io::pipe();
+        assert_eq!(
+            writer.write(&vec![b'x'; PIPE_CAPACITY - 1]).now_or_never(),
+            Some(Ok(PIPE_CAPACITY - 1))
+        );
+        let write = executor.spawn(async move { writer.write(b"abc").await });
+        assert_eq!(executor.drive(8).pending, 1);
+        assert_eq!(executor.drive(8).polls, 0);
+        assert_eq!(reader.read(&mut [0; 2]).now_or_never(), Some(Ok(2)));
+        assert_eq!(executor.drive(8).pending, 0);
+        assert_eq!(write.now_or_never(), Some(Ok(3)));
+        let mut remaining = vec![0; PIPE_CAPACITY];
+        assert_eq!(
+            reader.read(&mut remaining).now_or_never(),
+            Some(Ok(PIPE_CAPACITY))
+        );
+        assert_eq!(&remaining[PIPE_CAPACITY - 3..], b"abc");
+    }
+
+    #[test]
+    fn closing_last_reader_wakes_a_blocked_writer_with_broken_pipe() {
+        let executor = Executor::new();
+        let (reader, writer) = io::pipe();
+        assert_eq!(
+            writer.write(&vec![0; PIPE_CAPACITY]).now_or_never(),
+            Some(Ok(PIPE_CAPACITY))
+        );
+        let write = executor.spawn(async move { writer.write(b"x").await });
+        executor.drive(8);
+        let alias = reader.clone();
+        drop(reader);
+        assert_eq!(executor.drive(8).polls, 0);
+        drop(alias);
+        executor.drive(8);
+        assert_eq!(write.now_or_never(), Some(Err(IoError::BrokenPipe)));
+    }
+
+    #[test]
+    fn cancelling_parked_read_does_not_consume_later_bytes() {
+        let executor = Executor::new();
+        let (reader, writer) = io::pipe();
+        let cancel = Cancel::new();
+        let pending = reader.clone();
+        let interrupted = cancel.clone();
+        let read =
+            executor.spawn(async move { pending.read_cancelled(&mut [0], &interrupted).await });
+        executor.drive(8);
+        cancel.cancel();
+        executor.drive(8);
+        assert_eq!(read.now_or_never(), Some(Err(IoError::Cancelled)));
+        assert_eq!(writer.write(b"z").now_or_never(), Some(Ok(1)));
+        let mut byte = [0];
+        assert_eq!(reader.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"z");
+    }
+
+    #[test]
+    fn child_abort_is_local_and_parent_cancel_wakes_descendants() {
+        let executor = Executor::new();
+        let parent = Cancel::new();
+        let first = parent.child();
+        let sibling = parent.child();
+        first.cancel();
+        assert!(!parent.is_cancelled());
+        assert!(!sibling.is_cancelled());
+        let read = executor.spawn(async move { sibling.cancelled().await });
+        executor.drive(8);
+        assert!(!read.is_finished());
+        parent.cancel();
+        executor.drive(8);
+        assert!(read.is_finished());
+    }
+
+    #[test]
+    fn weak_descriptor_observation_does_not_hold_a_pipe_open() {
+        let (reader, writer) = io::pipe();
+        let observer = writer.downgrade();
+        assert!(observer.upgrade().is_some());
+        drop(writer);
+        assert!(observer.upgrade().is_none());
+        assert_eq!(reader.read(&mut [0]).now_or_never(), Some(Ok(0)));
+    }
+
+    #[test]
+    fn descriptor_clones_share_offsets_but_reopens_do_not() {
+        let fs = MemoryFs::new(16);
+        fs.write_file("/data", b"abc").unwrap();
+        let source = fs.open("/data", &OpenOptions::default()).unwrap();
+        let alias = source.clone();
+        let reopened = fs.open("/data", &OpenOptions::default()).unwrap();
+        let mut byte = [0];
+        assert_eq!(source.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(alias.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"b");
+        assert_eq!(reopened.read(&mut byte).now_or_never(), Some(Ok(1)));
+        assert_eq!(&byte, b"a");
+    }
+
+    #[test]
+    fn buffered_pump_source_shares_offset_without_holding_exported_descriptor() {
+        let input = Endpoint::bytes(b"abc".to_vec());
+        let source = input.buffered_source();
+        assert_eq!(input.buffered_input_bytes(), Some(3));
+        assert_eq!(input.read(&mut [0]).now_or_never(), Some(Ok(1)));
+        let mut rest = [0; 2];
+        assert_eq!(source.read(&mut rest).now_or_never(), Some(Ok(2)));
+        assert_eq!(&rest, b"bc");
+        assert!(source.runtime_fd().is_none());
+        assert!(source.host_owner().is_none());
+    }
 }
