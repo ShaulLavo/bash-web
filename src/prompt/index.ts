@@ -20,7 +20,9 @@ export function createPrompt(options: CreatePromptOptions): PromptProvider {
     load() {
       return (status ??= import("./sources/status").then(
         ({ GitStatusSource, renderGitStatus }) => ({
-          source: new GitStatusSource(options.logger),
+          source: new GitStatusSource(options.logger, async (...args) =>
+            (await import("./sources/objects")).readObjectStatus(...args),
+          ),
           render: renderGitStatus,
         }),
       ));
