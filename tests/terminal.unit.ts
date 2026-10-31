@@ -32,6 +32,26 @@ const codec = (bridge: SharedBridge, descriptors?: DescriptorTable) => {
   });
 };
 
+test("output wake publication is edge-triggered while bytes remain queued", () => {
+  const bridge = new SharedBridge();
+  const initialWake = Atomics.load(bridge.state, control.wake);
+
+  assert.equal(bridge.tryWrite([Uint8Array.of(1)]), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 1);
+  assert.equal(bridge.tryWrite([Uint8Array.of(2)]), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 1);
+
+  assert.deepEqual(bridge.drain(), Uint8Array.of(1, 2));
+  assert.equal(bridge.tryWrite([Uint8Array.of(3)]), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 3);
+  assert.equal(bridge.write(Uint8Array.of(4)), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 3);
+
+  assert.deepEqual(bridge.drain(), Uint8Array.of(3, 4));
+  assert.equal(bridge.write(Uint8Array.of(5)), 1);
+  assert.equal(Atomics.load(bridge.state, control.wake), initialWake + 5);
+});
+
 test("terminal immediate operations return EAGAIN without entering a blocking path", () => {
   const bridge = new SharedBridge();
   const input = createBridgeTerminal(bridge.buffer, 0);
@@ -66,7 +86,7 @@ test("terminal ring wraps without losing binary bytes or exceeding its fixed cap
   assert.deepEqual(a, binary.subarray(0, 2));
   assert.deepEqual(b.subarray(0, 3), binary.subarray(2));
   assert.equal(bridge.availableInput(), 0);
-  assert.equal(bridge.buffer.byteLength, 64 + INPUT_CAPACITY + OUTPUT_CAPACITY);
+  assert.equal(bridge.buffer.byteLength, 72 + INPUT_CAPACITY + OUTPUT_CAPACITY);
 });
 
 test("arbitrary fd remapping preserves transferable terminal endpoint provenance", () => {
@@ -225,7 +245,7 @@ test("unrecoverable crashed holder fails terminal closed without unsafe lock rec
   assert.equal(bridge.closed(), true);
   assert.equal(createBridgeTerminal(bridge.buffer, 0).tryRead!([new Uint8Array(1)]), -29);
   assert.equal(createBridgeTerminal(bridge.buffer, 1).tryWrite!([new Uint8Array([1])]), -29);
-  shellTerminalImports(bridge.buffer).phase(1);
+  shellTerminalImports(bridge.buffer).phase(1, 0);
   assert.equal(
     Atomics.load(bridge.state, control.phase),
     4,
@@ -259,7 +279,7 @@ test("all child terminal fds share fresh admission, independently of parent and 
 
 test("child shell phase imports exist without changing root terminal ownership", () => {
   const bridge = new SharedBridge();
-  shellTerminalImports(bridge.buffer).phase(1);
-  shellTerminalImports().phase(2);
+  shellTerminalImports(bridge.buffer).phase(1, 0);
+  shellTerminalImports().phase(2, 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 1);
 });

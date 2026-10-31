@@ -35,6 +35,15 @@ fn case_quoted_pattern_characters_are_literal_matches_bash() {
 }
 
 #[test]
+fn case_ansi_c_quoted_patterns_keep_literal_and_unquoted_spans() {
+    check_case(
+        r#"case 'a[bc' in $'a[bc') echo bracket;; esac; case abc in $'a*') echo wrong;; *) echo literal;; esac; case 'a?tail' in $'a\x3f'*) echo suffix;; esac"#,
+        "bracket\nliteral\nsuffix\n",
+        0,
+    );
+}
+
+#[test]
 fn case_semicolon_ampersand_runs_bodies_unconditionally_matches_bash() {
     check_case(
         r#"case a in a) echo one;& b) echo two;& c) echo three;; d) echo no;; esac"#,

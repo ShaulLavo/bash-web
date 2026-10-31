@@ -70,19 +70,548 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "63ddc5da0699d6e3ca449eaecb0bc35069c664d9",
+    "revision": "a03b2a51f8a5eb40d1b93820f0f129867110b6c2",
     "package": "waffle",
-    "version": "0.0.99",
-    "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.99/waffle-0.0.99.tgz",
+    "version": "0.0.105",
+    "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.105/waffle-0.0.105.tgz",
     "license": "MIT",
     "descriptorAdapter": "Original local Rust logical-to-physical fd translation and WASI path_open flags/rights adapter, from docs/host-abi.md at the selected revision. No copied runtime implementation. Native MemoryFs uses its own same-node/new-description operation; unexported buffers retain their explicit boundary. See docs/descriptor-reopening.md and plan 004.",
     "permissionAdapter": "Original local Rust adapter from runtime_fs.path_permissions_get documentation at the selected revision. No copied upstream implementation. Preserve the four-word supported-mode/access contract; query metadata without opening payloads. Test-only storage conformance imports fs/vfs-internal.ts from the same pinned source module as SharedFilesystem; product composition stays default FAST and the frozen runner stays public memory.",
     "strategy": "Required peer imported by the JavaScript shell adapter; exact same release archive used as development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle reports runtime_proc startup failures only through typed parent outcomes and full host diagnostics, without child-stdio bytes even before adapter entry. Host-root reporting stays unchanged. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot.",
-    "archiveSha256": "18db2c1d6eb598cb8618c438d0bfcae2f6da29a4b18d0160576ddd8d91a5f1bc",
+    "archiveSha256": "914400ac1a8268f151ffed30fca7b983c9e368925e48cc124e1624fdac62f510",
     "buildInputs": {
       "packagePath": "packages/waffle",
       "builderSha256": "85d6a1e6793390fe6c8c36762168f673cfe8fc7ecd5abc6daf27c05d82f7cf0e",
       "patchSha256": "856730a158d7fdaa08a787c572883a57baaf09a4d967b366c9d198a9c98de302"
+    }
+  },
+  "wafflePrograms": {
+    "version": "0.0.13",
+    "revision": "3050f69d810fe7c851e487135517698b5dfd93e5",
+    "provenance": "Function indices from the exact named optimized outputs in the published derivations. Capture verifies the named hashes, reruns scanner and memory checks, and proves that removing only name custom sections yields the released bytes exactly. Final SHA-256 binds these symbols to unchanged executable bytes. Historical local guest provenance is unchanged.",
+    "guests": {
+      "env": {
+        "sha256": "190da917392cfb6ae7264fec05b1cfdb05b053f3938d76ceb66dd6175c63169e",
+        "namedSha256": "4ff7d9c906b323ff647b90358ba42409e7ccd8ccab8ee4a669ed8ed7270129d0",
+        "nameOffset": 455000,
+        "symbols": {
+          "__wasilibc_ensure_environ": 1281,
+          "__wasi_fd_close": 1282,
+          "__wasi_fd_fdstat_get": 1283,
+          "__wasi_fd_filestat_get": 1284,
+          "__wasi_fd_prestat_get": 1285,
+          "__wasi_fd_prestat_dir_name": 1286,
+          "__wasi_fd_read": 1287,
+          "__wasi_fd_write": 1288,
+          "__wasi_proc_exit": 1289,
+          "__wasilibc_nocwd_fstatat": 1290,
+          "__wasilibc_find_relpath_alloc": 1292,
+          "__wasilibc_populate_preopens": 1296,
+          "__wasilibc_find_relpath": 1297
+        }
+      },
+      "clear": {
+        "sha256": "e08504c4ade7ebe6d07f2c52c5ef621d48cb0d1e3ed525b0b99e8db8e3ebc5c6",
+        "namedSha256": "5194d4942e32731ed884509d428189141b2fbf97ea100b7e0c2ea7e725e7ae75",
+        "nameOffset": 41312,
+        "symbols": {
+          "__wasi_fd_write": 101,
+          "__wasi_proc_exit": 102
+        }
+      },
+      "cat": {
+        "sha256": "d857924213ac1541b439f37e1d7fdcae3c03a7f423a48c8175c47d28e8b29fa1",
+        "namedSha256": "eb84a2dde4152ba8a03aa140304b3c3bc7c82aaec80d70137b02a0a78b5541ec",
+        "nameOffset": 115367,
+        "symbols": {
+          "waffle_program_support::runtime::wasi::proc_inherited_fd": 0,
+          "waffle_program_support::runtime::wasi::fd_prestat_get": 1,
+          "waffle_program_support::runtime::wasi::fd_prestat_dir_name": 2,
+          "waffle_program_support::runtime::wasi::proc_signal": 3,
+          "waffle_program_support::runtime::wasi::proc_interrupted": 5,
+          "waffle_program_support::runtime::wasi::proc_dup": 6,
+          "waffle_program_support::runtime::wasi::path_open": 7,
+          "waffle_program_support::runtime::wasi::proc_fd_kind": 8,
+          "waffle_program_support::runtime::wasi::proc_pipe": 9,
+          "waffle_program_support::runtime::wasi::proc_poll": 10,
+          "waffle_program_support::runtime::wasi::proc_read": 11,
+          "waffle_program_support::runtime::wasi::fd_close": 12,
+          "waffle_program_support::runtime::wasi::path_create_directory": 13,
+          "waffle_program_support::runtime::wasi::path_filestat_get": 14,
+          "waffle_program_support::runtime::wasi::proc_write": 15,
+          "__wasilibc_ensure_environ": 362,
+          "__wasi_fd_write": 363,
+          "__wasi_proc_exit": 364
+        }
+      },
+      "echo": {
+        "sha256": "ec62dbab5aaceeb7d7138121532a38668e3f6f7161e3262717bee4307c70b885",
+        "namedSha256": "3d72181a5db84130c4b7f4164ffd89f94a4a0e69960dd913c0a0600717f479e5",
+        "nameOffset": 311276,
+        "symbols": {
+          "__wasi_fd_close": 850,
+          "__wasi_fd_fdstat_get": 851,
+          "__wasi_fd_filestat_get": 852,
+          "__wasi_fd_prestat_get": 853,
+          "__wasi_fd_prestat_dir_name": 854,
+          "__wasi_fd_read": 855,
+          "__wasi_fd_write": 856,
+          "__wasi_proc_exit": 857,
+          "__wasilibc_populate_preopens": 862,
+          "__wasilibc_find_relpath": 863
+        }
+      },
+      "cut": {
+        "sha256": "bfa751a39176224ca2e2cd5986e6941c9863ebe5e2c17dc1d1778e192a7a6cd1",
+        "namedSha256": "c7461780503de4c7dce8e69139d5b227068d088954d914b09c125cadda825e87",
+        "nameOffset": 450691,
+        "symbols": {
+          "__wasi_fd_close": 1212,
+          "__wasi_fd_fdstat_get": 1213,
+          "__wasi_fd_filestat_get": 1214,
+          "__wasi_fd_prestat_get": 1215,
+          "__wasi_fd_prestat_dir_name": 1216,
+          "__wasi_fd_read": 1217,
+          "__wasi_fd_write": 1218,
+          "__wasi_proc_exit": 1219,
+          "__wasilibc_nocwd_fstatat": 1220,
+          "__wasilibc_find_relpath_alloc": 1222,
+          "__wasilibc_populate_preopens": 1227,
+          "__wasilibc_find_relpath": 1228
+        }
+      },
+      "tr": {
+        "sha256": "2a083f96c9965381a7b012428f6d98efbc87da48e38b37007634c24143c9318b",
+        "namedSha256": "265ebcd2550e23101cd9fbd4e9919ae4cebfacb8708eb07f29aa2dfe6ff5514d",
+        "nameOffset": 436150,
+        "symbols": {
+          "__wasi_fd_close": 1227,
+          "__wasi_fd_fdstat_get": 1228,
+          "__wasi_fd_filestat_get": 1229,
+          "__wasi_fd_prestat_get": 1230,
+          "__wasi_fd_prestat_dir_name": 1231,
+          "__wasi_fd_read": 1232,
+          "__wasi_fd_write": 1233,
+          "__wasi_proc_exit": 1234,
+          "__wasilibc_populate_preopens": 1239,
+          "__wasilibc_find_relpath": 1240
+        }
+      },
+      "head": {
+        "sha256": "5da7d09c86b85f19b25891e952034154d9a414f732c476857690c2a414fe8cbe",
+        "namedSha256": "019ad01426492190f486b85428d40f235361c870d55caa65487a5d69042d1290",
+        "nameOffset": 435408,
+        "symbols": {
+          "__wasi_fd_close": 1214,
+          "__wasi_fd_fdstat_get": 1215,
+          "__wasi_fd_filestat_get": 1216,
+          "__wasi_fd_prestat_get": 1217,
+          "__wasi_fd_prestat_dir_name": 1218,
+          "__wasi_fd_read": 1219,
+          "__wasi_fd_seek": 1220,
+          "__wasi_fd_write": 1221,
+          "__wasi_proc_exit": 1222,
+          "__wasilibc_nocwd_fstatat": 1223,
+          "__wasilibc_find_relpath_alloc": 1225,
+          "__wasilibc_populate_preopens": 1230,
+          "__wasilibc_find_relpath": 1231
+        }
+      },
+      "nl": {
+        "sha256": "3cabb66e78fe37bf2aca3f885f08ba955385e00c9774c175cae9db68d336ca84",
+        "namedSha256": "066c5e246c5e440a7faadb7734cdb559b0d23f6fd44548ee0ad670026549ebde",
+        "nameOffset": 1167895,
+        "symbols": {
+          "__wasi_fd_close": 2423,
+          "__wasi_fd_fdstat_get": 2424,
+          "__wasi_fd_filestat_get": 2425,
+          "__wasi_fd_prestat_get": 2426,
+          "__wasi_fd_prestat_dir_name": 2427,
+          "__wasi_fd_read": 2428,
+          "__wasi_fd_write": 2429,
+          "__wasi_proc_exit": 2430,
+          "__wasilibc_nocwd_fstatat": 2431,
+          "__wasilibc_find_relpath_alloc": 2433,
+          "__wasilibc_populate_preopens": 2438,
+          "__wasilibc_find_relpath": 2439
+        }
+      },
+      "which": {
+        "sha256": "81f20cc86bb97cbf3c57d8341dcb7850ed48ed491fb04d13f7311538f2e2be9e",
+        "namedSha256": "e488edc4fa9f8a375600841d2ae4f559ffa5341177e321483e39859286002d04",
+        "nameOffset": 54278,
+        "symbols": {
+          "__wasi_fd_write": 136,
+          "__wasi_proc_exit": 137
+        }
+      },
+      "ls": {
+        "sha256": "7018432c0574036b5aeed84ed4d44708084c7fbf479f3930b3cc27a16a9fe666",
+        "namedSha256": "9e5f2362565b425aac45c90ed2225f157250f87ca679ae1d7e15f3756626fff9",
+        "nameOffset": 2242208,
+        "symbols": {
+          "__wasi_fd_close": 2443,
+          "__wasi_fd_fdstat_get": 2444,
+          "__wasi_fd_filestat_get": 2445,
+          "__wasi_fd_prestat_get": 2446,
+          "__wasi_fd_prestat_dir_name": 2447,
+          "__wasi_fd_read": 2448,
+          "__wasi_fd_readdir": 2449,
+          "__wasi_fd_seek": 2450,
+          "__wasi_fd_write": 2451,
+          "__wasi_proc_exit": 2452,
+          "__wasilibc_nocwd_openat_nomode": 2453,
+          "__wasilibc_nocwd_fstatat": 2454,
+          "__wasilibc_find_relpath_alloc": 2457,
+          "__wasilibc_populate_preopens": 2465,
+          "__wasilibc_find_relpath": 2466
+        }
+      },
+      "mkdir": {
+        "sha256": "7d4d70cc3482f8557e67874884129233d7185d354b467d503e26ec47c0ba1309",
+        "namedSha256": "2e61f36efa90e9a34f09236956e44c427c9ceb97da847a3ca0d64e1734aa0967",
+        "nameOffset": 112001,
+        "symbols": {
+          "waffle_program_support::runtime::wasi::proc_inherited_fd": 0,
+          "waffle_program_support::runtime::wasi::fd_prestat_get": 1,
+          "waffle_program_support::runtime::wasi::fd_prestat_dir_name": 2,
+          "waffle_program_support::runtime::wasi::proc_signal": 3,
+          "waffle_program_support::runtime::wasi::proc_interrupted": 5,
+          "waffle_program_support::runtime::wasi::proc_dup": 6,
+          "waffle_program_support::runtime::wasi::path_open": 7,
+          "waffle_program_support::runtime::wasi::proc_fd_kind": 8,
+          "waffle_program_support::runtime::wasi::proc_pipe": 9,
+          "waffle_program_support::runtime::wasi::proc_poll": 10,
+          "waffle_program_support::runtime::wasi::proc_read": 11,
+          "waffle_program_support::runtime::wasi::fd_close": 12,
+          "waffle_program_support::runtime::wasi::path_create_directory": 13,
+          "waffle_program_support::runtime::wasi::path_filestat_get": 14,
+          "waffle_program_support::runtime::wasi::proc_write": 15,
+          "__wasilibc_ensure_environ": 348,
+          "__wasi_fd_write": 349,
+          "__wasi_proc_exit": 350
+        }
+      },
+      "seq": {
+        "sha256": "1f1c7e0b0f7e88fdebcdfd7494c906a4b210824a4447ce65aa47cf506e2a733e",
+        "namedSha256": "f28ca8da9c799bb8ef648f1cb9c57b34ca0e35833944602c8c0a7b70bbc04919",
+        "nameOffset": 108203,
+        "symbols": {
+          "waffle_program_support::runtime::wasi::proc_inherited_fd": 0,
+          "waffle_program_support::runtime::wasi::fd_prestat_get": 1,
+          "waffle_program_support::runtime::wasi::fd_prestat_dir_name": 2,
+          "waffle_program_support::runtime::wasi::proc_signal": 3,
+          "waffle_program_support::runtime::wasi::proc_interrupted": 5,
+          "waffle_program_support::runtime::wasi::proc_dup": 6,
+          "waffle_program_support::runtime::wasi::path_open": 7,
+          "waffle_program_support::runtime::wasi::proc_fd_kind": 8,
+          "waffle_program_support::runtime::wasi::proc_pipe": 9,
+          "waffle_program_support::runtime::wasi::proc_poll": 10,
+          "waffle_program_support::runtime::wasi::proc_read": 11,
+          "waffle_program_support::runtime::wasi::fd_close": 12,
+          "waffle_program_support::runtime::wasi::path_create_directory": 13,
+          "waffle_program_support::runtime::wasi::path_filestat_get": 14,
+          "waffle_program_support::runtime::wasi::proc_write": 15,
+          "__wasilibc_ensure_environ": 335,
+          "__wasi_fd_write": 336,
+          "__wasi_proc_exit": 337
+        }
+      },
+      "sort": {
+        "sha256": "decf9c4d6e426d77b642848f7e896484e6f27a35f2c63a45a901f88e07bff73d",
+        "namedSha256": "1bdf5a9248f1b7a6e7b9be5ef5c568b7ec9ab8cc63d6abcdbfea9600b0d53685",
+        "nameOffset": 2435815,
+        "symbols": {
+          "__wasi_fd_close": 2248,
+          "__wasi_fd_fdstat_get": 2249,
+          "__wasi_fd_filestat_get": 2250,
+          "__wasi_fd_filestat_set_size": 2251,
+          "__wasi_fd_prestat_get": 2252,
+          "__wasi_fd_prestat_dir_name": 2253,
+          "__wasi_fd_read": 2254,
+          "__wasi_fd_readdir": 2255,
+          "__wasi_fd_seek": 2256,
+          "__wasi_fd_write": 2257,
+          "__wasi_proc_exit": 2258,
+          "__wasilibc_nocwd_openat_nomode": 2259,
+          "__wasilibc_nocwd_fstatat": 2260,
+          "__wasilibc_nocwd___wasilibc_unlinkat": 2261,
+          "__wasilibc_nocwd___wasilibc_rmdirat": 2262,
+          "__wasilibc_find_relpath_alloc": 2265,
+          "__wasilibc_populate_preopens": 2273,
+          "__wasilibc_find_relpath": 2274
+        }
+      },
+      "tail": {
+        "sha256": "e97439a2a74696fe9d0852a39754e03ce7ce3c394f0a82616dbc30583f14f377",
+        "namedSha256": "c898830aabe47c62b8372219cc16a8c3aefd0faa1c03a916dcedfda7fcf95f73",
+        "nameOffset": 121192,
+        "symbols": {
+          "waffle_program_support::runtime::wasi::proc_inherited_fd": 0,
+          "waffle_program_support::runtime::wasi::fd_prestat_get": 1,
+          "waffle_program_support::runtime::wasi::fd_prestat_dir_name": 2,
+          "waffle_program_support::runtime::wasi::proc_signal": 3,
+          "waffle_program_support::runtime::wasi::proc_interrupted": 5,
+          "waffle_program_support::runtime::wasi::proc_dup": 6,
+          "waffle_program_support::runtime::wasi::path_open": 7,
+          "waffle_program_support::runtime::wasi::proc_fd_kind": 8,
+          "waffle_program_support::runtime::wasi::proc_pipe": 9,
+          "waffle_program_support::runtime::wasi::proc_poll": 10,
+          "waffle_program_support::runtime::wasi::proc_read": 11,
+          "waffle_program_support::runtime::wasi::fd_close": 12,
+          "waffle_program_support::runtime::wasi::path_create_directory": 13,
+          "waffle_program_support::runtime::wasi::path_filestat_get": 14,
+          "waffle_program_support::runtime::wasi::proc_write": 15,
+          "__wasilibc_ensure_environ": 382,
+          "__wasi_fd_write": 383,
+          "__wasi_proc_exit": 384
+        }
+      },
+      "uniq": {
+        "sha256": "9100696bcbf229e9929902a0d96d301183a7f4b6aa43b4c580529380c04b9f07",
+        "namedSha256": "18b5e0f267ade39f0abd57e11765e462088c98686a4dc9c9609b113a723f5839",
+        "nameOffset": 429672,
+        "symbols": {
+          "__wasi_fd_close": 1219,
+          "__wasi_fd_fdstat_get": 1220,
+          "__wasi_fd_filestat_get": 1221,
+          "__wasi_fd_prestat_get": 1222,
+          "__wasi_fd_prestat_dir_name": 1223,
+          "__wasi_fd_read": 1224,
+          "__wasi_fd_seek": 1225,
+          "__wasi_fd_write": 1226,
+          "__wasi_proc_exit": 1227,
+          "__wasilibc_nocwd_fstatat": 1228,
+          "__wasilibc_find_relpath_alloc": 1230,
+          "__wasilibc_populate_preopens": 1235,
+          "__wasilibc_find_relpath": 1236
+        }
+      },
+      "wc": {
+        "sha256": "8c96a40b25f8ca287e551354426e412218b8c6b3507c51aed8f7a9da78f041e2",
+        "namedSha256": "320e4ca0a029682fa03bf7359847f1097ee286229ffb17914ebba456bdfbd066",
+        "nameOffset": 479618,
+        "symbols": {
+          "__wasi_fd_close": 1365,
+          "__wasi_fd_fdstat_get": 1366,
+          "__wasi_fd_filestat_get": 1367,
+          "__wasi_fd_prestat_get": 1368,
+          "__wasi_fd_prestat_dir_name": 1369,
+          "__wasi_fd_read": 1370,
+          "__wasi_fd_write": 1371,
+          "__wasi_proc_exit": 1372,
+          "__wasilibc_nocwd_fstatat": 1373,
+          "__wasilibc_find_relpath_alloc": 1375,
+          "__wasilibc_populate_preopens": 1380,
+          "__wasilibc_find_relpath": 1381
+        }
+      },
+      "touch": {
+        "sha256": "459d77fe30c42d7239996f7a1d380246d7f0c273ce4eefdce734216a008a93ff",
+        "namedSha256": "b6b50e9fa40d6f87f6bc2171acc4f8d077d52cca24bd1b64332fef535654cd45",
+        "nameOffset": 924093,
+        "symbols": {
+          "__wasi_fd_close": 1781,
+          "__wasi_fd_fdstat_get": 1782,
+          "__wasi_fd_filestat_get": 1783,
+          "__wasi_fd_prestat_get": 1784,
+          "__wasi_fd_prestat_dir_name": 1785,
+          "__wasi_fd_read": 1786,
+          "__wasi_fd_readdir": 1787,
+          "__wasi_fd_seek": 1788,
+          "__wasi_fd_write": 1789,
+          "__wasi_proc_exit": 1790,
+          "__wasilibc_nocwd_openat_nomode": 1791,
+          "__wasilibc_nocwd_fstatat": 1792,
+          "__wasilibc_nocwd_utimensat": 1793,
+          "__wasilibc_find_relpath_alloc": 1796,
+          "__wasilibc_populate_preopens": 1803,
+          "__wasilibc_find_relpath": 1804
+        }
+      },
+      "rm": {
+        "sha256": "51632e4f26c45708d39dda972a09e0bb25d0d4fb153bbad3c181b99b84041991",
+        "namedSha256": "a45b5f30b814b00a62f6c704a6f0e4cee69d1f5dcfafabd3fb1d6b88332385a1",
+        "nameOffset": 524899,
+        "symbols": {
+          "__wasi_fd_close": 1436,
+          "__wasi_fd_fdstat_get": 1437,
+          "__wasi_fd_filestat_get": 1438,
+          "__wasi_fd_prestat_get": 1439,
+          "__wasi_fd_prestat_dir_name": 1440,
+          "__wasi_fd_read": 1441,
+          "__wasi_fd_readdir": 1442,
+          "__wasi_fd_write": 1443,
+          "__wasi_proc_exit": 1444,
+          "__wasilibc_nocwd_openat_nomode": 1445,
+          "__wasilibc_nocwd_fstatat": 1446,
+          "__wasilibc_nocwd___wasilibc_unlinkat": 1447,
+          "__wasilibc_nocwd___wasilibc_rmdirat": 1448,
+          "__wasilibc_find_relpath_alloc": 1451,
+          "__wasilibc_populate_preopens": 1461,
+          "__wasilibc_find_relpath": 1462
+        }
+      },
+      "cp": {
+        "sha256": "07ab0e905329799371c27ae4ad28edefe947b165263339a6f8595a8a10951a03",
+        "namedSha256": "f98a115307374e423325f0cd88d27875a8d89f02c198acd06a7030bd693f7fdc",
+        "nameOffset": 603370,
+        "symbols": {
+          "__wasi_fd_close": 1537,
+          "__wasi_fd_fdstat_get": 1538,
+          "__wasi_fd_filestat_get": 1539,
+          "__wasi_fd_filestat_set_times": 1540,
+          "__wasi_fd_prestat_get": 1541,
+          "__wasi_fd_prestat_dir_name": 1542,
+          "__wasi_fd_read": 1543,
+          "__wasi_fd_readdir": 1544,
+          "__wasi_fd_write": 1545,
+          "__wasi_proc_exit": 1546,
+          "__wasilibc_nocwd_openat_nomode": 1547,
+          "__wasilibc_nocwd_symlinkat": 1548,
+          "__wasilibc_nocwd_fstatat": 1549,
+          "__wasilibc_nocwd_linkat": 1550,
+          "__wasilibc_find_relpath_alloc": 1553,
+          "__wasilibc_link": 1565,
+          "__wasilibc_link_oldat": 1566,
+          "__wasilibc_link_newat": 1567,
+          "__wasilibc_populate_preopens": 1569,
+          "__wasilibc_find_relpath": 1570
+        }
+      },
+      "mv": {
+        "sha256": "3b109f62012170f60486111492a42ef3e8743c7059d64cdf06c751b4623b0aea",
+        "namedSha256": "2aa9f9da4d74a51c52153a7c22520e76628d7155567af35d687d75c977f29229",
+        "nameOffset": 530113,
+        "symbols": {
+          "__wasi_fd_close": 1425,
+          "__wasi_fd_fdstat_get": 1426,
+          "__wasi_fd_filestat_get": 1427,
+          "__wasi_fd_prestat_get": 1428,
+          "__wasi_fd_prestat_dir_name": 1429,
+          "__wasi_fd_read": 1430,
+          "__wasi_fd_readdir": 1431,
+          "__wasi_fd_write": 1432,
+          "__wasi_proc_exit": 1433,
+          "__wasilibc_nocwd_openat_nomode": 1434,
+          "__wasilibc_nocwd_fstatat": 1435,
+          "__wasilibc_nocwd___wasilibc_unlinkat": 1436,
+          "__wasilibc_nocwd___wasilibc_rmdirat": 1437,
+          "__wasilibc_find_relpath_alloc": 1440,
+          "__wasilibc_populate_preopens": 1453,
+          "__wasilibc_find_relpath": 1454
+        }
+      },
+      "find": {
+        "sha256": "878f233db8a96b477ab41fbd2f720fb6385fe133ba9d0e4784683e7a2cca44d2",
+        "namedSha256": "49229980d6b44a456d7bbd3a1b43bb83b08f9308c8449bad503b3c5c70680bfc",
+        "nameOffset": 2047831,
+        "symbols": {
+          "__wasi_fd_close": 3104,
+          "__wasi_fd_fdstat_get": 3105,
+          "__wasi_fd_filestat_get": 3106,
+          "__wasi_fd_prestat_get": 3107,
+          "__wasi_fd_prestat_dir_name": 3108,
+          "__wasi_fd_read": 3109,
+          "__wasi_fd_readdir": 3110,
+          "__wasi_fd_seek": 3111,
+          "__wasi_fd_write": 3112,
+          "__wasi_proc_exit": 3113,
+          "__wasilibc_nocwd_openat_nomode": 3114,
+          "__wasilibc_nocwd_fstatat": 3115,
+          "__wasilibc_find_relpath_alloc": 3118,
+          "__wasilibc_populate_preopens": 3128,
+          "__wasilibc_find_relpath": 3129
+        }
+      },
+      "xargs": {
+        "sha256": "c5d696fbeac24f7b638d8612bfc0e6dbcc58ce34ba6e5ef22551b0fdd0d26154",
+        "namedSha256": "725639ff66b71f35f976a7805b74b8ba9b8ec3fb2c6b3333855a4dc5e7072cdb",
+        "nameOffset": 285086,
+        "symbols": {
+          "__wasilibc_ensure_environ": 871,
+          "__wasi_fd_close": 872,
+          "__wasi_fd_fdstat_get": 873,
+          "__wasi_fd_fdstat_set_flags": 874,
+          "__wasi_fd_filestat_get": 875,
+          "__wasi_fd_prestat_get": 876,
+          "__wasi_fd_prestat_dir_name": 877,
+          "__wasi_fd_read": 878,
+          "__wasi_fd_seek": 879,
+          "__wasi_fd_write": 880,
+          "__wasi_proc_exit": 881,
+          "__wasilibc_nocwd_fstatat": 882,
+          "__wasilibc_find_relpath_alloc": 884,
+          "__wasilibc_populate_preopens": 885,
+          "__wasilibc_find_relpath": 886
+        }
+      },
+      "grep": {
+        "sha256": "99fd9bd48e90765273a55de35c5f8b5e89b37d69035f39ef7a5c2da67737c236",
+        "namedSha256": "56131b71b8e770692f6eb69cbcb6d3420657baea4de13e00d860f0eafedc9aac",
+        "nameOffset": 882119,
+        "symbols": {
+          "waffle_program_support::runtime::wasi::proc_inherited_fd": 0,
+          "waffle_program_support::runtime::wasi::fd_prestat_get": 1,
+          "waffle_program_support::runtime::wasi::fd_prestat_dir_name": 2,
+          "waffle_program_support::runtime::wasi::proc_signal": 3,
+          "waffle_program_support::runtime::wasi::proc_interrupted": 6,
+          "waffle_program_support::runtime::wasi::proc_dup": 7,
+          "waffle_program_support::runtime::wasi::path_open": 8,
+          "waffle_program_support::runtime::wasi::proc_fd_kind": 9,
+          "waffle_program_support::runtime::wasi::proc_pipe": 10,
+          "waffle_program_support::runtime::wasi::proc_poll": 11,
+          "waffle_program_support::runtime::wasi::proc_read": 12,
+          "waffle_program_support::runtime::wasi::fd_close": 13,
+          "waffle_program_support::runtime::wasi::path_create_directory": 14,
+          "waffle_program_support::runtime::wasi::path_filestat_get": 15,
+          "waffle_program_support::runtime::wasi::proc_write": 16,
+          "__wasilibc_ensure_environ": 1666,
+          "__wasi_fd_write": 1667,
+          "__wasi_proc_exit": 1668
+        }
+      },
+      "rg": {
+        "sha256": "352626409ff7ade5b5c9627f9d7cf92694c08821aaa9ff141c81325b59efba2c",
+        "namedSha256": "19c79f41259afc4065c6591d428ec3938e8e37a1321c8c490cc3f9bc134a9966",
+        "nameOffset": 1984199,
+        "symbols": {
+          "__wasi_fd_close": 4031,
+          "__wasi_fd_fdstat_get": 4032,
+          "__wasi_fd_fdstat_set_flags": 4033,
+          "__wasi_fd_filestat_get": 4034,
+          "__wasi_fd_prestat_get": 4035,
+          "__wasi_fd_prestat_dir_name": 4036,
+          "__wasi_fd_read": 4037,
+          "__wasi_fd_readdir": 4038,
+          "__wasi_fd_seek": 4039,
+          "__wasi_fd_write": 4040,
+          "__wasi_proc_exit": 4041,
+          "__wasilibc_nocwd_openat_nomode": 4042,
+          "__wasilibc_nocwd_fstatat": 4043,
+          "__wasilibc_find_relpath_alloc": 4046,
+          "__wasilibc_populate_preopens": 4053,
+          "__wasilibc_find_relpath": 4054
+        }
+      },
+      "sed": {
+        "sha256": "29e910b446e2db1b25d9cf2a78a46eabbb1cba94a857765c72e27819afcb4331",
+        "namedSha256": "53bdfdfe9ba8545d8d70e2f3c63c48b12a6379780318bc7b558ec5434f75004b",
+        "nameOffset": 1368709,
+        "symbols": {
+          "__wasi_fd_close": 2941,
+          "__wasi_fd_fdstat_get": 2942,
+          "__wasi_fd_filestat_get": 2943,
+          "__wasi_fd_prestat_get": 2944,
+          "__wasi_fd_prestat_dir_name": 2945,
+          "__wasi_fd_read": 2946,
+          "__wasi_fd_seek": 2947,
+          "__wasi_fd_write": 2948,
+          "__wasi_proc_exit": 2949,
+          "__wasilibc_populate_preopens": 2956,
+          "__wasilibc_find_relpath": 2957
+        }
+      }
     }
   },
   "wasiLibc": {
@@ -92,8 +621,8 @@
     "upstreamPath": "libc-bottom-half/sources/preopens.c",
     "sdk": "wasi-sdk 34.0",
     "patchOwner": "waffle",
-    "patchPath": ".build/waffle-inputs/63ddc5da0699d6e3ca449eaecb0bc35069c664d9/packages/waffle/patches/wasi-libc/preopen-scan.patch",
-    "builder": ".build/waffle-inputs/63ddc5da0699d6e3ca449eaecb0bc35069c664d9/packages/waffle/scripts/build-wasi-libc.sh",
+    "patchPath": ".build/waffle-inputs/a03b2a51f8a5eb40d1b93820f0f129867110b6c2/packages/waffle/patches/wasi-libc/preopen-scan.patch",
+    "builder": ".build/waffle-inputs/a03b2a51f8a5eb40d1b93820f0f129867110b6c2/packages/waffle/scripts/build-wasi-libc.sh",
     "changes": "After prestat BADF, query fdstat: continue past an open non-preopen, stop at a genuinely absent fd, preserve fatal handling of other errors. Every local WASI guest uses the owned patched sysroot at final link; Rust self-contained libc is disabled.",
     "documentation": "docs/wasi-libc.md"
   },

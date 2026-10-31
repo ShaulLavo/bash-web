@@ -2,6 +2,10 @@ import { test, expect, type Page } from "./helpers/browser-test";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
 import { execFileSync } from "node:child_process";
+import {
+  capturePipelineFailure,
+  installPipelineWorkerDiagnostics,
+} from "./helpers/pipeline-failure-diagnostics.ts";
 
 // Upstream acceptance copied from /work/reports/browser-shell-research.
 // Runtime owns a persistent filesystem worker as well as the guest shell.
@@ -166,23 +170,49 @@ for (const [name, producer, consumer, expected] of [
   });
 }
 
-test("pipeline Ctrl+C stops every stage and its children", async ({ page }) => {
-  await open(page);
-  await command(
-    page,
-    // Keep concurrent protocol markers on the guest's single-write byte path.
-    "export KEEP=kept; { test-guest emit $'PRODUCER_READY\\n' >&2; test-guest yes tick; } | { test-guest emit $'CONSUMER_READY\\n' >&2; test-guest cat; } | grep unmatched; echo BAD_AFTER_INTERRUPT",
+test("pipeline Ctrl+C stops every stage and its children", async ({ page }, info) => {
+  await page.addInitScript(installPipelineWorkerDiagnostics);
+  await capturePipelineFailure(
+    async () => {
+      await open(page);
+      await command(
+        page,
+        // Keep concurrent protocol markers on the guest's single-write byte path.
+        "export KEEP=kept; { test-guest emit $'PRODUCER_READY\\n' >&2; test-guest yes tick; } | { test-guest emit $'CONSUMER_READY\\n' >&2; test-guest cat; } | grep unmatched; echo BAD_AFTER_INTERRUPT",
+      );
+      await output(page, "PRODUCER_READY");
+      await output(page, "CONSUMER_READY");
+      await expect
+        .poll(() => page.workers().length)
+        .toBeGreaterThanOrEqual(baselineWorkers.get(page)! + 2);
+      await page.keyboard.press("Control+c");
+      await ready(page);
+      await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+      await command(page, "echo STATUS:$?:$KEEP");
+      await output(page, "STATUS:130:kept");
+    },
+    async () => {
+      const pageState = await page
+        .evaluate(() => ({
+          snapshot: window.bashWeb?.snapshot(),
+          runtime: window.bashWeb?.runtimeSnapshot(),
+          workers: window.pipelineWorkerDiagnostics,
+        }))
+        .catch((error: unknown) => ({ unavailable: String(error).slice(0, 512) }));
+      const workers = page.workers();
+      await info.attach("pipeline-failure-diagnostics", {
+        body: JSON.stringify({
+          baselineWorkers: baselineWorkers.get(page),
+          workerCount: workers.length,
+          workerUrls: Array.from({ length: Math.min(workers.length, 64) }, (_, index) =>
+            workers[index].url().slice(0, 512),
+          ),
+          page: pageState,
+        }),
+        contentType: "application/json",
+      });
+    },
   );
-  await output(page, "PRODUCER_READY");
-  await output(page, "CONSUMER_READY");
-  await expect
-    .poll(() => page.workers().length)
-    .toBeGreaterThanOrEqual(baselineWorkers.get(page)! + 2);
-  await page.keyboard.press("Control+c");
-  await ready(page);
-  await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
-  await command(page, "echo STATUS:$?:$KEEP");
-  await output(page, "STATUS:130:kept");
 });
 
 const statusCases = [

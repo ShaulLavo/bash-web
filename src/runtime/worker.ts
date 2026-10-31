@@ -7,6 +7,7 @@ import {
   preview1Executor,
   type WorkerExecutor,
   type RuntimeWorkerRequest,
+  type RuntimeWorkerMessage,
 } from "waffle/browser/worker";
 import { SharedBridge, control } from "../bridge";
 import { createExecutableQuery } from "./executable-query";
@@ -22,6 +23,9 @@ export interface ShellWorkerRequest extends RuntimeWorkerRequest {
   memoryUsage?: SharedArrayBuffer;
   shellOutput?: SharedArrayBuffer;
 }
+export type ShellWorkerMessage =
+  | RuntimeWorkerMessage
+  | { type: "interrupt-delegated"; generation: bigint };
 function wrapNamespace(namespace: WebAssembly.ModuleImports, before: () => void) {
   for (const [name, value] of Object.entries(namespace)) {
     if (typeof value !== "function") continue;
@@ -77,9 +81,21 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
             checkActive();
             return terminals?.columns() ?? shell.columns();
           },
-          phase(phase: number) {
+          rows() {
             checkActive();
-            shell.phase(phase);
+            return terminals?.rows() ?? shell.rows();
+          },
+          phase(phase: number, status: number) {
+            checkActive();
+            if (phase === -1) {
+              if (bridge && !bridge.closed())
+                globalThis.postMessage({
+                  type: "interrupt-delegated",
+                  generation: bridge.readPrompt()?.generation ?? 0n,
+                } satisfies ShellWorkerMessage);
+              return;
+            }
+            shell.phase(phase, status);
             terminals?.phase(phase);
           },
         },
@@ -110,10 +126,6 @@ export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<Shell
         instance.exports.memory instanceof WebAssembly.Memory ? instance.exports.memory : undefined;
       sampleMemory();
       terminals?.ready();
-      if (bridge && memory) {
-        Atomics.store(bridge.state, control.phase, 1);
-        bridge.signal();
-      }
     },
     beforeFinish() {
       sampleMemory();

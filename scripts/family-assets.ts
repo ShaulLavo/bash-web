@@ -11,6 +11,7 @@ const families = {
     "cut",
     "tr",
     "head",
+    "nl",
     "which",
     "ls",
     "mkdir",
@@ -36,6 +37,8 @@ const owners = new Map<string, string>();
 for (const [family, names] of Object.entries(families)) {
   for (const name of names) owners.set(name, `waffle-${family}`);
 }
+
+export const familyProgramNames = Array.from(owners.keys());
 
 export function familyWasmPath(name: string): string {
   const owner = owners.get(name);

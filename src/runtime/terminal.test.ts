@@ -38,7 +38,7 @@ test("shared terminal input and output stay bounded, wrap and preserve binary by
   bridge.drain(OUTPUT_CAPACITY);
   assert.equal(output.tryWrite!([binary]), binary.length);
   assert.deepEqual(bridge.drain(), binary);
-  assert.equal(bridge.buffer.byteLength, 64 + INPUT_CAPACITY + OUTPUT_CAPACITY);
+  assert.equal(bridge.buffer.byteLength, 72 + INPUT_CAPACITY + OUTPUT_CAPACITY);
 });
 
 test("cancelled terminal input drops queued bytes after a contended lock releases", () => {
@@ -156,17 +156,16 @@ test("shell metadata enumerates exact inherited fds rather than opening implicit
   );
 });
 
-test("only the interactive root owns shell phase and columns follow its live terminal", () => {
+test("only the interactive root owns shell phase and prompt status", () => {
   const bridge = new SharedBridge();
   const root = shellTerminalImports(bridge.buffer);
-  Atomics.store(bridge.state, control.cols, 103);
-  assert.equal(root.columns(), 103);
-  root.phase(2);
+  root.phase(2, 99);
+  assert.equal(Atomics.load(bridge.state, control.status), 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);
-  shellTerminalImports().phase(1);
+  shellTerminalImports().phase(1, 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);
   bridge.close();
-  root.phase(1);
+  root.phase(1, 0);
   assert.equal(Atomics.load(bridge.state, control.phase), 2);
 });
 

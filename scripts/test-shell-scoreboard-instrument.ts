@@ -13,8 +13,8 @@ import {
   oraclePath,
   runtimeReceiptPath,
   targetBranchBaseline,
-} from "./shell-scoreboard-base.mjs";
-import { sealOracle } from "./shell-scoreboard.mjs";
+} from "./shell-scoreboard-base.ts";
+import { sealOracle } from "./shell-scoreboard.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const target = authorizedInstrumentTransition.target;

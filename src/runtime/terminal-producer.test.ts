@@ -19,7 +19,6 @@ import {
 } from "waffle/proc/worker-client";
 import {
   createTerminalProducer,
-  terminalResult,
   type TerminalMetadata,
   type TerminalProducerTurn,
 } from "./terminal-producer";
@@ -210,30 +209,64 @@ test("producer acquisition rejects a child controller without publishing termina
   );
 });
 
-test("UI discard drains the shared cursor under a real raw lease without treating cancel as discard", async (context) => {
-  const { producer, stream, run } = fixture(context, undefined, "cooked");
-  const controls = terminalControls(stream)!;
-  assert.equal(producer.pushKeyboard(Uint8Array.of(65, 66, 10)).kind, "ok");
-  const byte = new Uint8Array(1);
-  assert.equal(stream.tryRead!([byte]), 1);
-  assert.equal(byte[0], 65);
-  await run((journal) =>
-    terminalResult(() => {
-      must(journal.raw());
-      assert.equal(journal.read([new Uint8Array(4096)]), 2);
-    }),
-  );
-  assert.equal(producer.available(), 0);
-  assert.equal(must(controls.snapshot()).mode, "raw");
-  producer.pushKeyboard(Uint8Array.of(67));
-  assert.equal(stream.tryRead!([byte]), 1);
-  assert.equal(byte[0], 67);
+for (const mode of ["raw", "cooked"] as const) {
+  test(`UI flush clears partial input without changing ${mode} mode or terminal ownership`, async (context) => {
+    const { producer, stream } = fixture(context, undefined, mode);
+    const controls = terminalControls(stream)!;
+    assert.equal(producer.pushKeyboard(Uint8Array.of(65, 66, 10, 88)).kind, "ok");
+    const byte = new Uint8Array(1);
+    assert.equal(stream.tryRead!([byte]), 1);
+    assert.equal(byte[0], 65);
+    const before = await producer.authority.control(() => ({ kind: "ok", value: undefined }));
+    assert.ok(before.receipt.state?.kind === "open");
+    assert.ok(before.receipt.state.selection);
+    const { group, lease, rootMember } = before.receipt.state.selection;
+    assert.ok(rootMember);
+    const flushed = await producer.flushInput();
+    must(flushed);
+    assert.equal(flushed.receipt.phase, "committed");
+    assert.ok(flushed.receipt.state?.kind === "open");
+    assert.deepEqual(flushed.receipt.state.snapshot, before.receipt.state.snapshot);
+    assert.equal(flushed.receipt.group(group), "active");
+    assert.equal(flushed.receipt.member(rootMember), "bound");
+    assert.equal(flushed.receipt.lease(lease), true);
+    assert.equal(producer.available(), 0);
+    assert.equal(stream.tryRead!([byte]), -6);
+    assert.equal(must(controls.snapshot()).mode, mode);
+    assert.equal(producer.pushKeyboard(Uint8Array.of(67, 10)).kind, "ok");
+    const next = new Uint8Array(2);
+    assert.equal(stream.tryRead!([next]), 2);
+    assert.deepEqual(next, Uint8Array.of(67, 10));
+    assert.equal(stream.tryRead!([byte]), -6);
+  });
+}
+
+test("an aborted UI flush preserves queued input and terminal ownership", async (context) => {
+  const { producer, stream } = fixture(context);
+  const before = await producer.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.ok(before.receipt.state?.kind === "open");
+  assert.ok(before.receipt.state.selection);
+  const lease = before.receipt.state.selection.lease;
+  const bytes = Uint8Array.of(65, 66);
+  assert.equal(producer.pushKeyboard(bytes).kind, "ok");
+  const abort = new AbortController();
+  abort.abort();
+  const flushed = await producer.flushInput(abort.signal);
+  assert.ok(flushed.kind === "error");
+  assert.equal(flushed.code, "CANCELED");
+  assert.equal(flushed.receipt.phase, "not-entered");
+  assert.equal(producer.available(), bytes.length);
+  const after = await producer.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.equal(after.receipt.lease(lease), true);
+  const actual = new Uint8Array(bytes.length);
+  assert.equal(stream.tryRead!([actual]), bytes.length);
+  assert.deepEqual(actual, bytes);
 });
 
 test("restoring an editor creates an actual raw group instead of restoring its saved cooked mode", async (context) => {
   const { producer, stream, run } = fixture(context, undefined, "cooked");
   const controls = terminalControls(stream)!;
-  await run((journal) => journal.restoreEditor());
+  await run((journal) => journal.restoreEditor("raw"));
   assert.equal(must(controls.snapshot()).mode, "raw");
   producer.pushKeyboard(Uint8Array.of(68));
   assert.equal(stream.tryRead!([new Uint8Array(1)]), 1);
@@ -250,7 +283,7 @@ for (const failure of ["quota", "cancel"] as const) {
     const result = await producer.authority.control(
       (turn) => {
         const journal = producer.begin(turn);
-        const restored = journal.restoreEditor();
+        const restored = journal.restoreEditor("raw");
         if (restored.kind === "error") return restored;
         provisional = journal.editor;
         assert.equal(producer.editor, editor, "working handles are not published early");

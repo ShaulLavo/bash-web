@@ -37,8 +37,8 @@ type Fixture = FuzzFixture<Case>;
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-functions-seed-1.json";
 const fixtureHashes: Record<string, string> = {
-  1: "30a63172f071c9ffc08348bf9c7e41fa59ee2c8a18245c91712298ef8434c7c0",
-  42: "5bf569081490a4d4833794a7a5302d078bb371768ecdc07c51ba8c42d1c4d24a",
+  1: "99868122df87bd81393604e86756aca10de4ec9bb8cad7ecf80a2ace856ae513",
+  42: "daad5040fdc79585f9997e40d8a3464bc7cf7c40fe14065320646305aa3f133b",
 };
 const observation = (patch = {}) => ({
   status: 0,
@@ -185,19 +185,19 @@ test("fixed matrix covers every scalar unit dimension without inert value paddin
 });
 
 test("all transitive process-runner sources participate in fixture identity", () => {
-  assert.deepEqual(sourceFiles, [
-    "fuzz-shell-functions.ts",
-    "fuzz-shell-control-flow.mjs",
+  const expected = ["fuzz-shell-functions.ts", "fuzz-shell-control-flow.ts"].concat([
     "fuzz-shell-results.ts",
-    "shell-process-group.mjs",
+    "shell-process-group.ts",
   ]);
-  for (const [name, hash] of Object.entries(sourceHashes()))
+  assert.deepEqual(sourceFiles, expected);
+  Object.entries(sourceHashes()).forEach(([name, hash]) => {
     assert.equal(
       hash,
       createHash("sha256")
         .update(readFileSync(new URL(name, import.meta.url)))
         .digest("hex"),
     );
+  });
   assert.equal(
     fingerprint(),
     createHash("sha256").update(JSON.stringify(sourceHashes())).digest("hex"),
@@ -237,8 +237,8 @@ test("fixture validation rejects every identity and unhealthy-observation mutati
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-functions.ts"] = "stale"),
-    (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
-    (f) => (f.sourceHashes["shell-process-group.mjs"] = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-control-flow.ts"] = "stale"),
+    (f) => (f.sourceHashes[sourceFiles[3]] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),
     (f) => (f.environment = { ...environment, locale: "C.UTF-8" }),

@@ -467,7 +467,11 @@ test("wc bounds memory on sustained input and stops on Ctrl+C", async ({ page },
   const before = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!);
   await command(page, "export KEEP=retained; while printf x; do :; done | wc; echo BAD_AFTER");
   await expect.poll(() => page.workers().length).toBe(baseline + 1);
-  await page.waitForTimeout(100);
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].guests[0]?.memoryBytes),
+    )
+    .toBeGreaterThan(0);
   const memory: number[] = [];
   for (let sample = 0; sample < 8; sample++) {
     const guests = await page.evaluate(() => window.bashWeb!.runtimeSnapshot()!.roots[0].guests);

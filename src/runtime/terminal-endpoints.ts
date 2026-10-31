@@ -76,8 +76,25 @@ export function createShellTerminals(
     pendingMode = undefined;
     if (root && phase === 1) root.acknowledgeInputDiscard();
   };
+  const resolve = (target: 0 | 1 | 2) => {
+    const endpoint = attachment.resolve(target);
+    if (!root || target !== 0) return endpoint;
+    const readiness = endpoint.readiness.bind(endpoint);
+    const tryRead = endpoint.tryRead!.bind(endpoint);
+    // A native poll/read can stay inside one host import across the flush.
+    // Prepare before its next terminal turn, never inside the policy callback.
+    endpoint.readiness = () => {
+      prepare();
+      return readiness();
+    };
+    endpoint.tryRead = (chunks) => {
+      prepare();
+      return tryRead(chunks);
+    };
+    return endpoint;
+  };
   return {
-    resolve: (target: 0 | 1 | 2) => attachment.resolve(target),
+    resolve,
     prepare,
     phase(phase: number) {
       if (phase === 1 || phase === 2) pendingMode = phase === 1 ? "raw" : "cooked";
@@ -92,6 +109,9 @@ export function createShellTerminals(
     dispose: () => attachment.dispose(),
     columns() {
       return Math.max(2, Atomics.load(display.state, control.cols));
+    },
+    rows() {
+      return Math.max(2, Atomics.load(display.state, control.rows));
     },
   };
 }

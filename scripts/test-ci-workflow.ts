@@ -159,13 +159,8 @@ test("each moved current-main gate has one owner", () => {
     prepare: ["sources:browser", "build:worker", "build:node-harness"],
     layers: ["test:check-layers", "check:layers", "typecheck:layers"],
     quality: ["quality:js", "test:ci", "test:guest-build", "typecheck:guest-build", "typecheck:ci"],
-    native: [
-      "check:rust",
-      "build:shell",
-      "build:test-guest",
-      "prepare:wasi-tests",
-      "check:capabilities",
-    ],
+    "native-checks": ["check:rust"],
+    native: ["build:shell", "build:test-guest", "prepare:wasi-tests", "check:capabilities"],
     wasi: ["test:shell:wasi"],
     browser: [
       "build:browser:assets:ci",
@@ -221,7 +216,7 @@ test("quality package recipes preserve complete current selections", () => {
   assert.equal(scripts["typecheck:browser"], scripts.typecheck);
   assert.equal(
     scripts["quality:js"],
-    "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run test:quality-gates && node --test scripts/test-family-routes.ts",
+    "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run check:javascript && npm run test:quality-gates && node --test scripts/test-family-routes.ts",
   );
   assert.equal(
     scripts["test:guest-build"],
@@ -230,7 +225,7 @@ test("quality package recipes preserve complete current selections", () => {
   assert.match(String(scripts["test:shell:scoreboard"]), /build:node-harness/);
   assert.match(
     expanded(String(scripts["test:shell:scoreboard"])),
-    /node scripts\/scoreboard-tests\.mjs/,
+    /node scripts\/scoreboard-tests\.ts/,
   );
   assert.doesNotMatch(expanded(String(scripts["test:shell:scoreboard"])), /scripts\/test-/);
 });
@@ -261,11 +256,8 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
     assert.equal(env[key], value);
   const run = commands(compat);
   assert.equal(env.BASH_COMPAT_BASE_REF, undefined);
-  assert.match(run, /node scripts\/scoreboard-ci\.mjs baseline BASH_COMPAT_BASE_REF/);
-  assert.match(
-    commands(jobs().layers),
-    /node scripts\/scoreboard-ci\.mjs baseline LAYERS_BASE_REF/,
-  );
+  assert.match(run, /node scripts\/scoreboard-ci\.ts baseline BASH_COMPAT_BASE_REF/);
+  assert.match(commands(jobs().layers), /node scripts\/scoreboard-ci\.ts baseline LAYERS_BASE_REF/);
   assert.doesNotMatch(
     readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
     /github\.event\.pull_request\.base\.sha/,
@@ -279,6 +271,18 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
     run,
     /fuzz:shell-echo:ci -- --waffle --shell "\$GITHUB_WORKSPACE\/\.build\/shell\/wasm32-wasip1\/release\/shell-runtime.wasm"/,
   );
+  assert.match(
+    run,
+    /node scripts\/diagnose-compat.ts "\$\{\{ runner.temp \}\}\/echo-diagnostics" -- timeout --signal=TERM --kill-after=5s 5m npm run fuzz:shell-echo:ci/,
+  );
+  assert.ok(Array.isArray(compat.steps));
+  const steps = compat.steps.map(object);
+  const echo = steps.find((step) => step.name === "Observe bounded Waffle echo cases");
+  assert.ok(echo);
+  assert.equal(object(echo.env).BASH_WEB_WAFFLE_TRACE, "1");
+  const upload = steps.find((step) => step.id === "current-upload");
+  assert.ok(upload);
+  assert.match(String(object(upload.with).path), /echo-diagnostics\//);
   const text = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
   assert.equal(text.match(/TMPDIR: \$\{\{ runner.temp \}\}/g)?.length, 2);
   const darwin = object(
@@ -305,33 +309,32 @@ function expanded(command: string, ancestors: readonly string[] = []): string {
 
 test("shell notices have exactly one native producer and a Cargo-free browser consumer", () => {
   const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
-    Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.mjs/g), () => owner),
+    Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.ts/g), () => owner),
   );
   assert.deepEqual(owners, ["native"]);
   const browser = expanded(commands(jobs().browser));
-  assert.equal(browser.match(/node scripts\/browser-notices\.mjs/g)?.length, 1);
+  assert.equal(browser.match(/node scripts\/browser-notices\.ts/g)?.length, 1);
   assert.match(browser, /node scripts\/ci-artifacts\.ts notices \.build\/ci-native/);
-  assert.doesNotMatch(browser, /\b(cargo|rustup)\b|scripts\/notices\.mjs/);
+  assert.doesNotMatch(browser, /\b(cargo|rustup)\b|scripts\/notices\.ts/);
   const native = expanded(commands(jobs().native));
   assert.ok(
-    native.indexOf("node scripts/notices.mjs") <
-      native.indexOf("node scripts/ci-artifacts.ts pack"),
+    native.indexOf("node scripts/notices.ts") < native.indexOf("node scripts/ci-artifacts.ts pack"),
   );
-  assert.match(expanded("npm run build:browser:assets"), /node scripts\/notices\.mjs/);
+  assert.match(expanded("npm run build:browser:assets"), /node scripts\/notices\.ts/);
   assert.equal(browser.match(/vite build/g)?.length, 1);
 });
 
 test("compatibility reuses the shared node build while standalone commands still build fresh", () => {
   const observation = expanded(commands(jobs()["own-shell-observation"]));
   assert.doesNotMatch(observation, /node scripts\/build-node-harness\.ts/);
-  assert.equal(observation.match(/node scripts\/bash-compat\.mjs/g)?.length, 1);
+  assert.equal(observation.match(/node scripts\/bash-compat\.ts/g)?.length, 1);
   const run = commands(jobs()["own-shell-observation"]);
   assert.ok(
     run.indexOf("npm run fuzz:shell-echo:ci") < run.indexOf("npm run compat:shell:prebuilt"),
   );
   assert.equal(
     expanded("npm run compat:shell"),
-    "node scripts/build-node-harness.ts && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs",
+    "node scripts/build-node-harness.ts && BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.ts",
   );
   for (const name of ["test:shell:scoreboard", "compat:shell"])
     assert.equal(
@@ -340,7 +343,7 @@ test("compatibility reuses the shared node build while standalone commands still
     );
   assert.equal(
     expanded("npm run test:shell:scoreboard:prebuilt"),
-    "node scripts/scoreboard-tests.mjs",
+    "node scripts/scoreboard-tests.ts",
   );
 });
 
@@ -412,9 +415,9 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
     commands(floor),
     /bash-compat\.mjs|compat:shell|build:|run.*status.*completed/,
   );
-  assert.match(commands(floor), /scoreboard-ci\.mjs fold/);
-  assert.match(commands(floor), /scoreboard-ci\.mjs enforce/);
-  const producer = readFileSync(new URL("./bash-compat.mjs", import.meta.url), "utf8");
+  assert.match(commands(floor), /scoreboard-ci\.ts fold/);
+  assert.match(commands(floor), /scoreboard-ci\.ts enforce/);
+  const producer = readFileSync(new URL("./bash-compat.ts", import.meta.url), "utf8");
   assert.match(producer, /BASH_COMPAT_RAW !== "1"/);
   assert.doesNotMatch(producer, /requireMembership: true/);
 });
@@ -496,7 +499,7 @@ test("npm prepare is the only worker build and Git consumes the family backend",
   const lifecycle = String(recipes().prepare);
   assert.equal(lifecycle, "npm run build:worker");
   const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
-    Array.from(expanded(commands(job)).matchAll(/node scripts\/build-worker\.mjs/g), () => owner),
+    Array.from(expanded(commands(job)).matchAll(/node scripts\/build-worker\.ts/g), () => owner),
   );
   assert.deepEqual(owners, ["prepare"]);
   const driver = readFileSync(new URL("./test-git-browser.ts", import.meta.url), "utf8");
@@ -533,10 +536,10 @@ test("scoreboard and observation run independently using one shared node build",
   assert.ok(prepare.indexOf("npm run build:node-harness") < prepare.indexOf("tar -czf"));
   assert.match(prepare, /tar -czf .* \.build\/node /);
   assert.equal(
-    expanded(commands(scoreboard)).match(/node scripts\/scoreboard-tests\.mjs/g)?.length,
+    expanded(commands(scoreboard)).match(/node scripts\/scoreboard-tests\.ts/g)?.length,
     1,
   );
-  assert.doesNotMatch(expanded(commands(observation)), /scoreboard-tests\.mjs/);
+  assert.doesNotMatch(expanded(commands(observation)), /scoreboard-tests\.ts/);
   assert.ok(Array.isArray(scoreboard.steps));
   for (const action of ["javascript", "native"])
     assert.equal(
@@ -570,8 +573,8 @@ test("scoreboard and observation run independently using one shared node build",
   );
   assert.match(String(object(upload.with).path), /\$\{\{ runner.temp \}\}\/scoreboard-input\.json/);
   const observe = commands(observation);
-  assert.ok(observe.indexOf("scoreboard-ci.mjs prepare") < observe.indexOf("diagnose-compat.ts"));
-  assert.doesNotMatch(commands(publisher), /scoreboard-ci\.mjs prepare/);
+  assert.ok(observe.indexOf("scoreboard-ci.ts prepare") < observe.indexOf("diagnose-compat.ts"));
+  assert.doesNotMatch(commands(publisher), /scoreboard-ci\.ts prepare/);
 });
 
 test("layer and split compatibility producers select immutable baselines after JavaScript restore", () => {
@@ -585,7 +588,7 @@ test("layer and split compatibility producers select immutable baselines after J
     {
       id: "own-shell-observation",
       variable: "BASH_COMPAT_BASE_REF",
-      consumer: "scoreboard-ci.mjs prepare",
+      consumer: "scoreboard-ci.ts prepare",
     },
   ]) {
     const job = object(jobs()[id]);
@@ -593,7 +596,7 @@ test("layer and split compatibility producers select immutable baselines after J
     assert.ok(Array.isArray(job.steps));
     const steps = job.steps.map(object);
     const restore = steps.findIndex((step) => step.uses === "./.github/actions/javascript");
-    const command = `node scripts/scoreboard-ci.mjs baseline ${variable}`;
+    const command = `node scripts/scoreboard-ci.ts baseline ${variable}`;
     const baseline = steps.findIndex((step) => step.run === command);
     assert.equal(steps.filter((step) => step.run === command).length, 1);
     assert.ok(restore >= 0 && restore < baseline, `${id} restores dependencies before selection`);

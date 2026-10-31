@@ -1,0 +1,53 @@
+{
+  "host": "pc",
+  "before": {
+    "worktree": "/work/worktrees/bash-web/terminal-a2-multiline",
+    "liveCwdProcesses": []
+  },
+  "removedTaskArtifactsBytes": {
+    ".build": 5275443093,
+    ".sources": 3795252,
+    "node_modules": 366884433,
+    "dist": 43115223,
+    "public/programs": 2890756,
+    "public/THIRD_PARTY_NOTICES.txt": 2150967,
+    "test-results": 45,
+    "playwright-report": 551187,
+    ".scratch": 0
+  },
+  "removedBytes": 5692996234,
+  "removedPaths": [
+    ".build",
+    ".sources",
+    "node_modules",
+    "dist",
+    "public/programs",
+    "public/THIRD_PARTY_NOTICES.txt",
+    "test-results",
+    "playwright-report",
+    ".scratch"
+  ],
+  "remaining": {
+    "authorCheckout": "Retained until the Terminal coordinator releases it.",
+    "evidence": ".internal/terminal-a2",
+    "trackedDistNotice": "Preserved"
+  },
+  "wasiLibcScratchRemoved": "/work/tmp/waffle-wasi-libc-P34hDY",
+  "sharedCaches": "Preserved Cargo, npm, uv and Playwright caches; no services, routes or remote host files created.",
+  "after": {
+    "worktree": "/work/worktrees/bash-web/terminal-a2-multiline",
+    "liveCwdProcesses": []
+  },
+  "remainingArtifactBytes": {
+    ".build": 0,
+    ".sources": 0,
+    "node_modules": 0,
+    "dist": 1834722,
+    "public/programs": 0,
+    "public/THIRD_PARTY_NOTICES.txt": 0,
+    "test-results": 0,
+    "playwright-report": 0,
+    ".scratch": 0
+  },
+  "testServerPort4243Closed": true
+}

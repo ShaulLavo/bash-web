@@ -8,7 +8,7 @@ browser package. Shell and frozen-corpus provenance below is retained unchanged.
 
 Brush is MIT licensed and retained as a pinned source submodule with its license. Ghostty WebGPU is MIT licensed; its source archive and included Ghostty WASM notices are pinned by revision and checksum. Remix 3 is MIT licensed. Comlink is Apache-2.0 licensed. browser_wasi_shim is MIT OR Apache-2.0 licensed. just-bash is Apache-2.0 licensed.
 
-`scripts/notices.mjs` copies the license and notice text from the exact Rust and npm dependencies and the terminal source into `public/THIRD_PARTY_NOTICES.txt`. The production build includes that generated file as `dist/THIRD_PARTY_NOTICES.txt`. Distribution must retain it.
+`scripts/notices.ts` copies the license and notice text from the exact Rust and npm dependencies and the terminal source into `public/THIRD_PARTY_NOTICES.txt`. The production build includes that generated file as `dist/THIRD_PARTY_NOTICES.txt`. Distribution must retain it.
 
 The source-built Bashkit Terminal is MIT licensed and pinned separately from the published npm package. Its build gathers license files from Cargo's actual compiler artifacts, including the vt100 and vte dependencies, and includes them in the generated distribution notices.
 
@@ -587,7 +587,7 @@ broker, subprocess transport, import-slot implementation, or runtime source is
 copied into this package to work around the missing external package surface.
 
 The small source-built guests under `tests/guest/` and their
-`scripts/build-test-guest.mjs` builder are original regression fixtures under the
+`scripts/build-test-guest.ts` builder are original regression fixtures under the
 root MIT license, not adapted Bun implementations. `test-guest` exercises generic
 cooperative process-ABI behavior; `test-spin` has no `runtime_proc` imports and
 exercises the runtime's actual source interruption admission. Generated test
@@ -687,7 +687,7 @@ TypeScript installers are original integration code. The `cut` entry sets the
 WASI working directory from `PWD` before calling upstream. No multicall
 executable, shell builtin, or replacement implementation is included.
 Cargo's workspace lock records exact source and dependency identities;
-`scripts/notices.mjs` includes the upstream root license and dependency notices.
+`scripts/notices.ts` includes the upstream root license and dependency notices.
 See [cut](docs/cut.md) for tested behavior and runtime limits.
 
 

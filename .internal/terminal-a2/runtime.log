@@ -1,0 +1,12 @@
+✔ runtime prompt brackets paste, holds multiline commands and disables mode for execution (39.192955ms)
+✔ runtime prompt rearms paste after cancellation and empty input, and disables it on exit (3.881828ms)
+✔ runtime disables bracketed paste on input EOF, including an unfinished paste (2.464699ms)
+✔ runtime accepts a capped paste ending at a UTF-8 boundary (171.917011ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 343.378883

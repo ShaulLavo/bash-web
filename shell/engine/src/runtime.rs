@@ -333,7 +333,7 @@ struct Child {
     job: Option<u32>,
     /// A member of the shell's own job: signalled by PID, never reaped as a job.
     joined: bool,
-    status: Cell<Option<Result<i32, i32>>>,
+    status: Cell<Option<Result<crate::process::ChildExit, i32>>>,
 }
 struct State {
     abi: Rc<dyn Abi>,
@@ -1163,7 +1163,10 @@ impl ProcessHost for Runtime {
         }
         .boxed_local()
     }
-    fn wait(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<i32, ProcessError>> {
+    fn wait(
+        &self,
+        pid: ProcessId,
+    ) -> LocalBoxFuture<'static, Result<crate::process::ChildExit, ProcessError>> {
         let child = self.0.children.borrow().get(&pid).cloned();
         let runtime = self.clone();
         async move {
@@ -1175,8 +1178,10 @@ impl ProcessHost for Runtime {
                 match runtime.0.abi.wait(pid as u32) {
                     Ok(result) => {
                         let status = match result {
-                            WaitResult::Exited(code) => Ok(code),
-                            WaitResult::Signaled(signal) => Ok(128 + signal),
+                            WaitResult::Exited(code) => Ok(crate::process::ChildExit::Exited(code)),
+                            WaitResult::Signaled(signal) => {
+                                Ok(crate::process::ChildExit::Signaled(signal))
+                            }
                             WaitResult::StartFailed(errno) => Err(errno),
                         };
                         child.status.set(Some(status));
@@ -1192,6 +1197,20 @@ impl ProcessHost for Runtime {
             }
         }
         .boxed_local()
+    }
+    fn signal_child(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
+        let child = self
+            .0
+            .children
+            .borrow()
+            .get(&pid)
+            .cloned()
+            .ok_or(ProcessError::UnknownProcess(pid))?;
+        let result = match child.job {
+            Some(job) => self.0.abi.kill_job(job, signal),
+            None => self.0.abi.kill(pid as u32, signal),
+        };
+        result.map_err(ProcessError::Runtime)
     }
     fn kill(&self, pid: ProcessId, signal: i32) -> Result<(), ProcessError> {
         if !self.0.children.borrow().contains_key(&pid) {

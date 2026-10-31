@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "sourceHash": "941103a8d73328a43dee7286e709fb42b446c4c6b45fa4d24b505684996d9703",
+  "sourceHash": "765e35891c079ab18bd71555695da62ec877af466137ea29fb7edc5775ac907f",
   "sourceHashes": {
-    "fuzz-shell-job-lifetime.mjs": "b613e29aa9ae6c70b8d42bfc7ae73aa5c4bcec8552af946af0cca01c893d7d64",
-    "fuzz-shell-control-flow.mjs": "5053098732f2336af6d683e6ed31a679d8d68ebcac844c3034283d21c087c1af",
-    "fuzz-shell-results.ts": "7c244b9267b9427c08c1cc7d1bcdc43525e7e14f85b92839ae33541c1ff03954",
-    "shell-process-group.mjs": "577f8be074a4ca5751b161d306445645a4dac9b4fa97ca73abf8195635e58205"
+    "fuzz-shell-job-lifetime.ts": "4d51dd9c164610c0e9da2af389650cab80959a2df493fed9b2997bca70c1d69a",
+    "fuzz-shell-control-flow.ts": "b271eeb55e5b916123db867147ba9c98f7f58381f66aeb0614e66780a0c1399b",
+    "fuzz-shell-results.ts": "eb8f78a6ec41a8fb6e357e75b895112098902f07971fd981bcbab2cbd0dac8cd",
+    "shell-process-group.ts": "4a0c9dd84c941d7edb99f9044397c7f204cae685240aca99d64ee307ee4249d5"
   },
   "seed": 42,
   "count": 96,

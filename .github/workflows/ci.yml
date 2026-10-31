@@ -4,6 +4,7 @@ on:
     branches:
       - main
   pull_request: null
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -55,7 +56,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select immutable layer baseline
-        run: node scripts/scoreboard-ci.mjs baseline LAYERS_BASE_REF
+        run: node scripts/scoreboard-ci.ts baseline LAYERS_BASE_REF
       - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
         env:
           LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
@@ -119,12 +120,6 @@ jobs:
         if: steps.machete.outputs.cache-hit != 'true'
         run: cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools -j2
       - uses: ./.github/actions/wasi-sdk
-      - name: Rust quality and native tests
-        run: |
-          ulimit -c 0
-          npm run check:rust
-          cargo fmt --manifest-path tests/guest/Cargo.toml --check
-          cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
       - name: Build shared WASI guests and test binaries
         run: |
           ulimit -c 0
@@ -156,6 +151,52 @@ jobs:
             .build/shell/cli-sha256.txt
             .build/shell/cli-source.txt
           retention-days: 3
+  # Downstream jobs need only native's builds, so its tests run beside them.
+  native-checks:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_TARGET_DIR: .build/shell
+      WASI_LIBC_JOBS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: ./.github/actions/javascript
+      - uses: actions/cache@v4
+        with:
+          path: ~/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu
+          key: rustup-${{ runner.os }}-${{ runner.arch }}-1.98.1-wasip1-rustfmt-clippy
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          targets: wasm32-wasip1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            shell -> ../.build/shell
+            tests/guest -> ../../.build/test-guest
+          cache-all-crates: true
+          cache-workspace-crates: true
+          cache-directories: .build/wasi-libc
+      - uses: actions/cache@v4
+        id: machete
+        with:
+          path: .build/quality-tools
+          key: cargo-machete-${{ runner.os }}-${{ runner.arch }}-0.9.2
+      - name: Install pinned Rust dependency checker
+        if: steps.machete.outputs.cache-hit != 'true'
+        run: cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools -j2
+      - uses: ./.github/actions/wasi-sdk
+      - name: Rust quality and native tests
+        run: |
+          ulimit -c 0
+          npm run check:rust
+          cargo fmt --manifest-path tests/guest/Cargo.toml --check
+          cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
+          npm run test:terminal:display
   wasi:
     needs:
       - prepare
@@ -217,6 +258,10 @@ jobs:
       - native
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       CARGO_TARGET_DIR: .build/shell
       BASH_COMPAT_MODE: frozen
@@ -233,7 +278,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select compatibility baseline
-        run: node scripts/scoreboard-ci.mjs baseline BASH_COMPAT_BASE_REF
+        run: node scripts/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - uses: actions/cache@v4
         with:
@@ -251,6 +296,8 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: npm run test:shell:scoreboard:prebuilt
+        env:
+          SCOREBOARD_TEST_SHARD: ${{ matrix.shard }}/3
   own-shell-observation:
     permissions:
       contents: read
@@ -278,16 +325,18 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select compatibility baseline
-        run: node scripts/scoreboard-ci.mjs baseline BASH_COMPAT_BASE_REF
+        run: node scripts/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - name: Bind qualification and resolve PR main floor
-        run: node scripts/scoreboard-ci.mjs prepare "${{ runner.temp }}/scoreboard-input.json"
+        run: node scripts/scoreboard-ci.ts prepare "${{ runner.temp }}/scoreboard-input.json"
         env:
           GH_TOKEN: ${{ github.token }}
       - run: node --test scripts/test-diagnose-compat.ts
-      - run: npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
+      - name: Observe bounded Waffle echo cases
+        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/echo-diagnostics" -- timeout --signal=TERM --kill-after=5s 5m npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}
+          BASH_WEB_WAFFLE_TRACE: "1"
       - name: Observe compatibility with the shared node build
         run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
@@ -302,6 +351,7 @@ jobs:
           path: |
             ${{ runner.temp }}/scoreboard-input.json
             ${{ runner.temp }}/own-shell-current.json
+            ${{ runner.temp }}/echo-diagnostics/
             ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
   own-shell-compatibility:
@@ -330,7 +380,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}
       - name: Seal complete raw score
-        run: node scripts/scoreboard-ci.mjs raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
+        run: node scripts/scoreboard-ci.ts raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
       - name: Upload complete raw score
         id: raw-upload
         uses: actions/upload-artifact@v4
@@ -362,7 +412,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/scoreboard-raw
       - name: Fold main floor and qualification
-        run: node scripts/scoreboard-ci.mjs fold "${{ runner.temp }}/scoreboard-raw/raw.json" "${{ runner.temp }}/scoreboard-floor"
+        run: node scripts/scoreboard-ci.ts fold "${{ runner.temp }}/scoreboard-raw/raw.json" "${{ runner.temp }}/scoreboard-floor"
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Upload cumulative main floor
@@ -381,13 +431,18 @@ jobs:
           retention-days: 90
           if-no-files-found: error
       - name: Enforce qualification
-        run: node scripts/scoreboard-ci.mjs enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
+        run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
+  # Playwright runs one worker per runner, so the suite is sharded across runners.
   browser:
     needs:
       - prepare
       - native
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -409,16 +464,18 @@ jobs:
           cat /etc/apt/apt-mirrors.txt
       - run: npx playwright install --with-deps chromium firefox
       - run: npm run test:git:browser
+        if: matrix.shard == 1
       - run: npm run build:browser:assets:ci
       - run: npm run prepare:python:browser
         env:
           BASH_WEB_PYTHON_SHELL_WASM: public/programs/shell-engine.wasm
       - run: npm run test:runtime:terminal
-      - run: npm run test:browser
+        if: matrix.shard == 1
+      - run: npm run test:browser -- --shard=${{ matrix.shard }}/3
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-failure-evidence
+          name: browser-failure-evidence-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
@@ -429,6 +486,7 @@ jobs:
       - layers
       - quality
       - native
+      - native-checks
       - wasi
       - fuzz
       - own-shell-scoreboard

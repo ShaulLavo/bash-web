@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
-import { createShellRunner } from "./bash-compat-runner.mjs";
+import { createShellRunner } from "./bash-compat-runner.ts";
 import { recordedBash } from "./recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 

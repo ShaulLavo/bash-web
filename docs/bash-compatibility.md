@@ -124,7 +124,7 @@ part of compatibility CI:
 ```sh
 # Requires bubblewrap, Python 3, GNU bash 5.3.15 and pinned corpus sources.
 # BASH_COMPAT_BRUSH_DIR and BASH_COMPAT_BASHKIT_DIR may select existing caches.
-BASH_COMPAT_MODE=capture BASH_COMPAT_BASH=/usr/bin/bash BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.mjs
+BASH_COMPAT_MODE=capture BASH_COMPAT_BASH=/usr/bin/bash BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.ts
 
 # After reviewing the oracle and pinning its SHA-256 in sources.lock.json:
 BASH_COMPAT_RECORD=1 BASH_COMPAT_OUT=docs/evidence/own-shell-baseline.json npm run compat:shell

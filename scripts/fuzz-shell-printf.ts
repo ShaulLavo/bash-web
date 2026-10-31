@@ -21,7 +21,7 @@ import {
   optionsFor as sharedOptionsFor,
   outputLimit,
   run,
-} from "./fuzz-shell-control-flow.mjs";
+} from "./fuzz-shell-control-flow.ts";
 
 export { healthy, matches, outputLimit, run };
 import {
@@ -301,9 +301,9 @@ const oracleVersion = /^GNU bash, version 5\.3\.15(?:\(|\s)/;
 const queue = "/work/platform-production/heavy/current/run.js";
 export const sourceFiles = [
   "fuzz-shell-printf.ts",
-  "fuzz-shell-control-flow.mjs",
+  "fuzz-shell-control-flow.ts",
   "fuzz-shell-results.ts",
-  "shell-process-group.mjs",
+  "shell-process-group.ts",
 ];
 export const sourceHashes = () =>
   Object.fromEntries(

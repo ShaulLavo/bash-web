@@ -22,14 +22,19 @@ function ownTerminal(owner: TestContext, transport: WorkerProcessTransport) {
   return producer;
 }
 
-test("shell terminal columns follow the live bridge and default to 80 for a child", () => {
+test("shell terminal geometry follows the live bridge and defaults to 80x24 for a child", () => {
   const bridge = new SharedBridge();
   const root = shellTerminalImports(bridge.buffer);
   Atomics.store(bridge.state, control.cols, 103);
+  Atomics.store(bridge.state, control.rows, 41);
   assert.equal(root.columns(), 103);
+  assert.equal(root.rows(), 41);
   Atomics.store(bridge.state, control.cols, 0);
+  Atomics.store(bridge.state, control.rows, 0);
   assert.equal(root.columns(), 2);
+  assert.equal(root.rows(), 2);
   assert.equal(shellTerminalImports().columns(), 80);
+  assert.equal(shellTerminalImports().rows(), 24);
 });
 
 test("shell metadata enumerates exact inherited bindings, including the maximum fd", () => {
@@ -270,4 +275,24 @@ test("production worker keeps terminal stdio for an empty root transport but not
       connection.server.port.close();
     }
   }
+});
+
+test("prompt publication stores shell status before ready and wakes repeated ready prompts", () => {
+  const bridge = new SharedBridge();
+  const root = shellTerminalImports(bridge.buffer);
+  root.phase(2, 0);
+  root.phase(1, 1);
+  assert.equal(Atomics.load(bridge.state, control.phase), 1);
+  assert.equal(Atomics.load(bridge.state, control.status), 1);
+  const wake = Atomics.load(bridge.state, control.wake);
+  root.phase(1, 130);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
+  assert.ok(Atomics.load(bridge.state, control.wake) > wake);
+  root.phase(2, 42);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
+  shellTerminalImports().phase(1, 7);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
+  bridge.close();
+  root.phase(1, 0);
+  assert.equal(Atomics.load(bridge.state, control.status), 130);
 });

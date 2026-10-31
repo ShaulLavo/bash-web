@@ -10,6 +10,7 @@ import {
   createTerminalInputPolicy,
   createTerminalSession,
   claimTerminalAuthority,
+  terminalControls,
   type TerminalMember,
 } from "waffle/browser/runtime-terminals";
 import { DescriptorTable } from "waffle/core/descriptors";
@@ -188,6 +189,10 @@ async function finishHolder(
 ) {
   Atomics.store(cells, 1, 1);
   Atomics.notify(cells, 1);
+  if (cells.length > 5) {
+    Atomics.store(cells, 5, 1);
+    Atomics.notify(cells, 5);
+  }
   await changed(cells, 3);
   await lifetime.quiesce();
   await worker.terminate();
@@ -504,13 +509,13 @@ test("a departed restore ancestor preserves a live outer group and its sibling",
   assert.equal(byte[0], 67);
 });
 
-test("a PROCESS_GONE control failure outside ancestor selection still fails a live root", async (context) => {
+test("a PROCESS_GONE flush failure still fails a live root", async (context) => {
   await liveControlFailure(context, new TerminalOperationError("PROCESS_GONE"));
 });
 
 async function liveControlFailure(context: TestContext, failure: Error) {
   const f = await fixture(context, { expectedFailures: [failure] });
-  context.mock.method(f.authority, "control", async () => {
+  context.mock.method(f.authority, "flushInput", async () => {
     throw failure;
   });
   f.bridge.interrupt();
@@ -529,34 +534,62 @@ async function barrier(bridge: SharedBridge) {
   }
 }
 
+test("page discard preserves the active foreground selection", async (context) => {
+  const f = await foregroundFixture(context);
+  await f.flush();
+  const baseline = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.ok(baseline.receipt.state?.kind === "open");
+  const selection = baseline.receipt.state.snapshot.selection;
+  assert.notEqual(selection, null);
+  const runControl = f.authority.control.bind(f.authority);
+  const selections: (typeof selection | undefined)[] = [];
+  context.mock.method(f.authority, "control", async (...args: Parameters<typeof runControl>) => {
+    const result = await runControl(...args);
+    const state = result.receipt.state;
+    selections.push(state?.kind === "open" ? state.snapshot.selection : undefined);
+    return result;
+  });
+  await f.flush();
+  assert.ok(selections.length > 0);
+  assert.ok(
+    selections.every((value) => value === selection),
+    "ordinary controls preserve selection",
+  );
+  selections.length = 0;
+  f.bridge.interrupt();
+  assert.equal(f.bridge.discardInput(), false);
+  await f.flush();
+  assert.ok(selections.length > 0);
+  assert.ok(
+    selections.every((value) => value === selection),
+    `discard displaced the active foreground selection: before=${selection}, during=${selections}`,
+  );
+});
+
 for (const during of ["new foreground", "second interrupt"] as const) {
-  test(`discard preserves completed drain and reset while handling ${during}`, async (context) => {
+  test(`discard preserves flushed input and acknowledgement while handling ${during}`, async (context) => {
     const f = await fixture(context);
-    const rootTerminal = createShellTerminals(
-      { runtimeProcess: f.root },
-      f.bridge.buffer,
-      createTerminalAdmission(),
-      f.bridge,
-      () => {},
-    );
-    assert.ok(rootTerminal);
-    context.after(() => rootTerminal.dispose());
+    const rootTerminal = attachRootTerminal(context, f);
     Atomics.store(f.bridge.state, control.phase, 1);
     assert.equal(f.bridge.send(new Uint8Array(8192).fill(65)), 8192);
-    const controlTurn = f.authority.control.bind(f.authority);
-    let setup = true;
+    const flushInput = f.authority.flushInput.bind(f.authority);
+    let first = true;
     let child: ReturnType<typeof f.reserve> | undefined;
-    context.mock.method(f.authority, "control", async (...args: Parameters<typeof controlTurn>) => {
-      const result = await controlTurn(...args);
-      if (!setup) return result;
-      setup = false;
-      if (during === "second interrupt") f.bridge.interrupt();
-      else {
-        child = f.reserve();
-        await f.start(child);
-      }
-      return result;
-    });
+    context.mock.method(
+      f.authority,
+      "flushInput",
+      async (...args: Parameters<typeof flushInput>) => {
+        const result = await flushInput(...args);
+        if (!first) return result;
+        first = false;
+        if (during === "second interrupt") f.bridge.interrupt();
+        else {
+          child = f.reserve();
+          await f.start(child);
+        }
+        return result;
+      },
+    );
     f.bridge.interrupt();
     assert.equal(f.bridge.discardInput(), false);
     await barrier(f.bridge);
@@ -580,6 +613,35 @@ for (const during of ["new foreground", "second interrupt"] as const) {
   });
 }
 
+test("discard preserves bytes accepted after the committed flush without replay", async (context) => {
+  const f = await foregroundFixture(context);
+  const childTerminal = attachChildTerminal(context, f, f.child.transport);
+  assert.equal(f.bridge.send(Uint8Array.of(65)), 1);
+  const flushInput = f.authority.flushInput.bind(f.authority);
+  const flushed = context.mock.method(
+    f.authority,
+    "flushInput",
+    async (...args: Parameters<typeof flushInput>) => {
+      const result = await flushInput(...args);
+      assert.equal(result.receipt.phase, "committed");
+      assert.equal(f.input.push(Uint8Array.of(66)), 1);
+      return result;
+    },
+  );
+  f.bridge.interrupt();
+  assert.equal(f.bridge.discardInput(), false);
+  await barrier(f.bridge);
+  await f.flush();
+  assert.equal(flushed.mock.calls.length, 1);
+  assert.equal(f.input.available(), 1);
+  f.controller.interruptDelegated(1n);
+  await f.flush();
+  const byte = new Uint8Array(1);
+  assert.equal(childTerminal.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], 66);
+  assertInput(f, childTerminal, 67);
+});
+
 test("input observation resumes after an empty foreign Session releases only the input lock", async (context) => {
   const f = await fixture(context);
   const process = createWorkerProcessTransport();
@@ -598,12 +660,18 @@ test("input observation resumes after an empty foreign Session releases only the
     process,
     terminals: [{ identity: display.identity, inputs: [f.input] }],
   });
-  const flag = new SharedArrayBuffer(16);
+  const flag = new SharedArrayBuffer(24);
   const cells = new Int32Array(flag);
   const worker = new Worker(
     new URL("../../tests/helpers/terminal-input-holder.ts", import.meta.url),
     {
-      workerData: { process, context: member.context, input: f.input.buffer, flag },
+      workerData: {
+        process,
+        context: member.context,
+        input: f.input.buffer,
+        flag,
+        pauseAfterUnlock: true,
+      },
       execArgv: [],
     },
   );
@@ -631,6 +699,15 @@ test("input observation resumes after an empty foreign Session releases only the
   Atomics.store(cells, 1, 1);
   Atomics.notify(cells, 1);
   terminalValue(await waiting);
+  await changed(cells, 4);
+  assert.equal(
+    Atomics.load(f.input.notification, 0),
+    sequence,
+    "lock observation resumes before the holder publishes its data wake",
+  );
+  Atomics.store(cells, 5, 1);
+  Atomics.notify(cells, 5);
+  await changed(cells, 3);
   assert.ok(
     Atomics.load(f.input.notification, 0) > sequence,
     "contended unlock publishes a wake without adding input data",
@@ -671,7 +748,7 @@ test("an exit arriving during retirement is joined and cleaned without repeating
   assert.deepEqual(new Set(f.launched), new Set([first.pid, second.pid]));
 });
 
-test("exit after committed editor retirement reconciles the removed member without double cleanup", async (context) => {
+test("discard preserves editor membership until exactly one ordinary exit cleanup", async (context) => {
   const f = await fixture(context);
   const child = f.reserve(workerProcessState(f.root).job);
   let member: TerminalMember | undefined;
@@ -683,22 +760,19 @@ test("exit after committed editor retirement reconciles the removed member witho
   });
   await f.start(child);
   assert.ok(member);
-  const root = createShellTerminals(
-    { runtimeProcess: f.root },
-    f.bridge.buffer,
-    createTerminalAdmission(),
-    f.bridge,
-    () => {},
-  );
-  assert.ok(root);
-  context.after(() => root.dispose());
+  const root = attachRootTerminal(context, f);
   Atomics.store(f.bridge.state, control.phase, 1);
+  const before = await f.authority.control(() => ({ kind: "ok", value: undefined }));
+  assert.ok(before.receipt.state?.kind === "open");
+  assert.ok(before.receipt.state.selection);
+  const lease = before.receipt.state.selection.lease;
   f.bridge.interrupt();
   f.bridge.discardInput();
   await barrier(f.bridge);
   root.resolve(0).readiness();
   const receipt = await f.authority.control(() => ({ kind: "ok", value: undefined }));
-  assert.ok(["removed", "stale"].includes(receipt.receipt.member(member)));
+  assert.equal(receipt.receipt.member(member), "bound");
+  assert.equal(receipt.receipt.lease(lease), true);
   let removals = 0;
   const remove = f.authority.removeMember.bind(f.authority);
   context.mock.method(f.authority, "removeMember", (...args: Parameters<typeof remove>) => {
@@ -708,12 +782,16 @@ test("exit after committed editor retirement reconciles the removed member witho
   f.supervisor.exit(child.pid, 0);
   await f.supervisor.waitForExit(f.root.pid, child.pid);
   await f.flush();
-  assert.equal(removals, 0, "a committed retired group already removed this membership");
+  assert.equal(removals, 1, "discard leaves membership for ordinary exit cleanup");
   assert.equal(f.bridge.send(Uint8Array.of(65)), 1);
   assert.equal(root.resolve(0).tryRead!([new Uint8Array(1)]), 1);
 });
 
-function holdControl(context: TestContext, authority: RootDescendantPreparation["terminal"]) {
+function holdControl(
+  context: TestContext,
+  authority: RootDescendantPreparation["terminal"],
+  operation: "control" | "flushInput" = "control",
+) {
   let reached!: () => void;
   let release!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -722,12 +800,21 @@ function holdControl(context: TestContext, authority: RootDescendantPreparation[
   const blocked = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const run = authority.control.bind(authority);
-  context.mock.method(authority, "control", async (...args: Parameters<typeof run>) => {
-    reached();
-    await blocked;
-    return run(...args);
-  });
+  if (operation === "control") {
+    const run = authority.control.bind(authority);
+    context.mock.method(authority, "control", async (...args: Parameters<typeof run>) => {
+      reached();
+      await blocked;
+      return run(...args);
+    });
+  } else {
+    const flushInput = authority.flushInput.bind(authority);
+    context.mock.method(authority, "flushInput", async (...args: Parameters<typeof flushInput>) => {
+      reached();
+      await blocked;
+      return flushInput(...args);
+    });
+  }
   return { started, release };
 }
 
@@ -736,7 +823,11 @@ for (const operation of ["cleanup", "discard"] as const) {
     const f = await fixture(context);
     const child = f.reserve();
     await f.start(child);
-    const held = holdControl(context, f.authority);
+    const held = holdControl(
+      context,
+      f.authority,
+      operation === "cleanup" ? "control" : "flushInput",
+    );
     if (operation === "cleanup") f.supervisor.exit(child.pid, 0);
     else {
       f.bridge.interrupt();
@@ -764,7 +855,7 @@ test("an unexpected task failure while the root is live still reaches the root f
 
 test("runtime disposal before task completion is shutdown rather than a new root failure", async (context) => {
   const f = await fixture(context);
-  const held = holdControl(context, f.authority);
+  const held = holdControl(context, f.authority, "flushInput");
   f.bridge.interrupt();
   f.bridge.discardInput();
   await held.started;
@@ -774,3 +865,204 @@ test("runtime disposal before task completion is shutdown rather than a new root
   assert.equal(readOutcome(workerProcessState(f.root).signals.outcome), null);
   assert.deepEqual(f.failures, []);
 });
+
+async function foregroundFixture(context: TestContext) {
+  const f = await fixture(context);
+  f.bridge.publishPrompt(0);
+  const child = f.reserve();
+  await f.start(child);
+  return Object.assign(f, { child });
+}
+
+function attachRootTerminal(context: TestContext, f: Awaited<ReturnType<typeof fixture>>) {
+  const terminal = createShellTerminals(
+    { runtimeProcess: f.root },
+    f.bridge.buffer,
+    createTerminalAdmission(),
+    f.bridge,
+    () => {},
+  );
+  assert.ok(terminal);
+  context.after(() => terminal.dispose());
+  return terminal;
+}
+
+function attachChildTerminal(
+  context: TestContext,
+  f: Awaited<ReturnType<typeof fixture>>,
+  transport: WorkerProcessTransport,
+) {
+  const terminal = createShellTerminals(
+    { runtimeProcess: transport },
+    f.bridge.buffer,
+    createTerminalAdmission(),
+    undefined,
+    () => {},
+  );
+  assert.ok(terminal);
+  context.after(() => terminal.dispose());
+  terminal.ready();
+  return terminal;
+}
+
+function assertInput(
+  f: Awaited<ReturnType<typeof fixture>>,
+  terminal: Pick<typeof f.attachment, "resolve">,
+  expected = 120,
+) {
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
+  assert.equal(f.bridge.send(Uint8Array.of(expected)), 1);
+  const byte = new Uint8Array(1);
+  assert.equal(terminal.resolve(0).tryRead!([byte]), 1);
+  assert.equal(byte[0], expected);
+}
+
+test("stale delegated acknowledgement does not change the current interrupt barrier", async (context) => {
+  const f = await fixture(context);
+  f.bridge.publishPrompt(0);
+  Atomics.store(f.bridge.state, control.cancel, 1);
+  const transfer = context.mock.method(
+    f.authority,
+    "transfer",
+    f.authority.transfer.bind(f.authority),
+  );
+  f.controller.interruptDelegated(0n);
+  await f.flush();
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
+  assert.equal(transfer.mock.calls.length, 0);
+  f.bridge.acknowledgeInputDiscard();
+});
+
+test("delegated acknowledgement waits for discard and clears only the completed barrier", async (context) => {
+  const f = await foregroundFixture(context);
+  const { child } = f;
+  const childTerminal = attachChildTerminal(context, f, child.transport);
+  const states: number[] = [];
+  const acknowledge = f.bridge.acknowledgeInputDiscard.bind(f.bridge);
+  context.mock.method(f.bridge, "acknowledgeInputDiscard", () => {
+    states.push(Atomics.load(f.bridge.state, control.cancel));
+    acknowledge();
+  });
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  f.controller.interruptDelegated(1n);
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 2);
+  await barrier(f.bridge);
+  await f.flush();
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 0);
+  assert.ok(states.includes(1));
+  assert.ok(!states.includes(2));
+  assertInput(f, childTerminal);
+});
+
+test("delegated acknowledgement after target exit preserves the editor", async (context) => {
+  const f = await foregroundFixture(context);
+  const { child } = f;
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await barrier(f.bridge);
+  await exitChild(f, child);
+  f.controller.interruptDelegated(1n);
+  await f.flush();
+  assertInput(f, f.attachment, 121);
+});
+
+for (const timing of ["queued", "cleaned", "during-select"] as const) {
+  test(`delegated acknowledgement restores a surviving pipeline reader: ${timing}`, async (context) => {
+    const f = await fixture(context);
+    f.bridge.publishPrompt(0);
+    Atomics.store(f.bridge.state, control.phase, 2);
+    const { first, second } = await startPair(f);
+    const childTerminal = attachChildTerminal(context, f, second.transport);
+    f.bridge.interrupt();
+    f.bridge.discardInput();
+    await barrier(f.bridge);
+    await f.flush();
+    let interruptedTransfer = false;
+    if (timing === "during-select") {
+      // A real nested foreground keeps the acknowledgement's selection race reachable.
+      await f.start(f.reserve(0, first.transport));
+      const transfer = f.authority.transfer.bind(f.authority);
+      context.mock.method(f.authority, "transfer", (options: Parameters<typeof transfer>[0]) => {
+        if (!interruptedTransfer) f.supervisor.exit(first.pid, 0);
+        interruptedTransfer = true;
+        return transfer(options);
+      });
+    }
+    if (timing !== "cleaned") f.controller.interruptDelegated(1n);
+    if (timing !== "during-select") f.supervisor.exit(first.pid, 0);
+    await f.supervisor.waitForExit(f.root.pid, first.pid);
+    await f.flush();
+    if (timing === "cleaned") f.controller.interruptDelegated(1n);
+    await f.flush();
+    if (timing === "during-select") assert.equal(interruptedTransfer, true);
+    assertInput(f, childTerminal);
+  });
+}
+
+test("queued stale acknowledgement cannot clear the next generation interrupt", async (context) => {
+  const f = await foregroundFixture(context);
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await barrier(f.bridge);
+  await f.flush();
+  f.controller.interruptDelegated(1n);
+  f.bridge.publishPrompt(7);
+  f.bridge.interrupt();
+  f.bridge.discardInput();
+  await barrier(f.bridge);
+  await f.flush();
+  assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
+  f.bridge.acknowledgeInputDiscard();
+});
+
+for (const operation of ["readiness", "tryRead", "prepare"] as const) {
+  test(`a root prompt parked behind discard resumes through ${operation}`, async (context) => {
+    const f = await fixture(context);
+    const root = attachRootTerminal(context, f);
+    f.bridge.publishPrompt(0);
+    root.ready();
+    Atomics.store(f.bridge.state, control.phase, 2);
+    root.phase(2);
+    const input = root.resolve(0);
+    const controls = terminalControls(input)!;
+    assert.equal(terminalValue(controls.snapshot()).mode, "cooked");
+    assert.equal(f.bridge.send(Uint8Array.of(65, 13)), 2);
+    f.bridge.interrupt();
+    assert.equal(f.bridge.discardInput(), false);
+    f.bridge.publishPrompt(130);
+    root.phase(1);
+    assert.equal(Atomics.load(f.bridge.state, control.cancel), 2);
+    assert.equal(input.readiness().readable, false);
+    const waiting = Atomics.load(f.bridge.state, control.wake);
+    await barrier(f.bridge);
+    assert.equal(Atomics.load(f.bridge.state, control.cancel), 1);
+    assert.ok(
+      Atomics.load(f.bridge.state, control.wake) > waiting,
+      "the completed flush woke the root",
+    );
+    root.resolve(1).readiness();
+    root.resolve(2).readiness();
+    assert.equal(
+      Atomics.load(f.bridge.state, control.cancel),
+      1,
+      "output polling does not prepare root input",
+    );
+    assert.equal(terminalValue(controls.snapshot()).mode, "cooked");
+    if (operation === "prepare") root.prepare();
+    if (operation === "tryRead") assert.equal(input.tryRead!([new Uint8Array(1)]), -6);
+    if (operation !== "tryRead") assert.equal(input.readiness().readable, false);
+    assert.equal(
+      Atomics.load(f.bridge.state, control.cancel),
+      0,
+      "root polling acknowledges the flushed prompt",
+    );
+    assert.equal(terminalValue(controls.snapshot()).mode, "raw");
+    assert.equal(f.input.available(), 0);
+    assert.equal(f.bridge.readPrompt()?.status, 130);
+    assert.equal(f.bridge.send(Uint8Array.of(66)), 1);
+    const byte = new Uint8Array(1);
+    assert.equal(input.tryRead!([byte]), 1);
+    assert.equal(byte[0], 66);
+  });
+}

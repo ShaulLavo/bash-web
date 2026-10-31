@@ -60,8 +60,8 @@ type Fixture = FuzzFixture<Case>;
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const fixturePath = "shell-path-seed-1.json";
 const fixtureHashes: Record<string, string> = {
-  "shell-path-seed-1.json": "f127475dc2b5551cce44f423b5fa3d3348b2bb4d2e50767bd39708e8a2d2f72e",
-  "shell-path-seed-42.json": "fa30d34c6360015885b1fc54da7ac25667d95bd553797d00e93bef7a5b157461",
+  "shell-path-seed-1.json": "2bda03e4886d8952ad5ce875fd1d7bd765f761e65cf57a4064e9933948c90d14",
+  "shell-path-seed-42.json": "b7c8cae2d78ec1dfbadc74eb85338d907fd2dd5232f10cc6d77d238256df127e",
 };
 // Frozen before the manifest validator changed any harness source identity.
 // These independently pin every case and Bash observation, excluding metadata.
@@ -415,12 +415,12 @@ test("manifest schema and limits reject the whole input before filesystem mutati
 });
 
 test("all transitive harness sources are pinned and raw bytes/status stay strict", () => {
-  assert.deepEqual(sourceFiles, [
-    "fuzz-shell-path.ts",
-    "fuzz-shell-control-flow.mjs",
+  const expected = ["fuzz-shell-path.ts"].concat([
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
-    "shell-process-group.mjs",
+    "shell-process-group.ts",
   ]);
+  assert.deepEqual(sourceFiles, expected);
   for (const [name, hash] of Object.entries(sourceHashes()))
     assert.equal(
       hash,
@@ -464,8 +464,8 @@ test("fixture identity rejects schema, grammar, oracle, environment, subset and 
     (f) => f.schema++,
     (f) => (f.sourceHash = "stale"),
     (f) => (f.sourceHashes["fuzz-shell-path.ts"] = "stale"),
-    (f) => (f.sourceHashes["fuzz-shell-control-flow.mjs"] = "stale"),
-    (f) => (f.sourceHashes["shell-process-group.mjs"] = "stale"),
+    (f) => (f.sourceHashes["fuzz-shell-control-flow.ts"] = "stale"),
+    (f) => (f.sourceHashes["shell-process-group.ts"] = "stale"),
     (f) => (f.bash = "GNU bash, version 5.2.0"),
     (f) => (f.oraclePath = "/bin/bash"),
     (f) => (f.environment = { ...environment, filesystem: { schema: 1, nodes: [] } }),

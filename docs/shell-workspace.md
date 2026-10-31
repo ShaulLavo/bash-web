@@ -22,7 +22,7 @@ The parser starts from `everruns/bashkit`, revision
 parser and may change freely. Its MIT license is retained at `shell/parser/LICENSE` (repository-root paths).
 The `shellParser` entry in `../sources.lock.json` records that base revision,
 local changes and reasons, and the license checksum.
-`node scripts/check-shell-parser.mjs` verifies that provenance record and license,
+`node scripts/check-shell-parser.ts` verifies that provenance record and license,
 not source byte identity. Keep upstream parser tests running; remove one only for
 a deliberate behavior change recorded with a reason in `removedUpstreamTests`.
 Rustfmt skips the imported module to avoid unrelated formatting changes.

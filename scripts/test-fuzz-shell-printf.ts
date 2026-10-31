@@ -171,9 +171,9 @@ test("every transitive raw runner source participates in fixture identity", () =
   const hashes = sourceHashes();
   assert.deepEqual(sourceFiles, [
     "fuzz-shell-printf.ts",
-    "fuzz-shell-control-flow.mjs",
+    "fuzz-shell-control-flow.ts",
     "fuzz-shell-results.ts",
-    "shell-process-group.mjs",
+    "shell-process-group.ts",
   ]);
   assert.deepEqual(Object.keys(hashes), sourceFiles);
   for (const name of sourceFiles)
@@ -224,10 +224,10 @@ test("fixture validation rejects identity, grammar, encoding and process mutatio
       f.sourceHash = "changed";
     },
     (f: Fixture) => {
-      f.sourceHashes["fuzz-shell-control-flow.mjs"] = "changed";
+      f.sourceHashes["fuzz-shell-control-flow.ts"] = "changed";
     },
     (f: Fixture) => {
-      f.sourceHashes["shell-process-group.mjs"] = "changed";
+      f.sourceHashes["shell-process-group.ts"] = "changed";
     },
     (f: Fixture) => {
       f.bash = "GNU bash, version 5.2.0";
@@ -387,8 +387,8 @@ for (const seed of [1, 42])
     assert.equal(
       hash(bytes),
       seed === 1
-        ? "b68a255fd1c48247c198221167a032d8d970ee7f6d028f03d08ca18df1113d34"
-        : "a4184f7afa4bc94ea36e2663cf762492d996b6b935c057e2822b92daf169b77c",
+        ? "c9fdeed8a4fce0197aa6aaa24e0f968ee090107b12c8cc988e73cdb58670df4f"
+        : "3518e90017930aaca63ff2d739fff0fd68656ce3aad8a6008c485ea8ff81ca55",
     );
     const fixture: Fixture = JSON.parse(bytes.toString("utf8"));
     const cases = validateFixture(url.pathname, fixture, {

@@ -27,6 +27,6 @@ Commands already parsed on the same line do not see the change. Functions keep
 the aliases expanded when their definitions were read. `eval` starts a new reader
 with current aliases and follows the same read-unit rules.
 
-`scripts/test-own-shell-aliases.mjs` replays recorded Bash 5.3.15 results through
+`scripts/test-own-shell-aliases.ts` replays recorded Bash 5.3.15 results through
 the real Waffle runtime. Native tests cover token recursion, source offsets,
 atomic admission, and retained-version release.

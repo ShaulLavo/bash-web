@@ -2,7 +2,8 @@
 // exact Runtime, not a shell-specific runtime interface or a second service owner.
 import type { Runtime } from "waffle";
 import type { StartupObserver } from "./runtime/startup-diagnostics";
-import { SharedBridge } from "./bridge";
+import { SharedBridge, type ShellPrompt } from "./bridge";
+import { waitForPrompt, type PromptWaitOptions } from "./shell-prompt";
 import { runtimeSnapshot } from "./runtime/diagnostics";
 import { startShell } from "./runtime/shell-host";
 
@@ -31,6 +32,8 @@ export interface ShellOptions {
   signal?: AbortSignal;
   cwd?: string;
   env?: Record<string, string>;
+  /** Editing only. Bash commands and the default Bash editing mode stay unchanged. */
+  lineEditor?: { mode: "bash" | "zsh" };
   /** Omit for the persistent interactive editor. */
   script?: string;
 }
@@ -38,6 +41,7 @@ export interface Shell {
   readonly terminal: SharedBridge;
   readonly process: RuntimeProcess;
   readonly done: Promise<RuntimeExit>;
+  waitForPrompt(options?: PromptWaitOptions): Promise<ShellPrompt>;
   interrupt(): void;
   dispose(): Promise<void>;
   diagnostics(): ReturnType<typeof runtimeSnapshot>;
@@ -45,13 +49,27 @@ export interface Shell {
 export async function createShell(options: ShellOptions): Promise<Shell> {
   const terminal = options.terminal ?? new SharedBridge();
   const process = await startShell(options, terminal);
+  const lifetime = new AbortController();
+  const stopWaiting = () => lifetime.abort(new Error("Shell closed before the next prompt"));
+  void process.done.then(stopWaiting, stopWaiting);
   return {
     terminal,
     process,
     done: process.done,
+    waitForPrompt: ({ signal, after }: PromptWaitOptions = {}) =>
+      waitForPrompt(terminal, {
+        after,
+        signal: signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal,
+      }),
     // The shell handles SIGINT and forwards only its foreground job.
     interrupt: () => process.signal(2),
-    dispose: () => process.dispose(),
+    dispose: () => {
+      stopWaiting();
+      return process.dispose();
+    },
     diagnostics: () => runtimeSnapshot(options.runtime),
   };
 }
+
+export type { ShellPrompt } from "./bridge";
+export type { PromptWaitOptions } from "./shell-prompt";
