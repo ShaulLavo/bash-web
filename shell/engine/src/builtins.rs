@@ -7,6 +7,7 @@ mod directories;
 mod enable;
 mod getopts;
 mod help;
+mod mapfile;
 mod printf;
 mod read;
 pub(crate) mod test;
@@ -191,6 +192,11 @@ pub(crate) async fn run(
             return output_outcome(printf::run(args, state, fds, context, work).await);
         }
         Builtin::Read => return read::run(args, state, fds, context, work).await,
+        Builtin::Mapfile => {
+            return mapfile::run((name, args), state, fds, context, work)
+                .await
+                .map(Outcome::status);
+        }
         Builtin::Declaration => {
             return declarations(name, args, state, fds, context, work).await;
         }

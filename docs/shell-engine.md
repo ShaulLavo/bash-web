@@ -289,8 +289,8 @@ Bashkit sources recorded separately in `sources.lock.json` and
 `THIRD_PARTY_NOTICES.md`. Protection is structural, with cooperative work and
 explicit intermediate/aggregate limits instead of sentinel strings or truncation.
 The parser starts from Bashkit at the recorded base revision and is maintained
-freely with local changes recorded in the source pin. No known Bashkit buffering or
-`mapfile` implementation is ported.
+freely with local changes recorded in the source pin. No known Bashkit buffering or `mapfile` implementation is ported; the shell
+implements streaming `mapfile` and `readarray` as original state producers.
 
 ## Verification
 

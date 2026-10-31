@@ -83,6 +83,7 @@ fn builtin_topic(builtin: Builtin, name: &str) -> (&'static str, &'static str) {
             "Format and write arguments or assign the result to a variable.",
         ),
         Builtin::Read => (" [options] [name ...]", "Read input into shell variables."),
+        Builtin::Mapfile => (" [options] [array]", "Read records into an indexed array."),
         Builtin::Getopts => (" optstring name [arg ...]", "Parse option arguments."),
         Builtin::Caller => (" [index]", "Display a shell function call frame."),
         Builtin::Trap => (

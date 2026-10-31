@@ -2506,6 +2506,33 @@
       "byte-identical GNU Bash --help prose"
     ]
   },
+  "shellMapfile": {
+    "classification": "Original streaming mapfile/readarray builtin and state-owned incremental indexed-array producer; GNU Bash 5.3.15 is the behavior oracle and no external implementation is copied.",
+    "implementationDestinations": [
+      "shell/engine/src/builtins/mapfile.rs",
+      "shell/engine/src/builtins/mapfile/records.rs",
+      "shell/engine/src/state/producer.rs",
+      "shell/engine/src/state.rs",
+      "shell/engine/src/state/binding.rs"
+    ],
+    "testDestinations": [
+      "shell/engine/tests/words/mapfile.rs",
+      "scripts/test-own-shell-mapfile.ts",
+      "scripts/fixtures/shell-mapfile.json"
+    ],
+    "documentation": [
+      "docs/mapfile.md",
+      "docs/indexed-arrays.md",
+      "docs/shell-engine.md",
+      "plans/009-read-timeouts-and-mapfile.md"
+    ],
+    "verification": "Records are read through one bounded scratch buffer and published one at a time. Validation, target admission, local tickets, copy-on-write and case attributes use the existing state model. Completed prefixes survive cancellation, input errors and later record failures; callbacks remain explicitly unsupported before input or mutation.",
+    "deferred": [
+      "-C callback execution",
+      "raw-byte array values",
+      "Bash-specific PIPESTATUS and array-valued IFS behavior"
+    ]
+  },
   "shellIndexedArrays": {
     "classification": "Original local indexed binding and assignment adapters, with GNU Bash 5.3.15 as a behavior oracle. No upstream implementation copied or adapted.",
     "baseRevision": "361992834804c5d9325022ddc3580f5e9899bcee",
