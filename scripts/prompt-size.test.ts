@@ -40,6 +40,7 @@ test("size graph includes static dependencies without double charging lazy paylo
     configGraphBytesGzip: 300,
     configIncrementalBytesGzip: 200,
     totalBytesGzip: 600,
+    statusIncrementalBytesGzip: 0,
   });
 });
 test("size graph fails closed for missing roots, imports, sizes, and unaccounted outputs", () => {
