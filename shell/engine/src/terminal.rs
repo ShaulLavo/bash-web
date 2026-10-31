@@ -1,6 +1,8 @@
 //! Original bounded multiline terminal editor. The guest owns echo; the browser
 //! forwards raw bytes, including ANSI arrows, without maintaining shell state.
 mod display;
+mod navigation;
+pub use navigation::Mode;
 mod width;
 use display::Display;
 pub use display::Geometry;
@@ -119,6 +121,8 @@ fn paint_text(bytes: &mut Vec<u8>, line: &[u8]) {
 }
 #[derive(Default)]
 pub struct Editor {
+    mode: Mode,
+    vertical_column: Option<usize>,
     line: Vec<u8>,
     cursor: usize,
     escape: Escape,
@@ -131,9 +135,16 @@ pub struct Editor {
     discard_utf8: usize,
 }
 impl Editor {
+    pub fn new(mode: Mode) -> Self {
+        Self {
+            mode,
+            ..Self::default()
+        }
+    }
     pub fn clear(&mut self) {
         self.line.clear();
         self.cursor = 0;
+        self.vertical_column = None;
         self.escape = Escape::None;
         self.paste = None;
         self.discard_utf8 = 0;
@@ -201,6 +212,7 @@ impl Editor {
         at
     }
     fn meta(&mut self, byte: u8) -> Action {
+        self.vertical_column = None;
         match byte {
             b'b' => self.cursor = self.previous_word(),
             b'f' => self.cursor = self.next_word(),
@@ -219,9 +231,10 @@ impl Editor {
     fn csi(&mut self, parameters: Parameters, byte: u8) -> Action {
         use Parameters::{Empty, First, Modified, Third};
         if matches!((parameters, byte), (Empty, b'A' | b'B')) {
-            self.history(byte == b'A');
+            self.vertical(byte == b'A');
             return Action::Redraw;
         }
+        self.vertical_column = None;
         match (parameters, byte) {
             (Third(27, 2, 13), b'~') | (Modified(13, 2), b'u') => {
                 return self.insert(b'\n');
@@ -232,8 +245,8 @@ impl Editor {
             }
             (Empty, b'D') if self.cursor > 0 => self.cursor = self.previous(),
             (Empty, b'C') if self.cursor < self.line.len() => self.cursor = self.next(),
-            (Empty, b'H') | (First(1), b'~') => self.cursor = 0,
-            (Empty, b'F') | (First(4), b'~') => self.cursor = self.line.len(),
+            (Empty, b'H') | (First(1), b'~') => self.cursor = self.line_start(),
+            (Empty, b'F') | (First(4), b'~') => self.cursor = self.line_end(),
             (First(3), b'~') if self.cursor < self.line.len() => {
                 self.line.drain(self.cursor..self.next());
             }
@@ -335,6 +348,9 @@ impl Editor {
         }
         if !matches!(self.escape, Escape::None) {
             return self.feed_escape(byte);
+        }
+        if !matches!(byte, 16 | 14) {
+            self.vertical_column = None;
         }
         match byte {
             2 => self.csi(Parameters::Empty, b'D'),
@@ -742,3 +758,8 @@ mod tests {
 
 #[cfg(test)]
 mod readline_tests;
+#[cfg(test)]
+mod reference;
+
+#[cfg(test)]
+mod zsh_tests;

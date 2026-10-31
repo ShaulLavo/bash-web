@@ -14,7 +14,7 @@ fn main() {
 
 #[cfg(target_os = "wasi")]
 mod guest {
-    use super::terminal::{Action, Editor, Geometry};
+    use super::terminal::{Action, Editor, Geometry, Mode};
     use futures::FutureExt;
     use shell_engine::{
         Limits, Session,
@@ -43,7 +43,7 @@ mod guest {
         std::process::exit(2);
     }
     enum Startup {
-        Interactive,
+        Interactive(Mode),
         Command {
             source: String,
             name: String,
@@ -57,8 +57,8 @@ mod guest {
     fn startup(mut args: impl Iterator<Item = String>) -> Startup {
         let program = args.next().unwrap_or_else(|| usage());
         match args.next() {
-            None => Startup::Interactive,
-            Some(flag) if flag == "-i" && args.next().is_none() => Startup::Interactive,
+            None => Startup::Interactive(Mode::Bash),
+            Some(flag) if flag == "-i" => Startup::Interactive(editor_mode(args)),
             Some(flag) if flag == "-c" => {
                 let source = args.next().unwrap_or_else(|| usage());
                 let name = args.next().unwrap_or(program);
@@ -75,8 +75,27 @@ mod guest {
             _ => usage(),
         }
     }
+    fn editor_mode(mut args: impl Iterator<Item = String>) -> Mode {
+        let Some(flag) = args.next() else {
+            return Mode::Bash;
+        };
+        if flag != "--line-editor" {
+            usage();
+        }
+        let mode = match args.next().as_deref() {
+            Some("bash") => Mode::Bash,
+            Some("zsh") => Mode::Zsh,
+            _ => usage(),
+        };
+        if args.next().is_some() {
+            usage();
+        }
+        mode
+    }
     fn usage() -> ! {
-        report("usage: shell-runtime [-i | -c SCRIPT [NAME [ARG...]] | FILE [ARG...]]")
+        report(
+            "usage: shell-runtime [-i [--line-editor bash|zsh] | -c SCRIPT [NAME [ARG...]] | FILE [ARG...]]",
+        )
     }
     pub fn main() {
         let startup = startup(std::env::args());
@@ -97,7 +116,7 @@ mod guest {
         {
             let state = session.state();
             let mut state = state.borrow_mut();
-            state.interactive = matches!(startup, Startup::Interactive);
+            state.interactive = matches!(startup, Startup::Interactive(_));
             state.inherit_environment(std::env::vars());
             state.command_string = matches!(startup, Startup::Command { .. });
             if let Ok(cwd) = std::env::var("PWD") {
@@ -105,7 +124,7 @@ mod guest {
             }
         }
         // Only an interactive shell gives each command its own job; `-c` and scripts keep theirs.
-        runtime.set_job_control(matches!(startup, Startup::Interactive));
+        runtime.set_job_control(matches!(startup, Startup::Interactive(_)));
         let fds = runtime.take_stdio().unwrap_or_else(|error| report(error));
         session
             .set_descriptors(fds)
@@ -171,7 +190,7 @@ mod guest {
     }
     async fn run(session: Rc<Session>, startup: Startup, input_cancel: Rc<RefCell<Cancel>>) -> i32 {
         let job = match startup {
-            Startup::Interactive => return interactive(session, input_cancel).await,
+            Startup::Interactive(mode) => return interactive(session, input_cancel, mode).await,
             Startup::Command { source, name, args } => {
                 set_phase(2, session.state().borrow().status());
                 session
@@ -265,8 +284,12 @@ mod guest {
             Ok(_) => unreachable!("prompt reader returns a command, interrupt or EOF"),
         }
     }
-    async fn interactive(session: Rc<Session>, input_cancel: Rc<RefCell<Cancel>>) -> i32 {
-        let mut editor = Editor::default();
+    async fn interactive(
+        session: Rc<Session>,
+        input_cancel: Rc<RefCell<Cancel>>,
+        mode: Mode,
+    ) -> i32 {
+        let mut editor = Editor::new(mode);
         let mut skip_lf = false;
         loop {
             let (Some(input), Some(output)) = (session.descriptor(0), session.descriptor(1)) else {

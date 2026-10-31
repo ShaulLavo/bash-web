@@ -11,7 +11,7 @@ mod source {
 }
 use source::terminal;
 use std::io::{self, BufRead};
-use terminal::{Action, Editor, Geometry};
+use terminal::{Action, Editor, Geometry, Mode};
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
@@ -47,7 +47,12 @@ fn main() {
     let mut rows = std::env::args().nth(2);
     let parse = |value: &mut Option<String>| value.take().expect("COLUMNS ROWS").parse().unwrap();
     let mut geometry = Geometry::new(parse(&mut columns), parse(&mut rows));
-    let mut editor = Editor::default();
+    let mode = match std::env::args().nth(3).as_deref() {
+        None | Some("bash") => Mode::Bash,
+        Some("zsh") => Mode::Zsh,
+        _ => panic!("expected editor mode bash or zsh"),
+    };
+    let mut editor = Editor::new(mode);
     for line in io::stdin().lock().lines() {
         let line = line.unwrap();
         let (command, argument) = line.split_once(' ').unwrap_or((&line, ""));

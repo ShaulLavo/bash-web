@@ -8,13 +8,18 @@ const bytes = await readFile(`${directory}/shell-runtime.wasm`);
 const wasmUrl = `data:application/wasm;base64,${bytes.toString("base64")}`;
 const encoder = new TextEncoder();
 
-async function fixture(context: TestContext, script?: string) {
+async function fixture(
+  context: TestContext,
+  script?: string,
+  lineEditor?: Parameters<typeof api.createShell>[0]["lineEditor"],
+) {
   const { runtime } = await waffleFixture(context);
   const shell = await api.createShell({
     runtime,
     wasmUrl,
     workerUrl: new URL("shell.mjs", nodeDirectory),
     script,
+    lineEditor,
   });
   context.after(() => shell.dispose());
   return { runtime, shell };
@@ -388,3 +393,34 @@ for (let run = 0; run < 6; run++) {
     },
   );
 }
+
+const editorCases: readonly {
+  mode: "bash" | "zsh" | undefined;
+  motion: string;
+  expected: string;
+}[] = [
+  { mode: undefined, motion: "\x01# ", expected: "B" },
+  { mode: "bash", motion: "\x01# ", expected: "B" },
+  { mode: "zsh", motion: "\x01# ", expected: "A" },
+  { mode: "zsh", motion: "\x01\x1b[Aprintf C >> /result\x1b[B\x01# ", expected: "AC" },
+];
+for (const { mode, motion, expected } of editorCases)
+  test(
+    `real WASI shell uses ${mode ?? "default"} editor navigation for ${JSON.stringify(motion)}`,
+    { timeout: 30000 },
+    async (context) => {
+      const { runtime, shell } = await fixture(context, undefined, mode ? { mode } : undefined);
+      const initial = await shell.waitForPrompt({ signal: context.signal });
+      await send(
+        shell,
+        "\x1b[200~printf A > /result\n\nprintf B >> /result\x1b[201~" + motion,
+        context.signal,
+      );
+      const next = await shell.waitForPrompt({ after: initial.generation, signal: context.signal });
+      assert.equal(next.status, 0);
+      assert.equal(
+        new TextDecoder().decode(await runtime.filesystem.readFile("/result")),
+        expected,
+      );
+    },
+  );

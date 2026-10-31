@@ -32,7 +32,7 @@ type Step =
 const hex = (text: string) => Buffer.from(text).toString("hex");
 const left = (count: number) => "\x1b[D".repeat(count);
 
-function replay(columns: number, rows: number, steps: readonly Step[]) {
+function replay(columns: number, rows: number, steps: readonly Step[], mode = "bash") {
   const script = steps.map((step) => {
     if ("prompt" in step) return `prompt ${hex(step.prompt)}`;
     if ("keys" in step) return `keys ${hex(step.keys)}`;
@@ -40,7 +40,7 @@ function replay(columns: number, rows: number, steps: readonly Step[]) {
     if ("resize" in step) return `resize ${step.resize.join(" ")}`;
     return "cancel" in step ? "cancel" : "eof";
   });
-  const run = spawnSync(replayer, [String(columns), String(rows)], {
+  const run = spawnSync(replayer, [String(columns), String(rows), mode], {
     input: script.join("\n") + "\n",
     encoding: "utf8",
   });
@@ -342,32 +342,33 @@ function string(value: unknown): string {
   return value;
 }
 
-async function referenceCases() {
+async function referenceCases(name = "readline-navigation") {
   const document: unknown = JSON.parse(
-    await readFile(resolve(root, "tests/terminal/readline-navigation.json"), "utf8"),
+    await readFile(resolve(root, `tests/terminal/${name}.json`), "utf8"),
   );
   return values(record(document).cases).map((value) => {
     const fixture = record(value);
     assert.ok(typeof fixture.columns === "number");
     const history = values(fixture.history).map((entry) => string(entry));
     const steps: Step[] = [{ prompt: "$ " }];
-    for (const entry of history) steps.push({ keys: entry + "\r" }, { prompt: "$ " });
-    const preceding = history.map((entry) => `$ ${entry}\r\n`).join("");
+    for (const entry of history)
+      steps.push({ keys: "\x1b[200~" + entry + "\x1b[201~\r" }, { prompt: "$ " });
+    const preceding = history.map((entry) => `$ ${entry.replaceAll("\n", "\r\n")}\r\n`).join("");
     return { fixture, columns: fixture.columns, steps, preceding };
   });
 }
 
-test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", async () => {
-  for (const { fixture, columns, steps, preceding } of await referenceCases()) {
-    if (fixture.parity !== true) continue;
+async function checkNavigationReference(mode: "bash" | "zsh") {
+  const name = mode === "bash" ? "readline-navigation" : "zsh-navigation";
+  for (const { fixture, columns, steps, preceding } of await referenceCases(name)) {
+    if (mode === "bash" && fixture.parity !== true) continue;
     for (const rawStep of values(fixture.steps)) {
       const step = record(rawStep);
-      const input = Buffer.from(string(step.inputHex), "hex").toString();
       const line = string(step.line);
       assert.ok(typeof step.point === "number");
       const prefix = Buffer.from(line).subarray(0, step.point).toString();
-      steps.push({ keys: input });
-      const actual = replay(columns, 100, steps);
+      steps.push({ keys: Buffer.from(string(step.inputHex), "hex").toString() });
+      const actual = replay(columns, 100, steps, mode);
       const expected = direct(
         columns,
         100,
@@ -378,7 +379,12 @@ test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", 
       assert.deepEqual(actual.cursor, expected.cursor, `${fixture.name} ${step.key}`);
     }
   }
-});
+}
+
+test("Bash 5 byte replay keeps the observed buffer and caret in the pinned VT", () =>
+  checkNavigationReference("bash"));
+test("zsh 5.9 byte replay paints every observed hard-line and history cursor in the VT", () =>
+  checkNavigationReference("zsh"));
 
 test("native Shift key bytes retain explicit newline and safe-CSI policies in the VT", async () => {
   const policies = new Map([

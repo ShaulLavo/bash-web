@@ -408,7 +408,9 @@ export async function startShell(
       module: loaded.module,
       args:
         options.script === undefined
-          ? ["shell-engine", "-i"]
+          ? ["shell-engine", "-i"].concat(
+              options.lineEditor ? ["--line-editor", options.lineEditor.mode] : [],
+            )
           : ["shell-engine", "-c", options.script],
       env: {
         HOME: "/home/guest",

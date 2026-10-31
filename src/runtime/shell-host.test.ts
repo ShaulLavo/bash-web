@@ -1120,3 +1120,32 @@ test("a borrowed runtime with cached registration does not synthesize earlier st
   assert.deepEqual(diagnostics.snapshot().pending, []);
   await second.dispose();
 });
+
+for (const mode of [undefined, "bash", "zsh"] as const)
+  test(`interactive shell forwards editor mode ${mode ?? "default"} in its own arguments`, async (context) => {
+    const host = fixture(context);
+    const shell = await createShell({
+      ...host.options,
+      lineEditor: mode ? { mode } : undefined,
+    });
+    const request = host.requests[0];
+    assert.ok(typeof request === "object" && request !== null && "args" in request);
+    assert.deepEqual(
+      request.args,
+      ["shell-engine", "-i"].concat(mode ? ["--line-editor", mode] : []),
+    );
+    await shell.dispose();
+  });
+
+test("a zsh editor option does not change script execution arguments", async (context) => {
+  const host = fixture(context);
+  const shell = await createShell({
+    ...host.options,
+    script: "printf ok",
+    lineEditor: { mode: "zsh" },
+  });
+  const request = host.requests[0];
+  assert.ok(typeof request === "object" && request !== null && "args" in request);
+  assert.deepEqual(request.args, ["shell-engine", "-c", "printf ok"]);
+  await shell.dispose();
+});

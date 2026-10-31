@@ -35,6 +35,7 @@ A failed asset fetch does not poison later calls. A later `createShell` retries 
 | `script` | `string` | none | Run this script and exit. When omitted, start the interactive shell (`shell-engine -i`). |
 | `cwd` | `string` | `/home/guest` | Starting directory. Sets `PWD`. |
 | `env` | `Record<string, string>` | see below | Merged over the default environment. `PWD` always comes from `cwd`. |
+| `lineEditor` | `{ mode: "bash" \| "zsh" }` | `{ mode: "bash" }` | Interactive editing only. [Zsh mode](../zsh-line-editor.md) uses hard-line navigation. Ignored with `script`. |
 | `terminal` | `SharedBridge` | a new bridge | Terminal byte transport. |
 | `wasmUrl` | `string \| URL` | `/programs/shell-engine.wasm` | Shell guest. Resolved against `document.baseURI`. |
 | `workerUrl` | `string \| URL` | `dist/shell-worker.js` next to the package | Bundled shell worker. A raw `.ts` worker is not supported. |
