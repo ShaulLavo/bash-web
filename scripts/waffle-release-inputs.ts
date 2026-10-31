@@ -11,6 +11,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import {
+  assertPackageHostInterface,
+  assertRuntimePeer,
+  parseHostInterface,
+} from "./waffle-host-interface.ts";
 
 function object(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === "object" && !Array.isArray(value));
@@ -27,6 +32,7 @@ function waffleRelease(root: string) {
   const selected = object(json(resolve(root, "sources.lock.json")).waffle);
   const inputs = object(selected.buildInputs);
   const release = {
+    hostInterface: parseHostInterface(selected.hostInterface, "sources.lock.json.waffle"),
     revision: text(selected.revision),
     version: text(selected.version),
     specifier: text(selected.specifier),
@@ -78,9 +84,11 @@ export function prepareWaffleBuildInputs(root: string, download: Download = down
     release.specifier,
     "Waffle release pin mismatch",
   );
-  assert.equal(object(pkg.peerDependencies).waffle, release.specifier, "Waffle peer pin mismatch");
+  assertPackageHostInterface(pkg, release.hostInterface, "bash-web");
+  assertRuntimePeer(pkg, "bash-web");
   const installed = resolve(root, "node_modules/waffle");
   const metadata = json(resolve(installed, "package.json"));
+  assertPackageHostInterface(metadata, release.hostInterface, "installed Waffle");
   assert.equal(metadata.name, "waffle");
   assert.equal(metadata.version, release.version, "Installed Waffle release mismatch");
   assert.equal(

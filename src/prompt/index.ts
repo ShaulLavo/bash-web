@@ -1,3 +1,4 @@
+import type { StatusLoader } from "./sources/status-types";
 import { resolvePromptConfig } from "./config/defaults";
 import { renderPrompt, type PromptConfigReader } from "./render";
 import type {
@@ -14,6 +15,22 @@ export function createPrompt(options: CreatePromptOptions): PromptProvider {
   const baseConfig = resolvePromptConfig(options.config);
   const variableNames = configuredVariables(baseConfig);
   const generations = new WeakMap<AbortSignal, number>();
+  let status: ReturnType<StatusLoader["load"]> | undefined;
+  const loadStatus: StatusLoader = {
+    load() {
+      return (status ??= import("./sources/status").then(
+        ({ GitStatusSource, renderGitStatus }) => ({
+          source: new GitStatusSource(options.logger, async (...args) =>
+            (await import("./sources/objects")).readObjectStatus(...args),
+          ),
+          render: renderGitStatus,
+        }),
+      ));
+    },
+    leave() {
+      void status?.then(({ source }) => source.leave());
+    },
+  };
   const readers = new Map<string, Promise<PromptConfigReader>>();
   const loadConfigFile = (path: string) => {
     let reader = readers.get(path);
@@ -49,6 +66,7 @@ export function createPrompt(options: CreatePromptOptions): PromptProvider {
         (config) => {
           for (const variable of configuredVariables(config)) variableNames.add(variable);
         },
+        loadStatus,
       )
         .then((result) => result.text)
         .catch((error: unknown) => {

@@ -1,3 +1,5 @@
+import type { StatusSnapshot } from "./sources/status-types";
+import type { renderGitStatus } from "./segments/git_status";
 import type { RepositorySnapshot } from "./sources/repo-types";
 import { styleKey, styleToSgr, type StyleEnvironment } from "./style";
 import type {
@@ -35,26 +37,28 @@ export interface ComposeInput {
   readonly manifest: ManifestSnapshot | undefined;
   readonly repository: RepositorySnapshot | undefined;
   readonly versions: Readonly<{ bun?: string; node?: string; python?: string }>;
+  readonly gitStatus?: StatusSnapshot;
+  readonly statusRenderer?: typeof renderGitStatus;
   readonly environment: StyleEnvironment;
 }
 
 const renderers: Partial<
   Record<SegmentName, (input: SegmentInput, config: never) => Piece[] | undefined>
 > = {
-  directory: (input, config) => renderDirectory(input, config),
-  git_branch: (input, config) => renderGitBranch(input, config),
-  git_commit: (input, config) => renderGitCommit(input, config),
-  git_state: (input, config) => renderGitState(input, config),
-  package: (input, config) => renderPackage(input, config),
-  bun: (input, config) => renderBun(input, config),
-  nodejs: (input, config) => renderNodejs(input, config),
-  python: (input, config) => renderPython(input, config),
-  env_var: (input, config) => renderEnvVar(input, config),
-  cmd_duration: (input, config) => renderCmdDuration(input, config),
-  jobs: (input, config) => renderJobs(input, config),
-  status: (input, config) => renderStatus(input, config),
-  line_break: (input, config) => renderLineBreak(input, config),
-  character: (input, config) => renderCharacter(input, config),
+  directory: renderDirectory,
+  git_branch: renderGitBranch,
+  git_commit: renderGitCommit,
+  git_state: renderGitState,
+  package: renderPackage,
+  bun: renderBun,
+  nodejs: renderNodejs,
+  python: renderPython,
+  env_var: renderEnvVar,
+  cmd_duration: renderCmdDuration,
+  jobs: renderJobs,
+  status: renderStatus,
+  line_break: renderLineBreak,
+  character: renderCharacter,
 };
 
 function sequenceEnd(text: string, offset: number, osc: boolean): number {
@@ -90,7 +94,7 @@ function cleanText(text: string, newline: boolean): string {
 function renderItem(item: LayoutItem, input: SegmentInput, config: ResolvedPromptConfig): Piece[] {
   if (typeof item !== "string")
     return item.text ? [{ text: cleanText(item.text, true), style: item.style }] : [];
-  const renderer = renderers[item];
+  const renderer = item === "git_status" ? input.statusRenderer : renderers[item];
   if (!renderer) return [];
   return (renderer(input, config.segments[item] as never) ?? []).map((piece) => ({
     ...piece,
@@ -105,6 +109,8 @@ export function composePrompt(input: ComposeInput): string {
     manifest: input.manifest,
     repository: input.repository,
     versions: input.versions,
+    gitStatus: input.gitStatus,
+    statusRenderer: input.statusRenderer,
   };
   const pieces = input.config.layout.flatMap((item) =>
     renderItem(item, segmentInput, input.config),

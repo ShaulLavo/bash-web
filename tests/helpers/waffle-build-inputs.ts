@@ -2,10 +2,18 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+export const wasiBuildScripts = [
+  "wasi-build.ts",
+  "verify-wasi-guests.ts",
+  "waffle-release-inputs.ts",
+  "waffle-host-interface.ts",
+];
+
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
 export function waffleBuildFixture(root: string, builder: string, patch: string) {
   const waffle = {
+    hostInterface: 1,
     revision: hash(builder + patch).slice(0, 40),
     version: "0.0.91",
     specifier:
@@ -24,8 +32,9 @@ export function waffleBuildFixture(root: string, builder: string, patch: string)
   put(
     "package.json",
     JSON.stringify({
+      waffleHostInterface: waffle.hostInterface,
       devDependencies: { waffle: waffle.specifier },
-      peerDependencies: { waffle: waffle.specifier },
+      peerDependencies: { waffle: "*" },
     }),
   );
   put("sources.lock.json", JSON.stringify({ waffle }));
@@ -33,6 +42,7 @@ export function waffleBuildFixture(root: string, builder: string, patch: string)
     "node_modules/waffle/package.json",
     JSON.stringify({
       name: "waffle",
+      waffleHostInterface: waffle.hostInterface,
       version: waffle.version,
       exports: { "./program-build-tools": "./program-build-tools.mjs" },
     }),

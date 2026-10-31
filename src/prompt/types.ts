@@ -76,6 +76,18 @@ export interface GitStateConfig {
   readonly style: SegmentStyle;
 }
 export interface GitStatusConfig {
+  readonly counts: boolean;
+  readonly conflicted: string;
+  readonly stashed: string;
+  readonly deleted: string;
+  readonly modified: string;
+  readonly typeChanged: string;
+  readonly untracked: string;
+  readonly staged: string;
+  readonly ahead: string;
+  readonly behind: string;
+  readonly diverged: string;
+  readonly unknown: string;
   readonly disabled: boolean;
   readonly prefix: string;
   readonly suffix: string;

@@ -40,6 +40,8 @@ test("size graph includes static dependencies without double charging lazy paylo
     configGraphBytesGzip: 300,
     configIncrementalBytesGzip: 200,
     totalBytesGzip: 600,
+    statusIncrementalBytesGzip: 0,
+    objectsIncrementalBytesGzip: 0,
   });
 });
 test("size graph fails closed for missing roots, imports, sizes, and unaccounted outputs", () => {
@@ -56,4 +58,36 @@ test("size graph fails closed for missing roots, imports, sizes, and unaccounted
   unknown.outputs["orphan.js"] = { bytes: 1, inputs: {}, exports: [], imports: [] };
   assert.throws(() => promptSize(unknown, sizes), /Unaccounted/);
   assert.throws(() => promptSize(metadata(), new Map()), /Missing compressed size/);
+});
+
+test("objects graph stays lazy and shared bytes are counted once", () => {
+  const meta = metadata();
+  meta.outputs["out/status.js"] = {
+    bytes: 1,
+    inputs: {},
+    exports: [],
+    entryPoint: "src/prompt/sources/status.ts",
+    imports: [{ path: "out/objects.js", kind: "dynamic-import" }],
+  };
+  meta.outputs["out/objects.js"] = {
+    bytes: 1,
+    inputs: { "src/prompt/sources/objects.ts": { bytesInOutput: 1 } },
+    exports: [],
+    entryPoint: "src/prompt/sources/objects.ts",
+    imports: [{ path: "out/shared.js", kind: "import-statement" }],
+  };
+  meta.outputs["out/main.js"].imports.push({ path: "out/status.js", kind: "dynamic-import" });
+  const measured = promptSize(
+    meta,
+    new Map(
+      Array.from(sizes).concat([
+        ["out/status.js", 40],
+        ["out/objects.js", 50],
+      ]),
+    ),
+  );
+  assert.equal(measured.objectsIncrementalBytesGzip, 50);
+  assert.equal(measured.totalBytesGzip, 690);
+  meta.outputs["out/main.js"].imports.push({ path: "out/objects.js", kind: "import-statement" });
+  assert.throws(() => promptSize(meta, sizes), /must stay out/);
 });

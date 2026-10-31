@@ -26,6 +26,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [Async shell core](shell-engine.md): Execution contract, bounds, supported syntax
 - [Shell workspace](shell-workspace.md): Parser crate, runtime ABI for interactive and [named-file](script-files.md) execution, the CLI; [WASI utility processes](wasi-process.md) for child execution
 - [Engine ownership notes](reference/engine-ownership.md): Which module owns execution types, bindings, parsing entry points
+- [Waffle host compatibility](waffle-host-interface.md): Exact metadata checks, one runtime, and independent artifact integrity
 - [Guest libc and build provenance](wasi-libc.md): The patched wasi-libc every WASI guest links against
 - [Zsh line-editor mode](zsh-line-editor.md): Opt-in hard-line navigation without changing Bash execution
 - [Interactive terminal editing](terminal-editing.md): Multiline commands, Shift+Enter, bracketed paste and input limits
@@ -39,7 +40,7 @@ One page per feature, each stating exactly what is supported and what is left ou
 - Output and input: [echo](echo.md), [mapfile](mapfile.md), [printf options](printf-options.md), [printf quoting](printf-quoting.md), [printf string fields](printf-string-fields.md), [printf integer fields](printf-integer-fields.md), [printf integer operands](printf-integer-operands.md), [printf unsigned and radix operands](printf-unsigned-radix.md), [printf character](printf-character.md), [printf floating conversions](printf-float.md), [printf escaped fields](printf-escaped-fields.md), [printf scalar assignment](printf-scalar-assignment.md), [read](read.md), [getopts](getopts.md)
 - Expansion: [tilde expansion](tilde-expansion.md), [parameter transformations](parameter-transformation.md), [input-only command substitution](file-substitution.md), [indexed arrays](indexed-arrays.md), [typed variable references](typed-references-contract.md), [grouped conditional ERE](regex-groups.md), [negative extglob patterns](negative-extglob.md)
 - Commands and state: [aliases](aliases.md), [builtin wrapper](builtin-wrapper.md), [type](type.md), [declaration printing](declaration-printing.md), [cd and the directory stack](directories.md), [trap registration](trap-registration.md), [completion](completion.md)
-- Prompt: [git metadata](prompt-git.md)
+- Prompt: [git metadata](prompt-git.md), [staged changes and upstream counts](prompt-git-objects.md)
 - Files and descriptors: [file permission predicates](file-permissions.md), [descriptor reopening](descriptor-reopening.md), [broken pipes](pipeline-broken-pipe.md)
 
 ## Contribute
@@ -51,3 +52,5 @@ One page per feature, each stating exactly what is supported and what is left ou
 - [Code quality gates](code-quality.md): Run lint, types, duplicate, and Rust quality checks
 
 Frozen records that scripts check live in [`evidence/`](evidence/README.md). They are not documentation.
+
+- [Background working-tree status](prompt-git-status.md)
