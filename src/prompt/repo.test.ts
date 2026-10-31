@@ -1,126 +1,26 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
-import { test, type TestContext } from "node:test";
+import { test } from "node:test";
 import { createPrompt } from "./index";
 import { TurnFilesystem } from "./fs";
 import { readRef, readRepository } from "./sources/repo";
 import { composePrompt } from "./compose";
 import { resolvePromptConfig } from "./config/defaults";
-import type { PromptContext, PromptFilesystem } from "./types";
+import type { PromptFilesystem } from "./types";
+import {
+  context,
+  git,
+  fixture,
+  snapshot,
+  makeRepository,
+  makeCommittedRepository,
+  realFilesystem,
+} from "./git-test-helpers";
 
 const execFile = promisify(execFileCallback);
-function context(cwd: string, variables: ReadonlyMap<string, string> = new Map()): PromptContext {
-  return {
-    turn: 1,
-    cwd,
-    status: 0,
-    pipestatus: [0],
-    durationMs: undefined,
-    jobs: 0,
-    columns: 80,
-    rows: 24,
-    lineEditor: "bash",
-    ps1: "$ ",
-    variables: new Map<string, string>(Array.from(variables).concat([["HOME", cwd]])),
-    signal: new AbortController().signal,
-  };
-}
-
-async function lookupDirectory(
-  path: string,
-  stat: Awaited<ReturnType<typeof lstat>>,
-): Promise<Awaited<ReturnType<PromptFilesystem["lookup"]>>> {
-  const entries = await readdir(path, { withFileTypes: true });
-  const children = new Map(
-    Array.from(entries, (entry) => [
-      entry.name,
-      {
-        kind: entry.isDirectory() ? ("dir" as const) : ("file" as const),
-        ino: 1,
-        mtime: 1,
-      },
-    ]),
-  );
-  return { kind: "dir", ino: Number(stat.ino), mtime: Number(stat.mtimeMs), children };
-}
-
-function realFilesystem(boundary?: string): PromptFilesystem {
-  return {
-    async lookup(path) {
-      try {
-        const stat = await lstat(path);
-        if (stat.isDirectory()) {
-          const entry = await lookupDirectory(path, stat);
-          if (
-            boundary &&
-            path !== boundary &&
-            boundary.startsWith(`${path}/`) &&
-            entry?.kind === "dir"
-          )
-            entry.children.delete(".git");
-          return entry;
-        }
-        return { kind: "file", ino: Number(stat.ino), mtime: Number(stat.mtimeMs) };
-      } catch {
-        return undefined;
-      }
-    },
-    async readFile(path) {
-      try {
-        return await readFile(path);
-      } catch {
-        return undefined;
-      }
-    },
-  };
-}
-
-async function git(cwd: string, ...args: string[]): Promise<string> {
-  const result = await execFile("git", args, {
-    cwd,
-    env: {
-      ...process.env,
-      GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_AUTHOR_NAME: "Prompt Test",
-      GIT_AUTHOR_EMAIL: "prompt@example.invalid",
-      GIT_COMMITTER_NAME: "Prompt Test",
-      GIT_COMMITTER_EMAIL: "prompt@example.invalid",
-      GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
-      GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
-    },
-  });
-  return result.stdout.trim();
-}
-
-async function fixture(t: TestContext, name: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), `bash-web-prompt-${name}-`));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  return root;
-}
-
-async function snapshot(path: string, variables?: ReadonlyMap<string, string>) {
-  return readRepository(new TurnFilesystem(realFilesystem()), context(path, variables));
-}
-
-async function makeRepository(root: string, name: string): Promise<string> {
-  const repository = join(root, name);
-  await execFile("git", ["init", "-q", "-b", "main", repository]);
-  await git(repository, "config", "user.name", "Prompt Test");
-  await git(repository, "config", "user.email", "prompt@example.invalid");
-  return repository;
-}
-async function makeCommittedRepository(root: string, name: string): Promise<string> {
-  const repository = await makeRepository(root, name);
-  await writeFile(join(repository, "tracked.txt"), "first\n");
-  await git(repository, "add", "tracked.txt");
-  await git(repository, "commit", "-m", "initial");
-  return repository;
-}
 
 async function renderGit(
   cwd: string,
