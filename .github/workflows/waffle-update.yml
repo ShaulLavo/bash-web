@@ -34,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           bash .github/scripts/test-publish-update.sh
+          bash .github/scripts/test-update-waffle-releases.sh
           bash .github/scripts/update-waffle-releases.sh
           bash .github/scripts/check-update-paths.sh
           mkdir "$RUNNER_TEMP/dependency-update"
