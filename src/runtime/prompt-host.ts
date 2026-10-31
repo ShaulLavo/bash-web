@@ -58,7 +58,8 @@ export function startPromptHost(options: PromptHostOptions): PromptHost {
     let bytes = encoder.encode(next);
     if (bytes.length > channel.names.length) {
       report(new Error("Prompt variable names exceed 1 KiB; the rest are left out"));
-      bytes = bytes.subarray(0, bytes.lastIndexOf(44, channel.names.length));
+      // Whole names only: up to the last comma that fits, or none when the first is too long.
+      bytes = bytes.subarray(0, Math.max(0, bytes.lastIndexOf(44, channel.names.length)));
     }
     channel.names.set(bytes);
     channel.store(promptWord.namesLength, bytes.length);
@@ -111,7 +112,10 @@ export function startPromptHost(options: PromptHostOptions): PromptHost {
         queueMicrotask(flush);
       },
     };
-    const reply = (text: string | null | undefined) => {
+    let answered = false;
+    const reply = (text: unknown) => {
+      if (answered) return;
+      answered = true;
       clearTimeout(timer);
       firstAnswer.abort();
       writeNames();
@@ -122,6 +126,11 @@ export function startPromptHost(options: PromptHostOptions): PromptHost {
       channel.store(promptWord.replyLength, bytes ? bytes.length : -1);
       channel.store(promptWord.replyTurn, turn);
       channel.notify(promptWord.replyTurn);
+    };
+    const fail = (error: unknown) => {
+      if (answered) return;
+      report(error);
+      reply(null);
     };
     const context: PromptContext = {
       turn,
@@ -138,16 +147,14 @@ export function startPromptHost(options: PromptHostOptions): PromptHost {
       signal: firstAnswer.signal,
     };
     try {
-      const answer = options.provider.render(context, live);
-      if (isPromiseLike(answer))
-        answer.then(reply, (error: unknown) => {
-          report(error);
-          reply(null);
-        });
+      const answer: unknown = options.provider.render(context, live);
+      // A thenable's `then` is read once, as Promise resolution does; an accessor may
+      // answer differently on a second read.
+      const then = thenOf(answer);
+      if (then) then.call(answer, reply, fail);
       else reply(answer);
     } catch (error) {
-      report(error);
-      reply(null);
+      fail(error);
     }
     return {
       number: turn,
@@ -202,8 +209,11 @@ export function startPromptHost(options: PromptHostOptions): PromptHost {
   };
 }
 
-function isPromiseLike(value: unknown): value is PromiseLike<string | null> {
-  return typeof (value as PromiseLike<unknown> | null)?.then === "function";
+type Then = (resolve: (value: unknown) => void, reject: (error: unknown) => void) => unknown;
+function thenOf(value: unknown): Then | undefined {
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) return;
+  const then: unknown = (value as { then?: unknown }).then;
+  return typeof then === "function" ? (then as Then) : undefined;
 }
 
 /** Logs each distinct provider failure once per shell. */

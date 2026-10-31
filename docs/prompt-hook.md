@@ -66,6 +66,15 @@ The shell waits for the first answer for at most 100 ms. To push an update, the 
 
 The guest imports four functions from `shell_terminal`: `prompt_names`, `prompt`, `prompt_update` and `output_position`. A shell without `--prompt-host` never calls them. Hosts that run the guest without a provider can pass `noPromptHost` from `src/runtime/guest-imports.ts`.
 
+## Cost without a provider
+
+A page that passes no provider gets no prompt channel, no prompt import calls, no SIGWINCH handler, and does not load the prompt host module. A few small fixed costs remain:
+
+- Shell startup checks for a provider and awaits one already-resolved promise.
+- The shell worker bundle includes and builds the four prompt import functions, about 0.7 KB gzipped.
+- The guest checks for an absent prompt host on each editor write, checks for a pending prompt on each key, and reads the clock once for every submitted command.
+- The shell WebAssembly is about 8 KB larger, 2.5 KB with brotli.
+
 ## Not supported
 
 - Continuation prompts: bash-web has no `PS2` yet.
@@ -77,6 +86,7 @@ The guest imports four functions from `shell_terminal`: `prompt_names`, `prompt`
 
 - `npm run test:terminal:display` replays redraws into the pinned libghostty-vt: buffer and cursor kept in both editor modes, one line to two and back, a soft-wrapping prompt, a command rewrapping under a wider prompt, after a resize, scrolling at the bottom of the screen, background output, a scrolled-away prompt with Ctrl+L, and updates mid-escape and mid-paste.
 - `npm run test:rust` covers the editor rules, SIGWINCH registration and dequeue, and that cancelling the input read never loses a byte.
-- `src/runtime/prompt-host.test.ts` covers text cleaning, the context, fallbacks, coalescing and turn tracking.
+- `scripts/test-own-shell-prompt-host.ts` runs the real WASI guest with `--prompt-host`: an update deferred during a paste, an escape sequence or a split UTF-8 character is drawn when the input completes, and is not drawn over a background job's output until Ctrl+L.
+- `src/runtime/prompt-host.test.ts` covers text cleaning, the context, fallbacks, coalescing, turn tracking, variable names that overflow 1 KiB, and a thenable whose `then` is read once.
 - `tests/prompt-hook.spec.ts` runs the real guest on Waffle in Chromium and Firefox: the context, every fallback, an update after a late answer, in-place redraw with typing kept, no redraw after Enter, Ctrl+C or background output, Ctrl+L, and a stray SIGWINCH to a shell without a provider.
 - `BASH_WEB_MEASURE=1 npx playwright test tests/prompt-hook.spec.ts -g costs --project chromium` measures the hook round trip, push to redraw and a filesystem lookup.
