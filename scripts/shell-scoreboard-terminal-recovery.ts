@@ -588,19 +588,36 @@ function successfulStep(job: Pick<HostJob, "steps">, label: string): CompletedHo
 }
 export function assertTerminalFreshObservation(
   raw: Pick<RawScore<unknown>, "sourceSha" | "run" | "selected" | "capturedAt">,
-  jobs: Pick<
-    HostJob,
-    "name" | "run_id" | "run_attempt" | "head_sha" | "status" | "conclusion" | "steps"
-  >[],
+  jobs: {
+    observer: Pick<
+      HostJob,
+      "name" | "run_id" | "run_attempt" | "head_sha" | "status" | "conclusion" | "steps"
+    >;
+    sealer: Pick<
+      HostJob,
+      "name" | "run_id" | "run_attempt" | "head_sha" | "status" | "conclusion" | "steps"
+    >;
+    observerAttempt: number;
+  },
 ): void {
-  const observer = unique(jobs, (job) => job.name === "own-shell-observation", "Waffle observer");
-  const sealer = unique(jobs, (job) => job.name === "own-shell-compatibility", "raw sealer");
+  const { observer, sealer, observerAttempt } = jobs;
+  const headSha = raw.selected.kind === "pull-request" ? raw.selected.headSha : raw.sourceSha;
+  assert.ok(
+    Number.isSafeInteger(observerAttempt) && observerAttempt > 0,
+    "invalid observer attempt",
+  );
+  assert.ok(observerAttempt <= raw.run.attempt, "observer comes from a later attempt");
+  assertJobBinding(observer, {
+    id: raw.run.runId,
+    run_attempt: observerAttempt,
+    head_sha: headSha,
+  });
+  assertJobBinding(sealer, {
+    id: raw.run.runId,
+    run_attempt: raw.run.attempt,
+    head_sha: headSha,
+  });
   for (const job of [observer, sealer]) {
-    assertJobBinding(job, {
-      id: raw.run.runId,
-      run_attempt: raw.run.attempt,
-      head_sha: raw.selected.kind === "pull-request" ? raw.selected.headSha : raw.sourceSha,
-    });
     assert.equal(job.status, "completed");
     assert.equal(job.conclusion, "success");
   }

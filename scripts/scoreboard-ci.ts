@@ -366,6 +366,7 @@ export function sealRaw({
     kind: "raw-score",
     ...prepared,
     run: { runId: prepared.run.runId, attempt },
+    observationRun: prepared.run,
     resultSha256: digest(score),
     score,
   });

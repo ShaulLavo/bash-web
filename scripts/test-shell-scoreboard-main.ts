@@ -1462,6 +1462,7 @@ async function assertRerunSeal(input: ReturnType<typeof qualificationFixture>): 
   const raw: unknown = JSON.parse(readFileSync(resolve(output, "raw.json"), "utf8"));
   assertRawScore(raw);
   assert.deepEqual(raw.run, { runId: 11, attempt: 2 });
+  assert.deepEqual(raw.observationRun, { runId: 11, attempt: 1 });
   input.run.run_attempt = 2;
   input.publish(raw);
   const folded = await foldQualification({
