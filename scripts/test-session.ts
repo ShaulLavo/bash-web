@@ -292,6 +292,31 @@ test("submission replaces the whole zsh draft with Ctrl+E, Ctrl+U, Ctrl+K and ha
   assert.equal(session.running, false);
 });
 
+test("a prompt published after the phase snapshot wins before submit resolves", async (context) => {
+  const f = fixture(context);
+  const session = await f.starting;
+  const submitting = session.submit("short command");
+  await turn();
+  f.bridge.receive(65536);
+  Atomics.store(f.bridge.state, api.control.phase, 2);
+  const read = f.bridge.readPrompt.bind(f.bridge);
+  const receipt = context.mock.method(f.bridge, "readPrompt", () => {
+    receipt.mock.restore();
+    f.bridge.publishPrompt(5);
+    return read();
+  });
+  // Run one real pump synchronously to place publication after its phase load,
+  // before either the submission waiter or the next timer can repair the state.
+  const pump: unknown = Reflect.get(session, "pump");
+  assert.equal(typeof pump, "function");
+  if (typeof pump !== "function") throw new Error("Missing session pump");
+  Reflect.apply(pump, session, []);
+  await submitting;
+  assert.equal(session.lastExit, 5);
+  assert.equal(session.state, "ready");
+  assert.equal(session.running, false);
+});
+
 test("submissions serialize and recover after a rejected oversized submission", async (context) => {
   const f = fixture(context);
   const session = await f.starting;

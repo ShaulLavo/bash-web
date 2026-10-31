@@ -366,14 +366,14 @@ export class BrowserSession {
       this.fail(this.failureMessage);
       return;
     }
-    const receipt = this.bridge.readPrompt();
-    if (receipt) this.acceptPrompt(receipt);
     if (phase !== this.phase && !this.bridge.cancelled()) {
       this.phase = phase;
       if (phase === 1 && this.receipt) this.setState("ready");
       if (phase === 2) this.setState("running");
       if (phase === 3) this.setState("exited");
     }
+    const receipt = this.bridge.readPrompt();
+    if (receipt) this.acceptPrompt(receipt);
     if (this.disposed || this.failed) return;
     if (
       phase === 3 &&
