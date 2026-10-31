@@ -12,6 +12,7 @@ const {
   PipeController,
   ExecutableRegistry,
   ProcessSupervisor,
+  noPromptHost,
 }: typeof Api = await import(new URL("../.build/node/api.mjs", import.meta.url).href);
 
 const guest = await WebAssembly.compile(
@@ -112,6 +113,7 @@ function runPaused(options: {
       columns: () => 80,
       rows: () => 24,
       phase: () => {},
+      ...noPromptHost,
     };
     const instance = new WebAssembly.Instance(guest, wasi.imports(guest));
     const exportedMemory = instance.exports.memory;

@@ -93,6 +93,7 @@ function interactive(
         if (next !== 1) return;
         assert.deepEqual(bridge.readPrompt(), { generation: ++generation, status: result });
       },
+      ...api.noPromptHost,
     };
     const instance = new WebAssembly.Instance(guest, wasi.imports(guest));
     assert.ok(instance.exports.memory instanceof WebAssembly.Memory);

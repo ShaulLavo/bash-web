@@ -29,6 +29,7 @@ import {
 import { guestLauncher, waitForShellWorkers } from "./worker-launcher";
 import type { ShellWorkerRequest, ShellWorkerMessage } from "./worker";
 import { createTerminalController } from "./terminal-controller";
+import type { PromptHost } from "./prompt-host";
 
 const executable = "/programs/shell-engine.wasm";
 interface Registration {
@@ -146,6 +147,20 @@ function createRegistration(runtime: Runtime, wasmUrl: string, workerUrl: string
   };
 }
 
+/** Pages without a prompt provider never load the prompt host. */
+function importPromptHost(options: ShellOptions) {
+  if (options.script !== undefined || !options.prompt) return Promise.resolve(undefined);
+  return import("./prompt-host");
+}
+
+function shellArguments(options: ShellOptions, promptHost: PromptHost | undefined): string[] {
+  if (options.script !== undefined) return ["shell-engine", "-c", options.script];
+  return ["shell-engine", "-i"].concat(
+    options.lineEditor ? ["--line-editor", options.lineEditor.mode] : [],
+    promptHost ? ["--prompt-host"] : [],
+  );
+}
+
 export async function startShell(
   options: ShellOptions,
   terminal: SharedBridge,
@@ -153,6 +168,8 @@ export async function startShell(
   const runtime = options.runtime;
   options.signal?.throwIfAborted();
   const registration = registerShell(runtime, options);
+  const promptModule = importPromptHost(options);
+  void promptModule.catch(() => {});
   const filesystem = runtime.filesystem.fork();
   const { port: _port, ...identity } = filesystem;
   const cwd = options.cwd ?? "/home/guest";
@@ -203,6 +220,7 @@ export async function startShell(
   let unobserveExit = () => {};
   let release = () => {};
   let terminalController: ReturnType<typeof createTerminalController> | undefined;
+  let promptHost: PromptHost | undefined;
   let resolveDone!: (result: RuntimeExit) => void;
   const done = new Promise<RuntimeExit>((resolve) => {
     resolveDone = resolve;
@@ -275,6 +293,7 @@ export async function startShell(
     );
     const status = waitStatus(winner);
     terminalController?.stop();
+    promptHost?.stop();
     if (Atomics.load(terminal.state, control.phase) !== 4) {
       Atomics.store(terminal.state, control.status, status);
       Atomics.store(terminal.state, control.phase, result.error ? 4 : 3);
@@ -304,6 +323,12 @@ export async function startShell(
     if (signal === 2 && interruptForeground()) return;
     void service!.kill(state.pid, signal).catch(signalFailure);
   };
+  // SIGWINCH to the shell itself, never a job. Best effort: a wake that loses a race
+  // with the shell's exit leaves nothing to redraw.
+  const wakePrompt = () => {
+    if (finished || runtime.disposed) return;
+    void service!.kill(state.pid, 28).catch(() => {});
+  };
   try {
     options.signal?.addEventListener("abort", abort, { once: true });
     options.signal?.throwIfAborted();
@@ -316,6 +341,7 @@ export async function startShell(
     markStartup(options.onStartupStage, "shell-registration-resolved");
     markStartup(options.onStartupStage, "shell-module-requested");
     const loaded = await pending(() => registration.module(options.onStartupStage));
+    const promptHosting = await pending(() => promptModule);
     markStartup(options.onStartupStage, "shell-module-resolved");
     if (runtime.disposed) throw new Error("Runtime is disposed");
     markStartup(options.onStartupStage, "shell-processes-requested");
@@ -367,6 +393,23 @@ export async function startShell(
       await clean();
       throw new Error("Shell stopped before worker startup");
     }
+    const env = {
+      HOME: "/home/guest",
+      USER: "guest",
+      PATH: "/bin",
+      TERM: "xterm-256color",
+      LANG: "C.UTF-8",
+      ...options.env,
+      PWD: cwd,
+    };
+    promptHost = promptHosting?.startPromptHost({
+      provider: options.prompt!,
+      terminal,
+      lineEditor: options.lineEditor,
+      cwd,
+      env,
+      wake: wakePrompt,
+    });
     worker = service.takeWorker(registration.workerUrl);
     worker.onmessage = ({ data: message }: MessageEvent<ShellWorkerMessage>) => {
       if (runtime.disposed) return;
@@ -406,26 +449,14 @@ export async function startShell(
       finish({ code: 1, error: "Shell worker message could not be decoded" });
     const request: ShellWorkerRequest = {
       module: loaded.module,
-      args:
-        options.script === undefined
-          ? ["shell-engine", "-i"].concat(
-              options.lineEditor ? ["--line-editor", options.lineEditor.mode] : [],
-            )
-          : ["shell-engine", "-c", options.script],
-      env: {
-        HOME: "/home/guest",
-        USER: "guest",
-        PATH: "/bin",
-        TERM: "xterm-256color",
-        LANG: "C.UTF-8",
-        ...options.env,
-        PWD: cwd,
-      },
+      args: shellArguments(options, promptHost),
+      env,
       filesystem,
       runtimeProcess: transport,
       terminal: terminal.buffer,
       terminalAdmission: admission,
       memoryUsage: memory,
+      prompt: promptHost?.buffer,
     };
     worker.postMessage(request, [filesystem.port]);
     markStartup(options.onStartupStage, "shell-worker-start-requested");
