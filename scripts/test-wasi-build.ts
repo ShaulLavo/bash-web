@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
@@ -12,7 +12,12 @@ import {
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { wasiBuildConfiguration, wasiBuildEnvironment } from "./wasi-build.ts";
+import {
+  wasiBuildConfiguration,
+  wasiBuildEnvironment,
+  wasiCargoEnvironment,
+  wasiSysrootCommand,
+} from "./wasi-build.ts";
 import { waffleBuildFixture } from "../tests/helpers/waffle-build-inputs.ts";
 
 const builder = `#!/bin/bash
@@ -178,4 +183,31 @@ for (const binary of ["shell-runtime", "argv-py", "printenv-py"]) {
 
 test("standalone shell build keeps its existing verifier policy", () => {
   runAdapterPolicy("shell-engine", "shell_engine::runtime::wasi");
+});
+
+test("Cargo environment calculation preserves caller values without preparing a sysroot", () => {
+  fixture((root, env) => {
+    env.CARGO_TARGET_DIR = "wrong-target";
+    env.SHELL_BUILD_MARKER = "keep";
+    const config = wasiBuildConfiguration(root, env);
+    const result = wasiCargoEnvironment(root, ".build/isolated-guest", env);
+    assert.equal(result.CARGO_TARGET_DIR, resolve(root, ".build/isolated-guest"));
+    assert.equal(result.SHELL_BUILD_MARKER, "keep");
+    assert.equal(env.CARGO_TARGET_DIR, "wrong-target");
+    assert.equal(result.WASI_SDK_PATH, config.sdk);
+    assert.throws(() => readFileSync(resolve(root, "builds")), { code: "ENOENT" });
+    assert.throws(() => readFileSync(resolve(config.directory, "recipe.sha256")), {
+      code: "ENOENT",
+    });
+  });
+});
+
+test("async-supervised preparation uses the supplied root and child environment", () => {
+  fixture((root, env) => {
+    const [command, args] = wasiSysrootCommand(root);
+    execFileSync(command, args, { cwd: "/", env, stdio: "pipe" });
+    const config = wasiBuildConfiguration(root, env);
+    assert.equal(readFileSync(resolve(root, "builds"), "utf8"), "build\n");
+    assert.equal(readFileSync(resolve(config.directory, "recipe.sha256"), "utf8"), config.identity);
+  });
 });

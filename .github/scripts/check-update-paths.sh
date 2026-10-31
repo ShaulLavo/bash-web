@@ -24,7 +24,7 @@ check_record_type() {
 
 while IFS= read -r -d '' path; do
   case "$path" in
-    package.json|package-lock.json|bun.lock|sources.lock.json|shell/compat-fixtures/Cargo.toml|shell/Cargo.lock) ;;
+    package.json|package-lock.json|bun.lock|sources.lock.json|shell/engine/Cargo.toml|shell/compat-fixtures/Cargo.toml|shell/Cargo.lock) ;;
     *) echo "::error::Dependency updater changed a forbidden path: $path" >&2; exit 1 ;;
   esac
   if ! git cat-file -e "HEAD:$path"; then
@@ -33,3 +33,20 @@ while IFS= read -r -d '' path; do
   fi
   if [[ $# == 0 ]]; then check_record_type "$path"; fi
 done < <(changed_paths "$@")
+
+if [[ $# == 0 ]]; then
+  scratch=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/waffle-manifest-validation-XXXXXX")
+  trap 'rm -rf "$scratch"' EXIT
+  normalize_support_revisions() {
+    sed -E '/^[[:space:]]*waffle-program-support[[:space:]]*=/{s/(rev = ")[0-9a-f]{40}(")/\1<waffle-program-support-rev>\2/;}'
+  }
+  for file in shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; do
+    [[ -f "$file" ]] || continue
+    git show "HEAD:$file" | normalize_support_revisions > "$scratch/before"
+    normalize_support_revisions < "$file" > "$scratch/after"
+    if ! cmp -s "$scratch/before" "$scratch/after"; then
+      echo "::error::Dependency updater changed Cargo manifest fields beyond waffle-program-support revision pins: $file" >&2
+      exit 1
+    fi
+  done
+fi

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { functionNames, verifyWasiGuest } from "./verify-wasi-guests.ts";
 import { verifyStrippedWasiGuest } from "./verify-family-guests.ts";
 import { stripNames } from "./capture-family-symbols.ts";
 
@@ -22,19 +22,14 @@ const section = (kind: number, body: number[]) => [kind].concat(integer(body.len
 
 // Original minimal modules for the verifier only; production artifacts are also
 // inspected by every build entrypoint. The disassembler is a controlled stand-in.
-function moduleBytes(maximum: number, withNames = true, adapter = false) {
+function moduleBytes(maximum: number, withNames = true, adapter?: string) {
   const imports = [2].concat(
     ...["fd_prestat_get", "fd_fdstat_get"].map((name) =>
       text("wasi_snapshot_preview1").concat(text(name), [0, 0]),
     ),
   );
   const names = adapter
-    ? [2].concat(
-        [0],
-        text("shell_engine::runtime::wasi::fd_prestat_get"),
-        [1],
-        text("shell_engine::runtime::wasi::fd_fdstat_get"),
-      )
+    ? [2].concat([0], text(`${adapter}::fd_prestat_get`), [1], text(`${adapter}::fd_fdstat_get`))
     : [3].concat(
         [0],
         text("__wasi_fd_prestat_get"),
@@ -133,7 +128,7 @@ test("deadstripped libc is accepted only when no filesystem imports remain", () 
 
 test("direct Rust adapter imports prove scanner omission without hiding libc", () => {
   fixture((path, sdk) => {
-    writeFileSync(path, moduleBytes(4096, true, true));
+    writeFileSync(path, moduleBytes(4096, true, "shell_engine::runtime::wasi"));
     verifyWasiGuest(path, sdk);
   });
 });
@@ -198,4 +193,28 @@ test("restored release symbols still require the original guest memory cap", () 
       /guest memory cap changed/,
     );
   });
+});
+
+test("an explicit filesystem adapter is verified by its exact imported function index", () => {
+  fixture((path, sdk) => {
+    const adapter = "waffle_program_support::runtime::wasi";
+    writeFileSync(path, moduleBytes(4096, true, adapter));
+    verifyWasiGuest(path, sdk, adapter);
+    assert.throws(
+      () => verifyWasiGuest(path, sdk),
+      /filesystem imports remain but libc scanner is missing/,
+    );
+  });
+});
+
+test("the symbol reader preserves function indices for released-guest provenance", () => {
+  const module = new WebAssembly.Module(moduleBytes(4096));
+  assert.deepEqual(
+    functionNames(module),
+    new Map([
+      ["__wasi_fd_prestat_get", 0],
+      ["__wasi_fd_fdstat_get", 1],
+      ["__wasilibc_populate_preopens", 2],
+    ]),
+  );
 });

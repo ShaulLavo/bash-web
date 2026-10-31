@@ -10,6 +10,39 @@ import {
 } from "./shell-scoreboard.ts";
 import type { Binding, Oracle, RunBinding, Score, ScoreComparison } from "./shell-scoreboard.ts";
 
+export interface FloorCorrection {
+  id: string;
+  reason: string;
+}
+const builtinFollowUp =
+  "plans/007-agent-shell-compatibility.md#follow-up-read-timeouts-and-mapfile";
+export const falsePassCorrections: readonly FloorCorrection[] = [
+  {
+    id: "brush-suite:builtins/mapfile:10",
+    reason: `false pass: earlier redirection failure masked unsupported mapfile; real support tracked in ${builtinFollowUp}`,
+  },
+  {
+    id: "oils:builtin-read:605",
+    reason: `false pass: earlier redirection failure masked unsupported read -t; real support tracked in ${builtinFollowUp}`,
+  },
+  {
+    id: "oils:builtin-read:619",
+    reason: `false pass: earlier redirection failure masked unsupported read -t; real support tracked in ${builtinFollowUp}`,
+  },
+];
+function assertFloorCorrections(value: unknown): asserts value is FloorCorrection[] {
+  assert.ok(Array.isArray(value), "invalid floor corrections");
+  const ids = new Set<string>();
+  for (const correction of value) {
+    assertRecord(correction);
+    assert.ok(typeof correction.id === "string", "invalid correction ID");
+    assert.ok(!ids.has(correction.id), "duplicate floor correction");
+    ids.add(correction.id);
+    const approved = falsePassCorrections.find(({ id }) => id === correction.id);
+    assert.ok(approved, "unapproved floor correction");
+    assert.deepEqual(correction, approved, "floor correction differs from approved reason");
+  }
+}
 export interface FloorEvidence {
   kind: string;
   [key: string]: unknown;
@@ -22,6 +55,7 @@ export interface MainFloor {
   floorSha256: string;
   floorIds: string[];
   evidence: FloorEvidence[];
+  corrections?: readonly FloorCorrection[];
   run?: RunBinding;
   beforeSha?: string;
   lostIds?: string[];
@@ -36,6 +70,7 @@ export function assertMainFloor(value: unknown): asserts value is MainFloor {
   assert.equal(typeof value.floorSha256, "string", "missing floor digest");
   assert.ok(Array.isArray(value.floorIds), "missing floor IDs");
   for (const id of value.floorIds) assert.equal(typeof id, "string", "invalid floor ID");
+  if (value.corrections !== undefined) assertFloorCorrections(value.corrections);
   assert.ok(Array.isArray(value.evidence), "missing floor evidence");
   for (const evidence of value.evidence) {
     assertRecord(evidence);
@@ -61,6 +96,7 @@ export function assertQualification(value: unknown): asserts value is Qualificat
   assert.equal(typeof value.floorSha256, "string", "missing qualification floor digest");
   assert.equal(typeof value.scoreSha256, "string", "missing qualification score digest");
   assert.equal(typeof value.ok, "boolean", "missing qualification result");
+  if (value.floorCorrections !== undefined) assertFloorCorrections(value.floorCorrections);
   assertRecord(value.counts);
   for (const summary of Object.values(value.counts)) {
     assertRecord(summary);
@@ -87,6 +123,7 @@ export interface Qualification extends ScoreComparison {
   observedMainAfter?: string | null;
   gainedSincePredecessor?: Record<string, string[]>;
   floorSource?: unknown;
+  floorCorrections?: readonly FloorCorrection[];
   [key: string]: unknown;
 }
 
@@ -131,8 +168,32 @@ export function validateFloor(oracle: Oracle, floor: MainFloor): MainFloor {
   );
   for (const id of floor.floorIds)
     assert.ok(scored.has(id), `unknown or excluded floor case ${id}`);
+  if (floor.corrections !== undefined) {
+    assertFloorCorrections(floor.corrections);
+    for (const correction of floor.corrections)
+      assert.ok(scored.has(correction.id), "unknown or excluded corrected case");
+  }
   assert.equal(floor.floorSha256, digest(floor.floorIds), "floor membership digest");
   return floor;
+}
+export function correctFalsePasses(oracle: Oracle, floor: MainFloor): MainFloor {
+  validateFloor(oracle, floor);
+  const recorded = floor.corrections ?? [];
+  const pending = falsePassCorrections.filter(
+    ({ id }) => floor.floorIds.includes(id) && !recorded.some((item) => item.id === id),
+  );
+  if (!pending.length) return floor;
+  const floorIds = floor.floorIds.filter((id) => !pending.some((item) => item.id === id));
+  return validateFloor(oracle, {
+    ...floor,
+    floorIds,
+    floorSha256: digest(floorIds),
+    corrections: recorded.concat(pending).toSorted((a, b) => a.id.localeCompare(b.id)),
+  });
+}
+function inheritedIds(floor: MainFloor, corrected: ReadonlySet<string>): string[] {
+  const recorded = new Set(floor.corrections?.map(({ id }) => id));
+  return floor.floorIds.filter((id) => !corrected.has(id) || recorded.has(id));
 }
 export function compareFloor(oracle: Oracle, floor: MainFloor, score: Score): ScoreComparison {
   validateFloor(oracle, floor);
@@ -164,10 +225,16 @@ export function accumulateFloor({
 }): MainFloor {
   const validatedSourceSha = validSourceSha(sourceSha);
   assert.ok(predecessors.length > 0, "missing predecessor floor");
+  const corrections = Array.from(
+    new Map(
+      predecessors.flatMap((floor) => floor.corrections ?? []).map((item) => [item.id, item]),
+    ).values(),
+  ).sort((a, b) => a.id.localeCompare(b.id));
+  const corrected = new Set(corrections.map(({ id }) => id));
   const ids = new Set<string>();
   for (const predecessor of predecessors) {
     validateFloor(oracle, predecessor);
-    for (const id of predecessor.floorIds) ids.add(id);
+    for (const id of inheritedIds(predecessor, corrected)) ids.add(id);
   }
   for (const score of scores) for (const id of scoreFloor(oracle, score)) ids.add(id);
   const floorIds = Array.from(ids).sort();
@@ -179,6 +246,7 @@ export function accumulateFloor({
     floorSha256: digest(floorIds),
     floorIds,
     evidence,
+    ...(corrections.length ? { corrections } : {}),
   });
 }
 export function bootstrapFloor(oracle: Oracle, sourceSha: string, score: Score): MainFloor {
@@ -211,5 +279,6 @@ export function qualification(
     scoreSha256: digest(score),
     counts: summarize(score),
     ...delta,
+    ...(floor.corrections?.length ? { floorCorrections: floor.corrections } : {}),
   };
 }
