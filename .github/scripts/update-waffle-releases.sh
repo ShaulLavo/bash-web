@@ -18,10 +18,11 @@ release_source_revision() {
   local direct_ref="refs/tags/${tag}"
   local peeled_ref="${direct_ref}^{}"
   local refs direct=''
-  refs=$(git ls-remote "$repository" "$peeled_ref" "$direct_ref")
+  refs=$(git ls-remote "$repository" "$peeled_ref" "$direct_ref") || return
   while IFS=$'\t' read -r revision ref; do
     [[ -n "$revision" && -n "$ref" ]] || continue
     if [[ "$ref" == "$peeled_ref" ]]; then
+      [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || return 1
       printf '%s\n' "$revision"
       return
     fi
@@ -29,7 +30,7 @@ release_source_revision() {
       direct=$revision
     fi
   done <<< "$refs"
-  test -n "$direct"
+  [[ "$direct" =~ ^[0-9a-f]{40}$ ]] || return 1
   printf '%s\n' "$direct"
 }
 
@@ -42,7 +43,7 @@ update_runtime() {
     return
   fi
 
-  revision=$(release_source_revision https://github.com/ShaulLavo/waffle.git "$tag")
+  revision=$(release_source_revision https://github.com/ShaulLavo/waffle.git "$tag") || return
   specifier="https://github.com/ShaulLavo/waffle/releases/download/${tag}/waffle-${version}.tgz"
   archive_sha=$(curl --fail --location --silent --show-error "$specifier" | sha256sum | cut -d ' ' -f 1)
   builder_sha=$(curl --fail --location --silent --show-error \

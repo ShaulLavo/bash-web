@@ -105,28 +105,39 @@ GH
   cat > "$root/bin/git" <<'GIT'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$1" == ls-remote ]]; then
-  tag=${*: -1}
-  tag=${tag#refs/tags/}
-  tag=${tag%\^\{\}}
-  if [[ "$*" == *'waffle-v'* ]]; then
-    if [[ "$GIT_REF_MODE" == annotated ]]; then
-      printf '%s\trefs/tags/%s\n' "${RUNTIME_TAG_OBJECT}" "$tag"
-      if [[ "$#" -ge 4 ]]; then
-        printf '%s\trefs/tags/%s^{}\n' "${RUNTIME_SOURCE_REVISION}" "$tag"
-      fi
-      exit 0
-    fi
-    printf '%s\trefs/tags/%s\n' "${RUNTIME_DIRECT_REVISION}" "$tag"
-    exit 0
-  fi
-  if [[ "$*" == *'programs-v'* ]]; then
-    printf '%s\trefs/tags/%s\n' "${PROGRAM_TAG_OBJECT}" "$tag"
-    printf '%s\trefs/tags/%s^{}\n' "${PROGRAM_SOURCE_REVISION}" "$tag"
-    exit 0
-  fi
+if [[ "$1" != ls-remote ]]; then
+  exec "$REAL_GIT" "$@"
 fi
-exec "$REAL_GIT" "$@"
+tag=${*: -1}
+tag=${tag#refs/tags/}
+tag=${tag%\^\{\}}
+if [[ "$*" == *'programs-v'* ]]; then
+  printf '%s\trefs/tags/%s\n' "${PROGRAM_TAG_OBJECT}" "$tag"
+  printf '%s\trefs/tags/%s^{}\n' "${PROGRAM_SOURCE_REVISION}" "$tag"
+  exit 0
+fi
+case "$GIT_REF_MODE" in
+  failed) echo 'fixture: remote lookup failed' >&2; exit 1 ;;
+  partial)
+    printf '%s\trefs/tags/%s\n' "${RUNTIME_DIRECT_REVISION}" "$tag"
+    echo 'fixture: remote lookup failed after partial output' >&2
+    exit 1
+    ;;
+  missing) exit 0 ;;
+  invalid) printf 'invalid-revision\trefs/tags/%s\n' "$tag" ;;
+  invalid-peeled)
+    printf '%s\trefs/tags/%s\n' "${RUNTIME_TAG_OBJECT}" "$tag"
+    printf 'invalid-revision\trefs/tags/%s^{}\n' "$tag"
+    ;;
+  annotated)
+    printf '%s\trefs/tags/%s\n' "${RUNTIME_TAG_OBJECT}" "$tag"
+    if [[ "$#" -ge 4 ]]; then
+      printf '%s\trefs/tags/%s^{}\n' "${RUNTIME_SOURCE_REVISION}" "$tag"
+    fi
+    ;;
+  direct) printf '%s\trefs/tags/%s\n' "${RUNTIME_DIRECT_REVISION}" "$tag" ;;
+  *) echo "unexpected Git ref mode: $GIT_REF_MODE" >&2; exit 1 ;;
+esac
 GIT
   cat > "$root/bin/curl" <<'CURL'
 #!/usr/bin/env bash
@@ -178,7 +189,7 @@ run_updater() {
 
 assert_support_revision() {
   local root=$1 revision=$2
-  rg -q "waffle-program-support.*rev = \"${revision}\"" "$root/shell/engine/Cargo.toml"
+  test "$(rg -c "waffle-program-support.*rev = \"${revision}\"" "$root/shell/engine/Cargo.toml")" = 2
   test "$(rg -c 'waffle-program-support.*rev =' "$root/shell/engine/Cargo.toml")" = 2
   rg -q "waffle-program-support.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   rg -q "name = \"waffle-program-support\"" "$root/shell/Cargo.lock"
@@ -240,8 +251,27 @@ run_guard_negative_fixture() {
   grep -q 'beyond waffle-program-support revision pins' "$root/guard.log"
 }
 
+run_bad_ref_fixture() {
+  local mode=$1 root="$scratch/bad-ref-$1"
+  write_fixture "$root" 0.0.105 0.0.13
+  write_stubs "$root"
+  if RELEASE_RUNTIME=0.0.106 RELEASE_PROGRAM=0.0.14 GIT_REF_MODE="$mode" run_updater "$root" > "$root/updater.log" 2>&1; then
+    echo "FAIL: ${mode} runtime lookup passed the updater" >&2
+    exit 1
+  fi
+  "$real_git" -C "$root" diff --exit-code
+  test ! -s "$root/cargo-calls"
+  test ! -s "$root/npm-calls"
+  test ! -s "$root/bun-calls"
+}
+
+run_bad_ref_fixture partial
+run_bad_ref_fixture failed
+run_bad_ref_fixture missing
+run_bad_ref_fixture invalid
+run_bad_ref_fixture invalid-peeled
 run_pair_fixture annotated 0.0.106
 run_pair_fixture direct 0.0.107
 run_no_runtime_fixture
 run_guard_negative_fixture
-printf '%s\n' 'Waffle updater fixtures passed: peeled and lightweight refs, runtime-owned support, no-runtime preservation, repeat stability, and narrow manifest guards.'
+printf '%s\n' 'Waffle updater fixtures passed: peeled and lightweight refs, runtime-owned support, no-runtime preservation, repeat stability, narrow manifest guards, and rejected failed/missing/invalid refs.'
