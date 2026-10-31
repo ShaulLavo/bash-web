@@ -59,7 +59,7 @@ function readEntry(
     offset += 2;
     if (extended & ~0x6000) throw new Error("unsupported index flags");
   }
-  const strip = version === 4 ? readStrip(bytes, offset, end) : { count: 0, offset };
+  const strip = version === 4 ? readStrip(view, offset, end) : { count: 0, offset };
   offset = strip.offset;
   const terminator = bytes.indexOf(0, offset);
   if (terminator < offset || terminator >= end || terminator - offset > 4096)
@@ -96,16 +96,13 @@ function readEntry(
   };
 }
 
-function readStrip(
-  bytes: Uint8Array,
-  offset: number,
-  end: number,
-): { count: number; offset: number } {
-  let byte = bytes[offset++];
+function readStrip(view: DataView, offset: number, end: number): { count: number; offset: number } {
+  if (offset >= end) throw new Error("invalid index prefix");
+  let byte = view.getUint8(offset++);
   let count = byte & 127;
   for (let length = 1; byte & 128; length++) {
     if (offset >= end || length > 4) throw new Error("invalid index prefix");
-    byte = bytes[offset++];
+    byte = view.getUint8(offset++);
     count = (count + 1) * 128 + (byte & 127);
   }
   return { count, offset };

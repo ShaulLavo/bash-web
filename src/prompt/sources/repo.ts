@@ -35,10 +35,10 @@ export async function readRepository(
 async function discover(filesystem: TurnFilesystem, cwd: string): Promise<Candidate | undefined> {
   const roots = ancestors(normalizePath(cwd));
   const entries = await Promise.all(roots.map((path) => filesystem.lookup(path)));
-  for (let index = 0; index < roots.length; index++) {
+  for (const [index, root] of roots.entries()) {
     const entry = entries[index];
     if (entry?.kind !== "dir" || !entry.children.has(".git")) continue;
-    return { root: roots[index], gitDir: joinPath(roots[index], ".git") };
+    return { root, gitDir: joinPath(root, ".git") };
   }
   return undefined;
 }
@@ -70,9 +70,9 @@ async function resolveGitDirectory(filesystem: TurnFilesystem, path: string): Pr
   if (entry?.kind === "dir") return path;
   if (entry?.kind !== "file") throw new Error("Missing git directory");
   const text = await requiredText(filesystem, path);
-  const match = /^gitdir: (.+)$/u.exec(text);
-  if (!match) throw new Error("Invalid gitdir file");
-  return resolvePath(parentPath(path), match[1]);
+  const gitDir = /^gitdir: (.+)$/u.exec(text)?.[1];
+  if (gitDir === undefined) throw new Error("Invalid gitdir file");
+  return resolvePath(parentPath(path), gitDir);
 }
 
 async function readHead(
@@ -191,13 +191,15 @@ function unsupportedFormat(config: string): boolean {
     const line = raw.trim();
     if (line.startsWith("[")) {
       const header = /^\[\s*([^\]\s]+)\s*\]\s*(?:[#;].*)?$/u.exec(line);
-      section = header?.[1].toLowerCase() ?? "";
+      section = header?.[1]?.toLowerCase() ?? "";
     }
     if (section !== "extensions") continue;
     const match = /^(objectformat|refstorage)\s*=\s*"?([^"\s#;]+)"?/iu.exec(line);
-    if (!match) continue;
-    const supported = match[1].toLowerCase() === "objectformat" ? "sha1" : "files";
-    if (match[2].toLowerCase() !== supported) return true;
+    const key = match?.[1];
+    const value = match?.[2];
+    if (key === undefined || value === undefined) continue;
+    const supported = key.toLowerCase() === "objectformat" ? "sha1" : "files";
+    if (value.toLowerCase() !== supported) return true;
   }
   return false;
 }

@@ -41,8 +41,7 @@ export class PackIndex {
       bucket++;
     }
     index.offsets.sort((left, right) => left - right);
-    for (let position = 0; position < index.offsets.length; position++) {
-      const start = index.offsets[position];
+    for (const [position, start] of index.offsets.entries()) {
       const end = index.offsets[position + 1] ?? 0;
       requireObject(start >= 12 && (!end || end > start));
       index.ends.set(start, end);
