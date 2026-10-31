@@ -337,7 +337,14 @@ export function sealRaw({
   assert.equal(prepared.sourceSha, git(root, ["rev-parse", "HEAD"]));
   assert.equal(prepared.sourceSha, process.env.GITHUB_SHA);
   assert.equal(prepared.run.runId, Number(process.env.GITHUB_RUN_ID));
-  assert.equal(prepared.run.attempt, Number(process.env.GITHUB_RUN_ATTEMPT));
+  const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+  assert.ok(
+    Number.isSafeInteger(attempt) &&
+      Number.isSafeInteger(prepared.run.attempt) &&
+      prepared.run.attempt > 0 &&
+      prepared.run.attempt <= attempt,
+    "preparation cannot come from a later attempt",
+  );
   assert.equal(prepared.inputsSha256, digest(scoringInputs(root, prepared.sourceSha)));
   assert.deepEqual(
     prepared.selected,
@@ -358,6 +365,7 @@ export function sealRaw({
     schema: 1,
     kind: "raw-score",
     ...prepared,
+    run: { runId: prepared.run.runId, attempt },
     resultSha256: digest(score),
     score,
   });

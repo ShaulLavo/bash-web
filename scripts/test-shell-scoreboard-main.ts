@@ -1304,7 +1304,7 @@ function qualificationFixture(repo: RepoContext, dispatch = false) {
   async function request(path: string, type: "json" | "bytes" | "text" = "json"): Promise<unknown> {
     requests.push(path);
     if (path === "/git/ref/heads/main") return { object: { sha: client.observedMain } };
-    if (path === "/actions/runs/11/attempts/1") return run;
+    if (path === `/actions/runs/11/attempts/${run.run_attempt}`) return run;
     if (
       path.startsWith("/actions/runs/11/") ||
       path === "/actions/jobs/99/logs" ||
@@ -1328,7 +1328,7 @@ function qualificationFixture(repo: RepoContext, dispatch = false) {
     const value = hostedArtifact({
       root,
       sourceSha: input.sourceSha,
-      attempt: 1,
+      attempt: raw.run.attempt,
       kind: "raw",
       observation: raw.score,
       requiredFloor,
@@ -1338,14 +1338,14 @@ function qualificationFixture(repo: RepoContext, dispatch = false) {
     value.bytes = archive([["raw.json", JSON.stringify(raw)]] satisfies [string, string][]);
     Object.assign(value.artifact, {
       id: 999,
-      name: `own-shell-raw-${input.sourceSha}-11-1`,
+      name: `own-shell-raw-${input.sourceSha}-11-${raw.run.attempt}`,
       digest: `sha256:${bytesDigest(value.bytes)}`,
       workflow_run: { id: 11, head_sha: run.head_sha, head_repository_id: authority.repositoryId },
     });
     value.logs = `2026-10-24T17:00:01.100Z SHA256 digest of uploaded artifact zip is ${bytesDigest(value.bytes)}\n2026-10-24T17:00:01.200Z Artifact ${value.artifact.name} has been successfully uploaded! Final size is ${value.bytes.length} bytes. Artifact ID is 999\n`;
     rawClient = hostedClient(input.sourceSha, [value]);
   }
-  return { ...input, client, ids, score, publish };
+  return { ...input, client, ids, score, publish, run };
 }
 async function withQualificationEnvironment(
   input: ReturnType<typeof qualificationFixture> | ReturnType<typeof rebuiltMerge>,
@@ -1442,6 +1442,51 @@ test("stale-event preparation, sealing and host-admitted folding preserve the ca
   await withRepo(async (repo) => {
     const input = qualificationFixture(repo);
     await withQualificationEnvironment(input, () => assertQualificationLifecycle(input));
+  });
+});
+
+async function assertRerunSeal(input: ReturnType<typeof qualificationFixture>): Promise<void> {
+  const { root, client, ids } = input;
+  const preparedPath = resolve(root, "rerun-prepared.json");
+  const scorePath = resolve(root, "rerun-score.json");
+  const output = resolve(root, "rerun-raw");
+  await prepareQualification({ root, client, output: preparedPath });
+  const prepared: unknown = JSON.parse(readFileSync(preparedPath, "utf8"));
+  assertRecord(prepared);
+  assertRecord(prepared.run);
+  writeFileSync(scorePath, JSON.stringify(input.score(ids)));
+  const seal = () => sealRaw({ root, input: preparedPath, scorePath, output });
+
+  process.env.GITHUB_RUN_ATTEMPT = "2";
+  seal();
+  const raw: unknown = JSON.parse(readFileSync(resolve(output, "raw.json"), "utf8"));
+  assertRawScore(raw);
+  assert.deepEqual(raw.run, { runId: 11, attempt: 2 });
+  input.run.run_attempt = 2;
+  input.publish(raw);
+  const folded = await foldQualification({
+    root,
+    client,
+    rawPath: resolve(output, "raw.json"),
+    output,
+  });
+  assert.equal(folded.ok, true);
+
+  for (const patch of [
+    { run: { runId: 12, attempt: 1 } },
+    { sourceSha: sha(123) },
+    { inputsSha256: "0".repeat(64) },
+    { run: { runId: 11, attempt: 3 } },
+  ]) {
+    writeFileSync(preparedPath, JSON.stringify({ ...prepared, ...patch }));
+    assert.throws(seal);
+  }
+}
+
+test("a failed-jobs rerun seals an earlier observation while retaining run and source checks", async () => {
+  await withRepo(async (repo) => {
+    const input = qualificationFixture(repo);
+    await withQualificationEnvironment(input, () => assertRerunSeal(input));
   });
 });
 
