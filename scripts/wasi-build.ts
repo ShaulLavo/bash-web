@@ -149,7 +149,11 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const binIndex = args.indexOf("--bin");
   const binaries = binIndex >= 0 ? [args[binIndex + 1]] : workspaceGuests;
   for (const binary of binaries) {
-    verifyWasiGuest(resolve(target, wasiTarget, "release", `${binary}.wasm`));
+    verifyWasiGuest(
+      resolve(target, wasiTarget, "release", `${binary}.wasm`),
+      undefined,
+      binary === "shell-runtime" ? "waffle_program_support::runtime::wasi" : undefined,
+    );
   }
 }
 
