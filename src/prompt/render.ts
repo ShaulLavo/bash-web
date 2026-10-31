@@ -1,10 +1,11 @@
 import { composePrompt } from "./compose";
 import { resolvePromptConfig } from "./config/defaults";
-import { TurnFilesystem } from "./fs";
-import { PromptTurnLive } from "./live";
+import { TurnFilesystem, type PromptEntry } from "./fs";
+import { WorkBudget, PromptTurnLive } from "./live";
 import { readDirectory, readManifest } from "./sources";
 import type {
   CreatePromptOptions,
+  PromptConfig,
   PromptContext,
   PromptLive,
   PromptMetrics,
@@ -17,33 +18,19 @@ export interface PromptConfigReader {
   read(
     filesystem: TurnFilesystem,
     path: string,
-    base: import("./types").PromptConfig,
+    base: PromptConfig,
+    knownEntry?: PromptEntry,
   ): Promise<ResolvedPromptConfig>;
 }
-
+export type PromptConfigLoader = (path: string) => Promise<PromptConfigReader>;
 export interface RenderResult {
   readonly text: string;
   readonly metrics: PromptMetrics;
 }
-
 interface RenderState {
-  readonly config: ResolvedPromptConfig;
-  readonly directory: DirectorySnapshot | undefined;
-  readonly manifest: ManifestSnapshot | undefined;
-}
-
-function environment(context: PromptContext): { noColor: boolean; trueColor: boolean } {
-  const term = context.variables.get("TERM") ?? "";
-  const color = context.variables.get("COLORTERM") ?? "";
-  return {
-    noColor: context.variables.has("NO_COLOR"),
-    trueColor: color === "truecolor" || color === "24bit" || term.includes("direct"),
-  };
-}
-
-function configPath(context: PromptContext): string {
-  const home = context.variables.get("HOME") ?? "/";
-  return `${home.replace(/\/$/, "")}/.config/bash-web/prompt.json`;
+  config: ResolvedPromptConfig;
+  directory: DirectorySnapshot | undefined;
+  manifest: ManifestSnapshot | undefined;
 }
 
 export async function renderPrompt(
@@ -51,78 +38,124 @@ export async function renderPrompt(
   versions: VersionMap,
   context: PromptContext,
   live: PromptLive,
-  configFile: PromptConfigReader | Promise<PromptConfigReader> | undefined,
+  configFileLoader: PromptConfigLoader | undefined,
   baseConfig: ResolvedPromptConfig = resolvePromptConfig(options.config),
+  onConfig?: (config: ResolvedPromptConfig) => void,
 ): Promise<RenderResult> {
   const started = performance.now();
-  const filesystem = new TurnFilesystem(options.filesystem);
-  const configPromise =
-    options.file && configFile
-      ? Promise.resolve(configFile).then((reader) =>
-          reader.read(filesystem, configPath(context), options.config ?? {}),
-        )
-      : Promise.resolve(baseConfig);
-  const directoryPromise = readDirectory(filesystem, context.cwd);
-  const manifestPromise = directoryPromise.then((directory) =>
-    readManifest(filesystem, context.cwd, directory),
+  const budget = new WorkBudget(live.signal, baseConfig.backgroundMs);
+  const filesystem = new TurnFilesystem(options.filesystem, budget);
+  const state: RenderState = { config: baseConfig, directory: undefined, manifest: undefined };
+  const work = populate(
+    state,
+    options,
+    context,
+    filesystem,
+    budget,
+    configFileLoader,
+    onConfig,
+  ).catch((error: unknown) => {
+    options.logger?.("prompt source failed", error);
+  });
+  await waitForPaint(work, baseConfig.paintMs, live.signal);
+  const text = renderState(context, versions, state);
+  const updates = new PromptTurnLive(
+    live.signal,
+    context.turn,
+    () => context.turn,
+    (next) => {
+      if (budget.active) live.update(next);
+    },
   );
-  const fast = Promise.all([configPromise, directoryPromise, manifestPromise]);
-  const timed = await Promise.race([fast.then(() => true), timeout(baseConfig.paintMs)]);
-  let state: RenderState = { config: baseConfig, directory: undefined, manifest: undefined };
-  if (timed) state = await readState(configPromise, directoryPromise, manifestPromise, baseConfig);
-  const render = (next: RenderState) =>
-    composePrompt({
-      context,
-      config: next.config,
-      directory: next.directory,
-      manifest: next.manifest,
-      versions,
-      environment: environment(context),
-    });
-  const text = render(state);
-  void fast
-    .then(async ([config, directory, manifest]) => {
-      if (live.signal.aborted) return;
-      const next = render({ config, directory, manifest });
-      if (next !== text) live.update(next);
-    })
-    .catch((error: unknown) => options.logger?.("prompt source failed", error));
+  void work.then(() => {
+    if (!budget.active) return;
+    const nextText = renderState(context, versions, state);
+    if (nextText !== text) updates.update(nextText);
+  });
   return {
     text,
     metrics: {
       paintMs: performance.now() - started,
-      backgroundMs: timed ? undefined : undefined,
+      backgroundMs: undefined,
       sourceReads: filesystem.requestCount,
     },
   };
 }
 
-async function readState(
-  config: Promise<ResolvedPromptConfig>,
-  directory: Promise<DirectorySnapshot | undefined>,
-  manifest: Promise<ManifestSnapshot | undefined>,
-  fallback: ResolvedPromptConfig,
-): Promise<RenderState> {
-  const [resolvedConfig, resolvedDirectory, resolvedManifest] = await Promise.all([
-    config,
-    directory,
-    manifest,
-  ]);
-  return {
-    config: resolvedConfig ?? fallback,
-    directory: resolvedDirectory,
-    manifest: resolvedManifest,
-  };
-}
-function timeout(ms: number): Promise<false> {
-  return new Promise((resolve) => setTimeout(() => resolve(false), ms));
+async function populate(
+  state: RenderState,
+  options: CreatePromptOptions,
+  context: PromptContext,
+  filesystem: TurnFilesystem,
+  budget: WorkBudget,
+  loader: PromptConfigLoader | undefined,
+  onConfig: ((config: ResolvedPromptConfig) => void) | undefined,
+): Promise<void> {
+  if (options.file && loader) {
+    const config = await readConfig(options, context, filesystem, budget, loader);
+    if (!budget.active) return;
+    if (config) state.config = config;
+    budget.setDuration(state.config.backgroundMs);
+    if (!budget.active) return;
+    onConfig?.(state.config);
+  }
+  const enabled = state.config.layout.filter(
+    (item) => typeof item === "string" && !state.config.segments[item].disabled,
+  );
+  if (!enabled.some((item) => item === "package" || item === "bun" || item === "nodejs")) return;
+  const directory = await readDirectory(filesystem, context.cwd);
+  if (!budget.active) return;
+  state.directory = directory;
+  if (!enabled.includes("package") && !enabled.includes("nodejs")) return;
+  const manifest = await readManifest(filesystem, context.cwd, directory);
+  if (budget.active) state.manifest = manifest;
 }
 
-export function createTurnLive(
-  signal: AbortSignal,
-  generation: number,
-  currentGeneration: () => number,
-  update: (text: string) => void,
-): PromptLive {
-  return new PromptTurnLive(signal, generation, currentGeneration, update);
+async function readConfig(
+  options: CreatePromptOptions,
+  context: PromptContext,
+  filesystem: TurnFilesystem,
+  budget: WorkBudget,
+  loader: PromptConfigLoader,
+): Promise<ResolvedPromptConfig | undefined> {
+  const home = context.variables.get("HOME") ?? "/";
+  const path = `${home.replace(/\/$/, "")}/.config/bash-web/prompt.json`;
+  const entry = await filesystem.lookup(path);
+  if (!entry || entry.kind !== "file" || !budget.active) return undefined;
+  const reader = await budget.run(() => loader(path));
+  if (!reader || !budget.active) return undefined;
+  return budget.run(() => reader.read(filesystem, path, options.config ?? {}, entry));
+}
+
+function renderState(context: PromptContext, versions: VersionMap, state: RenderState): string {
+  const term = context.variables.get("TERM") ?? "";
+  const color = context.variables.get("COLORTERM") ?? "";
+  return composePrompt({
+    context,
+    config: state.config,
+    directory: state.directory,
+    manifest: state.manifest,
+    versions,
+    environment: {
+      noColor: context.variables.has("NO_COLOR"),
+      trueColor: color === "truecolor" || color === "24bit" || term.includes("direct"),
+    },
+  });
+}
+
+async function waitForPaint(work: Promise<void>, ms: number, signal: AbortSignal): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stop = () => {};
+  const wait = new Promise<void>((resolve) => {
+    stop = resolve;
+    timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", stop, { once: true });
+    if (signal.aborted) resolve();
+  });
+  try {
+    await Promise.race([work, wait]);
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", stop);
+  }
 }

@@ -1,4 +1,5 @@
 export { createShell } from "./shell";
+export type { PromptContext, PromptLive, PromptProvider, PromptStart } from "./prompt-hook";
 export type {
   RuntimeExit,
   RuntimeProcess,

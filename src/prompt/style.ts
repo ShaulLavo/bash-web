@@ -32,17 +32,19 @@ function colorCode(
   color: Color,
   palette: Readonly<Record<string, Color>>,
   env: StyleEnvironment,
+  background = false,
 ): string | undefined {
-  if (typeof color === "number") return `38;5;${Math.max(0, Math.min(255, color))}`;
+  const extended = background ? 48 : 38;
+  if (typeof color === "number") return `${extended};5;${Math.max(0, Math.min(255, color))}`;
   const resolved = palette[color] ?? color;
-  if (typeof resolved === "number") return `38;5;${Math.max(0, Math.min(255, resolved))}`;
+  if (typeof resolved === "number") return `${extended};5;${Math.max(0, Math.min(255, resolved))}`;
   const named = namedColors[resolved];
-  if (named !== undefined) return String(named);
+  if (named !== undefined) return String(named + (background ? 10 : 0));
   const match = /^#([0-9a-f]{6})$/i.exec(resolved);
   if (!match) return undefined;
-  if (!env.trueColor) return `38;5;${rgbToAnsi256(match[1])}`;
+  if (!env.trueColor) return `${extended};5;${rgbToAnsi256(match[1])}`;
   const value = Number.parseInt(match[1], 16);
-  return `38;2;${value >> 16};${(value >> 8) & 255};${value & 255}`;
+  return `${extended};2;${value >> 16};${(value >> 8) & 255};${value & 255}`;
 }
 
 function rgbToAnsi256(hex: string): number {
@@ -74,9 +76,7 @@ export function styleToSgr(
   if (style.strike) codes.push("9");
   const foreground = style.fg === undefined ? undefined : colorCode(style.fg, palette, environment);
   const background =
-    style.bg === undefined
-      ? undefined
-      : colorCode(style.bg, palette, environment)?.replace(/^38;/, "48;");
+    style.bg === undefined ? undefined : colorCode(style.bg, palette, environment, true);
   if (foreground) codes.push(foreground);
   if (background) codes.push(background);
   return codes.length ? `\u001b[${codes.join(";")}m` : "";

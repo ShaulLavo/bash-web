@@ -31,3 +31,11 @@ The provider never runs `git`, Bun, Node, Python, or another external program. I
 The provider paints within 15 ms by default. Background work uses generation checks and coalesced updates. Git segments are reserved for the later repository and status changes.
 
 The native Starship captures in `src/prompt/fixtures/` record the 1.27.0 reference output. The package tests compare the non-git subset after removing Starship's leading erase-display control, which the prompt hook does not permit.
+
+## Lifetimes and configuration dependencies
+
+Each render owns its work budget and uses the hook's live signal. Finishing the first-answer wait does not cancel live updates. Aborting the live signal or reaching the background deadline prevents new reads and discards results from reads already admitted.
+
+Providers can serve several shells at once. They use each context's variables, not a retained startup environment. File configuration caches are keyed by the config path. The negotiated variable list grows when a file introduces a new `env_var` name, so the following shell context can supply it without removing another shell's dependencies.
+
+`npm run test:prompt` bundles and runs the prompt regressions. `npm run quality:js` runs that command and the dependency-graph size gate. The size report includes the eager graph, the full config graph, and the incremental config download. Shared chunks count in each full graph but only once in the total download.

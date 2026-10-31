@@ -1,85 +1,75 @@
-import { defaultPromptConfig, resolvePromptConfig } from "./config/defaults";
-import { createTurnLive, renderPrompt, type PromptConfigReader } from "./render";
+import { resolvePromptConfig } from "./config/defaults";
+import { renderPrompt, type PromptConfigReader } from "./render";
 import type {
   CreatePromptOptions,
   PromptContext,
   PromptLive,
   PromptProvider,
-  PromptStart,
   VersionMap,
+  ResolvedPromptConfig,
 } from "./types";
 
 export function createPrompt(options: CreatePromptOptions): PromptProvider {
   const versions: VersionMap = options.versions ?? {};
   const baseConfig = resolvePromptConfig(options.config);
-  let configFilePromise: Promise<PromptConfigReader> | undefined;
-  const configFile = () => {
-    configFilePromise ??= import("./config/file").then(
-      ({ PromptConfigFile }) => new PromptConfigFile(options.logger),
-    );
-    return configFilePromise;
-  };
-  let generation = 0;
-  let start: PromptStart | undefined;
-  const controllers = new Set<AbortController>();
-  const variables = new Set(["HOME", "VIRTUAL_ENV", "COLORTERM", "TERM", "NO_COLOR"]);
-  for (const item of baseConfig.layout)
-    if (item === "env_var") {
-      const variable = baseConfig.segments.env_var.variable;
-      if (variable) variables.add(variable);
-    }
-  return {
-    variables: Array.from(variables),
-    prepare(nextStart: PromptStart) {
-      start = nextStart;
-    },
-    render(context: PromptContext, live: PromptLive): Promise<string> {
-      generation++;
-      for (const controller of controllers) controller.abort();
-      const local = new AbortController();
-      controllers.add(local);
-      const combined = combineSignals(context.signal, live.signal, local.signal);
-      const turnLive = createTurnLive(
-        combined,
-        generation,
-        () => generation,
-        live.update.bind(live),
+  const variableNames = configuredVariables(baseConfig);
+  const generations = new WeakMap<AbortSignal, number>();
+  const readers = new Map<string, Promise<PromptConfigReader>>();
+  const loadConfigFile = (path: string) => {
+    let reader = readers.get(path);
+    if (!reader) {
+      reader = import("./config/file").then(
+        ({ PromptConfigFile }) => new PromptConfigFile(options.logger),
       );
-      const variables = new Map(start ? Object.entries(start.env) : []);
-      for (const [name, value] of context.variables) variables.set(name, value);
+      readers.set(path, reader);
+    }
+    return reader;
+  };
+  return {
+    get variables() {
+      return Array.from(variableNames);
+    },
+    prepare() {},
+    render(context: PromptContext, live: PromptLive): Promise<string> {
+      const combined = live.signal;
+      generations.set(combined, context.turn);
+      const turnLive: PromptLive = {
+        signal: combined,
+        update(text) {
+          if (generations.get(combined) === context.turn && !combined.aborted) live.update(text);
+        },
+      };
       return renderPrompt(
-        { ...options, config: options.config ?? defaultPromptConfig },
+        options,
         versions,
-        { ...context, variables, signal: combined },
+        context,
         turnLive,
-        options.file ? configFile() : undefined,
+        loadConfigFile,
         baseConfig,
+        (config) => {
+          for (const variable of configuredVariables(config)) variableNames.add(variable);
+        },
       )
         .then((result) => result.text)
         .catch((error: unknown) => {
           options.logger?.("prompt render failed", error);
           return context.ps1;
-        })
-        .finally(() => controllers.delete(local));
+        });
     },
   };
 }
 
-function combineSignals(...signals: readonly AbortSignal[]): AbortSignal {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  for (const signal of signals) {
-    if (signal.aborted) return AbortSignal.abort();
-    signal.addEventListener("abort", abort, { once: true });
-  }
-  return controller.signal;
+function configuredVariables(config: ResolvedPromptConfig): Set<string> {
+  const variables = new Set(["HOME", "VIRTUAL_ENV", "COLORTERM", "TERM", "NO_COLOR"]);
+  const envVar = config.segments.env_var.variable;
+  if (envVar) variables.add(envVar);
+  return variables;
 }
 
 export { defaultPromptConfig, resolvePromptConfig } from "./config/defaults";
 export { composePrompt } from "./compose";
 export { renderPrompt } from "./render";
-export { runWorkUnits, PromptTurnLive } from "./live";
-export type { WorkOptions, WorkUnit } from "./live";
+export { WorkBudget, PromptTurnLive } from "./live";
 export type {
   BunConfig,
   CharacterConfig,
@@ -103,8 +93,8 @@ export type {
   PromptLive,
   PromptMetrics,
   PromptProvider,
-  PromptStart,
   PythonConfig,
+  PromptStart,
   ResolvedPromptConfig,
   SegmentConfigs,
   SegmentName,

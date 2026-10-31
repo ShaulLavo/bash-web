@@ -49,11 +49,45 @@ const renderers: Partial<
   character: (input, config) => renderCharacter(input, config),
 };
 
+function sequenceEnd(text: string, offset: number, osc: boolean): number {
+  for (let index = offset; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (!osc && code >= 64 && code <= 126) return index + 1;
+    if (osc && (code === 7 || code === 156)) return index + 1;
+    if (osc && code === 27 && text[index + 1] === "\\") return index + 2;
+  }
+  return text.length;
+}
+
+function cleanText(text: string, newline: boolean): string {
+  let result = "";
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (code === 27) {
+      const next = text[index + 1];
+      index =
+        next === "[" || next === "]" ? sequenceEnd(text, index + 2, next === "]") - 1 : index + 1;
+      continue;
+    }
+    if (code === 155 || code === 157) {
+      index = sequenceEnd(text, index + 1, code === 157) - 1;
+      continue;
+    }
+    if ((newline && code === 10) || (code >= 32 && (code < 127 || code > 159)))
+      result += text[index];
+  }
+  return result;
+}
+
 function renderItem(item: LayoutItem, input: SegmentInput, config: ResolvedPromptConfig): Piece[] {
-  if (typeof item !== "string") return item.text ? [{ text: item.text, style: item.style }] : [];
+  if (typeof item !== "string")
+    return item.text ? [{ text: cleanText(item.text, true), style: item.style }] : [];
   const renderer = renderers[item];
   if (!renderer) return [];
-  return renderer(input, config.segments[item] as never) ?? [];
+  return (renderer(input, config.segments[item] as never) ?? []).map((piece) => ({
+    ...piece,
+    text: cleanText(piece.text, item === "line_break"),
+  }));
 }
 
 export function composePrompt(input: ComposeInput): string {
@@ -77,10 +111,10 @@ export function composePrompt(input: ComposeInput): string {
     merged.push(piece);
   }
   const body = merged
-    .map(
-      (piece) =>
-        `${styleToSgr(piece.style, input.config.palette, input.environment)}${piece.text}${piece.style ? "\u001b[0m" : ""}`,
-    )
+    .map((piece) => {
+      const prefix = styleToSgr(piece.style, input.config.palette, input.environment);
+      return `${prefix}${piece.text}${prefix ? "\u001b[0m" : ""}`;
+    })
     .join("");
   return `${input.config.newline ? "\n" : ""}${body}`;
 }

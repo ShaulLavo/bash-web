@@ -153,20 +153,16 @@ function mergeObject<T extends object>(base: T, patch: Partial<T> | undefined): 
   return result;
 }
 
-export function resolvePromptConfig(config: PromptConfig | undefined): ResolvedPromptConfig {
-  const mergedSegments = Object.fromEntries(
-    Object.entries(defaultPromptConfig.segments).map(([name, defaults]) => [
-      name,
-      mergeObject(defaults, config?.segments?.[name as keyof SegmentConfigs]),
-    ]),
-  ) as SegmentConfigs;
-  const merged = mergeObject(defaultPromptConfig, config as Partial<ResolvedPromptConfig>);
+export function resolvePromptConfig(
+  config: PromptConfig | undefined,
+  override?: PromptConfig,
+): ResolvedPromptConfig {
+  const host = mergeObject(defaultPromptConfig, config as Partial<ResolvedPromptConfig>);
+  const merged = mergeObject(host, override as Partial<ResolvedPromptConfig>);
   return {
     ...merged,
-    layout: config?.layout ? Array.from(config.layout) : defaultPromptConfig.layout,
-    palette: { ...defaultPromptConfig.palette, ...config?.palette },
-    segments: mergedSegments,
-    paintMs: Math.min(50, Math.max(0, config?.paintMs ?? defaultPromptConfig.paintMs)),
-    backgroundMs: Math.max(0, config?.backgroundMs ?? defaultPromptConfig.backgroundMs),
+    layout: Array.from(merged.layout),
+    paintMs: Math.min(50, Math.max(0, merged.paintMs)),
+    backgroundMs: Math.max(0, merged.backgroundMs),
   };
 }

@@ -2,36 +2,7 @@ import type { RuntimeFilesystem } from "waffle";
 
 export type PromptFilesystem = Pick<RuntimeFilesystem, "lookup" | "readFile">;
 
-export interface PromptContext {
-  readonly turn: number;
-  readonly cwd: string;
-  readonly status: number;
-  readonly pipestatus: readonly number[];
-  readonly durationMs: number | undefined;
-  readonly jobs: number;
-  readonly columns: number;
-  readonly rows: number;
-  readonly lineEditor: "bash" | "zsh";
-  readonly ps1: string;
-  readonly variables: ReadonlyMap<string, string>;
-  readonly signal: AbortSignal;
-}
-
-export interface PromptLive {
-  readonly signal: AbortSignal;
-  update(text: string): void;
-}
-
-export interface PromptStart {
-  readonly cwd: string;
-  readonly env: Readonly<Record<string, string>>;
-}
-
-export interface PromptProvider {
-  readonly variables: readonly string[];
-  prepare?(start: PromptStart): void;
-  render(context: PromptContext, live: PromptLive): string | null | PromiseLike<string | null>;
-}
+export type { PromptContext, PromptLive, PromptProvider, PromptStart } from "../index";
 
 export type VersionMap = Readonly<{
   readonly bun?: string;

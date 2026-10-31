@@ -1,31 +1,27 @@
 import type { PromptLive } from "./types";
 
-export interface WorkUnit<T> {
-  run(): Promise<T> | T;
-}
-
-export interface WorkOptions {
-  readonly signal: AbortSignal;
-  readonly deadlineMs: number;
-  readonly clock?: () => number;
-}
-
-export async function runWorkUnits<T>(
-  units: readonly WorkUnit<T>[],
-  options: WorkOptions,
-): Promise<T[]> {
-  const started = options.clock?.() ?? performance.now();
-  const results: T[] = [];
-  for (const unit of units) {
-    if (
-      options.signal.aborted ||
-      (options.clock?.() ?? performance.now()) - started >= options.deadlineMs
-    )
-      break;
-    results.push(await unit.run());
-    await Promise.resolve();
+export class WorkBudget {
+  private deadline: number;
+  private readonly started: number;
+  constructor(
+    readonly signal: AbortSignal,
+    durationMs: number,
+    private readonly clock = () => performance.now(),
+  ) {
+    this.started = clock();
+    this.deadline = this.started + durationMs;
   }
-  return results;
+  setDuration(durationMs: number): void {
+    this.deadline = this.started + durationMs;
+  }
+  get active(): boolean {
+    return !this.signal.aborted && this.clock() < this.deadline;
+  }
+  async run<T>(work: () => T | Promise<T>): Promise<T | undefined> {
+    if (!this.active) return undefined;
+    const value = await work();
+    return this.active ? value : undefined;
+  }
 }
 
 export class PromptTurnLive implements PromptLive {
@@ -44,7 +40,7 @@ export class PromptTurnLive implements PromptLive {
     if (
       this.signal.aborted ||
       this.currentGeneration() !== this.generation ||
-      text === this.lastText
+      (!this.scheduled && text === this.lastText)
     )
       return;
     this.pending = text;

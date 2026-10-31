@@ -1,27 +1,15 @@
-import type { TurnFilesystem } from "../fs";
-import { resolvePromptConfig } from "./defaults";
+import type { PromptEntry, TurnFilesystem } from "../fs";
+import { defaultPromptConfig, resolvePromptConfig } from "./defaults";
 import type { Color, PromptConfig, ResolvedPromptConfig, SegmentName } from "../types";
 
 const decoder = new TextDecoder();
-const segmentNames: readonly SegmentName[] = [
-  "directory",
-  "git_branch",
-  "git_commit",
-  "git_state",
-  "git_status",
-  "package",
-  "bun",
-  "nodejs",
-  "python",
-  "env_var",
-  "cmd_duration",
-  "jobs",
-  "status",
-  "line_break",
-  "character",
-];
+const segmentNames = Object.keys(defaultPromptConfig.segments);
 const styleKeys = ["fg", "bg", "bold", "dim", "italic", "underline", "inverse", "strike"] as const;
 const globalKeys = ["layout", "newline", "paintMs", "backgroundMs", "palette", "segments"] as const;
+const segmentSchemas = {
+  ...defaultPromptConfig.segments,
+  git_branch: { ...defaultPromptConfig.segments.git_branch, truncateLength: 0 },
+};
 
 export interface ConfigDiagnostic {
   readonly path: string;
@@ -35,8 +23,9 @@ export function parsePromptConfig(value: unknown): {
   const errors: ConfigDiagnostic[] = [];
   if (!isRecord(value)) return { errors: [{ path: "$", message: "expected an object" }] };
   validateObjectKeys(value, globalKeys, "$", errors);
-  validateNumber(value.paintMs, "paintMs", errors);
-  validateNumber(value.backgroundMs, "backgroundMs", errors);
+  if (value.paintMs !== undefined) validateNumber(value.paintMs, "paintMs", errors, false);
+  if (value.backgroundMs !== undefined)
+    validateNumber(value.backgroundMs, "backgroundMs", errors, false);
   if (value.newline !== undefined && typeof value.newline !== "boolean")
     errors.push({ path: "newline", message: "expected a boolean" });
   if (value.layout !== undefined) validateLayout(value.layout, errors);
@@ -45,10 +34,6 @@ export function parsePromptConfig(value: unknown): {
   return errors.length ? { errors } : { config: value as PromptConfig, errors };
 }
 
-function validateNumber(value: unknown, path: string, errors: ConfigDiagnostic[]): void {
-  if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value)))
-    errors.push({ path, message: "expected a finite number" });
-}
 function validateLayout(value: unknown, errors: ConfigDiagnostic[]): void {
   if (!Array.isArray(value)) {
     errors.push({ path: "layout", message: "expected an array" });
@@ -71,38 +56,98 @@ function validateLayout(value: unknown, errors: ConfigDiagnostic[]): void {
     if (item.style !== undefined) validateStyle(item.style, `${path}.style`, errors);
   });
 }
+
 function validatePalette(value: unknown, errors: ConfigDiagnostic[]): void {
   if (!isRecord(value)) {
     errors.push({ path: "palette", message: "expected an object" });
     return;
   }
   for (const [name, color] of Object.entries(value))
-    if (!isColor(color)) errors.push({ path: `palette.${name}`, message: "expected a color" });
+    if (!isColor(color))
+      errors.push({
+        path: `palette.${name}`,
+        message: "expected a named color, ANSI index, or hex color",
+      });
 }
+
 function validateSegments(value: unknown, errors: ConfigDiagnostic[]): void {
   if (!isRecord(value)) {
     errors.push({ path: "segments", message: "expected an object" });
     return;
   }
   for (const [name, config] of Object.entries(value)) {
-    if (!segmentNames.includes(name as SegmentName)) {
-      errors.push({ path: `segments.${name}`, message: "unknown segment" });
+    const segment = name as SegmentName;
+    const path = `segments.${name}`;
+    if (!segmentNames.includes(segment)) {
+      errors.push({ path, message: "unknown segment" });
       continue;
     }
     if (!isRecord(config)) {
-      errors.push({ path: `segments.${name}`, message: "expected an object" });
+      errors.push({ path, message: "expected an object" });
       continue;
     }
-    for (const [key, field] of Object.entries(config)) {
-      if (key.toLowerCase().includes("style"))
-        validateStyle(field, `segments.${name}.${key}`, errors);
-      else if (typeof field === "object" && field !== null && !Array.isArray(field))
-        validateStyle(field, `segments.${name}.${key}`, errors);
-      else if (!isPrimitive(field))
-        errors.push({ path: `segments.${name}.${key}`, message: "expected a scalar or array" });
-    }
+    const schema = segmentSchemas[segment];
+    validateSegment(config, schema, path, errors);
   }
 }
+
+function validateSegment(
+  config: Record<string, unknown>,
+  schema: object,
+  path: string,
+  errors: ConfigDiagnostic[],
+): void {
+  for (const [key, field] of Object.entries(config)) {
+    const location = `${path}.${key}`;
+    if (!Object.hasOwn(schema, key)) {
+      errors.push({ path: location, message: "unknown field" });
+      continue;
+    }
+    const sample: unknown = Reflect.get(schema, key);
+    validateField(field, sample, location, errors);
+  }
+}
+
+function validateField(
+  value: unknown,
+  sample: unknown,
+  path: string,
+  errors: ConfigDiagnostic[],
+): void {
+  if (Array.isArray(sample)) {
+    if (!Array.isArray(value) || !value.every((item) => typeof item === "string"))
+      errors.push({ path, message: "expected an array of strings" });
+    return;
+  }
+  if (typeof sample === "object") {
+    validateStyle(value, path, errors);
+    return;
+  }
+  if (typeof sample === "number") {
+    validateNumber(value, path, errors, true);
+    return;
+  }
+  if (typeof value !== typeof sample) errors.push({ path, message: `expected a ${typeof sample}` });
+}
+
+function validateNumber(
+  value: unknown,
+  path: string,
+  errors: ConfigDiagnostic[],
+  integer: boolean,
+): void {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    (integer && !Number.isInteger(value)) ||
+    (integer && value < 0)
+  )
+    errors.push({
+      path,
+      message: integer ? "expected a nonnegative integer" : "expected a finite number",
+    });
+}
+
 function validateStyle(value: unknown, path: string, errors: ConfigDiagnostic[]): void {
   if (!isRecord(value)) {
     errors.push({ path, message: "expected a style object" });
@@ -111,11 +156,15 @@ function validateStyle(value: unknown, path: string, errors: ConfigDiagnostic[])
   validateObjectKeys(value, styleKeys, path, errors);
   for (const key of ["fg", "bg"] as const)
     if (value[key] !== undefined && !isColor(value[key]))
-      errors.push({ path: `${path}.${key}`, message: "expected a color" });
+      errors.push({
+        path: `${path}.${key}`,
+        message: "expected a named color, ANSI index, or hex color",
+      });
   for (const key of ["bold", "dim", "italic", "underline", "inverse", "strike"] as const)
     if (value[key] !== undefined && typeof value[key] !== "boolean")
       errors.push({ path: `${path}.${key}`, message: "expected a boolean" });
 }
+
 function validateObjectKeys(
   value: Record<string, unknown>,
   allowed: readonly string[],
@@ -126,17 +175,13 @@ function validateObjectKeys(
     if (!allowed.includes(key))
       errors.push({ path: path === "$" ? key : `${path}.${key}`, message: "unknown field" });
 }
-function isPrimitive(value: unknown): boolean {
-  return (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    (Array.isArray(value) && value.every(isPrimitive))
-  );
-}
+
 function isColor(value: unknown): value is Color {
-  return (typeof value === "number" && Number.isInteger(value)) || typeof value === "string";
+  return (
+    (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 255) ||
+    (typeof value === "string" && /^[a-z][a-z0-9_-]*$/i.test(value)) ||
+    (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value))
+  );
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -157,8 +202,9 @@ export class PromptConfigFile {
     filesystem: TurnFilesystem,
     path: string,
     base: PromptConfig,
+    knownEntry?: PromptEntry,
   ): Promise<ResolvedPromptConfig> {
-    const entry = await filesystem.lookup(path);
+    const entry = knownEntry ?? (await filesystem.lookup(path));
     if (!entry || entry.kind !== "file") {
       this.state = { identity: "missing", config: resolvePromptConfig(base) };
       return this.state.config;
@@ -172,7 +218,7 @@ export class PromptConfigFile {
       for (const error of parsed.errors) this.report(`${error.path}: ${error.message}`);
       return this.state?.config ?? resolvePromptConfig(base);
     }
-    const config = resolvePromptConfig(mergePromptConfig(base, parsed.config));
+    const config = resolvePromptConfig(base, parsed.config);
     this.state = { identity, config };
     return config;
   }
@@ -190,13 +236,4 @@ function parseJson(bytes: Uint8Array): unknown {
   } catch {
     return undefined;
   }
-}
-function mergePromptConfig(base: PromptConfig, patch: PromptConfig | undefined): PromptConfig {
-  if (!patch) return base;
-  return {
-    ...base,
-    ...patch,
-    palette: { ...base.palette, ...patch.palette },
-    segments: { ...base.segments, ...patch.segments },
-  };
 }
