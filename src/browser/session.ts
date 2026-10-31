@@ -259,7 +259,6 @@ export class BrowserSession {
   }
   private pump() {
     if (this.disposed || this.failed) return;
-    this.flushInput();
     const startedAt = this.options.trace ? performance.timeOrigin + performance.now() : 0;
     const queuedBytes = this.options.trace
       ? (Atomics.load(this.bridge.state, control.outputWrite) -
@@ -281,9 +280,10 @@ export class BrowserSession {
       else this.metrics.traceDropped++;
     }
     if (this.disposed || this.failed) return;
+    const sequence = Atomics.load(this.bridge.state, control.wake);
+    this.flushInput();
     this.metrics.memoryBytes = Atomics.load(this.bridge.state, control.memory);
     const phase = Atomics.load(this.bridge.state, control.phase);
-    const sequence = Atomics.load(this.bridge.state, control.wake);
     const outputPending =
       Atomics.load(this.bridge.state, control.outputWrite) !==
       Atomics.load(this.bridge.state, control.outputRead);
@@ -315,10 +315,16 @@ export class BrowserSession {
   }
   private schedulePump() {
     if (this.disposed || this.failed || this.timer !== undefined) return;
-    this.timer = setTimeout(() => {
-      this.timer = undefined;
-      this.pump();
-    }, 0);
+    const outputPending =
+      Atomics.load(this.bridge.state, control.outputWrite) !==
+      Atomics.load(this.bridge.state, control.outputRead);
+    this.timer = setTimeout(
+      () => {
+        this.timer = undefined;
+        this.pump();
+      },
+      outputPending ? 8 : 0,
+    );
   }
   private waitForActivity(sequence: number) {
     const wait = Atomics.waitAsync(this.bridge.state, control.wake, sequence);

@@ -78,7 +78,9 @@ all page and worker helpers must come from the same compatible package artifact.
 The demo requires `Atomics.waitAsync` on the page. It subscribes to the bridge's
 wake counter instead of polling an idle terminal. Output, freed input capacity,
 phase changes and shutdown publish activity. Each task drains at most 32 KiB,
-then schedules another task if output remains. Bursts share one scheduled task.
+then schedules another task if output remains. Queued output shares one pending 8 ms timer, giving concurrent producers a
+batching window without polling while idle. The delay is not reset by later
+writes. Input and phase-only activity use a zero-delay task.
 Sampling the counter after draining, before checking for more output or
 subscribing, prevents the drain's own notification from creating an empty turn.
 A publication after that sample still changes the counter, so the wait remains
