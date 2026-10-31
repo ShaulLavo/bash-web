@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { wasiBuildConfiguration, wasiBuildEnvironment } from "./wasi-build.ts";
 import { waffleBuildFixture } from "../tests/helpers/waffle-build-inputs.ts";
 
@@ -93,4 +103,79 @@ test("a stock or mismatched SDK is rejected before preparing any guest", () => {
     writeFileSync(resolve(root, "sdk/VERSION"), "33.0\nwasi-libc: other\n");
     assert.throws(() => wasiBuildConfiguration(root, env), /wasi-sdk 34.0/);
   });
+});
+
+function adapterGuest(adapter: string): Uint8Array {
+  const text = (value: string) =>
+    [value.length].concat(Array.from(new TextEncoder().encode(value)));
+  const section = (id: number, bytes: number[]) => [id, bytes.length].concat(bytes);
+  const imports = [1].concat(text("wasi_snapshot_preview1"), text("fd_prestat_get"), [0, 0]);
+  const names = [1, 0].concat(text(`${adapter}::fd_prestat_get`));
+  const bytes = Uint8Array.from(
+    [0, 97, 115, 109, 1, 0, 0, 0].concat(
+      section(1, [1, 0x60, 0, 0]),
+      section(2, imports),
+      section(5, [1, 1, 1, 128, 32]),
+      section(0, text("name").concat(section(1, names))),
+    ),
+  );
+  assert.ok(WebAssembly.validate(bytes));
+  return bytes;
+}
+
+function runAdapterPolicy(binary: string, adapter: string) {
+  fixture((root, env) => {
+    const scripts = resolve(root, "scripts");
+    mkdirSync(scripts);
+    for (const file of ["wasi-build.ts", "verify-wasi-guests.ts", "waffle-release-inputs.ts"])
+      copyFileSync(resolve(import.meta.dirname, file), resolve(scripts, file));
+    const bin = resolve(root, "bin");
+    mkdirSync(bin);
+    const cargo = resolve(bin, "cargo");
+    writeFileSync(
+      cargo,
+      '#!/bin/bash\nset -eu\nmkdir -p "$CARGO_TARGET_DIR/wasm32-wasip1/release"\ncp "$POLICY_GUEST" "$CARGO_TARGET_DIR/wasm32-wasip1/release/$POLICY_BINARY.wasm"\n',
+    );
+    chmodSync(cargo, 0o755);
+    const guest = resolve(root, "guest.wasm");
+    writeFileSync(guest, adapterGuest(adapter));
+    const wrapper = pathToFileURL(resolve(scripts, "wasi-build.ts")).href;
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { buildWasiShell } from ${JSON.stringify(wrapper)}; buildWasiShell(["--bin", ${JSON.stringify(binary)}]);`,
+      ],
+      {
+        cwd: root,
+        env: {
+          ...env,
+          PATH: `${bin}:${env.PATH}`,
+          CARGO_TARGET_DIR: resolve(root, ".build/target"),
+          POLICY_GUEST: guest,
+          POLICY_BINARY: binary,
+        },
+        encoding: "utf8",
+        timeout: 10000,
+      },
+    );
+    if (adapter === "waffle_program_support::runtime::wasi" || binary === "shell-engine") {
+      assert.equal(result.status, 0, result.stderr);
+      return;
+    }
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /filesystem imports remain but libc scanner is missing/);
+  });
+}
+
+for (const binary of ["shell-runtime", "argv-py", "printenv-py"]) {
+  test(`${binary} build wrapper accepts only the canonical adapter identity`, () => {
+    runAdapterPolicy(binary, "waffle_program_support::runtime::wasi");
+    runAdapterPolicy(binary, "shell_engine::runtime::wasi");
+  });
+}
+
+test("standalone shell build keeps its existing verifier policy", () => {
+  runAdapterPolicy("shell-engine", "shell_engine::runtime::wasi");
 });

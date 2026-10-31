@@ -64,7 +64,7 @@ Every baseline fingerprint has a nonempty one-line reason. Reasons identify
 upstream code, generated code, a fixture, or a deferred production clone with an
 exact Approved removal item. Missing reasons, unknown categories, and missing
 plan items fail before detection. Production duplicates are not fixture exceptions.
-The current inventory has 140 exact fixture occurrences and 179 exact plus 12
+The current inventory has 138 exact fixture occurrences and 172 exact plus 12
 structural production occurrences awaiting their grouped removal items.
 
 Both the normal check and the recorder reject any fingerprint count above the

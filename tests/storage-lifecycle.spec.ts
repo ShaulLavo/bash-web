@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
-import { STORAGE_READY_TIMEOUT_MS } from "../src/browser/storage.ts";
+import { STORAGE_READY_TIMEOUT_MS } from "../src/runtime/storage.ts";
 import { startupReady } from "./helpers/readiness.ts";
 
 async function waiting(page: Page) {

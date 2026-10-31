@@ -140,7 +140,7 @@ Indexes into `SharedBridge.state`:
 | `cols` | 7 | | |
 | `rows` | 8 | | |
 
-To resize, store `cols` and `rows`, add 1 to `resize`, then call `signal()`. The demo host (`src/browser/session.ts`) reads `phase` as 0 starting, 1 ready, 2 running, 3 exited, and 4 shared terminal failed.
+To resize, store `cols` and `rows`, add 1 to `resize`, then call `signal()`. The demo host (`src/session.ts`) reads `phase` as 0 starting, 1 ready, 2 running, 3 exited, and 4 shared terminal failed.
 
 ### `waitForPrompt(options?)`
 

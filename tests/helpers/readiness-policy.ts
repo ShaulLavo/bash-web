@@ -1,4 +1,4 @@
-import { STORAGE_READY_TIMEOUT_MS } from "../../src/browser/storage.ts";
+import { STORAGE_READY_TIMEOUT_MS } from "../../src/runtime/storage.ts";
 
 export const SHELL_READY_TIMEOUT_MS = 5000;
 
