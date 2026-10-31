@@ -32,6 +32,8 @@ export interface ShellOptions {
   signal?: AbortSignal;
   cwd?: string;
   env?: Record<string, string>;
+  /** Editing only. Bash commands and the default Bash editing mode stay unchanged. */
+  lineEditor?: { mode: "bash" | "zsh" };
   /** Omit for the persistent interactive editor. */
   script?: string;
 }

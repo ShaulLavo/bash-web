@@ -14,6 +14,8 @@ A command holds at most 64 KiB. A paste drops its remaining text after reaching 
 
 ## Navigation
 
+These are the default Bash editing rules. The optional [zsh line-editor mode](zsh-line-editor.md) uses hard-line navigation instead.
+
 Ctrl+A and Home move to the beginning of the whole command buffer. Ctrl+E and End move to its end. Native macOS Ghostty maps Cmd+Left and Cmd+Right to Ctrl+A and Ctrl+E. LF, blank lines and soft wraps do not add navigation boundaries.
 
 Up and Down browse whole history entries from any position in the buffer. Down after the newest entry restores the unsubmitted draft with its cursor at the end. Ctrl+P and Ctrl+N share the arrow behavior. Option+Left and Option+Right move by word through the whole buffer.

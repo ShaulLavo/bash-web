@@ -1,27 +1,6 @@
+use super::reference::{Case, Reference};
 use super::{Action, Editor, Geometry};
-use serde::Deserialize;
 
-#[derive(Deserialize)]
-struct Reference {
-    cases: Vec<Case>,
-}
-#[derive(Deserialize)]
-struct Case {
-    name: String,
-    columns: usize,
-    history: Vec<String>,
-    steps: Vec<Step>,
-    parity: bool,
-}
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Step {
-    key: String,
-    input_hex: String,
-    line: String,
-    point: usize,
-    history_offset: usize,
-}
 fn unhex(text: &str) -> Vec<u8> {
     (0..text.len())
         .step_by(2)

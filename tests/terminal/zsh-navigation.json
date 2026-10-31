@@ -1,0 +1,794 @@
+{
+  "version": "zsh 5.9 (arm64-apple-darwin25.0)",
+  "sha256": "450b2d89ac587adea6397bb67c8e909f692af9b8bf63a0fca8064347e8a0aa57",
+  "keymap": "emacs",
+  "locale": "en_US.UTF-8",
+  "keys": {
+    "cmd-left": "01",
+    "cmd-right": "05",
+    "left": "1b5b44",
+    "right": "1b5b43",
+    "up": "1b5b41",
+    "down": "1b5b42",
+    "ctrl-p": "10",
+    "ctrl-n": "0e",
+    "ss3-up": "1b4f41",
+    "ss3-down": "1b4f42"
+  },
+  "ghosttyRevision": "7b11f3dca034d8d24369ad3856afe57946d7902a",
+  "keyReferenceSha256": "477a50826e0404f4bd4ae2438d8fa5283c20585987047c8e6a9fa7cb4bd818ef",
+  "observation": "zle-line-pre-redraw reads BUFFER and CURSOR without a diagnostic key binding. Every prefix also matches a fresh PTY. No fixture text is submitted.",
+  "cases": [
+    {
+      "name": "line-bounds",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e66697273740a0a6d6964646c650a6c6173741b5b3230317e",
+          "line": "first\n\nmiddle\nlast",
+          "point": 18,
+          "scalarPoint": 18
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "first\n\nmiddle\nlast",
+          "point": 14,
+          "scalarPoint": 14
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "first\n\nmiddle\nlast",
+          "point": 7,
+          "scalarPoint": 7
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "first\n\nmiddle\nlast",
+          "point": 13,
+          "scalarPoint": 13
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "first\n\nmiddle\nlast",
+          "point": 18,
+          "scalarPoint": 18
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "first\n\nmiddle\nlast",
+          "point": 18,
+          "scalarPoint": 18
+        }
+      ]
+    },
+    {
+      "name": "empty-lines",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e0a0a0a1b5b3230317e",
+          "line": "\n\n\n",
+          "point": 3,
+          "scalarPoint": 3
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "\n\n\n",
+          "point": 2,
+          "scalarPoint": 2
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "\n\n\n",
+          "point": 1,
+          "scalarPoint": 1
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "\n\n\n",
+          "point": 0,
+          "scalarPoint": 0
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "\n\n\n",
+          "point": 1,
+          "scalarPoint": 1
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "\n\n\n",
+          "point": 2,
+          "scalarPoint": 2
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "\n\n\n",
+          "point": 3,
+          "scalarPoint": 3
+        }
+      ]
+    },
+    {
+      "name": "sticky-column",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e61626364656667680a780a6162636465660a31323334351b5b3230317e",
+          "line": "abcdefgh\nx\nabcdef\n12345",
+          "point": 23,
+          "scalarPoint": 23
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdefgh\nx\nabcdef\n12345",
+          "point": 16,
+          "scalarPoint": 16
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdefgh\nx\nabcdef\n12345",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdefgh\nx\nabcdef\n12345",
+          "point": 5,
+          "scalarPoint": 5
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "abcdefgh\nx\nabcdef\n12345",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "abcdefgh\nx\nabcdef\n12345",
+          "point": 16,
+          "scalarPoint": 16
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "abcdefgh\nx\nabcdef\n12345",
+          "point": 23,
+          "scalarPoint": 23
+        }
+      ]
+    },
+    {
+      "name": "history-edges",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e64726166740a0a656e641b5b3230317e",
+          "line": "draft\n\nend",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "draft\n\nend",
+          "point": 6,
+          "scalarPoint": 6
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "draft\n\nend",
+          "point": 3,
+          "scalarPoint": 3
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "# newer",
+          "point": 7,
+          "scalarPoint": 7
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "# older\n# older tail",
+          "point": 20,
+          "scalarPoint": 20
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "# newer",
+          "point": 7,
+          "scalarPoint": 7
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "draft\n\nend",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "draft\n\nend",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "draft\n\nend",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "draft\n\nend",
+          "point": 10,
+          "scalarPoint": 10
+        }
+      ]
+    },
+    {
+      "name": "history-middle",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e66697273740a6d6964646c650a6c6173741b5b3230317e",
+          "line": "first\nmiddle\nlast",
+          "point": 17,
+          "scalarPoint": 17
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "first\nmiddle\nlast",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "first\nmiddle\nlast",
+          "point": 4,
+          "scalarPoint": 4
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "# newer",
+          "point": 7,
+          "scalarPoint": 7
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "first\nmiddle\nlast",
+          "point": 17,
+          "scalarPoint": 17
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "first\nmiddle\nlast",
+          "point": 17,
+          "scalarPoint": 17
+        }
+      ]
+    },
+    {
+      "name": "soft-wrap",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e30313233343536373839303132333435363738393031323334353637383930313233343536373839303132333435363738393031323334353637383930313233343536373839303132333435363738391b5b3230317e",
+          "line": "01234567890123456789012345678901234567890123456789012345678901234567890123456789",
+          "point": 80,
+          "scalarPoint": 80
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "01234567890123456789012345678901234567890123456789012345678901234567890123456789",
+          "point": 0,
+          "scalarPoint": 0
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "01234567890123456789012345678901234567890123456789012345678901234567890123456789",
+          "point": 80,
+          "scalarPoint": 80
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "# newer",
+          "point": 7,
+          "scalarPoint": 7
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "01234567890123456789012345678901234567890123456789012345678901234567890123456789",
+          "point": 80,
+          "scalarPoint": 80
+        }
+      ]
+    },
+    {
+      "name": "unicode",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307ee4b8ad65cc81f09f998261620ae79fad0ae4b8ad65cc81f09f998261621b5b3230317e",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 29,
+          "scalarPoint": 15
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 16,
+          "scalarPoint": 8
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 12,
+          "scalarPoint": 6
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 16,
+          "scalarPoint": 8
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 29,
+          "scalarPoint": 15
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 17,
+          "scalarPoint": 9
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 20,
+          "scalarPoint": 10
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 16,
+          "scalarPoint": 8
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 3,
+          "scalarPoint": 1
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 16,
+          "scalarPoint": 8
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中é🙂ab\n短\n中é🙂ab",
+          "point": 20,
+          "scalarPoint": 10
+        }
+      ]
+    },
+    {
+      "name": "controls",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e66697273740a0a6c6173741b5b3230317e",
+          "line": "first\n\nlast",
+          "point": 11,
+          "scalarPoint": 11
+        },
+        {
+          "key": "ctrl-p",
+          "inputHex": "10",
+          "line": "first\n\nlast",
+          "point": 6,
+          "scalarPoint": 6
+        },
+        {
+          "key": "ctrl-p",
+          "inputHex": "10",
+          "line": "first\n\nlast",
+          "point": 4,
+          "scalarPoint": 4
+        },
+        {
+          "key": "ctrl-n",
+          "inputHex": "0e",
+          "line": "first\n\nlast",
+          "point": 6,
+          "scalarPoint": 6
+        },
+        {
+          "key": "ctrl-n",
+          "inputHex": "0e",
+          "line": "first\n\nlast",
+          "point": 11,
+          "scalarPoint": 11
+        },
+        {
+          "key": "ss3-up",
+          "inputHex": "1b4f41",
+          "line": "first\n\nlast",
+          "point": 6,
+          "scalarPoint": 6
+        },
+        {
+          "key": "ss3-down",
+          "inputHex": "1b4f42",
+          "line": "first\n\nlast",
+          "point": 11,
+          "scalarPoint": 11
+        }
+      ]
+    },
+    {
+      "name": "wide-target",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307ee4b8ad610a31323334351b5b3230317e",
+          "line": "中a\n12345",
+          "point": 10,
+          "scalarPoint": 8
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "中a\n12345",
+          "point": 5,
+          "scalarPoint": 3
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "中a\n12345",
+          "point": 6,
+          "scalarPoint": 4
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "中a\n12345",
+          "point": 3,
+          "scalarPoint": 1
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中a\n12345",
+          "point": 6,
+          "scalarPoint": 4
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "中a\n12345",
+          "point": 7,
+          "scalarPoint": 5
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "中a\n12345",
+          "point": 4,
+          "scalarPoint": 2
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "中a\n12345",
+          "point": 7,
+          "scalarPoint": 5
+        }
+      ]
+    },
+    {
+      "name": "tabs",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e6109620a3132333435363738393031320a09656e641b5b3230317e",
+          "line": "a\tb\n123456789012\n\tend",
+          "point": 21,
+          "scalarPoint": 21
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "a\tb\n123456789012\n\tend",
+          "point": 17,
+          "scalarPoint": 17
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "a\tb\n123456789012\n\tend",
+          "point": 18,
+          "scalarPoint": 18
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "a\tb\n123456789012\n\tend",
+          "point": 5,
+          "scalarPoint": 5
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "a\tb\n123456789012\n\tend",
+          "point": 1,
+          "scalarPoint": 1
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "a\tb\n123456789012\n\tend",
+          "point": 5,
+          "scalarPoint": 5
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "a\tb\n123456789012\n\tend",
+          "point": 18,
+          "scalarPoint": 18
+        }
+      ]
+    },
+    {
+      "name": "combining-target",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e65cc816162630a31323334351b5b3230317e",
+          "line": "éabc\n12345",
+          "point": 12,
+          "scalarPoint": 11
+        },
+        {
+          "key": "cmd-left",
+          "inputHex": "01",
+          "line": "éabc\n12345",
+          "point": 7,
+          "scalarPoint": 6
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "éabc\n12345",
+          "point": 8,
+          "scalarPoint": 7
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "éabc\n12345",
+          "point": 1,
+          "scalarPoint": 1
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "éabc\n12345",
+          "point": 8,
+          "scalarPoint": 7
+        },
+        {
+          "key": "right",
+          "inputHex": "1b5b43",
+          "line": "éabc\n12345",
+          "point": 9,
+          "scalarPoint": 8
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "éabc\n12345",
+          "point": 3,
+          "scalarPoint": 2
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "éabc\n12345",
+          "point": 9,
+          "scalarPoint": 8
+        }
+      ]
+    },
+    {
+      "name": "edit-reset",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e6162636465660a780a31323334351b5b3230317e",
+          "line": "abcdef\nx\n12345",
+          "point": 14,
+          "scalarPoint": 14
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdef\nx\n12345",
+          "point": 8,
+          "scalarPoint": 8
+        },
+        {
+          "key": "insert",
+          "inputHex": "21",
+          "line": "abcdef\nx!\n12345",
+          "point": 9,
+          "scalarPoint": 9
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdef\nx!\n12345",
+          "point": 2,
+          "scalarPoint": 2
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "abcdef\nx!\n12345",
+          "point": 9,
+          "scalarPoint": 9
+        },
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e3f1b5b3230317e",
+          "line": "abcdef\nx!?\n12345",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdef\nx!?\n12345",
+          "point": 3,
+          "scalarPoint": 3
+        }
+      ]
+    },
+    {
+      "name": "reset-column",
+      "columns": 24,
+      "history": ["# older\n# older tail", "# newer"],
+      "steps": [
+        {
+          "key": "paste",
+          "inputHex": "1b5b3230307e61626364656667680a780a31323334351b5b3230317e",
+          "line": "abcdefgh\nx\n12345",
+          "point": 16,
+          "scalarPoint": 16
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdefgh\nx\n12345",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "left",
+          "inputHex": "1b5b44",
+          "line": "abcdefgh\nx\n12345",
+          "point": 9,
+          "scalarPoint": 9
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdefgh\nx\n12345",
+          "point": 0,
+          "scalarPoint": 0
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "abcdefgh\nx\n12345",
+          "point": 9,
+          "scalarPoint": 9
+        },
+        {
+          "key": "cmd-right",
+          "inputHex": "05",
+          "line": "abcdefgh\nx\n12345",
+          "point": 10,
+          "scalarPoint": 10
+        },
+        {
+          "key": "up",
+          "inputHex": "1b5b41",
+          "line": "abcdefgh\nx\n12345",
+          "point": 1,
+          "scalarPoint": 1
+        },
+        {
+          "key": "down",
+          "inputHex": "1b5b42",
+          "line": "abcdefgh\nx\n12345",
+          "point": 10,
+          "scalarPoint": 10
+        }
+      ]
+    }
+  ],
+  "bindings": "bindkey \"^@\" set-mark-command\nbindkey \"^A\" beginning-of-line\nbindkey \"^B\" backward-char\nbindkey \"^D\" delete-char-or-list\nbindkey \"^E\" end-of-line\nbindkey \"^F\" forward-char\nbindkey \"^G\" send-break\nbindkey \"^H\" backward-delete-char\nbindkey \"^I\" expand-or-complete\nbindkey \"^J\" accept-line\nbindkey \"^K\" kill-line\nbindkey \"^L\" clear-screen\nbindkey \"^M\" accept-line\nbindkey \"^N\" down-line-or-history\nbindkey \"^O\" accept-line-and-down-history\nbindkey \"^P\" up-line-or-history\nbindkey \"^Q\" push-line\nbindkey \"^R\" history-incremental-search-backward\nbindkey \"^S\" history-incremental-search-forward\nbindkey \"^T\" transpose-chars\nbindkey \"^U\" kill-whole-line\nbindkey \"^V\" quoted-insert\nbindkey \"^W\" backward-kill-word\nbindkey \"^X^B\" vi-match-bracket\nbindkey \"^X^F\" vi-find-next-char\nbindkey \"^X^J\" vi-join\nbindkey \"^X^K\" kill-buffer\nbindkey \"^X^N\" infer-next-history\nbindkey \"^X^O\" overwrite-mode\nbindkey \"^X^U\" undo\nbindkey \"^X^V\" vi-cmd-mode\nbindkey \"^X^X\" exchange-point-and-mark\nbindkey \"^X*\" expand-word\nbindkey \"^X=\" what-cursor-position\nbindkey \"^XG\" list-expand\nbindkey \"^Xg\" list-expand\nbindkey \"^Xr\" history-incremental-search-backward\nbindkey \"^Xs\" history-incremental-search-forward\nbindkey \"^Xu\" undo\nbindkey \"^Y\" yank\nbindkey \"^[^D\" list-choices\nbindkey \"^[^G\" send-break\nbindkey \"^[^H\" backward-kill-word\nbindkey \"^[^I\" self-insert-unmeta\nbindkey \"^[^J\" self-insert-unmeta\nbindkey \"^[^L\" clear-screen\nbindkey \"^[^M\" self-insert-unmeta\nbindkey \"^[^_\" copy-prev-word\nbindkey \"^[ \" expand-history\nbindkey \"^[!\" expand-history\nbindkey \"^[\\\"\" quote-region\nbindkey \"^[\\$\" spell-word\nbindkey \"^['\" quote-line\nbindkey \"^[-\" neg-argument\nbindkey \"^[.\" insert-last-word\nbindkey \"^[0\" digit-argument\nbindkey \"^[1\" digit-argument\nbindkey \"^[2\" digit-argument\nbindkey \"^[3\" digit-argument\nbindkey \"^[4\" digit-argument\nbindkey \"^[5\" digit-argument\nbindkey \"^[6\" digit-argument\nbindkey \"^[7\" digit-argument\nbindkey \"^[8\" digit-argument\nbindkey \"^[9\" digit-argument\nbindkey \"^[<\" beginning-of-buffer-or-history\nbindkey \"^[>\" end-of-buffer-or-history\nbindkey \"^[?\" which-command\nbindkey \"^[A\" accept-and-hold\nbindkey \"^[B\" backward-word\nbindkey \"^[C\" capitalize-word\nbindkey \"^[D\" kill-word\nbindkey \"^[F\" forward-word\nbindkey \"^[G\" get-line\nbindkey \"^[H\" run-help\nbindkey \"^[L\" down-case-word\nbindkey \"^[N\" history-search-forward\nbindkey \"^[OA\" up-line-or-history\nbindkey \"^[OB\" down-line-or-history\nbindkey \"^[OC\" forward-char\nbindkey \"^[OD\" backward-char\nbindkey \"^[P\" history-search-backward\nbindkey \"^[Q\" push-line\nbindkey \"^[S\" spell-word\nbindkey \"^[T\" transpose-words\nbindkey \"^[U\" up-case-word\nbindkey \"^[W\" copy-region-as-kill\nbindkey \"^[[200~\" bracketed-paste\nbindkey \"^[[A\" up-line-or-history\nbindkey \"^[[B\" down-line-or-history\nbindkey \"^[[C\" forward-char\nbindkey \"^[[D\" backward-char\nbindkey \"^[_\" insert-last-word\nbindkey \"^[a\" accept-and-hold\nbindkey \"^[b\" backward-word\nbindkey \"^[c\" capitalize-word\nbindkey \"^[d\" kill-word\nbindkey \"^[f\" forward-word\nbindkey \"^[g\" get-line\nbindkey \"^[h\" run-help\nbindkey \"^[l\" down-case-word\nbindkey \"^[n\" history-search-forward\nbindkey \"^[p\" history-search-backward\nbindkey \"^[q\" push-line\nbindkey \"^[s\" spell-word\nbindkey \"^[t\" transpose-words\nbindkey \"^[u\" up-case-word\nbindkey \"^[w\" copy-region-as-kill\nbindkey \"^[x\" execute-named-cmd\nbindkey \"^[y\" yank-pop\nbindkey \"^[z\" execute-last-named-cmd\nbindkey \"^[|\" vi-goto-column\nbindkey \"^[^?\" backward-kill-word\nbindkey \"^_\" undo\nbindkey -R \" \"-\"~\" self-insert\nbindkey \"^?\" backward-delete-char\nbindkey -R \"\\M-^@\"-\"\\M-^?\" self-insert\n"
+}
