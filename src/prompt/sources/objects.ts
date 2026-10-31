@@ -16,7 +16,14 @@ export async function readObjectStatus(
   const work = budget;
   const reader = new ObjectReader(filesystem, repository.commonDir, work);
   const head = repository.head;
-  if (head.kind === "unknown")
+  const replaced = await known(work, async () => {
+    const directory = await filesystem.lookup(`${repository.commonDir}/refs/replace`);
+    const grafts = await filesystem.lookup(`${repository.commonDir}/info/grafts`);
+    return Boolean(
+      grafts || (directory && (directory.kind !== "dir" || directory.children.size > 0)),
+    );
+  });
+  if (replaced.kind === "unknown" || replaced.value || head.kind === "unknown")
     return { staged: { kind: "unknown" }, aheadBehind: { kind: "unknown" } };
   const staged = await known(work, () => stagedChanges(reader, head.commit, index));
   const counts = await known(work, async () => {

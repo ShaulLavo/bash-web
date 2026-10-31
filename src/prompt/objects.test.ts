@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { TurnFilesystem } from "./fs";
 import {
+  context,
   fixture,
   git,
   makeCommittedRepository,
@@ -280,4 +281,146 @@ test("corrupt or missing objects, expired budgets and unsupported config never l
       }),
     /includes unsupported/,
   );
+});
+
+async function renderedStatus(path: string): Promise<string> {
+  const { createPrompt } = await import("./index");
+  const signal = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let update!: (text: string) => void;
+  const changed = new Promise<string>((resolve) => {
+    update = resolve;
+  });
+  try {
+    const prompt = createPrompt({
+      filesystem: realFilesystem(path, true),
+      config: { newline: false, layout: ["git_status"], paintMs: 0, backgroundMs: 30_000 },
+    });
+    const initial = await prompt.render(
+      { ...context(path, new Map([["NO_COLOR", "1"]])), signal: signal.signal },
+      { signal: signal.signal, update },
+    );
+    if (initial) return initial;
+    return await Promise.race([
+      changed,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("No object status update")), 5_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    signal.abort();
+  }
+}
+
+test("public provider lazily pushes staged, divergence and unknown markers without changing worktree status", async (t) => {
+  const root = await fixture(t, "objects-provider");
+  const repo = await makeCommittedRepository(root, "repo");
+  await writeFile(join(repo, "staged"), "addition");
+  await git(repo, "add", "staged");
+  assert.equal(await renderedStatus(repo), "[+] ");
+  await git(repo, "branch", "upstream");
+  await git(
+    repo,
+    "-c",
+    "user.name=Prompt",
+    "-c",
+    "user.email=prompt@example.invalid",
+    "commit",
+    "-qm",
+    "local",
+  );
+  await git(repo, "switch", "-q", "upstream");
+  await writeFile(join(repo, "remote"), "addition");
+  await git(repo, "add", ".");
+  await git(repo, "commit", "-qm", "remote");
+  await git(repo, "switch", "-q", "main");
+  await git(repo, "config", "branch.main.remote", ".");
+  await git(repo, "config", "branch.main.merge", "refs/heads/upstream");
+  assert.equal(await renderedStatus(repo), "[⇕] ");
+  await git(repo, "config", "branch.main.merge", "refs/heads/missing");
+  assert.equal(await renderedStatus(repo), "[…] ");
+});
+
+test("linked worktree compares its own index against common objects and refs", async (t) => {
+  const root = await fixture(t, "objects-worktree");
+  const repo = await makeCommittedRepository(root, "repo");
+  const linked = join(root, "linked");
+  await git(repo, "worktree", "add", "-qb", "linked", linked);
+  await git(repo, "config", "branch.linked.remote", ".");
+  await git(repo, "config", "branch.linked.merge", "refs/heads/main");
+  await writeFile(join(linked, "tracked.txt"), "linked staged");
+  await git(linked, "add", ".");
+  await expectStaged(linked);
+  await expectCounts(linked);
+  assert.equal(value((await status(linked)).staged), 1);
+  assert.equal(value((await status(repo)).staged), 0);
+});
+
+test("replacement history never reports ordinary staged or synchronized status", async (t) => {
+  const root = await fixture(t, "objects-replace");
+  const repo = await makeCommittedRepository(root, "repo");
+  const before = await git(repo, "rev-parse", "HEAD");
+  await writeFile(join(repo, "tracked.txt"), "replacement tree");
+  await git(repo, "add", ".");
+  await git(repo, "commit", "-qm", "replacement");
+  const replacement = await git(repo, "rev-parse", "HEAD");
+  await git(repo, "replace", before, replacement);
+  const result = await status(repo);
+  assert.equal(result.staged.kind, "unknown");
+  assert.equal(result.aheadBehind.kind, "unknown");
+});
+
+test("corrupt pack trailers and mismatched index pack checksums show unknown", async (t) => {
+  const root = await fixture(t, "objects-pack-checksum");
+  const repo = await makeCommittedRepository(root, "repo");
+  await git(repo, "gc", "--prune=now");
+  const packDir = join(repo, ".git/objects/pack");
+  const file = (await readdir(packDir)).find((entry) => entry.endsWith(".pack"));
+  assert.ok(file);
+  const path = join(packDir, file);
+  const original = await readFile(path);
+  const corrupt = Buffer.from(original);
+  corrupt[corrupt.length - 1] ^= 1;
+  await chmod(path, 0o600);
+  await writeFile(path, corrupt);
+  await assert.rejects(
+    () => git(repo, "verify-pack", "-v", path.replace(/\.pack$/, ".idx")),
+    /corrupt|mismatch/,
+  );
+  assert.equal((await status(repo)).staged.kind, "unknown");
+  assert.equal(await renderedStatus(repo), "[…] ");
+  await writeFile(path, original);
+  const indexPath = path.replace(/\.pack$/, ".idx");
+  const index = await readFile(indexPath);
+  index[index.length - 40] ^= 1;
+  const { createHash } = await import("node:crypto");
+  index.set(createHash("sha1").update(index.subarray(0, -20)).digest(), index.length - 20);
+  await chmod(indexPath, 0o600);
+  await writeFile(indexPath, index);
+  assert.equal((await status(repo)).staged.kind, "unknown");
+});
+
+test("unmerged paths remain conflicted, not ordinary staged changes", async (t) => {
+  const root = await fixture(t, "objects-conflict");
+  const repo = await makeCommittedRepository(root, "repo");
+  await git(repo, "branch", "side");
+  await writeFile(join(repo, "tracked.txt"), "main\n");
+  await git(repo, "commit", "-qam", "main");
+  await git(repo, "switch", "-q", "side");
+  await writeFile(join(repo, "tracked.txt"), "side\n");
+  await git(repo, "commit", "-qam", "side");
+  await git(repo, "switch", "-q", "main");
+  await assert.rejects(() => git(repo, "merge", "side"));
+  assert.match(await git(repo, "status", "--porcelain=v2"), /^u UU /m);
+  assert.equal(
+    await git(repo, "diff", "--cached", "--diff-filter=U", "--name-only"),
+    "tracked.txt",
+  );
+  assert.equal(value((await status(repo)).staged), 0);
+  assert.equal(await renderedStatus(repo), "[=] ");
+  await writeFile(join(repo, "staged"), "ordinary staged addition");
+  await git(repo, "add", "staged");
+  assert.equal(value((await status(repo)).staged), 1);
+  assert.equal(await renderedStatus(repo), "[=+] ");
 });

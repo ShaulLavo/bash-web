@@ -27,6 +27,7 @@ export class ObjectReader {
   private packs: Promise<readonly Pack[]> | undefined;
   private readonly cache = new Map<string, Promise<GitObject>>();
   private readonly offsets = new Map<string, Promise<GitObject>>();
+  private readonly packFiles = new Map<string, Promise<Uint8Array>>();
   private retained = 0;
   private fileBytes = 0;
   private readonly admittedFiles = new Set<string>();
@@ -127,13 +128,12 @@ export class ObjectReader {
     offset: number,
     ancestors: readonly string[],
   ): Promise<GitObject> {
-    const bytes = await this.file(pack.path);
-    requireObject(bytes && bytes.length >= 32 && decoder.decode(bytes.subarray(0, 4)) === "PACK");
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    requireObject(
-      (view.getUint32(4) === 2 || view.getUint32(4) === 3) &&
-        view.getUint32(8) === pack.index.count,
-    );
+    let pending = this.packFiles.get(pack.path);
+    if (!pending) {
+      pending = this.readPack(pack);
+      this.packFiles.set(pack.path, pending);
+    }
+    const bytes = await pending;
     const end = pack.index.ends.get(offset);
     requireObject(end !== undefined && offset < (end || bytes.length - 20));
     const cursor = new ObjectCursor(bytes.subarray(offset, end || bytes.length - 20));
@@ -153,6 +153,24 @@ export class ObjectReader {
     requireObject(data.length === size, "Git packed object size mismatch");
     if (!base) return this.retain({ type: packedType(type), bytes: data });
     return this.retain({ type: base.type, bytes: await applyDelta(base.bytes, data, this.work) });
+  }
+
+  private async readPack(pack: Pack): Promise<Uint8Array> {
+    const bytes = await this.file(pack.path);
+    requireObject(bytes && bytes.length >= 32 && decoder.decode(bytes.subarray(0, 4)) === "PACK");
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    requireObject(
+      (view.getUint32(4) === 2 || view.getUint32(4) === 3) &&
+        view.getUint32(8) === pack.index.count,
+    );
+    const checksum = hex(bytes.subarray(-20));
+    requireObject(
+      checksum === hex(pack.index.bytes.subarray(-40, -20)) &&
+        (await digest(bytes.subarray(0, -20))) === checksum,
+      "Git pack checksum mismatch",
+    );
+    this.work.check();
+    return bytes;
   }
 
   private async deltaBase(

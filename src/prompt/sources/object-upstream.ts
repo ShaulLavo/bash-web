@@ -1,5 +1,5 @@
 import type { TurnFilesystem } from "../fs";
-import { readRef } from "./repo";
+import { readRef } from "./repo-refs";
 import type { RepositorySnapshot } from "./repo-types";
 import { requireObject } from "./object-work";
 
@@ -71,6 +71,10 @@ function parseConfig(text: string): Config {
       const parsed = /^\[([\w.-]+)(?:\s+"((?:[^"\\]|\\.)*)")?\]\s*(?:[#;].*)?$/.exec(line);
       requireObject(parsed, "Unsupported Git config section");
       const name = parsed[1].toLowerCase();
+      requireObject(
+        !name.startsWith("branch.") && !name.startsWith("remote."),
+        "Deprecated Git config subsections unsupported",
+      );
       requireObject(name !== "include" && name !== "includeif", "Git config includes unsupported");
       const key = `${name}\0${parsed[2] === undefined ? "" : unquote(`"${parsed[2]}"`)}`;
       section = result.get(key) ?? new Map();

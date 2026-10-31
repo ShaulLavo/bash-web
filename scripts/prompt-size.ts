@@ -7,6 +7,7 @@ export interface PromptSize {
   readonly configIncrementalBytesGzip: number;
   readonly totalBytesGzip: number;
   readonly statusIncrementalBytesGzip: number;
+  readonly objectsIncrementalBytesGzip: number;
 }
 
 function entryOutput(meta: Metafile, entry: string): string {
@@ -45,7 +46,25 @@ export function promptSize(meta: Metafile, sizes: ReadonlyMap<string, number>): 
     ([, output]) => output.entryPoint === "src/prompt/sources/status.ts",
   );
   const statusGraph = statusOutput ? staticGraph(meta, statusOutput[0]) : new Set<string>();
-  const all = new Set(Array.from(eager).concat(Array.from(configGraph), Array.from(statusGraph)));
+  const objectsOutput = Object.entries(meta.outputs).find(
+    ([, output]) => output.entryPoint === "src/prompt/sources/objects.ts",
+  );
+  const objectsGraph = objectsOutput ? staticGraph(meta, objectsOutput[0]) : new Set<string>();
+  for (const path of eager) {
+    if (
+      Object.keys(meta.outputs[path].inputs).some((input) =>
+        /src\/prompt\/sources\/objects?(?:-|\.)/.test(input),
+      )
+    )
+      throw new Error("Git objects must stay out of the eager prompt graph");
+  }
+  const all = new Set(
+    Array.from(eager).concat(
+      Array.from(configGraph),
+      Array.from(statusGraph),
+      Array.from(objectsGraph),
+    ),
+  );
   for (const path of Object.keys(meta.outputs)) {
     if (!all.has(path)) throw new Error(`Unaccounted prompt output ${path}`);
     if (!sizes.has(path)) throw new Error(`Missing compressed size for ${path}`);
@@ -63,6 +82,11 @@ export function promptSize(meta: Metafile, sizes: ReadonlyMap<string, number>): 
     configIncrementalBytesGzip: sum(Array.from(configGraph).filter((path) => !eager.has(path))),
     statusIncrementalBytesGzip: sum(
       Array.from(statusGraph).filter((path) => !eager.has(path) && !configGraph.has(path)),
+    ),
+    objectsIncrementalBytesGzip: sum(
+      Array.from(objectsGraph).filter(
+        (path) => !eager.has(path) && !configGraph.has(path) && !statusGraph.has(path),
+      ),
     ),
     totalBytesGzip: sum(all),
   };

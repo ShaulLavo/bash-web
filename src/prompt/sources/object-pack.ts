@@ -19,7 +19,7 @@ export class PackIndex {
   static async parse(bytes: Uint8Array, work: ObjectWork): Promise<PackIndex> {
     const index = new PackIndex(bytes);
     requireObject(
-      (await digest(new Uint8Array(bytes.subarray(0, -20)))) === hex(bytes.subarray(-20)),
+      (await digest(bytes.subarray(0, -20))) === hex(bytes.subarray(-20)),
       "Git pack index checksum mismatch",
     );
     let bucket = 0;

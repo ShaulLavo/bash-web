@@ -24,8 +24,12 @@ export function oid(value: string): string {
   return value;
 }
 
-export async function digest(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  return hex(new Uint8Array(await crypto.subtle.digest("SHA-1", bytes)));
+export async function digest(bytes: Uint8Array): Promise<string> {
+  const input =
+    bytes.buffer instanceof ArrayBuffer
+      ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      : new Uint8Array(bytes);
+  return hex(new Uint8Array(await crypto.subtle.digest("SHA-1", input)));
 }
 
 export async function inflate(

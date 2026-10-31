@@ -13,9 +13,9 @@
 
 The `git_branch`, `git_commit` and `git_state` segments render this metadata. A repository format that the package cannot vouch for, including SHA-256 and reftable repositories, renders unknown metadata rather than claiming a clean or known state.
 
-## Not included yet
+## Background status
 
-`git_status`, staged-change details and ahead/behind counts are separate prompt tracks. Until those tracks land, the package does not inspect the index or Git objects.
+`git_status` inspects the working tree and index in a separate background run. [Staged changes and upstream counts](prompt-git-objects.md) describe the lazy object reader and its bounds. These reads do not join repository discovery.
 
 ## Limits
 
