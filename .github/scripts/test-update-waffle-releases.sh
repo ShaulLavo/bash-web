@@ -75,7 +75,7 @@ waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "$
 EOF_ENGINE
   cat > "$root/shell/compat-fixtures/Cargo.toml" <<EOF_COMPAT
 [dependencies]
-waffle-native-family-support = { package = "waffle-program-support", git = "https://github.com/ShaulLavo/waffle", rev = "${old_revision}" }
+waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "${old_revision}" }
 waffle-coreutils = { git = "https://github.com/ShaulLavo/waffle", rev = "${old_revision}" }
 waffle-grep = { git = "https://github.com/ShaulLavo/waffle", rev = "${old_revision}" }
 EOF_COMPAT
@@ -211,7 +211,7 @@ assert_support_revision() {
   local root=$1 revision=$2
   test "$(rg -c "waffle-program-support.*rev = \"${revision}\"" "$root/shell/engine/Cargo.toml")" = 2
   test "$(rg -c 'waffle-program-support.*rev =' "$root/shell/engine/Cargo.toml")" = 2
-  rg -q "waffle-native-family-support.*rev = \"${old_revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
+  rg -q "waffle-program-support.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   rg -q "name = \"waffle-program-support\"" "$root/shell/Cargo.lock"
   rg -q "rev=${revision}#${revision}" "$root/shell/Cargo.lock"
 }
@@ -248,7 +248,7 @@ run_no_runtime_fixture() {
   write_stubs "$root"
   RELEASE_RUNTIME=0.0.105 RELEASE_PROGRAM=0.0.14 GIT_REF_MODE=annotated run_updater "$root"
   test "$(rg -c "waffle-program-support.*${old_revision}" "$root/shell/engine/Cargo.toml")" = 2
-  test "$(rg -c "waffle-native-family-support.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
+  test "$(rg -c "waffle-program-support.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
   rg -q "rev=${old_revision}#${old_revision}" "$root/shell/Cargo.lock"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz"

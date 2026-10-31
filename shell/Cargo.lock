@@ -1428,7 +1428,7 @@ dependencies = [
  "shell-engine",
  "waffle-coreutils",
  "waffle-grep",
- "waffle-program-support 0.0.0 (git+https://github.com/ShaulLavo/waffle?rev=a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee)",
+ "waffle-program-support 0.0.0 (git+https://github.com/ShaulLavo/waffle?rev=acd64c19a6381c27edd602316e66d81df78abf25)",
 ]
 
 [[package]]
