@@ -12,13 +12,16 @@ runtime_direct_revision=1234567890abcdef1234567890abcdef12345678
 
 write_fixture() {
   local root=$1 runtime_version=$2 program_version=$3
-  mkdir -p "$root/bin" "$root/.github/scripts" "$root/shell/engine" "$root/shell/compat-fixtures"
+  mkdir -p "$root/scripts" "$root/bin" "$root/.github/scripts" "$root/shell/engine" "$root/shell/compat-fixtures"
+  cp "$script_root/../../scripts/"{check-waffle-release,installed-waffle,waffle-host-interface}.ts "$root/scripts/"
   cp "$script_root/update-waffle-releases.sh" "$root/.github/scripts/"
   cp "$script_root/check-update-paths.sh" "$root/.github/scripts/"
   printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$root/.github/scripts/update-hotkeys.sh"
   chmod +x "$root/.github/scripts"/*.sh
   cat > "$root/package.json" <<JSON
 {
+  "type": "module",
+  "waffleHostInterface": 1,
   "dependencies": {
     "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v${program_version}/waffle-base-${program_version}.tgz"
   },
@@ -26,7 +29,7 @@ write_fixture() {
     "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz"
   },
   "peerDependencies": {
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz"
+    "waffle": "*"
   },
   "allowScripts": {
     "waffle@${runtime_version}": true
@@ -38,19 +41,26 @@ JSON
   cat > "$root/sources.lock.json" <<JSON
 {
   "waffle": {
+    "hostInterface": 1,
     "version": "${runtime_version}",
     "revision": "${runtime_direct_revision}",
     "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz",
-    "archiveSha256": "archive",
+    "archiveSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "archiveBytes": 1,
     "buildInputs": {
       "builderSha256": "builder",
       "patchSha256": "patch"
     }
   },
   "wafflePrograms": {
-    "version": "0.0.13",
+    "version": "${program_version}",
     "revision": "${program_revision}",
-    "provenance": "historical receipts"
+    "provenance": "historical receipts",
+    "runtime": {
+      "url": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz",
+      "bytes": 1,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
   },
   "wasiLibc": {
     "patchPath": "waffle-inputs/${runtime_direct_revision}/patch",
@@ -142,14 +152,36 @@ GIT
   cat > "$root/bin/curl" <<'CURL'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'fixture bytes\n'
+url=${*: -1}
+case "$url" in
+  */waffle-*.tgz)
+    mkdir -p "$TEST_ROOT/runtime-archive/package"
+    printf '{"name":"waffle","version":"%s","waffleHostInterface":%s}\n' "$RELEASE_RUNTIME" "${RUNTIME_INTERFACE:-1}" > "$TEST_ROOT/runtime-archive/package/package.json"
+    tar -czf - -C "$TEST_ROOT/runtime-archive" package
+    ;;
+  */program-release.json)
+    jq -n --arg version "$RELEASE_PROGRAM" --arg source "$PROGRAM_SOURCE_REVISION" \
+      --slurpfile selected "$TEST_ROOT/sources.lock.json" \
+      '{schema:"waffle-program-release/2", version:$version, sourceCommit:$source,
+        tagState:"tagged", dirty:false,
+        runtime:{waffleHostInterface:1, url:$selected[0].waffle.specifier,
+          bytes:$selected[0].waffle.archiveBytes, sha256:$selected[0].waffle.archiveSha256},
+        packages:[{waffleHostInterface:1}]}'
+    ;;
+  *) printf 'fixture bytes\n' ;;
+esac
 CURL
   cat > "$root/bin/cargo" <<'CARGO'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$TEST_ROOT/cargo-calls"
-if [[ "$*" == *'update --manifest-path shell/Cargo.toml -p waffle-program-support'* ]]; then
-  sed -i "s/${OLD_REVISION}/${RUNTIME_SOURCE_REVISION}/g" shell/Cargo.lock
+if [[ "$*" == *'update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev='*'#waffle-grep' ]]; then
+  cat >> shell/Cargo.lock <<EOF
+
+[[package]]
+name = "waffle-program-support"
+source = "git+https://github.com/ShaulLavo/waffle?rev=${RUNTIME_SOURCE_REVISION}#${RUNTIME_SOURCE_REVISION}"
+EOF
 fi
 CARGO
   cat > "$root/bin/npm" <<'NPM'
@@ -193,12 +225,14 @@ assert_support_revision() {
   test "$(rg -c 'waffle-program-support.*rev =' "$root/shell/engine/Cargo.toml")" = 2
   rg -q "waffle-program-support.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   rg -q "name = \"waffle-program-support\"" "$root/shell/Cargo.lock"
+  rg -q "waffle-coreutils.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
+  rg -q "waffle-grep.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   rg -q "rev=${revision}#${revision}" "$root/shell/Cargo.lock"
 }
 
 assert_common_calls() {
   local root=$1
-  grep -Fxq 'update --manifest-path shell/Cargo.toml -p waffle-program-support' "$root/cargo-calls"
+  grep -Fxq "update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-program-support -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-coreutils -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-grep" "$root/cargo-calls"
   grep -Fxq -- 'install --package-lock-only --ignore-scripts --force' "$root/npm-calls"
   grep -Fxq -- 'install --lockfile-only --ignore-scripts' "$root/bun-calls"
 }
@@ -211,8 +245,8 @@ run_pair_fixture() {
   RELEASE_RUNTIME="$runtime" RELEASE_PROGRAM=0.0.14 GIT_REF_MODE="$mode" run_updater "$root"
   assert_support_revision "$root" "$([[ "$mode" == annotated ]] && printf '%s' "$runtime_revision" || printf '%s' "$runtime_direct_revision")"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
+  jq -e '.wafflePrograms.runtime == (.waffle | {url: .specifier, bytes: .archiveBytes, sha256: .archiveSha256})' "$root/sources.lock.json" > /dev/null
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz"
-  test "$(rg -c "waffle-coreutils.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
   (cd "$root" && bash .github/scripts/check-update-paths.sh)
   assert_common_calls "$root"
   before=$($real_git -C "$root" diff)
@@ -231,6 +265,7 @@ run_no_runtime_fixture() {
   test "$(rg -c "waffle-program-support.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
   rg -q "rev=${old_revision}#${old_revision}" "$root/shell/Cargo.lock"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
+  jq -e '.wafflePrograms.runtime == (.waffle | {url: .specifier, bytes: .archiveBytes, sha256: .archiveSha256})' "$root/sources.lock.json" > /dev/null
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz"
   test ! -s "$root/cargo-calls"
   (cd "$root" && bash .github/scripts/check-update-paths.sh)
@@ -248,7 +283,7 @@ run_guard_negative_fixture() {
     echo 'FAIL: unrelated engine manifest change passed the updater guard' >&2
     exit 1
   fi
-  grep -q 'beyond waffle-program-support revision pins' "$root/guard.log"
+  grep -q 'beyond native Waffle revision pins' "$root/guard.log"
 }
 
 run_bad_ref_fixture() {
@@ -272,6 +307,29 @@ run_bad_ref_fixture invalid
 run_bad_ref_fixture invalid-peeled
 run_pair_fixture annotated 0.0.106
 run_pair_fixture direct 0.0.107
+run_runtime_only_fixture() {
+  local root="$scratch/runtime-only"
+  write_fixture "$root" 0.0.107 0.0.15
+  write_stubs "$root"
+  RELEASE_RUNTIME=0.0.108 RELEASE_PROGRAM=0.0.15 GIT_REF_MODE=annotated run_updater "$root"
+  test "$(jq -r '.peerDependencies.waffle' "$root/package.json")" = '*'
+  test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = 'https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-base-0.0.15.tgz'
+  assert_support_revision "$root" "$runtime_revision"
+  test "$(jq -r '.wafflePrograms.runtime.url' "$root/sources.lock.json")" = 'https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.107/waffle-0.0.107.tgz'
+}
+run_runtime_only_fixture
+run_incompatible_runtime_fixture() {
+  local root="$scratch/incompatible-runtime"
+  write_fixture "$root" 0.0.107 0.0.15
+  write_stubs "$root"
+  if RUNTIME_INTERFACE=2 RELEASE_RUNTIME=0.0.108 RELEASE_PROGRAM=0.0.15 GIT_REF_MODE=annotated run_updater "$root" > "$root/guard.log" 2>&1; then
+    echo 'FAIL: incompatible runtime passed' >&2
+    exit 1
+  fi
+  grep -q 'host interface mismatch' "$root/guard.log"
+  "$real_git" -C "$root" diff --exit-code
+}
+run_incompatible_runtime_fixture
 run_no_runtime_fixture
 run_guard_negative_fixture
 printf '%s\n' 'Waffle updater fixtures passed: peeled and lightweight refs, runtime-owned support, no-runtime preservation, repeat stability, narrow manifest guards, and rejected failed/missing/invalid refs.'

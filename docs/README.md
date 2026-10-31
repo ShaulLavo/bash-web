@@ -26,6 +26,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [Async shell core](shell-engine.md): Execution contract, bounds, supported syntax
 - [Shell workspace](shell-workspace.md): Parser crate, runtime ABI for interactive and [named-file](script-files.md) execution, the CLI; [WASI utility processes](wasi-process.md) for child execution
 - [Engine ownership notes](reference/engine-ownership.md): Which module owns execution types, bindings, parsing entry points
+- [Waffle host compatibility](waffle-host-interface.md): Exact metadata checks, one runtime, and independent artifact integrity
 - [Guest libc and build provenance](wasi-libc.md): The patched wasi-libc every WASI guest links against
 - [Zsh line-editor mode](zsh-line-editor.md): Opt-in hard-line navigation without changing Bash execution
 - [Interactive terminal editing](terminal-editing.md): Multiline commands, Shift+Enter, bracketed paste and input limits

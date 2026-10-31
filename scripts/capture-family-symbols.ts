@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { familyProgramNames, familyWasmPath, familyWasiAdapter } from "./family-assets.ts";
 import { guestRecord } from "./verify-family-guests.ts";
 import { functionNames, verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { verifyInstalledPrograms } from "./waffle-program-release.ts";
 
 const json = (path: string) => guestRecord(JSON.parse(readFileSync(path, "utf8")));
 const identity = (bytes: Uint8Array) => ({
@@ -95,19 +96,20 @@ function main() {
     directory && manifestPath && output,
     "Use <named directory> <release manifest> <output>",
   );
+  verifyInstalledPrograms(resolve(import.meta.dirname, ".."), readFileSync(manifestPath));
   const release = json(manifestPath);
-  assert.equal(release.schema, "waffle-program-release/1");
+  assert.equal(release.schema, "waffle-program-release/2");
   assert.equal(release.tagState, "tagged");
   assert.equal(release.dirty, false);
   assert.ok(
     typeof release.sourceCommit === "string" && /^[a-f0-9]{40}$/.test(release.sourceCommit),
   );
   const revision = release.sourceCommit;
-  const runtime = guestRecord(release.runtime);
-  const sources = json(resolve(import.meta.dirname, "../sources.lock.json"));
-  assert.equal(runtime.url, guestRecord(sources.waffle).specifier);
-  assert.equal(runtime.sha256, guestRecord(sources.waffle).archiveSha256);
+
   const proof = {
+    releaseManifest: guestRecord(
+      json(resolve(import.meta.dirname, "../sources.lock.json")).wafflePrograms,
+    ).releaseManifest,
     version: release.version,
     revision,
     provenance:

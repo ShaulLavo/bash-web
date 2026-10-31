@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { waffleBuildFixture } from "../tests/helpers/waffle-build-inputs.ts";
+import { waffleBuildFixture, wasiBuildScripts } from "../tests/helpers/waffle-build-inputs.ts";
 import { execFileSync, fork, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -664,7 +664,7 @@ for (const descendant of [false, true]) {
 function putCompatibilityEntrypoint(put: FixtureContext["put"]): void {
   // Only the compiler and archived target scorer are stand-ins. The candidate entrypoint,
   // trusted baseline launcher, migration supervisor and group draining are shipped code.
-  for (const name of [
+  const entrypointScripts = [
     "bash-compat.ts",
     "compat-programs.ts",
     "bash-compat-helpers.ts",
@@ -673,10 +673,8 @@ function putCompatibilityEntrypoint(put: FixtureContext["put"]): void {
     "shell-scoreboard-base.ts",
     "shell-scoreboard-migration.ts",
     "shell-process-group.ts",
-    "wasi-build.ts",
-    "waffle-release-inputs.ts",
-    "verify-wasi-guests.ts",
-  ])
+  ];
+  for (const name of entrypointScripts.concat(wasiBuildScripts))
     put(`scripts/${name}`, readFileSync(new URL(name, import.meta.url)));
 }
 function runCompatibility(repo: string, runner: string) {

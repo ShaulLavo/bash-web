@@ -18,7 +18,7 @@ import {
   wasiCargoEnvironment,
   wasiSysrootCommand,
 } from "./wasi-build.ts";
-import { waffleBuildFixture } from "../tests/helpers/waffle-build-inputs.ts";
+import { waffleBuildFixture, wasiBuildScripts } from "../tests/helpers/waffle-build-inputs.ts";
 
 const builder = `#!/bin/bash
 set -eu
@@ -132,7 +132,7 @@ function runAdapterPolicy(binary: string, adapter: string) {
   fixture((root, env) => {
     const scripts = resolve(root, "scripts");
     mkdirSync(scripts);
-    for (const file of ["wasi-build.ts", "verify-wasi-guests.ts", "waffle-release-inputs.ts"])
+    for (const file of wasiBuildScripts)
       copyFileSync(resolve(import.meta.dirname, file), resolve(scripts, file));
     const bin = resolve(root, "bin");
     mkdirSync(bin);

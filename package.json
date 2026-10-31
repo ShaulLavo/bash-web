@@ -96,7 +96,7 @@
     "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
-    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
+    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-waffle-host-interface.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
     "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/waffle-release-inputs.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-shell-wasi.ts scripts/wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts scripts/wasi-guest-path.ts scripts/test-wasi-guest-path.ts scripts/waffle-fixture-lifecycle.ts scripts/test-waffle-fixture-lifecycle.ts",
     "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
@@ -121,10 +121,10 @@
     "test:prompt:browser": "bun scripts/test-prompt-status-browser.ts"
   },
   "dependencies": {
-    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-python-0.0.14.tgz",
-    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz",
-    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-git-0.0.14.tgz",
-    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-ripgrep-0.0.14.tgz"
+    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-python-0.0.15.tgz",
+    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-base-0.0.15.tgz",
+    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-git-0.0.15.tgz",
+    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-ripgrep-0.0.15.tgz"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
@@ -139,11 +139,11 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.106/waffle-0.0.106.tgz",
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.107/waffle-0.0.107.tgz",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.106/waffle-0.0.106.tgz"
+    "waffle": "*"
   },
   "overrides": {
     "esbuild": "0.28.2"
@@ -153,10 +153,11 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.106": true
+    "waffle@0.0.107": true
   },
   "trustedDependencies": [
     "waffle",
     "esbuild"
-  ]
+  ],
+  "waffleHostInterface": 1
 }
