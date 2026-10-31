@@ -81,8 +81,9 @@ no-checkpoint CPU-loop behavior outside the explicit finite probe commands.
 
 ## Build and artifact verification
 
-`scripts/wasi-build.ts` is original build tooling. It invokes the verified staged
-Waffle builder and caches a sysroot under `.build/wasi-libc/<recipe-hash>/`.
+`scripts/wasi-build.ts` supplies the shell workspace, targets, and verified staged
+Waffle inputs to the public `waffle/program-build-tools` implementation. Waffle
+builds and caches the sysroot under `.build/wasi-libc/<recipe-hash>/`.
 The identity includes the SDK path/version and Waffle's builder/patch bytes;
 a success receipt plus `libc.a` is required before reuse. An unverified output
 is rejected, not silently accepted or deleted. A flock serializes independent
@@ -96,7 +97,9 @@ and supplies `--target=wasm32-wasip1` and `--sysroot=<patched-sysroot>` to the
 **final link**, as well as C compilation. Merely compiling against patched
 headers while linking stock SDK or Rust-bundled libc is not sufficient.
 
-The original `scripts/verify-wasi-guests.ts` inspects final Wasm artifacts.
+`scripts/verify-wasi-guests.ts` supplies the shell's filesystem-adapter policy to
+Waffle's public verifier, which inspects final Wasm artifacts. The function-name
+reader used to capture released-family provenance also comes from Waffle.
 When `__wasilibc_populate_preopens` is retained, it must call both
 `__wasi_fd_prestat_get` and `__wasi_fd_fdstat_get`; checking imports alone cannot
 distinguish the stock scanner. This is the real scanner proof for both Rust std
@@ -116,7 +119,7 @@ artifact verifier; browser/test helpers verify before publishing their assets.
 Before a heavy build, verify the data mount/free space and record pre-existing
 resources. Admit work through the host's shared build queue. Waffle owns its
 unique temporary download/source/build tree under `WASI_LIBC_SCRATCH_ROOT`
- and removes it after descendants stop on success,
+and removes it after descendants stop on success,
 failure or interruption. If cleanup cannot be verified it prints and retains
 the path for its caller to resolve. Compiler temporaries use that owned tree.
 
