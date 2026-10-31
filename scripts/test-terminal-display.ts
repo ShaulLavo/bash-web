@@ -26,6 +26,8 @@ type Step =
   | { prompt: string }
   | { keys: string }
   | { output: string }
+  | { update: string }
+  | { background: string }
   | { resize: [number, number] }
   | { cancel: true }
   | { eof: true };
@@ -37,6 +39,8 @@ function replay(columns: number, rows: number, steps: readonly Step[], mode = "b
     if ("prompt" in step) return `prompt ${hex(step.prompt)}`;
     if ("keys" in step) return `keys ${hex(step.keys)}`;
     if ("output" in step) return `output ${hex(step.output)}`;
+    if ("update" in step) return `update ${hex(step.update)}`;
+    if ("background" in step) return `background ${hex(step.background)}`;
     if ("resize" in step) return `resize ${step.resize.join(" ")}`;
     return "cancel" in step ? "cancel" : "eof";
   });
@@ -402,5 +406,92 @@ test("native Shift key bytes retain explicit newline and safe-CSI policies in th
     const directPolicy = direct(columns, 100, `${preceding}$ ${expected.replaceAll("\n", "\r\n")}`);
     assert.deepEqual(actual.lines, directPolicy.lines, string(fixture.name));
     assert.deepEqual(actual.cursor, directPolicy.cursor, string(fixture.name));
+  }
+});
+
+test("a pushed prompt repaints in place and keeps the command and caret", () => {
+  const keys = { keys: `echo abcdefghij${left(3)}` };
+  const cases: [string, number, string, string][] = [
+    ["same height", 24, "$ ", "~/app $ "],
+    ["one line to two", 24, "$ ", "~/app\r\n$ "],
+    ["two lines to one", 24, "~/app\r\n$ ", "$ "],
+    ["prompt soft wraps", 12, "$ ", "~/a-long-directory $ "],
+    ["command rewraps under a wider prompt", 12, "$ ", "~/app $ "],
+  ];
+  for (const mode of ["bash", "zsh"])
+    for (const [name, columns, before, after] of cases) {
+      const result = replay(columns, 6, [{ prompt: before }, keys, { update: after }], mode);
+      const reference = direct(columns, 6, `${after}echo abcdefghij`, `${after}echo abcdefg`);
+      assert.deepEqual(result.lines, reference.lines, `${mode} ${name}`);
+      assert.deepEqual(result.cursor, reference.cursor, `${mode} ${name}`);
+      const typed = replay(
+        columns,
+        6,
+        [{ prompt: before }, keys, { update: after }, { keys: "Z\r" }],
+        mode,
+      );
+      assert.deepEqual(typed.submitted, ["echo abcdefgZhij"], `${mode} ${name}`);
+    }
+});
+
+test("a pushed prompt after a resize starts from the reflowed rows", () => {
+  const result = replay(12, 6, [
+    { prompt: "$ " },
+    { keys: `echo abcdefghijklmnop${left(4)}` },
+    { resize: [8, 6] },
+    { update: "% " },
+  ]);
+  const reference = direct(8, 6, "% echo abcdefghijklmnop", "% echo abcdefghijkl");
+  assert.deepEqual(result.lines, reference.lines);
+  assert.deepEqual(result.cursor, reference.cursor);
+});
+
+test("a taller pushed prompt at the bottom of the screen scrolls like written text", () => {
+  const result = replay(8, 3, [
+    { output: "one\r\ntwo\r\n" },
+    { prompt: "$ " },
+    { keys: "abc" },
+    { update: "~/app\r\n$ " },
+  ]);
+  const reference = direct(8, 1000, "one\r\ntwo\r\n~/app\r\n$ abc");
+  assert.deepEqual(result.lines, reference.lines);
+  assert.deepEqual(result.screen, ["two", "~/app", "$ abc"]);
+  assert.deepEqual(result.cursor, reference.cursor);
+});
+
+test("a prompt that is out of reach is not redrawn until ctrl-l", () => {
+  const command = "abcdefghijklmnopqrstuvwx1234567890";
+  const cases: [string, Step[]][] = [
+    ["background output", [{ prompt: "$ " }, { keys: "ab" }, { background: "JOB\r\n" }]],
+    ["first row scrolled away", [{ prompt: "$ " }, { keys: command }]],
+  ];
+  for (const [name, steps] of cases) {
+    const without = replay(8, 3, steps);
+    const pushed = replay(8, 3, steps.concat([{ update: "% " }]));
+    assert.equal(pushed.written, without.written, name);
+    const cleared = replay(8, 3, steps.concat([{ update: "% " }, { keys: "\x0c" }]));
+    assert.ok(
+      cleared.lines.some((line) => line.startsWith("% ")),
+      name,
+    );
+  }
+});
+
+// Split UTF-8 scalars are covered by the native editor tests; keys here are whole strings.
+test("a prompt pushed mid-escape or mid-paste is drawn when the input completes", () => {
+  const cases: [string, string, string, string][] = [
+    ["escape", "ab\x1b[", "D", "% ab"],
+    ["paste", "\x1b[200~ab", "cd\x1b[201~", "% abcd"],
+  ];
+  for (const [name, partial, rest, expected] of cases) {
+    const pending = replay(20, 6, [{ prompt: "$ " }, { keys: partial }, { update: "% " }]);
+    assert.ok(!pending.lines.some((line) => line.startsWith("%")), name);
+    const done = replay(20, 6, [
+      { prompt: "$ " },
+      { keys: partial },
+      { update: "% " },
+      { keys: rest },
+    ]);
+    assert.deepEqual(done.lines, [expected], name);
   }
 });

@@ -130,6 +130,10 @@ pub struct Editor {
     history_at: Option<usize>,
     draft: Vec<u8>,
     prompt: Vec<u8>,
+    /// Newer prompt text the host sent that could not be drawn yet.
+    pending_prompt: Option<Vec<u8>>,
+    /// Something else wrote to the terminal, so the display model no longer matches it.
+    stale_screen: bool,
     display: Display,
     paste: Option<Paste>,
     discard_utf8: usize,
@@ -154,7 +158,36 @@ impl Editor {
     /// The prompt is about to be written at column 0.
     pub fn begin(&mut self, prompt: &str, geometry: Geometry) {
         self.prompt = prompt.as_bytes().to_vec();
+        self.pending_prompt = None;
+        self.stale_screen = false;
         self.display.begin(&self.prompt, geometry);
+    }
+    /// Newer text for the prompt on screen. Returns the repaint when it can be drawn
+    /// now. Otherwise the text waits: the next key that completes an escape, a UTF-8
+    /// scalar or a paste redraws with it, and Ctrl+L shows it when the prompt row is
+    /// out of reach or other output moved things.
+    pub fn replace_prompt(&mut self, prompt: &[u8]) -> Option<Vec<u8>> {
+        if prompt == self.prompt {
+            self.pending_prompt = None;
+            return None;
+        }
+        self.pending_prompt = Some(prompt.to_vec());
+        self.prompt_ready().then(|| self.redraw())
+    }
+    /// Another writer moved the terminal under the editor. Prompt updates wait for
+    /// Ctrl+L, which repaints from a cleared screen.
+    pub fn foreign_output(&mut self) {
+        self.stale_screen = true;
+    }
+    fn prompt_ready(&self) -> bool {
+        let Some(prompt) = &self.pending_prompt else {
+            return false;
+        };
+        let mid_input = !matches!(self.escape, Escape::None)
+            || self.paste.is_some()
+            || self.discard_utf8 > 0
+            || incomplete_scalar(&self.line[..self.cursor]);
+        !self.stale_screen && !mid_input && self.display.reaches(&self.region(prompt).0)
     }
     /// Auto-fit terminal resizing reflows the already painted line. Recount its
     /// cursor BEFORE editing, while the old command/caret are still available.
@@ -165,11 +198,18 @@ impl Editor {
         self.display.echoed(byte);
     }
     pub fn redraw(&mut self) -> Vec<u8> {
-        let mut region = self.prompt.clone();
+        if self.prompt_ready() {
+            self.prompt = self.pending_prompt.take().unwrap_or_default();
+        }
+        let (region, caret) = self.region(&self.prompt);
+        self.display.render(region, caret)
+    }
+    fn region(&self, prompt: &[u8]) -> (Vec<u8>, usize) {
+        let mut region = prompt.to_vec();
         paint_text(&mut region, &self.line[..self.cursor]);
         let caret = region.len();
         paint_text(&mut region, &self.line[self.cursor..]);
-        self.display.render(region, caret)
+        (region, caret)
     }
     /// After a submit, interrupt or EOF: moves below the displayed command. The
     /// terminal may have reflowed it since the last key, so recount it first.
@@ -339,6 +379,12 @@ impl Editor {
         if bell { Action::Bell } else { Action::None }
     }
     pub fn feed(&mut self, byte: u8) -> Action {
+        match self.key(byte) {
+            Action::None | Action::Echo(_) if self.prompt_ready() => Action::Redraw,
+            action => action,
+        }
+    }
+    fn key(&mut self, byte: u8) -> Action {
         if self.paste.is_some() {
             return self.feed_paste(byte);
         }
@@ -410,6 +456,10 @@ impl Editor {
             }
             12 => {
                 self.display.clear_screen();
+                if let Some(prompt) = self.pending_prompt.take() {
+                    self.prompt = prompt;
+                }
+                self.stale_screen = false;
                 Action::Redraw
             }
             b'\t' | 32..=126 | 128..=255 => self.insert(byte),

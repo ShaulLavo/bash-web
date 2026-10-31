@@ -235,3 +235,48 @@ fn resizing_multiline_text_recounts_the_existing_caret() {
     assert_eq!(screen.text(), "$");
     assert_eq!((screen.row, screen.column), (0, 2));
 }
+
+/// The page pushes newer prompt text while the user is typing.
+mod prompt_updates {
+    use super::*;
+
+    #[test]
+    fn a_new_prompt_repaints_in_place_and_keeps_the_command_and_caret() {
+        let (mut editor, mut screen) = start(12);
+        type_bytes(&mut editor, &mut screen, b"echo hi\x1b[D\x1b[D");
+        screen.write(&editor.replace_prompt(b"app $ ").expect("drawn now"));
+        assert_eq!(screen.text(), "app $ echo hi");
+        assert_eq!((screen.row, screen.column), (0, 11));
+        assert_eq!(editor.replace_prompt(b"app $ "), None, "unchanged text");
+        type_bytes(&mut editor, &mut screen, b"X");
+        assert_eq!(screen.text(), "app $ echo Xhi");
+        assert_eq!(editor.feed(b'\r'), Action::Submit(b"echo Xhi".to_vec()));
+    }
+
+    #[test]
+    fn a_prompt_update_waits_for_the_input_in_progress_to_complete() {
+        for (partial, rest, line) in [
+            (&b"ab\x1b["[..], &b"D"[..], "ab"),
+            (b"ab\xc3", b"\xa9", "ab\u{e9}"),
+            (b"ab\x1b[200~cd", b"\x1b[201~", "abcd"),
+        ] {
+            let (mut editor, mut screen) = start(12);
+            type_bytes(&mut editor, &mut screen, partial);
+            assert_eq!(editor.replace_prompt(b"% "), None, "{partial:?}");
+            type_bytes(&mut editor, &mut screen, rest);
+            assert!(screen.text().starts_with("% ab"), "{partial:?}");
+            assert_eq!(editor.feed(b'\r'), Action::Submit(line.as_bytes().to_vec()));
+        }
+    }
+
+    #[test]
+    fn after_other_output_a_prompt_update_waits_for_ctrl_l() {
+        let (mut editor, mut screen) = start(12);
+        type_bytes(&mut editor, &mut screen, b"ab");
+        editor.foreign_output();
+        assert_eq!(editor.replace_prompt(b"% "), None);
+        assert_eq!(editor.feed(b'c'), Action::Echo(b'c'));
+        assert_eq!(editor.feed(12), Action::Redraw);
+        assert!(editor.redraw().ends_with(b"% abc"));
+    }
+}

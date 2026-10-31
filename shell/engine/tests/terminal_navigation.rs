@@ -2,7 +2,7 @@
 mod source {
     pub mod terminal;
 }
-use source::terminal::{Action, Editor, Geometry};
+use source::terminal::{Action, Editor, Geometry, Mode};
 
 fn feed(editor: &mut Editor, bytes: &[u8]) {
     for &byte in bytes {
@@ -97,4 +97,18 @@ fn large_markdown_blank_lines_are_one_readline_buffer() {
     paste(&mut editor, &text);
     feed(&mut editor, b"\x01!\x05?\x1b[A\x1b[B");
     submit(&mut editor, &format!("!{text}?"));
+}
+
+#[test]
+fn a_taller_prompt_does_not_change_zsh_vertical_movement() {
+    let mut editor = Editor::new(Mode::Zsh);
+    editor.begin("$ ", Geometry::new(12, 6));
+    paste(&mut editor, "first\nsecond");
+    feed(&mut editor, b"\x1b[D\x1b[D\x1b[A");
+    assert!(editor.replace_prompt(b"~/app\n$ ").is_some());
+    feed(&mut editor, b"!\x1b[B?");
+    editor.foreign_output();
+    assert_eq!(editor.replace_prompt(b"$ "), None);
+    feed(&mut editor, b"\x1b[A.");
+    submit(&mut editor, "firs!t.\nsecon?d");
 }
