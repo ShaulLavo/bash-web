@@ -428,6 +428,14 @@ mod tests {
             );
             job.now_or_never().unwrap()
         }
+        fn assert_values(&self, expected: &[&str]) {
+            let state = self.shell.state();
+            let state = state.borrow();
+            assert_eq!(state.array_count("a"), expected.len());
+            for (index, value) in expected.iter().enumerate() {
+                assert_eq!(state.array_element("a", index as i64), Some(*value));
+            }
+        }
         fn refunded(&self) {
             let state = self.shell.state();
             let state = state.borrow();
@@ -456,8 +464,13 @@ mod tests {
 
     #[test]
     fn mapfile_completion_cancellation_and_shutdown_refund_live_scratch() {
+        pending_publication(false);
+        pending_publication(true);
+    }
+
+    fn pending_publication(overlay: bool) {
         let fixture = InputSession::new();
-        fixture.input(Endpoint::bytes(b"first\nsecond\n".to_vec()));
+        fixture.input(Endpoint::bytes(b"o0\no1\no2\no3\n".to_vec()));
         assert_eq!(
             fixture.finish(fixture.shell.start("mapfile -t a").unwrap()),
             0
@@ -469,8 +482,19 @@ mod tests {
             Some(Ok(14))
         );
         fixture.input(reader);
-        let pending = fixture.shell.start("mapfile -t a").unwrap();
+        let source = if overlay {
+            "mapfile -t -O 1 a"
+        } else {
+            "mapfile -t a"
+        };
+        let pending = fixture.shell.start(source).unwrap();
         crate::interpreter::printer_controls::assert_parked(&fixture.executor, &pending);
+        let expected: &[&str] = if overlay {
+            &["o0", "x", "y", "o3"]
+        } else {
+            &["x", "y"]
+        };
+        fixture.assert_values(expected);
         assert!(
             fixture
                 .shell
@@ -481,6 +505,7 @@ mod tests {
         );
         fixture.shell.interrupt();
         assert_eq!(fixture.finish(pending), 130);
+        fixture.assert_values(expected);
         fixture.refunded();
         assert_eq!(fixture.finish(fixture.shell.start("true").unwrap()), 0);
         let (reader, writer2) = pipe();

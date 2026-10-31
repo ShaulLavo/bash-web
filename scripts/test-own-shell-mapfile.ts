@@ -4,6 +4,14 @@ import { releaseShellRunner } from "./release-shell-runner.ts";
 
 import fixture from "./fixtures/shell-mapfile.json" with { type: "json" };
 assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
+const negativeOrigin = fixture.cases.find((item) => item.id === "negative-origin-real-null");
+assert.ok(negativeOrigin);
+assert.match(Buffer.from(negativeOrigin.stderrBase64, "base64").toString(), /invalid array origin/);
+for (const item of fixture.cases)
+  assert.doesNotMatch(
+    Buffer.from(item.stderrBase64, "base64").toString(),
+    /cannot create temp file/,
+  );
 const run = await releaseShellRunner(fixture.env);
 for (const item of fixture.cases)
   test(`production Waffle mapfile ${item.id}`, async () => {
