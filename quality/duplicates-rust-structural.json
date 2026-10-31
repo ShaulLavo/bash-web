@@ -3,17 +3,77 @@
   "fingerprints": {
     "05a052dfe3a51e82": 1,
     "348c850d1b702d73": 1,
-    "34dd3468ff269f5e": 1,
     "3c12ffe7712742ef": 1,
     "430f85b7bb990e52": 1,
     "4336ca1065e2457d": 1,
     "4dffc8008c9bc9cb": 1,
-    "700126f8bb9de47b": 1,
     "9fb31e4a69f5ccaf": 1,
     "a3b1abb659180b7f": 1,
     "a4aaded51ac54342": 1,
     "d4014d7cb9ee87f6": 1,
     "e315bdbf94e0c210": 1,
     "ed9843c86ea928cf": 1
+  },
+  "reasons": {
+    "05a052dfe3a51e82": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/process.rs:615-622 (detach_group); shell/engine/src/runtime.rs:1282-1290 (detach_group); The parent track exclusively owns executor.rs, io.rs, runtime.rs, runtime/wasi.rs and their adjacent process support. Editing these clones concurrently would overlap that migration.",
+      "plan": "plans/008-duplicate-baseline.md#neutral-support"
+    },
+    "348c850d1b702d73": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:2227-2262 (parse_while); shell/parser/src/parser/mod.rs:2265-2300 (parse_until); Parser provenance lives in protected sources.lock.json. These branches deliberately differ in error text and grammar entry points; characterize invalid syntax before extraction in a dedicated parser change.",
+      "plan": "plans/008-duplicate-baseline.md#parser-loops"
+    },
+    "3c12ffe7712742ef": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand.rs:2315-2323 (case_mode); shell/engine/src/expand.rs:2325-2333 (trim_mode); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "430f85b7bb990e52": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/ast.rs:357-365 (literal); shell/parser/src/parser/ast.rs:368-376 (quoted_literal); Parser provenance updates are prohibited here. Budget and printer paths enforce allocation/work limits, so the cleanup needs existing bounded-printer and parser failure tests rather than relabeling these production copies as fixtures.",
+      "plan": "plans/008-duplicate-baseline.md#parser-budget-ast"
+    },
+    "4336ca1065e2457d": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/exec.rs:387-395 (descend); shell/engine/src/exec.rs:397-405 (enter); exec.rs and interpreter.rs share context ownership with the shell migration. The parser-wrapper pairs are structural similarities with different parser entry points and need characterization before changing their interface.",
+      "plan": "plans/008-duplicate-baseline.md#engine-scopes"
+    },
+    "4dffc8008c9bc9cb": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand.rs:2880-2888 (pattern); shell/engine/src/expand.rs:2892-2900 (conditional_pattern); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "9fb31e4a69f5ccaf": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/parse.rs:128-134 (generated_word); shell/engine/src/parse.rs:172-178 (substitution_token); exec.rs and interpreter.rs share context ownership with the shell migration. The parser-wrapper pairs are structural similarities with different parser entry points and need characterization before changing their interface.",
+      "plan": "plans/008-duplicate-baseline.md#engine-scopes"
+    },
+    "a3b1abb659180b7f": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/exec.rs:371-376 (function_body); shell/engine/src/interpreter.rs:449-454 (condition); exec.rs and interpreter.rs share context ownership with the shell migration. The parser-wrapper pairs are structural similarities with different parser entry points and need characterization before changing their interface.",
+      "plan": "plans/008-duplicate-baseline.md#engine-scopes"
+    },
+    "a4aaded51ac54342": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/parse.rs:128-134 (generated_word); shell/engine/src/parse.rs:183-189 (backtick_body); exec.rs and interpreter.rs share context ownership with the shell migration. The parser-wrapper pairs are structural similarities with different parser entry points and need characterization before changing their interface.",
+      "plan": "plans/008-duplicate-baseline.md#engine-scopes"
+    },
+    "d4014d7cb9ee87f6": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/exec.rs:558-564 (admit_storage); shell/engine/src/expand.rs:817-823 (admit_raw); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    },
+    "e315bdbf94e0c210": {
+      "kind": "deferred",
+      "reason": "Remove shell/parser/src/parser/mod.rs:5720-5727 (read_replace_operand); shell/parser/src/parser/mod.rs:5729-5736 (read_brace_operand); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
+      "plan": "plans/008-duplicate-baseline.md#parser-parameters"
+    },
+    "ed9843c86ea928cf": {
+      "kind": "deferred",
+      "reason": "Remove shell/engine/src/expand.rs:171-182 (admit_vec_exact); shell/engine/src/expand.rs:184-196 (admit_vec_slot); These blocks sit on resource-limit and expansion boundaries. A safe change needs targeted native and frozen compatibility cases for each helper. The short track prioritizes enforcement and cannot change protected compatibility evidence.",
+      "plan": "plans/008-duplicate-baseline.md#engine-expansion"
+    }
   }
 }

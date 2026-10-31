@@ -60,47 +60,36 @@ Only generated fixture data and Cargo target directories are excluded from these
 source roots. The parser is included in both scans, not treated as untouched vendor
 code. Baselines are in `quality/duplicates-*.json`.
 
-The initial inventory preserves existing fixture builders, shell syntax handlers,
-and similar test cases. This change removes unused printer implementations and
-shares process-result codecs and byte validation instead of accepting those copies.
-The baseline fingerprints include multiplicities, so adding another occurrence of
-an existing clone is not an allowance to grow it.
+Every baseline fingerprint has a nonempty one-line reason. Reasons identify
+upstream code, generated code, a fixture, or a deferred production clone with an
+exact Approved removal item. Missing reasons, unknown categories, and missing
+plan items fail before detection. Production duplicates are not fixture exceptions.
+The current inventory has 140 exact fixture occurrences and 179 exact plus 12
+structural production occurrences awaiting their grouped removal items.
 
-Merging main `2a0905a` reconciles token identities after its binding-state,
-shared parse entry points, typed command dispatch, and Waffle build changes.
-Exact clones change from 344 to 356, with 50 added and 38 removed occurrences.
-Structural clones change from 16 to 15, with 5 added and 6 removed. Every added
-fingerprint and multiplicity exists in an independent scan of that immutable main
-snapshot. The repeated guest-registration loop is shared instead of baselined.
-[The fingerprint delta](evidence/quality-integration.json) records this
-reconciliation. No-new-clones and empty-scan failures stay unchanged.
+Both the normal check and the recorder reject any fingerprint count above the
+comparison commit. Local checks use `origin/main`. GitHub Actions uses `HEAD^`,
+the tested merge's base parent or the previous main commit. The quality job fetches
+two commits so that parent is available. `DUPLICATES_BASE_REF` selects an explicit
+comparison commit when needed.
 
-The startup-readiness integration keeps the exact inventory at 356 clones and the
-structural inventory at 15. Repeated retained-child checks in the fake runtime are
-shared, not accepted into the baseline. Three changed exact identities are deliberate
-exceptions: required trait forwarding in independent test hosts (two) and ABI
-declarations in the engine and standalone acceptance guest (one). Sharing the latter
-would make the acceptance guest depend on the implementation it verifies; combining
-the former would require an unrelated test-host abstraction. The `startupIntegration`
-section of the fingerprint evidence records every added and removed identity,
-multiplicity, source pair, and reason for independent review. Gate thresholds,
-exclusions, and negative controls are unchanged.
-
-To review a deliberate baseline change:
+To inspect every clone and then remove obsolete allowances:
 
 ```sh
-npm run check:duplicates                 # inspect failures first
+node scripts/check-duplicates.ts --report /work/tmp/bash-web-duplicates.json
 node scripts/check-duplicates.ts --record
-npm run check:duplicates                 # both scans must pass unchanged
+npm run check:duplicates
 ```
 
-Include the added/removed fingerprints and the reason in the PR. Do not update a
-baseline merely to hide a finding. Tool upgrades require a fresh reviewed inventory,
-not a relaxed duplication percentage.
+The report lists both source ranges, the fingerprint, and the reviewed disposition
+for every occurrence. Deferred production work is counted separately from fixtures.
+The recorder only deletes fingerprints or lowers multiplicities after both scans
+pass. It never admits a new clone or invents a reason. Include the before and after
+counts in the PR. Do not rewrite the baseline to hide a finding.
 
 `npm run test:quality-gates` proves valid controls pass and debugger, ambient `name`,
-type errors, unused files, new exact clones, new structural Rust clones, and empty
-scans fail. Probes use isolated `.scratch/quality-probe-*` projects and remove them
+type errors, unused files, new exact clones, new structural Rust clones, missing or blank reasons, baseline
+growth, and empty scans fail. Probes use isolated `.scratch/quality-probe-*` projects and remove them
 in `finally`, including on assertion failure. No services or deployments are created.
 
 Fuzzer source edits refresh only source-identity metadata. Frozen case definitions,
