@@ -1,3 +1,5 @@
+import * as fuzzer from "./fuzz-shell-job-lifetime.ts";
+import { observation, syntheticFixture } from "./fuzz-test-observation.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -25,47 +27,13 @@ import {
   statuses,
   validateFixture,
 } from "./fuzz-shell-job-lifetime.ts";
-import type { FuzzFixture as Fixture, ProcessResult } from "./fuzz-shell-results.ts";
+import type { FuzzFixture as Fixture } from "./fuzz-shell-results.ts";
 import type { Case } from "./fuzz-shell-job-lifetime.ts";
 
 const options = { seed: 1, count: 0, timeoutMs: defaultTimeoutMs };
 const path = "shell-job-lifetime-seed-1.json";
-const observation = (patch: Partial<ProcessResult> = {}): ProcessResult => ({
-  status: 0,
-  signal: null,
-  timedOut: false,
-  error: null,
-  stdout: Buffer.from("ok\n"),
-  stderr: Buffer.alloc(0),
-  ...patch,
-});
-function fixtureFor(): Fixture<Case> {
-  const cases = generateCases(1, 0);
-  return {
-    schema: 1,
-    sourceHash: fingerprint(),
-    sourceHashes: sourceHashes(),
-    seed: 1,
-    count: 0,
-    timeoutMs: defaultTimeoutMs,
-    bash: "GNU bash, version 5.3.15(1)-release (test)",
-    oraclePath: "/usr/bin/bash",
-    environment,
-    provenance: "oracle-only",
-    coverage: coverage(cases),
-    cases: cases.map((item) => ({
-      case: item,
-      bash: {
-        status: 0,
-        signal: null,
-        timedOut: false,
-        error: null,
-        stdoutBase64: "",
-        stderrBase64: "",
-      },
-    })),
-  };
-}
+
+const fixtureFor = () => syntheticFixture(fuzzer);
 
 test("generation is deterministic, independently seeded, finite and builtin-only", () => {
   for (const seed of [0, 1, 42, 0xffffffff]) {

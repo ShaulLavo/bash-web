@@ -1,18 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { test } from "node:test";
-const api: typeof import("./waffle-node-api.ts") = await import(
-  new URL("../.build/node/api.mjs", import.meta.url).href
-);
-const guest = await WebAssembly.compile(
-  await readFile(
-    resolve(
-      process.env.CARGO_TARGET_DIR ?? ".build/shell",
-      "wasm32-wasip1/release/shell-runtime.wasm",
-    ),
-  ),
-);
+import { api, runInteractive } from "./own-shell-interactive.ts";
 const encoder = new TextEncoder();
 const enable = "\x1b[?2004h";
 const disable = "\x1b[?2004l";
@@ -21,91 +9,38 @@ function interactive(
   steps: readonly ((output: string, phase: number, status: number) => string | null)[],
   exitStatus = 0,
 ) {
-  const input = new api.PipeController({ relay: "manual" });
-  const output: Uint8Array[] = [];
-  const errors: Uint8Array[] = [];
-  const namespaces: WebAssembly.Imports = {};
-  const fs = new api.MemFS();
-  const wasi = new api.Wasi({
-    namespaces,
+  const bridge = new api.SharedBridge();
+  const terminal = api.shellTerminalImports(bridge.buffer);
+  let phase = 0;
+  let status = 0;
+  let generation = 0n;
+  let pauses = 0;
+  const result = runInteractive({
     args: ["shell-runtime"],
-    env: { PWD: "/" },
-    fs,
-    preopens: { "/": "/" },
-    reservedFds: [0, 1, 2],
-    stdout: (bytes) => output.push(bytes.slice()),
-    stderr: (bytes) => errors.push(bytes.slice()),
-    sleep() {
-      throw new Error("editor must use runtime input");
-    },
-  });
-  const supervisor = new api.ProcessSupervisor({
-    registry: new api.ExecutableRegistry(),
-    launch() {
-      throw new Error("test uses builtins only");
-    },
-  });
-  try {
-    const pid = supervisor.createRoot({ descriptors: wasi.descriptors });
-    const feed = input.retain(pid + 1, "write");
-    wasi.descriptors.close(0);
-    wasi.descriptors.openAt(0, input.retain(pid, "read"), (1n << 29n) - 1n, 0n);
-    let memory: WebAssembly.Memory | undefined;
-    const bridge = new api.SharedBridge();
-    const terminal = api.shellTerminalImports(bridge.buffer);
-    let phase = 0;
-    let status = 0;
-    let generation = 0n;
-    let pauses = 0;
-    const signals = supervisor.get(pid);
-    assert.ok(signals);
-    const abi = new api.ProcessABI({
-      memory: () => {
-        assert.ok(memory);
-        return memory;
-      },
-      descriptors: wasi.descriptors,
-      fs,
-      pid,
-      service: supervisor,
-      signals,
-      wait() {
-        const step = steps[pauses++];
-        assert.ok(step, "unexpected extra read from the interactive guest");
-        const next = step(Buffer.concat(output).toString(), phase, status);
-        if (next === null) {
-          feed.close();
-          return;
-        }
-        const bytes = encoder.encode(next);
-        assert.equal(feed.tryWrite([bytes]), bytes.length);
-      },
-    });
-    namespaces.runtime_proc = abi.imports;
-    namespaces.shell_terminal = {
+    terminal: () => ({
       inherited_fd: (index: number) => [0, 1, 2][index] ?? -1,
       columns: () => 12,
       rows: () => 6,
-      phase: (next: number, result: number) => {
+      phase: (next: number, value: number) => {
         phase = next;
-        status = result;
-        terminal.phase(next, result);
+        status = value;
+        terminal.phase(next, value);
         if (next !== 1) return;
-        assert.deepEqual(bridge.readPrompt(), { generation: ++generation, status: result });
+        assert.deepEqual(bridge.readPrompt(), { generation: ++generation, status: value });
       },
-    };
-    const instance = new WebAssembly.Instance(guest, wasi.imports(guest));
-    assert.ok(instance.exports.memory instanceof WebAssembly.Memory);
-    memory = instance.exports.memory;
-    assert.equal(wasi.start(instance), exitStatus, Buffer.concat(errors).toString());
-    assert.equal(pauses, steps.length);
-    return Buffer.concat(output).toString();
-  } finally {
-    supervisor.dispose();
-    wasi.descriptors.dispose();
-    input.dispose();
-    assert.ok(input.closed);
-  }
+      ...api.noPromptHost,
+    }),
+    next(output) {
+      const step = steps[pauses++];
+      assert.ok(step, "unexpected extra read from the interactive guest");
+      const text = step(output, phase, status);
+      return text === null ? null : encoder.encode(text);
+    },
+  });
+  assert.equal(result.status, exitStatus, result.errors);
+  assert.equal(pauses, steps.length);
+  assert.ok(result.inputClosed);
+  return result.output;
 }
 
 function prompt(output: string, phase: number) {

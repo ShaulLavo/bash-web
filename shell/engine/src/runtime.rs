@@ -99,11 +99,18 @@ const AGAIN: i32 = 6;
 const SIGNAL_DISPOSITION_HANDLE: i32 = 2;
 #[cfg(any(target_os = "wasi", test))]
 fn register_interrupt_handler(signal: impl FnOnce(i32, i32) -> i32) -> Result<(), i32> {
-    match signal(2, SIGNAL_DISPOSITION_HANDLE) {
+    register_handler(SIGINT, signal)
+}
+#[cfg(any(target_os = "wasi", test))]
+fn register_handler(number: i32, signal: impl FnOnce(i32, i32) -> i32) -> Result<(), i32> {
+    match signal(number, SIGNAL_DISPOSITION_HANDLE) {
         result if result < 0 => Err(-result),
         _ => Ok(()),
     }
 }
+const SIGINT: i32 = 2;
+/// Handled only by a shell whose prompt the page redraws; it wakes the prompt reader.
+pub const SIGWINCH: i32 = 28;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Binding {
@@ -348,6 +355,7 @@ struct State {
     inherited_transferred: Cell<bool>,
     inputs: RefCell<Vec<InputPump>>,
     job_control: Cell<bool>,
+    window_changed: Cell<bool>,
 }
 #[derive(Clone)]
 pub struct Runtime(Rc<State>);
@@ -366,6 +374,7 @@ impl Runtime {
             inherited_transferred: Cell::new(false),
             inputs: RefCell::new(Vec::new()),
             job_control: Cell::new(true),
+            window_changed: Cell::new(false),
         }))
     }
     /// Without job control (`sh -c`, scripts), foreground commands stay in the shell's
@@ -486,8 +495,18 @@ impl Runtime {
         }
         Ok(count)
     }
+    /// Dequeues handled signals until an interrupt or none is left. A SIGWINCH taken
+    /// here, including at a budget checkpoint, is kept for `take_window_change`.
     pub fn take_interrupt(&self) -> bool {
-        self.0.abi.interrupted() == 2
+        loop {
+            match self.0.abi.interrupted() {
+                SIGWINCH => self.0.window_changed.set(true),
+                signal => return signal == SIGINT,
+            }
+        }
+    }
+    pub fn take_window_change(&self) -> bool {
+        self.0.window_changed.take()
     }
     fn group(&self, background: bool) -> GroupId {
         let id = self.0.next_group.get();

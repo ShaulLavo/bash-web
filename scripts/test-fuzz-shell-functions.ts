@@ -1,3 +1,5 @@
+import * as fuzzer from "./fuzz-shell-functions.ts";
+import { observation, syntheticFixture } from "./fuzz-test-observation.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -40,42 +42,8 @@ const fixtureHashes: Record<string, string> = {
   1: "99868122df87bd81393604e86756aca10de4ec9bb8cad7ecf80a2ace856ae513",
   42: "daad5040fdc79585f9997e40d8a3464bc7cf7c40fe14065320646305aa3f133b",
 };
-const observation = (patch = {}) => ({
-  status: 0,
-  signal: null,
-  timedOut: false,
-  error: null,
-  stdout: Buffer.from("ok\n"),
-  stderr: Buffer.alloc(0),
-  ...patch,
-});
-function fixtureFor(): Fixture {
-  const cases = generateCases(1, 0);
-  return {
-    schema: 1,
-    sourceHash: fingerprint(),
-    sourceHashes: sourceHashes(),
-    seed: 1,
-    count: 0,
-    timeoutMs: defaultTimeoutMs,
-    bash: "GNU bash, version 5.3.15(1)-release (test)",
-    oraclePath: "/usr/bin/bash",
-    environment,
-    provenance: "oracle-only",
-    coverage: coverage(cases),
-    cases: cases.map((item) => ({
-      case: item,
-      bash: {
-        status: 0,
-        signal: null,
-        timedOut: false,
-        error: null,
-        stdoutBase64: "",
-        stderrBase64: "",
-      },
-    })),
-  };
-}
+
+const fixtureFor = () => syntheticFixture(fuzzer);
 
 test("finite deterministic functions grammar keeps fixed cases separate from seeded semantic tuples", () => {
   const matrix = matrixCases();

@@ -343,6 +343,7 @@ for (const mode of ["handled", "exit"] as const) {
     { timeout: 5000 },
     async (context) => {
       const { shell, initial, output, ready } = await signalFixture(context, mode);
+      context.after(() => context.diagnostic(output()));
       await send(shell, 'signal-status; read x; printf "[%s]" "$x"');
       await ready();
       if (mode === "handled") {

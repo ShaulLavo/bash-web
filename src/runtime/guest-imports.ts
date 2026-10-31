@@ -2,11 +2,20 @@
 // Original adapter helpers: the guest fd namespace and root-only shell phase ownership.
 import { SharedBridge, control } from "../bridge";
 
+/** The prompt imports of a shell started without `--prompt-host`, which never calls them. */
+export const noPromptHost = {
+  prompt_names: () => -1,
+  prompt: () => -1,
+  prompt_update: () => -1,
+  output_position: () => 0,
+};
+
 export function shellTerminalImports(
   buffer?: SharedArrayBuffer,
   inherited: readonly number[] = [0, 1, 2],
 ) {
   return {
+    ...noPromptHost,
     // Enumerate only the launch bindings, never the root preopen or private fds
     // allocated while the guest bootstraps. Sparse large fd numbers cost one entry.
     inherited_fd(index: number) {
