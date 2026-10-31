@@ -619,6 +619,11 @@
       "url": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/program-release.json",
       "bytes": 616752,
       "sha256": "ce29ce655d6de6658d859d3d3fcfcf0d3bc383a2824c462ad0daddec8707a270"
+    },
+    "runtime": {
+      "url": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.107/waffle-0.0.107.tgz",
+      "bytes": 2280858,
+      "sha256": "2da9ad3a055369e7ba2922ca127e1bb802b7d9e5f8b358852c0934f2951be5d0"
     }
   },
   "wasiLibc": {

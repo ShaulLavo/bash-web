@@ -97,7 +97,8 @@ update_programs() {
     --slurpfile release "$scratch/program-release.json" \
     '.wafflePrograms.version = $release[0].version
      | .wafflePrograms.revision = $release[0].sourceCommit
-     | .wafflePrograms.releaseManifest = {url: $url, bytes: $bytes, sha256: $sha256}' sources.lock.json > "$tmp"
+     | .wafflePrograms.releaseManifest = {url: $url, bytes: $bytes, sha256: $sha256}
+     | .wafflePrograms.runtime = ($release[0].runtime | {url, bytes, sha256})' sources.lock.json > "$tmp"
   mv "$tmp" sources.lock.json
   sed -E -i "s|programs-v${current_version}|${tag}|g; s|(waffle-[[:alnum:]-]+-)${current_version}(\.tgz)|\1${version}\2|g" package.json
 }

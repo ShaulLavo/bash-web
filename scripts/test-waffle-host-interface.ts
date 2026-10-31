@@ -29,6 +29,7 @@ function fixture(context: TestContext) {
     put(path, value);
   };
   const runtimeUrl = "https://example.test/waffle-107.tgz";
+  const runtimeIdentity = { url: runtimeUrl, ...identity(Buffer.from("runtime")) };
   const gitDependency =
     "git+https://github.com/example/unrelated.git#0123456789012345678901234567890123456789";
   const packages = installedFamilyNames.map((name) => ({
@@ -65,15 +66,22 @@ function fixture(context: TestContext) {
     sourceCommit: "0123456789012345678901234567890123456789",
     tagState: "tagged",
     dirty: false,
-    runtime: { version: "107", waffleHostInterface: 1, url: runtimeUrl },
+    runtime: { version: "107", waffleHostInterface: 1, ...runtimeIdentity },
     packages,
   };
   const bytes = Buffer.from(JSON.stringify(release));
   put("sources.lock.json", {
-    waffle: { version: "107", hostInterface: 1, specifier: runtimeUrl },
+    waffle: {
+      version: "107",
+      hostInterface: 1,
+      specifier: runtimeUrl,
+      archiveBytes: runtimeIdentity.bytes,
+      archiveSha256: runtimeIdentity.sha256,
+    },
     wafflePrograms: {
       version: "15",
       revision: release.sourceCommit,
+      runtime: runtimeIdentity,
       releaseManifest: identity(bytes),
     },
   });
@@ -97,7 +105,7 @@ function fixture(context: TestContext) {
     ),
   });
   put("bun.lock", `"waffle": ["waffle@${runtimeUrl}", "", {}, "sha512-fixture"]`);
-  return { root, put, change, bytes, runtimeUrl, gitDependency };
+  return { root, put, change, bytes, runtimeUrl, gitDependency, release };
 }
 
 for (const value of [
@@ -180,12 +188,53 @@ for (const path of ["guest.wasm", "guest-program.json"]) {
   });
 }
 
+for (const change of [
+  { field: "url", value: "https://example.test/unreviewed-runtime.tgz" },
+  { field: "bytes", value: 999 },
+  { field: "sha256", value: "b".repeat(64) },
+]) {
+  test(`program release runtime identity rejects changed ${change.field}`, (context) => {
+    const f = fixture(context);
+    const release = {
+      ...f.release,
+      runtime: { ...f.release.runtime, [change.field]: change.value },
+    };
+    assert.throws(
+      () =>
+        checkReleaseMetadata(
+          release,
+          readMetadata(resolve(f.root, "sources.lock.json")).waffle,
+          "programs",
+          "15",
+        ),
+      /program release runtime .*mismatch/,
+    );
+  });
+  test(`installed program runtime identity rejects changed ${change.field}`, (context) => {
+    const f = fixture(context);
+    const release = {
+      ...f.release,
+      runtime: { ...f.release.runtime, [change.field]: change.value },
+    };
+    const bytes = Buffer.from(JSON.stringify(release));
+    f.change("sources.lock.json", (sources) => {
+      Object.assign(Object(sources.wafflePrograms), { releaseManifest: identity(bytes) });
+    });
+    assert.throws(
+      () => verifyInstalledPrograms(f.root, bytes),
+      /program release runtime .*mismatch/,
+    );
+  });
+}
+
 test("a same-interface runtime update does not require a family rebind", (context) => {
   const f = fixture(context);
   f.change("sources.lock.json", (sources) => {
     Object.assign(Object(sources.waffle), {
       version: "108",
       specifier: "https://example.test/waffle-108.tgz",
+      archiveBytes: 8,
+      archiveSha256: "c".repeat(64),
     });
   });
   f.change("node_modules/waffle/package.json", (pkg) => {

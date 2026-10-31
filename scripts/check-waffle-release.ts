@@ -10,6 +10,26 @@ import {
   parseHostInterface,
 } from "./waffle-host-interface.ts";
 
+export function assertProgramRuntimeIdentity(value: unknown, expected: unknown): void {
+  const runtime = metadataRecord(value);
+  const identity = metadataRecord(expected);
+  assert.ok(
+    typeof identity.url === "string" && identity.url.length > 0,
+    "Missing program runtime URL pin",
+  );
+  assert.ok(
+    typeof identity.bytes === "number" &&
+      Number.isSafeInteger(identity.bytes) &&
+      identity.bytes > 0,
+    "Invalid program runtime byte length pin",
+  );
+  assert.ok(typeof identity.sha256 === "string", "Missing program runtime SHA-256 pin");
+  assert.match(identity.sha256, /^[a-f0-9]{64}$/, "Invalid program runtime SHA-256 pin");
+  assert.equal(runtime.url, identity.url, "program release runtime URL mismatch");
+  assert.equal(runtime.bytes, identity.bytes, "program release runtime byte length mismatch");
+  assert.equal(runtime.sha256, identity.sha256, "program release runtime SHA-256 mismatch");
+}
+
 export function checkReleaseMetadata(
   value: unknown,
   selected: unknown,
@@ -30,6 +50,12 @@ export function checkReleaseMetadata(
   assert.equal(release.dirty, false);
   assert.match(String(release.sourceCommit), /^[a-f0-9]{40}$/);
   assertPackageHostInterface(release.runtime, required, "candidate family runtime");
+  const runtime = metadataRecord(selected);
+  assertProgramRuntimeIdentity(release.runtime, {
+    url: runtime.specifier,
+    bytes: runtime.archiveBytes,
+    sha256: runtime.archiveSha256,
+  });
   assert.ok(Array.isArray(release.packages) && release.packages.length > 0);
   for (const pkg of release.packages) assertPackageHostInterface(pkg, required, "candidate family");
 }

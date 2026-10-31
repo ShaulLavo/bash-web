@@ -13,8 +13,10 @@ Published families cannot carry a runtime dependency, optional dependency, or op
 
 Archive hashes, source revisions, builder and patch hashes, program derivations, producer receipts,
 and guest hashes remain separate integrity checks. The schema-2 program release manifest has its
-own exact byte length and SHA-256 pin. Installed acceptance checks every admitted artifact,
-including derivation receipts, before imports. Python and Git imports do not prove execution.
+own exact byte length and SHA-256 pin. Its declared runtime URL, byte length and SHA-256
+must match `sources.lock.json.wafflePrograms.runtime`, independently of the installed runtime.
+The updater checks a new family manifest against the selected runtime before recording that identity.
+Installed acceptance checks every admitted artifact, including derivation receipts, before imports. Python and Git imports do not prove execution.
 
 A runtime update with the same host integer does not require a family release or a change to the
 family's historical runtime record. The updater validates candidate metadata before selecting it

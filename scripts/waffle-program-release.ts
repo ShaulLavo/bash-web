@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import { assertProgramRuntimeIdentity } from "./check-waffle-release.ts";
 import { readMetadata, verifyInstalledWaffle } from "./installed-waffle.ts";
 import {
   assertPackageHostInterface,
@@ -30,6 +31,7 @@ function readProgramRelease(root: string, bytes: Uint8Array, required: HostInter
   assert.equal(release.version, selected.version);
   assert.equal(release.sourceCommit, selected.revision);
   assertPackageHostInterface(release.runtime, required, "program release runtime");
+  assertProgramRuntimeIdentity(release.runtime, selected.runtime);
   assert.ok(Array.isArray(release.packages));
   for (const value of release.packages) {
     const pkg = metadataRecord(value);

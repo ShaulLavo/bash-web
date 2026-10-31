@@ -45,7 +45,8 @@ JSON
     "version": "${runtime_version}",
     "revision": "${runtime_direct_revision}",
     "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz",
-    "archiveSha256": "archive",
+    "archiveSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "archiveBytes": 1,
     "buildInputs": {
       "builderSha256": "builder",
       "patchSha256": "patch"
@@ -54,7 +55,12 @@ JSON
   "wafflePrograms": {
     "version": "${program_version}",
     "revision": "${program_revision}",
-    "provenance": "historical receipts"
+    "provenance": "historical receipts",
+    "runtime": {
+      "url": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz",
+      "bytes": 1,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
   },
   "wasiLibc": {
     "patchPath": "waffle-inputs/${runtime_direct_revision}/patch",
@@ -154,7 +160,13 @@ case "$url" in
     tar -czf - -C "$TEST_ROOT/runtime-archive" package
     ;;
   */program-release.json)
-    printf '{"schema":"waffle-program-release/2","version":"%s","sourceCommit":"%s","tagState":"tagged","dirty":false,"runtime":{"waffleHostInterface":1},"packages":[{"waffleHostInterface":1}]}\n' "$RELEASE_PROGRAM" "$PROGRAM_SOURCE_REVISION"
+    jq -n --arg version "$RELEASE_PROGRAM" --arg source "$PROGRAM_SOURCE_REVISION" \
+      --slurpfile selected "$TEST_ROOT/sources.lock.json" \
+      '{schema:"waffle-program-release/2", version:$version, sourceCommit:$source,
+        tagState:"tagged", dirty:false,
+        runtime:{waffleHostInterface:1, url:$selected[0].waffle.specifier,
+          bytes:$selected[0].waffle.archiveBytes, sha256:$selected[0].waffle.archiveSha256},
+        packages:[{waffleHostInterface:1}]}'
     ;;
   *) printf 'fixture bytes\n' ;;
 esac
@@ -233,6 +245,7 @@ run_pair_fixture() {
   RELEASE_RUNTIME="$runtime" RELEASE_PROGRAM=0.0.14 GIT_REF_MODE="$mode" run_updater "$root"
   assert_support_revision "$root" "$([[ "$mode" == annotated ]] && printf '%s' "$runtime_revision" || printf '%s' "$runtime_direct_revision")"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
+  jq -e '.wafflePrograms.runtime == (.waffle | {url: .specifier, bytes: .archiveBytes, sha256: .archiveSha256})' "$root/sources.lock.json" > /dev/null
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz"
   (cd "$root" && bash .github/scripts/check-update-paths.sh)
   assert_common_calls "$root"
@@ -252,6 +265,7 @@ run_no_runtime_fixture() {
   test "$(rg -c "waffle-program-support.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
   rg -q "rev=${old_revision}#${old_revision}" "$root/shell/Cargo.lock"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
+  jq -e '.wafflePrograms.runtime == (.waffle | {url: .specifier, bytes: .archiveBytes, sha256: .archiveSha256})' "$root/sources.lock.json" > /dev/null
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz"
   test ! -s "$root/cargo-calls"
   (cd "$root" && bash .github/scripts/check-update-paths.sh)
@@ -301,6 +315,7 @@ run_runtime_only_fixture() {
   test "$(jq -r '.peerDependencies.waffle' "$root/package.json")" = '*'
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = 'https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-base-0.0.15.tgz'
   assert_support_revision "$root" "$runtime_revision"
+  test "$(jq -r '.wafflePrograms.runtime.url' "$root/sources.lock.json")" = 'https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.107/waffle-0.0.107.tgz'
 }
 run_runtime_only_fixture
 run_incompatible_runtime_fixture() {
