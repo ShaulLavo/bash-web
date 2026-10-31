@@ -209,13 +209,6 @@ for (const change of [
         ),
       /program release runtime .*mismatch/,
     );
-  });
-  test(`installed program runtime identity rejects changed ${change.field}`, (context) => {
-    const f = fixture(context);
-    const release = {
-      ...f.release,
-      runtime: { ...f.release.runtime, [change.field]: change.value },
-    };
     const bytes = Buffer.from(JSON.stringify(release));
     f.change("sources.lock.json", (sources) => {
       Object.assign(Object(sources.wafflePrograms), { releaseManifest: identity(bytes) });
