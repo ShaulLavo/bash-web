@@ -9,7 +9,7 @@ import { verifyCiArtifacts } from "./ci-artifacts.ts";
 import { familyProgramNames, familyWasmPath } from "./family-assets.ts";
 import { verifyFamilyGuest } from "./verify-family-guests.ts";
 import { wasiTestArguments, wasiTestFiles, wasiTestTargets } from "./prepare-wasi-tests.ts";
-import { verifyWasiGuest } from "./verify-wasi-guests.ts";
+import { functionNames, verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const prebuilt = process.argv[2] === "--prebuilt" ? process.argv[3] : undefined;
@@ -114,6 +114,27 @@ const size = (label: string, path: string, verify = () => verifyWasiGuest(path))
 };
 const core = size("Shell core release WASI (standalone embedding)", wasm);
 assert.ok(core <= 1_000_000, "shell core exceeds Brush's 1.0 MB brotli guardrail");
-size("Shell core release WASI (browser runtime)", resolve(release, "shell-runtime.wasm"));
+const runtimeWasm = resolve(release, "shell-runtime.wasm");
+size("Shell core release WASI (browser runtime)", runtimeWasm, () =>
+  verifyWasiGuest(runtimeWasm, undefined, "waffle_program_support::runtime::wasi"),
+);
+for (const binary of ["shell-runtime", "argv-py", "printenv-py"]) {
+  const path = resolve(release, `${binary}.wasm`);
+  verifyWasiGuest(path, undefined, "waffle_program_support::runtime::wasi");
+  const module = new WebAssembly.Module(readFileSync(path));
+  const imports = WebAssembly.Module.imports(module);
+  assert.ok(
+    imports.some((entry) => entry.module === "shell_terminal" && entry.name === "inherited_fd"),
+    `${binary} launch bindings must stay shell-owned`,
+  );
+  assert.ok(
+    !imports.some((entry) => entry.module === "runtime_proc" && entry.name === "inherited_fd"),
+    `${binary} must not query the generic program launch descriptor list`,
+  );
+  assert.ok(
+    !Array.from(functionNames(module).keys()).some((name) => name.includes("observation::")),
+    `${binary} must not contain development stack observation`,
+  );
+}
 for (const name of familyProgramNames)
   size(`Utility add-on ${name}`, familyWasmPath(name), () => verifyFamilyGuest(name));

@@ -1,6 +1,6 @@
 //! Test-only bridge from the shell's native process host to Waffle's program
-//! families. It converts descriptor, filesystem and cancellation types; every
-//! program byte and status comes from the family crates themselves.
+//! families. It maps logical descriptor numbers and cancellation; every program
+//! byte and status comes from the family crates themselves.
 use futures::{
     FutureExt,
     future::{self, LocalBoxFuture},
@@ -154,16 +154,16 @@ impl family::HostEndpoint for Descriptor {
         self.logical
     }
     fn descriptor_kind(&self) -> Result<family::DescriptorKind, family::IoError> {
-        self.inner.descriptor_kind().map(kind).map_err(error)
+        self.inner.descriptor_kind()
     }
     fn read<'a>(
         &'a self,
         output: &'a mut [u8],
     ) -> LocalBoxFuture<'a, Result<usize, family::IoError>> {
-        Box::pin(async move { self.inner.read(output).await.map_err(error) })
+        self.inner.read(output).boxed_local()
     }
     fn write<'a>(&'a self, input: &'a [u8]) -> LocalBoxFuture<'a, Result<usize, family::IoError>> {
-        Box::pin(async move { self.inner.write(input).await.map_err(error) })
+        self.inner.write(input).boxed_local()
     }
 }
 
@@ -175,7 +175,7 @@ struct Files {
 
 impl family::FileSystem for Files {
     fn pipe(&self) -> Result<(family::Endpoint, family::Endpoint), family::IoError> {
-        let (reader, writer) = self.inner.pipe().map_err(error)?;
+        let (reader, writer) = self.inner.pipe()?;
         Ok((descriptor(reader, None), descriptor(writer, None)))
     }
     fn mkdir<'a>(
@@ -183,26 +183,20 @@ impl family::FileSystem for Files {
         path: &'a str,
         parents: bool,
     ) -> LocalBoxFuture<'a, Result<(), family::IoError>> {
-        Box::pin(async move { self.inner.mkdir(path, parents).await.map_err(error) })
+        self.inner.mkdir(path, parents)
     }
     fn stat<'a>(
         &'a self,
         path: &'a str,
         follow_symlinks: bool,
     ) -> LocalBoxFuture<'a, Result<family::FileMetadata, family::IoError>> {
-        Box::pin(async move {
-            let metadata = self.inner.stat(path, follow_symlinks).await;
-            metadata.map(file_metadata).map_err(error)
-        })
+        self.inner.stat(path, follow_symlinks)
     }
     fn open_dir<'a>(
         &'a self,
         path: &'a str,
     ) -> LocalBoxFuture<'a, Result<Rc<dyn family::Directory>, family::IoError>> {
-        Box::pin(async move {
-            let inner = self.inner.open_dir(path).await.map_err(error)?;
-            Ok(Rc::new(Entries(inner)) as Rc<dyn family::Directory>)
-        })
+        self.inner.open_dir(path)
     }
     fn open<'a>(
         &'a self,
@@ -210,101 +204,9 @@ impl family::FileSystem for Files {
         options: &'a family::OpenOptions,
     ) -> LocalBoxFuture<'a, Result<family::Endpoint, family::IoError>> {
         Box::pin(async move {
-            let options = open_options(options);
-            let opening = shell::open_path(path, &self.fds, &options).map_err(error)?;
-            let endpoint = opening.open(self.inner.as_ref(), &options).await;
-            endpoint
-                .map(|endpoint| descriptor(endpoint, None))
-                .map_err(error)
+            let opening = shell::open_path(path, &self.fds, options)?;
+            let endpoint = opening.open(self.inner.as_ref(), options).await?;
+            Ok(descriptor(endpoint, None))
         })
-    }
-}
-
-struct Entries(Rc<dyn shell::Directory>);
-
-impl family::Directory for Entries {
-    fn read_entry<'a>(
-        &'a self,
-        cookie: u64,
-        output: &'a mut [u8],
-    ) -> LocalBoxFuture<'a, Result<Option<family::DirectoryEntry>, family::IoError>> {
-        Box::pin(async move {
-            let entry = self.0.read_entry(cookie, output).await.map_err(error)?;
-            Ok(entry.map(|entry| family::DirectoryEntry {
-                next_cookie: entry.next_cookie,
-                name: entry.name,
-            }))
-        })
-    }
-}
-
-fn open_options(options: &family::OpenOptions) -> shell::OpenOptions {
-    shell::OpenOptions {
-        read: options.read,
-        write: options.write,
-        create: options.create,
-        truncate: options.truncate,
-        append: options.append,
-    }
-}
-
-fn error(error: shell::IoError) -> family::IoError {
-    match error {
-        shell::IoError::BadDescriptor => family::IoError::BadDescriptor,
-        shell::IoError::BrokenPipe => family::IoError::BrokenPipe,
-        shell::IoError::Cancelled => family::IoError::Cancelled,
-        shell::IoError::LimitExceeded => family::IoError::LimitExceeded,
-        shell::IoError::NotFound => family::IoError::NotFound,
-        shell::IoError::AlreadyExists => family::IoError::AlreadyExists,
-        shell::IoError::NotDirectory => family::IoError::NotDirectory,
-        shell::IoError::Unsupported => family::IoError::Unsupported,
-        shell::IoError::InvalidPath => family::IoError::InvalidPath,
-        shell::IoError::WriteZero => family::IoError::WriteZero,
-        shell::IoError::Runtime(errno) => family::IoError::Runtime(errno),
-    }
-}
-
-fn kind(kind: shell::DescriptorKind) -> family::DescriptorKind {
-    match kind {
-        shell::DescriptorKind::Other => family::DescriptorKind::Other,
-        shell::DescriptorKind::Pipe => family::DescriptorKind::Pipe,
-        shell::DescriptorKind::Terminal => family::DescriptorKind::Terminal,
-        shell::DescriptorKind::Regular => family::DescriptorKind::Regular,
-        shell::DescriptorKind::Directory => family::DescriptorKind::Directory,
-    }
-}
-
-fn file_kind(kind: shell::FileKind) -> family::FileKind {
-    match kind {
-        shell::FileKind::Regular => family::FileKind::Regular,
-        shell::FileKind::Directory => family::FileKind::Directory,
-        shell::FileKind::Symlink => family::FileKind::Symlink,
-        shell::FileKind::BlockDevice => family::FileKind::BlockDevice,
-        shell::FileKind::CharacterDevice => family::FileKind::CharacterDevice,
-        shell::FileKind::Fifo => family::FileKind::Fifo,
-        shell::FileKind::Socket => family::FileKind::Socket,
-        shell::FileKind::Unknown => family::FileKind::Unknown,
-    }
-}
-
-fn file_metadata(metadata: shell::FileMetadata) -> family::FileMetadata {
-    family::FileMetadata {
-        kind: file_kind(metadata.kind),
-        size: metadata.size,
-        mode: metadata.mode.map(|mode| family::FileMode {
-            bits: mode.bits,
-            supported: mode.supported,
-        }),
-        device: metadata.device,
-        inode: metadata.inode,
-        uid: metadata.uid,
-        gid: metadata.gid,
-        accessed_ns: metadata.accessed_ns,
-        modified_ns: metadata.modified_ns,
-        readable: metadata.readable,
-        writable: metadata.writable,
-        executable: metadata.executable,
-        owned_by_effective_uid: metadata.owned_by_effective_uid,
-        owned_by_effective_gid: metadata.owned_by_effective_gid,
     }
 }
