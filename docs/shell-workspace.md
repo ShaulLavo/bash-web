@@ -166,3 +166,6 @@ even while the guest has not returned to the worker message loop.
 The guest also imports `shell_terminal.phase(i32)` for embedding/test state:
 1 means prompt painted and editor ready, 2 means a command is running, and 0
 means shutdown. This is UI metadata only, not a command or descriptor channel.
+With `--prompt-host`, the guest also calls `shell_terminal.prompt_names`, `prompt`,
+`prompt_update` and `output_position`, and handles SIGWINCH as a prompt wake. See
+the [prompt hook](prompt-hook.md).

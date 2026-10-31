@@ -3,6 +3,7 @@
 import type { Runtime } from "waffle";
 import type { StartupObserver } from "./runtime/startup-diagnostics";
 import { SharedBridge, type ShellPrompt } from "./bridge";
+import type { PromptProvider } from "./prompt-hook";
 import { waitForPrompt, type PromptWaitOptions } from "./shell-prompt";
 import { runtimeSnapshot } from "./runtime/diagnostics";
 import { startShell } from "./runtime/shell-host";
@@ -34,6 +35,8 @@ export interface ShellOptions {
   env?: Record<string, string>;
   /** Editing only. Bash commands and the default Bash editing mode stay unchanged. */
   lineEditor?: { mode: "bash" | "zsh" };
+  /** Draws each interactive prompt. Omit to draw PS1 as before. Ignored with `script`. */
+  prompt?: PromptProvider;
   /** Omit for the persistent interactive editor. */
   script?: string;
 }
@@ -72,4 +75,5 @@ export async function createShell(options: ShellOptions): Promise<Shell> {
 }
 
 export type { ShellPrompt } from "./bridge";
+export type { PromptContext, PromptLive, PromptProvider, PromptStart } from "./prompt-hook";
 export type { PromptWaitOptions } from "./shell-prompt";

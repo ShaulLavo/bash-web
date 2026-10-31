@@ -119,3 +119,15 @@ fn history_aliases_share_arrow_navigation_and_boundaries() {
     feed(&mut editor, b"\x0e\x1b[B\x0e!");
     submit(&mut editor, b"draft!");
 }
+
+#[test]
+fn a_prompt_update_keeps_the_history_position_and_the_draft() {
+    let mut editor = new_editor();
+    feed(&mut editor, b"saved\rdraft\x1b[A");
+    assert!(editor.replace_prompt(b"~/app $ ").is_some());
+    feed(&mut editor, b"\x1b[B");
+    editor.foreign_output();
+    assert_eq!(editor.replace_prompt(b"$ "), None);
+    feed(&mut editor, b"!");
+    submit(&mut editor, b"draft!");
+}
