@@ -86,26 +86,36 @@ async function measure(root: string, turns = 50) {
     turns,
   };
 }
-async function paint(root: string) {
+function blockFile(path: string) {
   let release!: () => void;
   let admitted = false;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
   const filesystem: PromptFilesystem = {
-    lookup: (path) => runtime.filesystem.lookup(path),
-    async readFile(path) {
-      if (path.endsWith("/f-00000")) {
+    lookup: (name) => runtime.filesystem.lookup(name),
+    async readFile(name) {
+      if (name === path) {
         admitted = true;
         await gate;
       }
-      return runtime.filesystem.readFile(path);
+      return runtime.filesystem.readFile(name);
     },
   };
-  const provider = createPrompt({ filesystem });
+  return {
+    filesystem,
+    release,
+    get admitted() {
+      return admitted;
+    },
+  };
+}
+async function paint(root: string) {
+  const blocked = blockFile(`${root}/d-000/f-00000`);
+  const provider = createPrompt({ filesystem: blocked.filesystem });
   const first = new AbortController();
   await provider.render(context(root), { signal: first.signal, update() {} });
-  await until(() => admitted);
+  await until(() => blocked.admitted);
   const samples: number[] = [];
   try {
     for (let turn = 2; turn <= 51; turn++) {
@@ -117,13 +127,13 @@ async function paint(root: string) {
     }
   } finally {
     first.abort();
-    release();
+    blocked.release();
   }
   samples.sort((a, b) => a - b);
   return {
     warmMedian: samples[25],
     warmP95: samples[47],
-    statusBlocked: admitted,
+    statusBlocked: blocked.admitted,
     prompts: samples.length,
   };
 }
@@ -138,23 +148,9 @@ async function until(check: () => boolean): Promise<void> {
 async function typing(root: string, mode: "bash" | "zsh") {
   const path = `${root}/d-000/f-00000`;
   await runtime.filesystem.writeFile(path, "changed for live prompt\n");
-  let release!: () => void;
-  let admitted = false;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const filesystem: PromptFilesystem = {
-    lookup: (path) => runtime.filesystem.lookup(path),
-    async readFile(name) {
-      if (name === path) {
-        admitted = true;
-        await gate;
-      }
-      return runtime.filesystem.readFile(name);
-    },
-  };
+  const blocked = blockFile(path);
   const prompt = createPrompt({
-    filesystem,
+    filesystem: blocked.filesystem,
     config: { layout: ["git_status", "character"], newline: false, paintMs: 15 },
   });
   const terminal = new SharedBridge();
@@ -176,10 +172,10 @@ async function typing(root: string, mode: "bash" | "zsh") {
   const timer = setInterval(pump, 1);
   try {
     const receipt = await shell.waitForPrompt();
-    await until(() => admitted);
+    await until(() => blocked.admitted);
     await send(terminal, "echo abcd\x1b[D\x1b[D");
     await pause(15);
-    release();
+    blocked.release();
     await until(() => {
       pump();
       return output.includes("[!]") && output.includes("echo abcd");
@@ -190,7 +186,7 @@ async function typing(root: string, mode: "bash" | "zsh") {
     if (!output.includes("abZcd")) throw new Error("live status redraw lost typed text or caret");
     return { mode, typedBufferAndCaretKept: true, statusAppearedWithoutKey: true };
   } finally {
-    release();
+    blocked.release();
     clearInterval(timer);
     await shell.dispose();
   }
