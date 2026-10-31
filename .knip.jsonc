@@ -22,6 +22,7 @@
     "src/index.ts": ["exports", "types"],
     "src/shell.ts": ["exports", "types"],
     "src/prompt/index.ts": ["exports", "types"],
+    "src/prompt/types.ts": ["types"],
     "src/session.ts": ["exports", "types"],
   },
   // Ghostty is a pinned source alias outside our graph. It consumes the hotkeys tarball.
