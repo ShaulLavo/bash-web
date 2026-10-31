@@ -12,8 +12,8 @@ publish.workspace = true
 [dependencies]
 shell-engine = { path = "../engine" }
 waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "acd64c19a6381c27edd602316e66d81df78abf25" }
-waffle-coreutils = { git = "https://github.com/ShaulLavo/waffle", rev = "a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee" }
-waffle-grep = { git = "https://github.com/ShaulLavo/waffle", rev = "a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee" }
+waffle-coreutils = { git = "https://github.com/ShaulLavo/waffle", rev = "acd64c19a6381c27edd602316e66d81df78abf25" }
+waffle-grep = { git = "https://github.com/ShaulLavo/waffle", rev = "acd64c19a6381c27edd602316e66d81df78abf25" }
 futures.workspace = true
 serde.workspace = true
 serde_json = "1"

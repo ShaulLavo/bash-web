@@ -163,7 +163,7 @@ CURL
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$TEST_ROOT/cargo-calls"
-if [[ "$*" == *'update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev='*'#waffle-program-support' ]]; then
+if [[ "$*" == *'update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev='*'#waffle-grep' ]]; then
   cat >> shell/Cargo.lock <<EOF
 
 [[package]]
@@ -213,12 +213,14 @@ assert_support_revision() {
   test "$(rg -c 'waffle-program-support.*rev =' "$root/shell/engine/Cargo.toml")" = 2
   rg -q "waffle-program-support.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   rg -q "name = \"waffle-program-support\"" "$root/shell/Cargo.lock"
+  rg -q "waffle-coreutils.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
+  rg -q "waffle-grep.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   rg -q "rev=${revision}#${revision}" "$root/shell/Cargo.lock"
 }
 
 assert_common_calls() {
   local root=$1
-  grep -Fxq "update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-program-support" "$root/cargo-calls"
+  grep -Fxq "update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-program-support -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-coreutils -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-grep" "$root/cargo-calls"
   grep -Fxq -- 'install --package-lock-only --ignore-scripts --force' "$root/npm-calls"
   grep -Fxq -- 'install --lockfile-only --ignore-scripts' "$root/bun-calls"
 }
@@ -232,7 +234,6 @@ run_pair_fixture() {
   assert_support_revision "$root" "$([[ "$mode" == annotated ]] && printf '%s' "$runtime_revision" || printf '%s' "$runtime_direct_revision")"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
   test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.14/waffle-base-0.0.14.tgz"
-  test "$(rg -c "waffle-coreutils.*${old_revision}" "$root/shell/compat-fixtures/Cargo.toml")" = 1
   (cd "$root" && bash .github/scripts/check-update-paths.sh)
   assert_common_calls "$root"
   before=$($real_git -C "$root" diff)
@@ -268,7 +269,7 @@ run_guard_negative_fixture() {
     echo 'FAIL: unrelated engine manifest change passed the updater guard' >&2
     exit 1
   fi
-  grep -q 'beyond waffle-program-support revision pins' "$root/guard.log"
+  grep -q 'beyond native Waffle revision pins' "$root/guard.log"
 }
 
 run_bad_ref_fixture() {

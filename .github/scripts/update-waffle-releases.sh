@@ -102,23 +102,25 @@ update_programs() {
   sed -E -i "s|programs-v${current_version}|${tag}|g; s|(waffle-[[:alnum:]-]+-)${current_version}(\.tgz)|\1${version}\2|g" package.json
 }
 
-update_program_support() {
+update_native_waffle() {
   [[ "$runtime_updated" == true ]] || return 0
   local manifest previous_revision
   previous_revision=$(sed -nE '/^[[:space:]]*waffle-program-support[[:space:]]*=/{s/.*rev = "([0-9a-f]{40})".*/\1/p;}' shell/engine/Cargo.toml | sed -n '1p')
   [[ "$previous_revision" =~ ^[0-9a-f]{40}$ ]] || return 1
   for manifest in shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; do
-    sed -E -i "/^[[:space:]]*waffle-program-support[[:space:]]*=/{s|(rev = \")[0-9a-f]{40}(\".*)|\\1${runtime_source_revision}\\2|;}" "$manifest"
+    sed -E -i "/^[[:space:]]*waffle-(program-support|coreutils|grep)[[:space:]]*=/{s|(rev = \")[0-9a-f]{40}(\".*)|\\1${runtime_source_revision}\\2|;}" "$manifest"
   done
   if ! git diff --quiet -- shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; then
-    cargo update --manifest-path shell/Cargo.toml -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-program-support"
+    cargo update --manifest-path shell/Cargo.toml -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-program-support" \
+      -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-coreutils" \
+      -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-grep"
   fi
 }
 
 update_runtime
 update_programs
 bash .github/scripts/update-hotkeys.sh
-update_program_support
+update_native_waffle
 # Move the version-specific script grant with the runtime pin.
 tmp=$(mktemp)
 jq --arg version "$(jq -r '.waffle.version' sources.lock.json)"   '.allowScripts |= with_entries(if (.key | startswith("waffle@")) then .key = ("waffle@" + $version) else . end)' package.json > "$tmp"

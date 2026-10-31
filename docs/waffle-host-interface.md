@@ -18,7 +18,8 @@ including derivation receipts, before imports. Python and Git imports do not pro
 
 A runtime update with the same host integer does not require a family release or a change to the
 family's historical runtime record. The updater validates candidate metadata before selecting it
-and moves only `waffle-program-support` to the runtime source. Other Cargo pins stay unchanged.
+and moves `waffle-program-support`, `waffle-coreutils`, and `waffle-grep` together to the runtime
+source. Their native composition needs one support-crate identity. Other Cargo pins stay unchanged.
 There is no version-derived compatibility, legacy metadata fallback, or interface negotiation.
 
 `npm run test:guest-build` exercises malformed metadata, duplicate runtimes, changed artifacts,

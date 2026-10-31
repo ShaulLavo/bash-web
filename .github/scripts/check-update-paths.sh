@@ -37,15 +37,15 @@ done < <(changed_paths "$@")
 if [[ $# == 0 ]]; then
   scratch=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/waffle-manifest-validation-XXXXXX")
   trap 'rm -rf "$scratch"' EXIT
-  normalize_support_revisions() {
-    sed -E '/^[[:space:]]*waffle-program-support[[:space:]]*=/{s/(rev = ")[0-9a-f]{40}(")/\1<waffle-program-support-rev>\2/;}'
+  normalize_native_waffle_revisions() {
+    sed -E '/^[[:space:]]*waffle-(program-support|coreutils|grep)[[:space:]]*=/{s/(rev = ")[0-9a-f]{40}(")/\1<native-waffle-rev>\2/;}'
   }
   for file in shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; do
     [[ -f "$file" ]] || continue
-    git show "HEAD:$file" | normalize_support_revisions > "$scratch/before"
-    normalize_support_revisions < "$file" > "$scratch/after"
+    git show "HEAD:$file" | normalize_native_waffle_revisions > "$scratch/before"
+    normalize_native_waffle_revisions < "$file" > "$scratch/after"
     if ! cmp -s "$scratch/before" "$scratch/after"; then
-      echo "::error::Dependency updater changed Cargo manifest fields beyond waffle-program-support revision pins: $file" >&2
+      echo "::error::Dependency updater changed Cargo manifest fields beyond native Waffle revision pins: $file" >&2
       exit 1
     fi
   done
