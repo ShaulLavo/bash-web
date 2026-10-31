@@ -2,7 +2,7 @@ import type { ParsedIndex } from "./index-types";
 import type { ObjectReader } from "./object-reader";
 import { decoder, hex, oid, requireObject } from "./object-work";
 
-export function commitHeaders(bytes: Uint8Array): { tree: string; parents: string[] } {
+function commitHeaders(bytes: Uint8Array): { tree: string; parents: string[] } {
   // Commit messages need not be UTF-8. Only the ASCII header is interpreted.
   let end = bytes.length;
   for (let position = 0; position + 1 < bytes.length; position++) {
