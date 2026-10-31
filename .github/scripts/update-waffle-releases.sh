@@ -1,12 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+runtime_updated=false
+runtime_source_revision=''
+
 latest_release_tag() {
   local repository=$1
   local prefix=$2
   gh api "repos/${repository}/releases?per_page=100" --paginate \
     --jq ".[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith(\"${prefix}\")) | .tag_name" |
     sed -n '1p'
+}
+
+release_source_revision() {
+  local repository=$1
+  local tag=$2
+  local direct_ref="refs/tags/${tag}"
+  local peeled_ref="${direct_ref}^{}"
+  local refs direct=''
+  refs=$(git ls-remote "$repository" "$peeled_ref" "$direct_ref") || return
+  while IFS=$'\t' read -r revision ref; do
+    [[ -n "$revision" && -n "$ref" ]] || continue
+    if [[ "$ref" == "$peeled_ref" ]]; then
+      [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || return 1
+      printf '%s\n' "$revision"
+      return
+    fi
+    if [[ "$ref" == "$direct_ref" ]]; then
+      direct=$revision
+    fi
+  done <<< "$refs"
+  [[ "$direct" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "$direct"
 }
 
 update_runtime() {
@@ -18,8 +43,7 @@ update_runtime() {
     return
   fi
 
-  revision=$(git ls-remote https://github.com/ShaulLavo/waffle.git "refs/tags/${tag}" | awk '{print $1}')
-  test "$revision" != ""
+  revision=$(release_source_revision https://github.com/ShaulLavo/waffle.git "$tag") || return
   specifier="https://github.com/ShaulLavo/waffle/releases/download/${tag}/waffle-${version}.tgz"
   archive_sha=$(curl --fail --location --silent --show-error "$specifier" | sha256sum | cut -d ' ' -f 1)
   builder_sha=$(curl --fail --location --silent --show-error \
@@ -44,6 +68,8 @@ update_runtime() {
      | .wasiLibc.builder |= sub("waffle-inputs/[0-9a-f]{40}/"; "waffle-inputs/" + $revision + "/")' \
     sources.lock.json > "$tmp"
   mv "$tmp" sources.lock.json
+  runtime_updated=true
+  runtime_source_revision=$revision
 }
 
 update_programs() {
@@ -57,16 +83,21 @@ update_programs() {
   sed -E -i "s|programs-v${current_version}|${tag}|g; s|(waffle-[[:alnum:]-]+-)${current_version}(\.tgz)|\1${version}\2|g" package.json
 }
 
+update_program_support() {
+  [[ "$runtime_updated" == true ]] || return 0
+  local manifest
+  for manifest in shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; do
+    sed -E -i "/^[[:space:]]*waffle-program-support[[:space:]]*=/{s|(rev = \")[0-9a-f]{40}(\".*)|\\1${runtime_source_revision}\\2|;}" "$manifest"
+  done
+  if ! git diff --quiet -- shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; then
+    cargo update --manifest-path shell/Cargo.toml -p waffle-program-support
+  fi
+}
+
 update_runtime
 update_programs
 bash .github/scripts/update-hotkeys.sh
-program_tag=$(latest_release_tag ShaulLavo/waffle programs-v)
-program_revision=$(git ls-remote https://github.com/ShaulLavo/waffle.git "refs/tags/${program_tag}^{}" "refs/tags/${program_tag}" | tail -n 1 | cut -f1)
-[[ "$program_revision" =~ ^[0-9a-f]{40}$ ]]
-sed -E -i "s|(rev = \")[0-9a-f]{40}(\".*)|\\1${program_revision}\\2|g" shell/compat-fixtures/Cargo.toml
-if ! git diff --quiet -- shell/compat-fixtures/Cargo.toml; then
-  cargo update --manifest-path shell/Cargo.toml -p waffle-program-support
-fi
+update_program_support
 # Move the version-specific script grant with the runtime pin.
 tmp=$(mktemp)
 jq --arg version "$(jq -r '.waffle.version' sources.lock.json)"   '.allowScripts |= with_entries(if (.key | startswith("waffle@")) then .key = ("waffle@" + $version) else . end)' package.json > "$tmp"
