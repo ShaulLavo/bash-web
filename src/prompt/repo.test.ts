@@ -294,9 +294,12 @@ test("stash distinguishes absent, loose, packed, missing logs and count boundari
   await git(repo, "stash", "push", "-m", "test");
   assert.deepEqual((await snapshot(repo))?.stash, { present: true, count: 1 });
   const log = join(repo, ".git/logs/refs/stash");
-  await writeFile(log, "x\n".repeat(32_768));
-  assert.deepEqual((await snapshot(repo))?.stash, { present: true, count: 32_768 });
-  await writeFile(log, "x\n".repeat(32_769));
+  const record = await readFile(log, "utf8");
+  const prefix = record.slice(0, record.indexOf("\t") + 1);
+  const limitRecord = `${prefix}${"x".repeat(64 * 1024 - Buffer.byteLength(prefix) - 1)}\n`;
+  await writeFile(log, limitRecord);
+  assert.deepEqual((await snapshot(repo))?.stash, { present: true, count: 1 });
+  await writeFile(log, `${limitRecord.slice(0, -1)}x\n`);
   assert.deepEqual((await snapshot(repo))?.stash, { present: true });
   await rm(log);
   await git(repo, "pack-refs", "--all", "--prune");
@@ -398,4 +401,51 @@ test("the three Git segments match every retained Starship git fixture", async (
     }
   }
   assert.equal(compared, 48);
+});
+
+test("corrupt packed refs cannot confirm an unborn branch or absent stash", async (t) => {
+  const root = await fixture(t, "git-corrupt-packed");
+  const repo = await makeCommittedRepository(root, "repo");
+  await git(repo, "pack-refs", "--all", "--prune");
+  await writeFile(join(repo, ".git/packed-refs"), "not a packed ref\n");
+  await assert.rejects(git(repo, "rev-parse", "--verify", "HEAD"), /unexpected line/u);
+  const result = await snapshot(repo);
+  assert.deepEqual(result?.head, { kind: "unknown" });
+  assert.deepEqual(result?.stash, { present: undefined });
+  const commit = "1".repeat(40);
+  await writeFile(
+    join(repo, ".git/packed-refs"),
+    `${commit} refs/heads/main\nmalformed later record\n`,
+  );
+  assert.deepEqual((await snapshot(repo))?.head, { kind: "unknown" });
+});
+
+test("inline config section comments do not bypass unsupported format detection", async (t) => {
+  const root = await fixture(t, "git-format-comments");
+  for (const comment of ["# comment", "; comment"]) {
+    const repo = join(root, comment.startsWith("#") ? "hash" : "semicolon");
+    await git(root, "init", "-q", "-b", "main", "--object-format=sha256", repo);
+    const path = join(repo, ".git/config");
+    await writeFile(
+      path,
+      (await readFile(path, "utf8")).replace("[extensions]", `[extensions] ${comment}`),
+    );
+    assert.equal(await git(repo, "rev-parse", "--show-object-format"), "sha256");
+    const result = await snapshot(repo);
+    assert.deepEqual(result?.head, { kind: "unknown" });
+    assert.deepEqual(result?.stash, { present: undefined });
+  }
+});
+
+test("corrupt or incomplete stash logs preserve presence without inventing counts", async (t) => {
+  const root = await fixture(t, "git-corrupt-stash");
+  const repo = await makeCommittedRepository(root, "repo");
+  await writeFile(join(repo, "tracked.txt"), "changed\n");
+  await git(repo, "stash", "push", "-m", "test");
+  const path = join(repo, ".git/logs/refs/stash");
+  const valid = await readFile(path, "utf8");
+  for (const contents of ["garbage\ngarbage\n", valid.slice(0, -1), `${valid}garbage\n`]) {
+    await writeFile(path, contents);
+    assert.deepEqual((await snapshot(repo))?.stash, { present: true });
+  }
 });

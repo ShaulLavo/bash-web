@@ -48,13 +48,23 @@ async function packedRef(
   if (!entry) return { kind: "missing" };
   if (entry.kind !== "file") return { kind: "unknown" };
   const bytes = await filesystem.readFile(path);
-  if (!bytes) return { kind: "unknown" };
-  for (const line of decoder.decode(bytes).split("\n")) {
-    if (!line.endsWith(` ${ref}`)) continue;
-    const commit = line.slice(0, -ref.length - 1);
-    return /^[0-9a-f]{40}$/u.test(commit) ? { kind: "resolved", commit } : { kind: "unknown" };
+  if (!bytes || (bytes.length && bytes[bytes.length - 1] !== 10)) return { kind: "unknown" };
+  const lines = decoder.decode(bytes).split("\n");
+  lines.pop();
+  let result: RefValue = { kind: "missing" };
+  let canPeel = false;
+  for (const line of lines) {
+    if (line.startsWith("#")) continue;
+    if (canPeel && /^\^[0-9a-f]{40}$/u.test(line)) {
+      canPeel = false;
+      continue;
+    }
+    const record = /^([0-9a-f]{40}) (refs\/.*)$/u.exec(line);
+    if (!record || !validRef(record[2])) return { kind: "unknown" };
+    if (record[2] === ref) result = { kind: "resolved", commit: record[1] };
+    canPeel = true;
   }
-  return { kind: "missing" };
+  return result;
 }
 
 export function validRef(ref: string): boolean {
