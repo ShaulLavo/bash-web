@@ -217,6 +217,7 @@ test("a completed output drain waits for new activity without an empty follow-up
     Reflect.set(Atomics, "waitAsync", (array: Int32Array, index: number, value: number) => {
       const result = wait(array, index, value);
       waits.push(result.async);
+      Reflect.set(window, "setTimeout", timeout);
       return result;
     });
     window.sessionDrain.action("write", [42]);
