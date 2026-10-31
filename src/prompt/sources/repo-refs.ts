@@ -60,7 +60,8 @@ async function packedRef(
 export function validRef(ref: string): boolean {
   return (
     ref.startsWith("refs/") &&
-    !/[\x00-\x20\x7f~^:?*\[\\]/u.test(ref) &&
+    !Array.from(ref).some((char) => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127) &&
+    !/[~^:?*[\\]/u.test(ref) &&
     !ref.includes("..") &&
     !ref.includes("@{") &&
     !ref.includes("//") &&
