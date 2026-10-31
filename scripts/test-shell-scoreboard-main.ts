@@ -1141,6 +1141,11 @@ test("observation payload tampering fails closed", async () => {
       /observation source binding mismatch/,
     ],
     [
+      "extra selection fields",
+      (input) => Object.assign(input.input.selected, { headSha: sha(99) }),
+      /observation source binding mismatch/,
+    ],
+    [
       "wrong predecessor",
       (input) => (input.input.selected.beforeSha = sha(2)),
       /merge-base|Not a valid commit name/,

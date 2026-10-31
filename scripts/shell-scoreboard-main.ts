@@ -745,9 +745,12 @@ async function readObservationArchive({
   assertRecord(input.selected);
   if (selected) assert.deepEqual(input.selected, selected, "observation source binding mismatch");
   if (!selected) {
-    assert.equal(input.selected.kind, "main-push", "observation source binding mismatch");
     const beforeSha = fullSha(input.selected.beforeSha);
-    assert.equal(input.selected.sourceSha, sourceSha, "observation source binding mismatch");
+    assert.deepEqual(
+      input.selected,
+      { kind: "main-push", sourceSha, beforeSha },
+      "observation source binding mismatch",
+    );
     assert.equal(
       git(root, ["merge-base", beforeSha, sourceSha]),
       beforeSha,
