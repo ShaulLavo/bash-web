@@ -198,6 +198,44 @@ test("Knip rejects an unreferenced authored file", () =>
     rejected(tool("knip", args, directory), /Unused files[\s\S]*src\/unreachable\.ts/);
   }));
 
+test("Knip checks private entry exports without reporting external package exports", () =>
+  fixture((directory) => {
+    copyFileSync(resolve(root, ".knip.jsonc"), resolve(directory, ".knip.jsonc"));
+    const publicRoots = {
+      ".": "./src/index.ts",
+      "./shell": "./src/shell.ts",
+      "./prompt": "./src/prompt/index.ts",
+      "./session": "./src/session.ts",
+    };
+    writeRepoFile(
+      directory,
+      "package.json",
+      JSON.stringify({
+        name: "quality-probe",
+        private: true,
+        type: "module",
+        exports: publicRoots,
+      }),
+    );
+    for (const path of Object.values(publicRoots))
+      writeRepoFile(
+        directory,
+        path,
+        "export const publicValue = 1;\nexport type PublicType = number;\n",
+      );
+    const entry = "scripts/test-own-shell-probe.ts";
+    writeRepoFile(directory, entry, "console.log('probe');\n");
+    const args = ["--config", ".knip.jsonc", "--no-progress", "--no-config-hints"];
+    passed(tool("knip", args, directory));
+    writeRepoFile(directory, entry, "export const deadEntryExport = 2;\n");
+    rejected(tool("knip", args, directory), /Unused exports[\s\S]*deadEntryExport/);
+    writeRepoFile(directory, entry, "export type DeadEntryType = number;\n");
+    rejected(tool("knip", args, directory), /Unused exported types[\s\S]*DeadEntryType/);
+    writeRepoFile(directory, entry, 'import "../src/shell-commands.ts";\n');
+    writeRepoFile(directory, "src/shell-commands.ts", "export const deadInternalExport = 3;\n");
+    rejected(tool("knip", args, directory), /Unused exports[\s\S]*deadInternalExport/);
+  }));
+
 const rustFunction = (
   functionName: string,
   parameter: string,

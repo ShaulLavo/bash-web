@@ -1,4 +1,5 @@
 {
+  "includeEntryExports": true,
   // Package exports, HTML, Vite/Playwright config and package scripts are discovered by Knip.
   // These roots are loaded dynamically by the runtime-test driver and compatibility pool.
   "entry": [
@@ -16,6 +17,13 @@
     "scripts/repro-pipeline-broken-pipe.ts",
   ],
   "project": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}", "scripts/**/*.{ts,mjs}"],
+  // External consumers use these package roots. Internal modules remain checked.
+  "ignoreIssues": {
+    "src/index.ts": ["exports", "types"],
+    "src/shell.ts": ["exports", "types"],
+    "src/prompt/index.ts": ["exports", "types"],
+    "src/session.ts": ["exports", "types"],
+  },
   // Ghostty is a pinned source alias outside our graph. It consumes the hotkeys tarball.
   // The duplicate-check driver spawns the pinned jscpd executable by path.
   "ignoreDependencies": ["ghostty-webgpu", "@fregat/hotkeys", "jscpd"],

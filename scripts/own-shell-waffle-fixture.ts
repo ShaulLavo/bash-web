@@ -4,7 +4,6 @@ import type { TestContext } from "node:test";
 import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import { runRoot } from "./waffle-compat.ts";
 import { createWaffleFixture } from "./waffle-fixture-lifecycle.ts";
-import { wasiGuestFilename } from "./wasi-guest-path.ts";
 import type * as Api from "./waffle-node-api.ts";
 
 export const nodeDirectory = new URL("../.build/node/", import.meta.url);
@@ -16,10 +15,6 @@ export const directory = resolve(
 export const shell = await WebAssembly.compile(
   await readFile(resolve(directory, "shell-runtime.wasm")),
 );
-
-export async function readGuest(name: string) {
-  return new Uint8Array(await readFile(resolve(directory, wasiGuestFilename(name))));
-}
 
 export async function prepareWaffleDirectories(
   runtime: Awaited<ReturnType<typeof api.createRuntime>>,
