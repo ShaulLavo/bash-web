@@ -196,6 +196,60 @@ test("burst output coalesces and each delivery stays bounded", async ({ page }) 
   expect(await page.evaluate(() => window.sessionDrain.maximumDelivery)).toBeLessThanOrEqual(32768);
 });
 
+test("a completed output drain waits for new activity without an empty follow-up turn", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const waits: boolean[] = [];
+    const delays: number[] = [];
+    Reflect.set(window, "drainWaits", waits);
+    Reflect.set(window, "drainDelays", delays);
+    const wait = Atomics.waitAsync;
+    const timeout = window.setTimeout;
+    Reflect.set(
+      window,
+      "setTimeout",
+      (handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+        delays.push(delay ?? 0);
+        return timeout(handler, delay, ...args);
+      },
+    );
+    Reflect.set(Atomics, "waitAsync", (array: Int32Array, index: number, value: number) => {
+      const result = wait(array, index, value);
+      waits.push(result.async);
+      Reflect.set(window, "setTimeout", timeout);
+      return result;
+    });
+    window.sessionDrain.action("write", [42]);
+  });
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.output)).toEqual([42]);
+  expect(await page.evaluate(() => Reflect.get(window, "drainWaits"))).toEqual([true]);
+  expect(await page.evaluate(() => Reflect.get(window, "drainDelays"))).toEqual([8]);
+});
+
+test("input capacity and phase published during a drain are handled before waiting", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    window.sessionDrain.input(new Array<number>(131072).fill(65));
+    const bridge = Reflect.get(globalThis, "drainBridge");
+    const drain = bridge.drain;
+    bridge.drain = function (...args: number[]) {
+      bridge.drain = drain;
+      const bytes = drain.apply(bridge, args);
+      bridge.receive(65536);
+      Atomics.store(bridge.state, 11, 2);
+      bridge.signal();
+      return bytes;
+    };
+    window.sessionDrain.action("write", [42]);
+  });
+  await expect.poll(() => page.evaluate(() => window.sessionDrain.states.at(-1))).toBe("running");
+  expect(await page.evaluate(() => Reflect.get(globalThis, "drainBridge").availableInput())).toBe(
+    65536,
+  );
+});
+
 for (const kind of ["exit", "fail"]) {
   test(`${kind} retains final output larger than one drain`, async ({ page }) => {
     await page.evaluate(

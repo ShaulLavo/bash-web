@@ -186,8 +186,9 @@ export class SharedBridge {
     if (Atomics.compareExchange(this.state, control.outputLock, 0, 1) !== 0) return -6;
     try {
       let write = Atomics.load(this.state, control.outputWrite);
-      let free =
-        this.output.length - ((write - Atomics.load(this.state, control.outputRead)) >>> 0);
+      const previousWrite = write;
+      const read = Atomics.load(this.state, control.outputRead);
+      let free = this.output.length - ((write - read) >>> 0);
       if (!free) return -6;
       let total = 0;
       for (const chunk of chunks) {
@@ -199,7 +200,12 @@ export class SharedBridge {
         if (!free) break;
       }
       Atomics.store(this.state, control.outputWrite, write);
-      this.signal();
+      if (
+        previousWrite === read ||
+        Atomics.load(this.state, control.outputRead) === previousWrite
+      ) {
+        this.signal();
+      }
       return total;
     } finally {
       Atomics.store(this.state, control.outputLock, 0);
@@ -249,6 +255,7 @@ export class SharedBridge {
     try {
       const read = Atomics.load(this.state, control.outputRead);
       const write = Atomics.load(this.state, control.outputWrite);
+      const wasEmpty = write === read;
       const free = this.output.length - ((write - read) >>> 0);
       if (!free && this.cancelled()) return -1;
       if (!free) {
@@ -258,7 +265,9 @@ export class SharedBridge {
       const length = Math.min(free, bytes.length);
       copyIntoRing(this.output, write, bytes.subarray(0, length));
       Atomics.store(this.state, control.outputWrite, write + length);
-      this.signal();
+      if (wasEmpty || Atomics.load(this.state, control.outputRead) === write) {
+        this.signal();
+      }
       return length;
     } finally {
       Atomics.store(this.state, control.outputLock, 0);
