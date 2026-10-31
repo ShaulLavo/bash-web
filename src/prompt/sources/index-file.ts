@@ -12,11 +12,14 @@ export async function parseIndex(bytes: Uint8Array, budget: WorkBudget): Promise
   if (version < 2 || version > 4) throw new Error("unsupported index version");
   if (count > 20_000 || bytes.length > 16 * 1024 * 1024) throw new Error("index limit");
   const end = bytes.length - 20;
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", bytes.subarray(0, end)));
-  if (!digest.every((byte, index) => byte === bytes[end + index])) throw new Error("index checksum");
+  if (!(bytes.buffer instanceof ArrayBuffer)) throw new Error("shared index buffer");
+  const content = new Uint8Array(bytes.buffer, bytes.byteOffset, end);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", content));
+  if (!digest.every((byte, index) => byte === bytes[end + index]))
+    throw new Error("index checksum");
   const entries: IndexEntry[] = [];
   let offset = 12;
-  let previous = new Uint8Array();
+  let previous: Uint8Array = new Uint8Array();
   for (let index = 0; index < count; index++) {
     if (index % 64 === 0) await budget.checkpoint();
     const parsed = readEntry(bytes, view, offset, end, version, previous);
@@ -67,13 +70,19 @@ function readEntry(
   path.set(bytes.subarray(offset, terminator), version === 4 ? prefix : 0);
   const name = decoder.decode(version === 4 ? path : bytes.subarray(offset, terminator));
   const mode = view.getUint32(start + 24);
-  if (!name || name.startsWith("/") || name.split("/").some((part) => !part || part === "." || part === ".."))
+  if (
+    !name ||
+    name.startsWith("/") ||
+    name.split("/").some((part) => !part || part === "." || part === "..")
+  )
     throw new Error("invalid index path");
   if ((mode & 0o170000) === 0o040000) throw new Error("sparse index");
   return {
     entry: {
       path: name,
-      oid: Array.from(bytes.subarray(start + 40, start + 60), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+      oid: Array.from(bytes.subarray(start + 40, start + 60), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join(""),
       mode,
       stage: (flags >> 12) & 3,
       assumeValid: Boolean(flags & 0x8000),
@@ -86,7 +95,11 @@ function readEntry(
   };
 }
 
-function readStrip(bytes: Uint8Array, offset: number, end: number): { count: number; offset: number } {
+function readStrip(
+  bytes: Uint8Array,
+  offset: number,
+  end: number,
+): { count: number; offset: number } {
   let byte = bytes[offset++];
   let count = byte & 127;
   for (let length = 1; byte & 128; length++) {

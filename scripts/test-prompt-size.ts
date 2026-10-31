@@ -30,6 +30,8 @@ try {
     throw new Error(
       `prompt incremental config graph exceeds 1,500 bytes: ${sizes.configIncrementalBytesGzip}`,
     );
+  if (sizes.statusIncrementalBytesGzip > 4_500)
+    throw new Error(`prompt status chunk exceeds 4,500 bytes: ${sizes.statusIncrementalBytesGzip}`);
   if (sizes.totalBytesGzip > 18_000)
     throw new Error(`prompt package exceeds 18,000 bytes: ${sizes.totalBytesGzip}`);
 } finally {

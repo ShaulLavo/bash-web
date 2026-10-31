@@ -1,3 +1,5 @@
+import type { StatusSnapshot } from "./sources/status-types";
+import type { renderGitStatus } from "./segments/git_status";
 import type { RepositorySnapshot } from "./sources/repo-types";
 import { styleKey, styleToSgr, type StyleEnvironment } from "./style";
 import type {
@@ -35,6 +37,8 @@ export interface ComposeInput {
   readonly manifest: ManifestSnapshot | undefined;
   readonly repository: RepositorySnapshot | undefined;
   readonly versions: Readonly<{ bun?: string; node?: string; python?: string }>;
+  readonly gitStatus?: StatusSnapshot;
+  readonly statusRenderer?: typeof renderGitStatus;
   readonly environment: StyleEnvironment;
 }
 
@@ -90,7 +94,7 @@ function cleanText(text: string, newline: boolean): string {
 function renderItem(item: LayoutItem, input: SegmentInput, config: ResolvedPromptConfig): Piece[] {
   if (typeof item !== "string")
     return item.text ? [{ text: cleanText(item.text, true), style: item.style }] : [];
-  const renderer = renderers[item];
+  const renderer = item === "git_status" ? input.statusRenderer : renderers[item];
   if (!renderer) return [];
   return (renderer(input, config.segments[item] as never) ?? []).map((piece) => ({
     ...piece,
@@ -105,6 +109,8 @@ export function composePrompt(input: ComposeInput): string {
     manifest: input.manifest,
     repository: input.repository,
     versions: input.versions,
+    gitStatus: input.gitStatus,
+    statusRenderer: input.statusRenderer,
   };
   const pieces = input.config.layout.flatMap((item) =>
     renderItem(item, segmentInput, input.config),

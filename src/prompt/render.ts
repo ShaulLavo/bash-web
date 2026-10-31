@@ -1,3 +1,5 @@
+import type { renderGitStatus } from "./segments/git_status";
+import type { StatusLoader, StatusSnapshot } from "./sources/status-types";
 import type { RepositorySnapshot } from "./sources/repo-types";
 import { composePrompt } from "./compose";
 import { resolvePromptConfig } from "./config/defaults";
@@ -33,6 +35,8 @@ interface RenderState {
   directory: DirectorySnapshot | undefined;
   manifest: ManifestSnapshot | undefined;
   repository: RepositorySnapshot | undefined;
+  gitStatus: StatusSnapshot | undefined;
+  statusRenderer: typeof renderGitStatus | undefined;
 }
 
 export async function renderPrompt(
@@ -43,6 +47,7 @@ export async function renderPrompt(
   configFileLoader: PromptConfigLoader | undefined,
   baseConfig: ResolvedPromptConfig = resolvePromptConfig(options.config),
   onConfig?: (config: ResolvedPromptConfig) => void,
+  statusLoader?: StatusLoader,
 ): Promise<RenderResult> {
   const started = performance.now();
   const budget = new WorkBudget(live.signal, baseConfig.backgroundMs);
@@ -52,6 +57,21 @@ export async function renderPrompt(
     directory: undefined,
     manifest: undefined,
     repository: undefined,
+    gitStatus: undefined,
+    statusRenderer: undefined,
+  };
+  let previous: string | undefined;
+  const updates = new PromptTurnLive(
+    live.signal,
+    context.turn,
+    () => context.turn,
+    (text) => live.update(text),
+  );
+  const refresh = () => {
+    if (live.signal.aborted || previous === undefined) return;
+    const next = renderState(context, versions, state);
+    if (next !== previous) updates.update(next);
+    previous = next;
   };
   const work = populate(
     state,
@@ -61,24 +81,15 @@ export async function renderPrompt(
     budget,
     configFileLoader,
     onConfig,
+    statusLoader,
+    refresh,
   ).catch((error: unknown) => {
-    options.logger?.("prompt source failed", error);
+    if (!live.signal.aborted) options.logger?.("prompt source failed", error);
   });
   await waitForPaint(work, baseConfig.paintMs, live.signal);
   const text = renderState(context, versions, state);
-  const updates = new PromptTurnLive(
-    live.signal,
-    context.turn,
-    () => context.turn,
-    (next) => {
-      if (budget.active) live.update(next);
-    },
-  );
-  void work.then(() => {
-    if (!budget.active) return;
-    const nextText = renderState(context, versions, state);
-    if (nextText !== text) updates.update(nextText);
-  });
+  previous = text;
+  void work.then(refresh);
   return {
     text,
     metrics: {
@@ -97,6 +108,8 @@ async function populate(
   budget: WorkBudget,
   loader: PromptConfigLoader | undefined,
   onConfig: ((config: ResolvedPromptConfig) => void) | undefined,
+  statusLoader: StatusLoader | undefined,
+  refresh: () => void,
 ): Promise<void> {
   if (options.file && loader) {
     const config = await readConfig(options, context, filesystem, budget, loader);
@@ -122,11 +135,43 @@ async function populate(
   await Promise.all([
     needsDirectory ? populateDirectory(state, filesystem, context, budget, enabled) : undefined,
     needsRepository
-      ? readRepository(filesystem, context).then((repository) => {
-          if (budget.active) state.repository = repository;
-        })
+      ? populateRepository(state, filesystem, context, budget, enabled, statusLoader, refresh)
       : undefined,
   ]);
+  if (!needsRepository) statusLoader?.leave();
+}
+
+async function populateRepository(
+  state: RenderState,
+  filesystem: TurnFilesystem,
+  context: PromptContext,
+  budget: WorkBudget,
+  enabled: readonly unknown[],
+  loader: StatusLoader | undefined,
+  refresh: () => void,
+): Promise<void> {
+  const repository = await readRepository(filesystem, context);
+  if (!budget.active) return;
+  state.repository = repository;
+  refresh();
+  if (!loader) return;
+  if (!repository || !enabled.includes("git_status")) {
+    loader.leave();
+    return;
+  }
+  const loaded = await loader();
+  state.statusRenderer = loaded.render;
+  state.gitStatus = await loaded.source.read({
+    filesystem,
+    repository,
+    context,
+    config: state.config.segments.git_status,
+    budget,
+    stale(snapshot) {
+      state.gitStatus = snapshot;
+      refresh();
+    },
+  });
 }
 
 async function populateDirectory(
@@ -169,6 +214,8 @@ function renderState(context: PromptContext, versions: VersionMap, state: Render
     directory: state.directory,
     manifest: state.manifest,
     repository: state.repository,
+    gitStatus: state.gitStatus,
+    statusRenderer: state.statusRenderer,
     versions,
     environment: {
       noColor: context.variables.has("NO_COLOR"),
