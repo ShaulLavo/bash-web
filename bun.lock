@@ -11,7 +11,7 @@
         "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.13/waffle-ripgrep-0.0.13.tgz",
       },
       "devDependencies": {
-        "@fregat/hotkeys": "https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz",
+        "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz",
         "@playwright/test": "1.64.0",
         "@types/node": "26.6.3",
         "@webgpu/types": "0.1.74",
@@ -97,7 +97,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.2", "", { "os": "win32", "cpu": "x64" }, "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g=="],
 
-    "@fregat/hotkeys": ["@fregat/hotkeys@https://github.com/ShaulLavo/fregat/releases/download/hotkeys-0.0.2-68d8aaf6f631-260650623e7e/fregat-hotkeys-0.0.2-68d8aaf6f631-260650623e7e.tgz", { "dependencies": { "@tanstack/store": "^0.11.1" } }, "sha512-7YbQUTyIJR4dPNCjszI6GMP828nRvR2PQEROdvsegoIzyMVvyLwGjMn+m6AtyilO41W96a/b1YsfaIdIm3glKw=="],
+    "@fregat/hotkeys": ["@fregat/hotkeys@https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz", { "dependencies": { "@tanstack/store": "^0.11.1" } }, "sha512-qZwKG97kn5M4eNOqbHX4dijpovJMaSJM6tVky9HXC+okwbN7olthQmAkJaFXYOGMgR0oz2inuccEKqUeWBLP1Q=="],
 
     "@jridgewell/resolve-uri": ["@jridgewell/resolve-uri@3.1.2", "", {}, "sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw=="],
 
