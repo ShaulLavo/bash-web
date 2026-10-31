@@ -9,3 +9,4 @@ This folder stays at `plans/` because the frozen scoreboard evidence (`docs/evid
 | `004-own-shell.md` | The Rust shell engine, the compatibility score, and a dated journal of each feature unit | Approved |
 | `005-bash-web-packaging.md` | Package boundary with Waffle and the browser integration | Approved |
 | `006-engine-boundaries.md` | Layer gate, shared execution types, utilities as separate programs | Approved |
+| `009-read-timeouts-and-mapfile.md` | Streaming `read` timeouts and `mapfile` publication | Approved |

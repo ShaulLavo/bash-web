@@ -1,4 +1,6 @@
 //! Word cases adapted from the pinned Bashkit sources in sources.lock.json.
+#[path = "words/mapfile.rs"]
+mod mapfile;
 mod support;
 use futures::FutureExt;
 use shell_engine::{

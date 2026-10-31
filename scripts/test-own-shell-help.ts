@@ -29,9 +29,21 @@ test("help lists only implemented builtin topics with bash-web identity", async 
   assert.equal(actual.status, 0);
   const text = actual.stdout.toString();
   assert.match(text, /^bash-web shell builtins\n/);
-  for (const name of ["help", "true", "false", ":", "printf", "builtin", "type", ".", "source"])
+  for (const name of [
+    "help",
+    "true",
+    "false",
+    ":",
+    "printf",
+    "builtin",
+    "type",
+    ".",
+    "source",
+    "mapfile",
+    "readarray",
+  ])
     assert.ok(text.split("\n").some((line) => line === name || line.startsWith(`${name} `)));
-  assert.doesNotMatch(text, /GNU bash|linux-gnu|\b(?:ulimit|history|fc|coproc|mapfile|times)\b/);
+  assert.doesNotMatch(text, /GNU bash|linux-gnu|\b(?:ulimit|history|fc|coproc|times)\b/);
   assert.equal(liveNodeWorkers(), 0);
 });
 
