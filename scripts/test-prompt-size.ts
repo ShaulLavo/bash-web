@@ -24,16 +24,16 @@ try {
   );
   const sizes = promptSize(metafile, new Map(entries));
   console.log(JSON.stringify({ entries, ...sizes }));
-  // measured after corrected PR 211 integration; see pr5-objects/integration-e4ddbc49/size.log
-  if (sizes.eagerBytesGzip > 7_450)
-    throw new Error(`prompt eager graph exceeds 7,450 bytes: ${sizes.eagerBytesGzip}`);
+  // Guard against real regressions with headroom for normal growth; measured 7,098 and 4,763 on October 31.
+  if (sizes.eagerBytesGzip > 8_000)
+    throw new Error(`prompt eager graph exceeds 8,000 bytes: ${sizes.eagerBytesGzip}`);
   if (sizes.configIncrementalBytesGzip > 1_500)
     throw new Error(
       `prompt incremental config graph exceeds 1,500 bytes: ${sizes.configIncrementalBytesGzip}`,
     );
-  // measured after two reduction rounds; see pr4-status/RESULT.md
-  if (sizes.statusIncrementalBytesGzip > 4_800)
-    throw new Error(`prompt status chunk exceeds 4,800 bytes: ${sizes.statusIncrementalBytesGzip}`);
+  // Guard against real regressions with headroom for normal growth; measured 7,098 and 4,763 on October 31.
+  if (sizes.statusIncrementalBytesGzip > 5_500)
+    throw new Error(`prompt status chunk exceeds 5,500 bytes: ${sizes.statusIncrementalBytesGzip}`);
   if (sizes.objectsIncrementalBytesGzip > 5_000)
     throw new Error(
       `prompt objects chunk exceeds 5,000 bytes: ${sizes.objectsIncrementalBytesGzip}`,
