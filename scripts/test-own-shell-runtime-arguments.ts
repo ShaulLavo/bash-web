@@ -86,6 +86,10 @@ for (const args of [
   ["sh", "-e", "script.sh"],
   ["sh", "-"],
   ["sh", "--", "script.sh"],
+  ["sh", "-i", "--line-editor"],
+  ["sh", "-i", "--line-editor", "fish"],
+  ["sh", "-i", "--line-editor", "zsh", "extra"],
+  ["sh", "-i", "--unknown", "zsh"],
 ]) {
   test(
     `WASI rejects unsupported startup ${JSON.stringify(args)}`,
@@ -94,7 +98,10 @@ for (const args of [
       const result = await invoke(context, args);
       assert.equal(result.status, 2);
       assert.equal(result.stdout, "");
-      assert.match(result.stderr, /usage: shell-runtime \[-i \| -c SCRIPT \[NAME \[ARG\.\.\.\]\]/);
+      assert.match(
+        result.stderr,
+        /usage: shell-runtime \[-i \[--line-editor bash\|zsh\] \| -c SCRIPT \[NAME \[ARG\.\.\.\]\]/,
+      );
     },
   );
 }
