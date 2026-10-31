@@ -1,22 +1,36 @@
-import { createShell, runtimeSnapshot, SharedBridge, type Shell } from "../index";
-import { control } from "../bridge";
-import type { Runtime } from "waffle";
-import { waitForStorage, type StorageStartup } from "./storage";
-import type { StartupObserver } from "../runtime/startup-diagnostics";
+import {
+  createShell,
+  runtimeSnapshot,
+  SharedBridge,
+  TerminalNewlines,
+  type Shell,
+  type ShellOptions,
+  type ShellPrompt,
+} from "./index";
+import { control } from "./bridge";
+import type { SharedFilesystemState } from "waffle";
+import { waitForStorage, type StorageStartup } from "./runtime/storage";
 
-export type SessionOptions = {
-  runtime: Runtime;
-  onStartupStage?: StartupObserver;
+export type SessionState = "starting" | "ready" | "running" | "exited" | "failed";
+
+/** Interactive createShell options, plus the terminal view's callbacks and dimensions. */
+export type SessionOptions = Omit<ShellOptions, "terminal" | "script"> & {
   storageStartup?: StorageStartup;
-  /** Cancels pending startup and the session, without disposing the borrowed runtime. */
+  onStorageState?: (state: SharedFilesystemState) => void;
+  /** Cancels startup and the running session, never the borrowed runtime. */
   signal?: AbortSignal;
   cols: number;
   rows: number;
+  /** Final display bytes, with bare LF translated to CRLF across output chunks. */
   onOutput: (bytes: Uint8Array) => void;
-  onState: (state: string) => void;
+  onState: (state: SessionState, detail?: string) => void;
   trace?: boolean;
+  /** Shell admission and the first prompt, after storage becomes ready. Default 60000. */
   startupTimeoutMs?: number;
 };
+const PASTE_LIMIT = 262144;
+const INPUT_CHUNK = 65536;
+const encoder = new TextEncoder();
 type DeliverySpan = {
   startedAt: number;
   drainedAt: number;
@@ -25,7 +39,7 @@ type DeliverySpan = {
   queuedBytes: number;
 };
 type FramePoint = { at: number; outputBytes: number };
-type SessionMetrics = {
+export type SessionMetrics = {
   startupMs: number;
   outputBytes: number;
   inputBytes: number;
@@ -39,6 +53,11 @@ type SessionMetrics = {
 };
 export class BrowserSession {
   private readonly bridge = new SharedBridge();
+  private readonly newlines = new TerminalNewlines();
+  private receipt?: ShellPrompt;
+  private currentState?: SessionState;
+  private submissions = Promise.resolve();
+  private pendingSubmissions = 0;
   private shell?: Shell;
   private pendingShell?: Promise<Shell>;
   private readonly admission = new AbortController();
@@ -71,25 +90,25 @@ export class BrowserSession {
   };
   private constructor(private readonly options: SessionOptions) {}
   static async create(options: SessionOptions): Promise<BrowserSession> {
-    if (!crossOriginIsolated || typeof SharedArrayBuffer === "undefined") {
+    if (!globalThis.crossOriginIsolated || typeof SharedArrayBuffer === "undefined") {
       throw new Error(
         "Shared memory requires HTTPS or localhost and COOP: same-origin / COEP: require-corp headers.",
       );
     }
     if (typeof Atomics.waitAsync !== "function")
-      throw new Error("The terminal demo requires Atomics.waitAsync support.");
+      throw new Error("BrowserSession requires Atomics.waitAsync support.");
     options.signal?.throwIfAborted();
     const session = new BrowserSession(options);
     options.signal?.addEventListener("abort", session.cancel, { once: true });
     const start = performance.now();
     try {
       session.resize(options.cols, options.rows);
-      options.onState("starting");
+      session.setState("starting");
       if (options.runtime.filesystem.state.status !== "ready") {
         await waitForStorage(options.runtime, session.admission.signal, {
           startup: options.storageStartup,
           onStartupStage: options.onStartupStage,
-          onState: (state) => options.onState(state.status === "waiting" ? "waiting" : "starting"),
+          onState: options.onStorageState,
         });
       }
       session.admission.signal.throwIfAborted();
@@ -115,9 +134,10 @@ export class BrowserSession {
         session.startupReject = undefined;
       }
       session.metrics.startupMs = performance.now() - start;
-      session.pump();
       return session;
     } catch (error) {
+      if (!session.disposed)
+        session.setState("failed", error instanceof Error ? error.message : String(error));
       await session.dispose();
       throw error;
     }
@@ -125,10 +145,9 @@ export class BrowserSession {
   private async initializeRuntimeShell(): Promise<{ wasmBytes: number }> {
     if (this.disposed) throw new Error("Shell startup was cancelled.");
     const shell = await (this.pendingShell = createShell({
-      runtime: this.options.runtime,
+      ...this.options,
       terminal: this.bridge,
       signal: this.admission.signal,
-      onStartupStage: this.options.onStartupStage,
     }));
     if (this.disposed) throw new Error("Shell startup was cancelled.");
     this.shell = shell;
@@ -137,7 +156,61 @@ export class BrowserSession {
       if (result.error) this.failureMessage = result.error;
       this.bridge.signal();
     });
+    this.pump();
+    this.acceptPrompt(await shell.waitForPrompt({ signal: this.admission.signal }));
     return { wasmBytes: shell.process.wasmBytes };
+  }
+  get state(): SessionState {
+    return this.currentState ?? "starting";
+  }
+  get running(): boolean {
+    return (
+      !this.disposed &&
+      (this.pendingSubmissions > 0 || Atomics.load(this.bridge.state, control.phase) === 2)
+    );
+  }
+  get lastPrompt(): ShellPrompt | undefined {
+    return this.receipt;
+  }
+  get lastExit(): number {
+    return this.receipt?.status ?? 0;
+  }
+  /** Replace the whole draft and resolve after the next prompt and output handoff. */
+  submit(command: string): Promise<void> {
+    if (this.disposed) return Promise.reject(new Error("Shell is closed"));
+    this.pendingSubmissions++;
+    const submitted = this.submissions.then(() => this.submitOne(command));
+    this.submissions = submitted.catch(() => {});
+    return submitted.finally(() => {
+      this.pendingSubmissions--;
+    });
+  }
+  private async submitOne(command: string): Promise<void> {
+    const shell = this.shell;
+    if (!shell || this.disposed) throw new Error("Shell is closed");
+    if (Atomics.load(this.bridge.state, control.phase) === 2)
+      throw new Error("Shell is running a foreground command");
+    const ready = await shell.waitForPrompt({ signal: this.admission.signal });
+    // Ctrl+E reaches the whole draft's end in zsh mode; Ctrl+U and Ctrl+K clear both sides.
+    this.input(`\x05\x15\x0b${command}\r`);
+    this.acceptPrompt(
+      await shell.waitForPrompt({ after: ready.generation, signal: this.admission.signal }),
+    );
+  }
+  private acceptPrompt(receipt: ShellPrompt): void {
+    if (this.disposed || (this.receipt && receipt.generation <= this.receipt.generation)) return;
+    // The guest publishes before the page pump. Hand off all queued output before settling submit.
+    const output = this.bridge.drain(this.bridge.output.length);
+    if (output.length) this.deliver(output);
+    if (this.disposed) return;
+    this.receipt = receipt;
+    if (Atomics.load(this.bridge.state, control.phase) === 1 && !this.bridge.cancelled())
+      this.setState("ready");
+  }
+  private setState(state: SessionState, detail?: string): void {
+    if (state === this.currentState) return;
+    this.currentState = state;
+    this.options.onState(state, detail);
   }
   runtimeSnapshot() {
     if (!this.shell) return undefined;
@@ -154,38 +227,36 @@ export class BrowserSession {
       },
     };
   }
-  input(bytes: Uint8Array) {
+  /** Queue a copied input chunk. Oversized pastes throw without accepting any of that call. */
+  input(data: string | Uint8Array): void {
     if (this.disposed || this.failed) return;
-    if (bytes.length === 1 && bytes[0] === 3) {
-      this.queued = [];
-      this.queuedBytes = 0;
-      this.pendingInputTime = 0;
-      this.renderPending = false;
-      // Block terminal reads before signalling the guest. If an inherited reader
-      // currently owns the input lock, the barrier keeps it from consuming stale
-      // bytes while the next pump retries the bounded discard.
-      this.bridge.interrupt();
-      this.pendingDiscard = !this.bridge.discardInput();
-      if (!this.pendingDiscard) this.bridge.resumeInput();
-      if (this.shell) this.shell.interrupt();
-      this.phase = -1;
-      this.options.onState("interrupting");
-      return;
-    }
-    if (bytes.length + this.queuedBytes > 262144) {
-      this.options.onState(
-        "warning: Input exceeds the 256 KiB paste queue. Paste a smaller selection.",
-      );
-      return;
-    }
+    const bytes = typeof data === "string" ? encoder.encode(data) : data;
+    if (bytes.length === 1 && bytes[0] === 3) return this.interrupt();
+    if (bytes.length + this.queuedBytes > PASTE_LIMIT)
+      throw new RangeError("Input exceeds the 256 KiB paste queue. Paste a smaller selection.");
+    if (!bytes.length) return;
     this.pendingInputTime = performance.now();
     this.metrics.inputBytes += bytes.length;
     this.queued.push(bytes.slice());
     this.queuedBytes += bytes.length;
     this.flushInput();
   }
+  /** Drop typed-ahead input, then deliver Ctrl+C to the shell's foreground job. */
+  interrupt(): void {
+    if (this.disposed || this.failed) return;
+    this.queued = [];
+    this.queuedBytes = 0;
+    this.pendingInputTime = 0;
+    this.renderPending = false;
+    this.bridge.interrupt();
+    this.pendingDiscard = !this.bridge.discardInput();
+    if (!this.pendingDiscard) this.bridge.resumeInput();
+    this.shell?.interrupt();
+    this.phase = -1;
+    this.schedulePump();
+  }
   resize(cols: number, rows: number) {
-    this.bridge.resize(cols, rows);
+    if (!this.disposed) this.bridge.resize(cols, rows);
   }
   crash() {
     if (this.disposed || this.failed) return;
@@ -195,8 +266,12 @@ export class BrowserSession {
   }
   dispose(): Promise<void> {
     if (this.disposal) return this.disposal;
-    this.startupReject?.(new Error("Shell startup was cancelled."));
+    this.disposal = Promise.resolve().then(async () => {
+      const shell = await this.pendingShell?.catch(() => undefined);
+      await shell?.dispose();
+    });
     this.disposed = true;
+    this.startupReject?.(new Error("Shell startup was cancelled."));
     this.options.signal?.removeEventListener("abort", this.cancel);
     this.admission.abort(new Error("Shell startup was cancelled."));
     this.bridge.close();
@@ -205,12 +280,7 @@ export class BrowserSession {
     this.queued = [];
     this.queuedBytes = 0;
     this.pendingDiscard = false;
-    return (this.disposal = (async () => {
-      // createShell guarantees rejected admission has completed its own cleanup.
-      // A facade that wins the cancellation race is still ours to dispose and await.
-      const shell = await this.pendingShell?.catch(() => undefined);
-      await shell?.dispose();
-    })());
+    return this.disposal;
   }
   markRendered() {
     if (this.options.trace && !this.disposed) {
@@ -229,11 +299,12 @@ export class BrowserSession {
     this.renderPending = false;
   }
   private fail(message: string) {
+    if (this.disposed || this.failed) return;
     this.startupReject?.(new Error(message));
     this.failed = true;
     this.bridge.close();
     clearTimeout(this.timer);
-    this.options.onState(`failed: ${message}`);
+    this.setState("failed", message);
     void this.dispose();
   }
   private flushInput() {
@@ -245,7 +316,7 @@ export class BrowserSession {
     if (this.bridge.cancelled()) return;
     while (this.queued.length) {
       const bytes = this.queued[0];
-      const chunk = bytes.subarray(0, 65536);
+      const chunk = bytes.subarray(0, INPUT_CHUNK);
       const accepted = this.bridge.send(chunk);
       if (!accepted) return;
       this.queuedBytes -= accepted;
@@ -295,11 +366,13 @@ export class BrowserSession {
       this.fail(this.failureMessage);
       return;
     }
+    const receipt = this.bridge.readPrompt();
+    if (receipt) this.acceptPrompt(receipt);
     if (phase !== this.phase && !this.bridge.cancelled()) {
       this.phase = phase;
-      this.options.onState(
-        ["starting", "ready", "running", "exited"][phase] ?? "Worker failed. Restart the session.",
-      );
+      if (phase === 1 && this.receipt) this.setState("ready");
+      if (phase === 2) this.setState("running");
+      if (phase === 3) this.setState("exited");
     }
     if (this.disposed || this.failed) return;
     if (
@@ -335,6 +408,6 @@ export class BrowserSession {
     this.metrics.outputBytes += bytes.length;
     this.metrics.outputFrames++;
     if (this.pendingInputTime) this.renderPending = true;
-    this.options.onOutput(bytes);
+    this.newlines.write(bytes, this.options.onOutput);
   }
 }

@@ -109,7 +109,7 @@ FAST uses IndexedDB checkpoints. Memory mode is nonpersistent and loses all chan
 when its owner stops. This selection does not certify SAFE, bounded FAST pressure,
 or the failed-close native storage matrix.
 
-`src/browser/storage.ts` observes `runtime.filesystem.state` before shell
+`src/runtime/storage.ts` observes `runtime.filesystem.state` before shell
 admission. `opening` and `waiting` are not shell failures: the host shows
 “Waiting for another tab to release storage…” and keeps input disabled until
 storage is ready. The observer preserves an existing `onStateChange` callback

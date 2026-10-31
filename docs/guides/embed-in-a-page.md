@@ -121,7 +121,7 @@ shell.terminal.resize(80, 24);
 shell.interrupt();
 ```
 
-Forward raw input without local echo. The shell echoes. `TerminalNewlines` turns bare `\n` into `\r\n` for the terminal, and only for display. Do not apply it to bytes you capture as data. `src/browser/session.ts` is a complete working host.
+Forward raw input without local echo. The shell echoes. `TerminalNewlines` turns bare `\n` into `\r\n` for the terminal, and only for display. Do not apply it to bytes you capture as data. `src/session.ts` is a complete working host.
 
 ## Handle startup and storage
 
