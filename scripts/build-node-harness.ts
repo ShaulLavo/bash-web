@@ -1,7 +1,9 @@
 import { build } from "esbuild";
 import { resolve } from "node:path";
+import { verifyInstalledWaffle } from "./installed-waffle.ts";
 
 const root = resolve(import.meta.dirname, "..");
+verifyInstalledWaffle(root);
 await build({
   absWorkingDir: root,
   entryPoints: {

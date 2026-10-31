@@ -96,7 +96,9 @@ for (const value of [undefined, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, 2]
     changeJson(f.root, "sources.lock.json", (selected) => {
       Object.assign(Object(selected.waffle), { hostInterface: 1 });
     });
-    changeJson(f.root, "package.json", (pkg) => { pkg.waffleHostInterface = 1; });
+    changeJson(f.root, "package.json", (pkg) => {
+      pkg.waffleHostInterface = 1;
+    });
     changeJson(f.root, "node_modules/waffle/package.json", (metadata) => {
       metadata.waffleHostInterface = value;
     });

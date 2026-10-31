@@ -1428,7 +1428,7 @@ dependencies = [
  "shell-engine",
  "waffle-coreutils",
  "waffle-grep",
- "waffle-program-support",
+ "waffle-program-support 0.0.0 (git+https://github.com/ShaulLavo/waffle?rev=acd64c19a6381c27edd602316e66d81df78abf25)",
 ]
 
 [[package]]
@@ -1441,7 +1441,7 @@ dependencies = [
  "serde_json",
  "shell-parser",
  "unicode-properties",
- "waffle-program-support",
+ "waffle-program-support 0.0.0 (git+https://github.com/ShaulLavo/waffle?rev=acd64c19a6381c27edd602316e66d81df78abf25)",
 ]
 
 [[package]]
@@ -1916,7 +1916,7 @@ dependencies = [
  "uu_uniq",
  "uucore 0.12.0",
  "uucore 0.13.0",
- "waffle-program-support",
+ "waffle-program-support 0.0.0 (git+https://github.com/ShaulLavo/waffle?rev=a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee)",
 ]
 
 [[package]]
@@ -1926,7 +1926,7 @@ source = "git+https://github.com/ShaulLavo/waffle?rev=a9af70fabd5ea2f0f7e7730a36
 dependencies = [
  "futures",
  "regex",
- "waffle-program-support",
+ "waffle-program-support 0.0.0 (git+https://github.com/ShaulLavo/waffle?rev=a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee)",
 ]
 
 [[package]]
@@ -1942,6 +1942,14 @@ dependencies = [
 name = "waffle-program-support"
 version = "0.0.0"
 source = "git+https://github.com/ShaulLavo/waffle?rev=a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee#a9af70fabd5ea2f0f7e7730a36ca00ff6697d9ee"
+dependencies = [
+ "futures",
+]
+
+[[package]]
+name = "waffle-program-support"
+version = "0.0.0"
+source = "git+https://github.com/ShaulLavo/waffle?rev=acd64c19a6381c27edd602316e66d81df78abf25#acd64c19a6381c27edd602316e66d81df78abf25"
 dependencies = [
  "futures",
 ]

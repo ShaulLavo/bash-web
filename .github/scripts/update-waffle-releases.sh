@@ -3,6 +3,8 @@ set -euo pipefail
 
 runtime_updated=false
 runtime_source_revision=''
+scratch=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/waffle-release-update-XXXXXX")
+trap 'rm -rf "$scratch"' EXIT
 
 latest_release_tag() {
   local repository=$1
@@ -45,7 +47,9 @@ update_runtime() {
 
   revision=$(release_source_revision https://github.com/ShaulLavo/waffle.git "$tag") || return
   specifier="https://github.com/ShaulLavo/waffle/releases/download/${tag}/waffle-${version}.tgz"
-  archive_sha=$(curl --fail --location --silent --show-error "$specifier" | sha256sum | cut -d ' ' -f 1)
+  curl --fail --location --silent --show-error "$specifier" > "$scratch/runtime.tgz"
+  node scripts/check-waffle-release.ts runtime "$scratch/runtime.tgz" "$version"
+  archive_sha=$(sha256sum "$scratch/runtime.tgz" | cut -d ' ' -f 1)
   builder_sha=$(curl --fail --location --silent --show-error \
     "https://raw.githubusercontent.com/ShaulLavo/waffle/${revision}/packages/waffle/scripts/build-wasi-libc.sh" |
     sha256sum | cut -d ' ' -f 1)
@@ -80,6 +84,19 @@ update_programs() {
   version=${tag#programs-v}
   current_version=${current_tag#programs-v}
   [[ "$version" == "$current_version" ]] && return 0
+  local manifest_url manifest_sha manifest_bytes tmp
+  manifest_url="https://github.com/ShaulLavo/waffle/releases/download/${tag}/program-release.json"
+  curl --fail --location --silent --show-error "$manifest_url" > "$scratch/program-release.json"
+  node scripts/check-waffle-release.ts programs "$scratch/program-release.json" "$version"
+  manifest_sha=$(sha256sum "$scratch/program-release.json" | cut -d ' ' -f 1)
+  manifest_bytes=$(wc -c < "$scratch/program-release.json")
+  tmp=$(mktemp)
+  jq --arg url "$manifest_url" --arg sha256 "$manifest_sha" --argjson bytes "$manifest_bytes" \
+    --slurpfile release "$scratch/program-release.json" \
+    '.wafflePrograms.version = $release[0].version
+     | .wafflePrograms.revision = $release[0].sourceCommit
+     | .wafflePrograms.releaseManifest = {url: $url, bytes: $bytes, sha256: $sha256}' sources.lock.json > "$tmp"
+  mv "$tmp" sources.lock.json
   sed -E -i "s|programs-v${current_version}|${tag}|g; s|(waffle-[[:alnum:]-]+-)${current_version}(\.tgz)|\1${version}\2|g" package.json
 }
 

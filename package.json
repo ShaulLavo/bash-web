@@ -96,7 +96,7 @@
     "quality": "npm run sources:browser && npm run build:worker && npm run quality:js && npm run check:rust && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast",
     "build:node-harness": "node scripts/build-node-harness.ts",
     "build:compat-control": "node scripts/build-compat-control.ts",
-    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
+    "test:guest-build": "node --test scripts/test-wasi-build.ts scripts/test-waffle-release-inputs.ts scripts/test-waffle-host-interface.ts scripts/test-verify-wasi-guests.ts scripts/test-build-compat-control.ts scripts/test-wasi-guest-path.ts scripts/test-waffle-fixture-lifecycle.ts",
     "typecheck:guest-build": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-shell-capabilities.ts scripts/wasi-build.ts scripts/waffle-release-inputs.ts scripts/build-compat-control.ts scripts/test-build-compat-control.ts scripts/test-shell-wasi.ts scripts/wasi-build.ts scripts/verify-wasi-guests.ts scripts/test-verify-wasi-guests.ts scripts/wasi-guest-path.ts scripts/test-wasi-guest-path.ts scripts/waffle-fixture-lifecycle.ts scripts/test-waffle-fixture-lifecycle.ts",
     "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",

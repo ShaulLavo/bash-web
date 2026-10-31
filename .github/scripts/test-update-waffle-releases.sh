@@ -12,13 +12,16 @@ runtime_direct_revision=1234567890abcdef1234567890abcdef12345678
 
 write_fixture() {
   local root=$1 runtime_version=$2 program_version=$3
-  mkdir -p "$root/bin" "$root/.github/scripts" "$root/shell/engine" "$root/shell/compat-fixtures"
+  mkdir -p "$root/scripts" "$root/bin" "$root/.github/scripts" "$root/shell/engine" "$root/shell/compat-fixtures"
+  cp "$script_root/../../scripts/"{check-waffle-release,installed-waffle,waffle-host-interface}.ts "$root/scripts/"
   cp "$script_root/update-waffle-releases.sh" "$root/.github/scripts/"
   cp "$script_root/check-update-paths.sh" "$root/.github/scripts/"
   printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$root/.github/scripts/update-hotkeys.sh"
   chmod +x "$root/.github/scripts"/*.sh
   cat > "$root/package.json" <<JSON
 {
+  "type": "module",
+  "waffleHostInterface": 1,
   "dependencies": {
     "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v${program_version}/waffle-base-${program_version}.tgz"
   },
@@ -26,7 +29,7 @@ write_fixture() {
     "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz"
   },
   "peerDependencies": {
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz"
+    "waffle": "*"
   },
   "allowScripts": {
     "waffle@${runtime_version}": true
@@ -38,6 +41,7 @@ JSON
   cat > "$root/sources.lock.json" <<JSON
 {
   "waffle": {
+    "hostInterface": 1,
     "version": "${runtime_version}",
     "revision": "${runtime_direct_revision}",
     "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz",
@@ -48,7 +52,7 @@ JSON
     }
   },
   "wafflePrograms": {
-    "version": "0.0.13",
+    "version": "${program_version}",
     "revision": "${program_revision}",
     "provenance": "historical receipts"
   },
@@ -142,7 +146,18 @@ GIT
   cat > "$root/bin/curl" <<'CURL'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'fixture bytes\n'
+url=${*: -1}
+case "$url" in
+  */waffle-*.tgz)
+    mkdir -p "$TEST_ROOT/runtime-archive/package"
+    printf '{"name":"waffle","version":"%s","waffleHostInterface":%s}\n' "$RELEASE_RUNTIME" "${RUNTIME_INTERFACE:-1}" > "$TEST_ROOT/runtime-archive/package/package.json"
+    tar -czf - -C "$TEST_ROOT/runtime-archive" package
+    ;;
+  */program-release.json)
+    printf '{"schema":"waffle-program-release/2","version":"%s","sourceCommit":"%s","tagState":"tagged","dirty":false,"runtime":{"waffleHostInterface":1},"packages":[{"waffleHostInterface":1}]}\n' "$RELEASE_PROGRAM" "$PROGRAM_SOURCE_REVISION"
+    ;;
+  *) printf 'fixture bytes\n' ;;
+esac
 CURL
   cat > "$root/bin/cargo" <<'CARGO'
 #!/usr/bin/env bash
@@ -272,6 +287,28 @@ run_bad_ref_fixture invalid
 run_bad_ref_fixture invalid-peeled
 run_pair_fixture annotated 0.0.106
 run_pair_fixture direct 0.0.107
+run_runtime_only_fixture() {
+  local root="$scratch/runtime-only"
+  write_fixture "$root" 0.0.107 0.0.15
+  write_stubs "$root"
+  RELEASE_RUNTIME=0.0.108 RELEASE_PROGRAM=0.0.15 GIT_REF_MODE=annotated run_updater "$root"
+  test "$(jq -r '.peerDependencies.waffle' "$root/package.json")" = '*'
+  test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = 'https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-base-0.0.15.tgz'
+  assert_support_revision "$root" "$runtime_revision"
+}
+run_runtime_only_fixture
+run_incompatible_runtime_fixture() {
+  local root="$scratch/incompatible-runtime"
+  write_fixture "$root" 0.0.107 0.0.15
+  write_stubs "$root"
+  if RUNTIME_INTERFACE=2 RELEASE_RUNTIME=0.0.108 RELEASE_PROGRAM=0.0.15 GIT_REF_MODE=annotated run_updater "$root" > "$root/guard.log" 2>&1; then
+    echo 'FAIL: incompatible runtime passed' >&2
+    exit 1
+  fi
+  grep -q 'host interface mismatch' "$root/guard.log"
+  "$real_git" -C "$root" diff --exit-code
+}
+run_incompatible_runtime_fixture
 run_no_runtime_fixture
 run_guard_negative_fixture
 printf '%s\n' 'Waffle updater fixtures passed: peeled and lightweight refs, runtime-owned support, no-runtime preservation, repeat stability, narrow manifest guards, and rejected failed/missing/invalid refs.'

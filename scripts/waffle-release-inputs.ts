@@ -11,7 +11,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { assertPackageHostInterface, assertRuntimePeer, parseHostInterface } from "./waffle-host-interface.ts";
+import {
+  assertPackageHostInterface,
+  assertRuntimePeer,
+  parseHostInterface,
+} from "./waffle-host-interface.ts";
 
 function object(value: unknown): Record<string, unknown> {
   assert.ok(value && typeof value === "object" && !Array.isArray(value));

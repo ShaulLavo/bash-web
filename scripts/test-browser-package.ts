@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { test } from "node:test";
+import { assertPackageHostInterface, parseHostInterface } from "./waffle-host-interface.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -40,17 +41,23 @@ const sources = await readJson("sources.lock.json");
 const sourceWaffle = record(sources.waffle);
 const bunLock = await readFile(resolve(root, "bun.lock"), "utf8");
 
-test("browser entry uses one required immutable Waffle peer and matching development install", () => {
+test("browser entry uses a placement-only Waffle peer and an exact development install", () => {
   const peerDependencies = record(pkg.peerDependencies);
   const devDependencies = record(pkg.devDependencies);
   const peer = text(peerDependencies.waffle);
   const version = text(sourceWaffle.version);
+  assert.equal(peer, "*");
+  const pin = text(devDependencies.waffle);
   assert.equal(
-    peer,
+    pin,
     `https://github.com/ShaulLavo/waffle/releases/download/waffle-v${version}/waffle-${version}.tgz`,
   );
-  assert.equal(devDependencies.waffle, peer);
-  assert.equal(sourceWaffle.specifier, peer);
+  assert.equal(sourceWaffle.specifier, pin);
+  assertPackageHostInterface(
+    pkg,
+    parseHostInterface(sourceWaffle.hostInterface, "selected Waffle"),
+    "bash-web",
+  );
   assert.match(text(sourceWaffle.revision), /^[0-9a-f]{40}$/);
   assert.match(text(sourceWaffle.archiveSha256), /^[0-9a-f]{64}$/);
   const peerMetadata = optionalRecord(pkg.peerDependenciesMeta);
@@ -59,16 +66,16 @@ test("browser entry uses one required immutable Waffle peer and matching develop
   const packages = record(lock.packages);
   const rootPackage = record(packages[""]);
   assert.equal(record(rootPackage.peerDependencies).waffle, peer);
-  assert.equal(record(rootPackage.devDependencies).waffle, peer);
+  assert.equal(record(rootPackage.devDependencies).waffle, pin);
   const lockedWaffle = record(packages["node_modules/waffle"]);
   const resolved = lockedWaffle.resolved;
-  assert.equal(resolved, peer);
+  assert.equal(resolved, pin);
   const integrity = text(lockedWaffle.integrity);
   assert.match(integrity, /^sha512-/);
   assert.ok(bunLock.includes(integrity));
   assert.equal(lockedWaffle.version, sourceWaffle.version);
   assert.ok(strings(pkg.trustedDependencies).includes("waffle"));
-  assert.ok(bunLock.includes(peer));
+  assert.ok(bunLock.includes(pin));
   assert.ok(bunLock.includes('"trustedDependencies"'));
   assert.equal(optionalRecord(pkg.allowScripts)?.[`waffle@${version}`], true);
   const exports = record(pkg.exports);
@@ -82,6 +89,11 @@ test("browser entry uses one required immutable Waffle peer and matching develop
 test("the installed Waffle package declares the accepted source and export paths", async () => {
   const installed = await readJson("node_modules/waffle/package.json");
   assert.equal(installed.version, sourceWaffle.version);
+  assertPackageHostInterface(
+    installed,
+    parseHostInterface(sourceWaffle.hostInterface, "selected Waffle"),
+    "installed Waffle",
+  );
   const rootExport = record(record(installed.exports)["."]);
   assert.equal(rootExport.browser, "./index.ts");
   assert.equal(rootExport.node, "./dist/index.js");

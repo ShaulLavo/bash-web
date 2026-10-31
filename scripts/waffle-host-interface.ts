@@ -15,7 +15,7 @@ export function parseHostInterface(value: unknown, source: string): HostInterfac
   return value as HostInterface;
 }
 
-export function assertExactHostInterface(
+function assertExactHostInterface(
   required: HostInterface,
   provided: HostInterface,
   source: string,
@@ -34,9 +34,22 @@ export function assertPackageHostInterface(
 
 export function assertRuntimePeer(metadata: unknown, source: string): void {
   const pkg = metadataRecord(metadata);
-  assert.equal(metadataRecord(pkg.peerDependencies).waffle, "*", `${source}: Waffle peer must be *`);
+  assert.equal(
+    metadataRecord(pkg.peerDependencies).waffle,
+    "*",
+    `${source}: Waffle peer must be *`,
+  );
+  if (pkg.peerDependenciesMeta !== undefined) {
+    const peer = metadataRecord(pkg.peerDependenciesMeta).waffle;
+    if (peer !== undefined)
+      assert.notEqual(metadataRecord(peer).optional, true, `${source}: Waffle peer is required`);
+  }
   for (const field of ["dependencies", "optionalDependencies"]) {
     if (pkg[field] === undefined) continue;
-    assert.equal(metadataRecord(pkg[field]).waffle, undefined, `${source}: forbidden Waffle ${field}`);
+    assert.equal(
+      metadataRecord(pkg[field]).waffle,
+      undefined,
+      `${source}: forbidden Waffle ${field}`,
+    );
   }
 }
