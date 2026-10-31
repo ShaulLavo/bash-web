@@ -117,7 +117,7 @@ impl State {
                 .ok_or(2)?,
             (_, Some(binding)) => binding.storage_bytes(),
         };
-        self.reserve_local_value(target, storage.max(self.held_local_value(target)))?;
+        self.reserve_local_value(target, storage)?;
         match (mode, self.variables.get_mut(target)) {
             (IndexedMode::Overlay, Some(Binding::Indexed(_))) => {}
             (IndexedMode::Overlay, Some(binding @ Binding::Scalar(_))) => {
@@ -463,12 +463,57 @@ mod tests {
         assert_eq!(values(&state), ["a", "b"]);
     }
 
-    #[test]
-    fn local_ticket_rejection_keeps_exact_previous_charge_and_unwinds() {
-        let memory = StorageBudget::new(16_384);
+    fn local_array_state(memory: &StorageBudget) -> (SharedState, FunctionFrame) {
         let state = State::with_memory(memory.clone()).shared();
         let frame = FunctionFrame::enter(state.clone(), Vec::new(), 100).unwrap();
         state.borrow_mut().local("a".into(), "old".into()).unwrap();
+        (state, frame)
+    }
+
+    #[test]
+    fn local_replace_releases_old_ticket_before_three_tight_budget_records() {
+        let limit = 16_384;
+        let memory = StorageBudget::new(limit);
+        let (state, frame) = local_array_state(&memory);
+        let mut work = work();
+        let mut old = begin(&state, IndexedMode::Replace, 0, &mut work);
+        push(&mut old, &state, &"x".repeat(4_096), &mut work)
+            .unwrap_or_else(|_| panic!("old array fits"));
+        drop(old);
+        let previous = state.borrow().held_local_value("a");
+        let before = memory.observation().0;
+        let mut producer = begin(&state, IndexedMode::Replace, 0, &mut work);
+        let header = Binding::indexed_header_bytes();
+        assert!(previous > header + 4_096);
+        assert_eq!(state.borrow().held_local_value("a"), header);
+        assert_eq!(memory.observation().0, before - previous + header);
+        let records = ["first", "second", "third"];
+        let growth =
+            Indexed::tree_bytes(records.len()) + records.iter().map(|s| s.len()).sum::<usize>();
+        let pressure = memory
+            .admit(limit - memory.observation().0 - growth)
+            .unwrap();
+        for record in records {
+            push(&mut producer, &state, record, &mut work)
+                .unwrap_or_else(|_| panic!("replacement prefix fits"));
+            let state = state.borrow();
+            assert_eq!(
+                state.held_local_value("a"),
+                state.variables["a"].storage_bytes()
+            );
+        }
+        assert_eq!(values(&state), records);
+        assert_eq!(memory.observation().0, limit);
+        drop(pressure);
+        drop(producer);
+        drop(frame);
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn local_ticket_rejection_keeps_exact_previous_charge_and_unwinds() {
+        let memory = StorageBudget::new(16_384);
+        let (state, frame) = local_array_state(&memory);
         let mut work = work();
         let mut producer = seed(&state, &mut work);
         let used = memory.observation().0;

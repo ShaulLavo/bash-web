@@ -203,7 +203,7 @@ impl IndexedProducer {
 
 5. Admit before mutating:
    - **Work:** `t.len() * 2` for the key, plus `snapshot_node_bytes::<Binding>()` when `variables` lacks `t`, plus the new header `Binding::indexed_header_bytes()`, plus `Indexed::tree_bytes(1)` when converting a scalar. This is the arithmetic of `admit_binding_update`.
-   - **Local ticket**, if `t` is local: `reserve_local_value(t, new_storage.max(held_local_value(t)))`. For Replace this usually shrinks. A failure leaves state unchanged.
+   - **Local ticket**, if `t` is local: `reserve_local_value(t, new_storage)`. Replace releases the old value ticket before input; Overlay sizes its actual starting image. Retain the old-ticket maximum only during per-record admission and allocation rollback. A failure leaves state unchanged.
 6. Mutate synchronously, still before any input. Install the image. The previous `Rc` is dropped, so other holders keep their own copies. If `t == "IFS"`, call `refresh_star_separator()` (see "Hook policy").
 7. `debug_assert!(self.assignment_undo.0.upgrade().is_none())`. The producer never touches a journal, never calls `prefixes.amend`, `reserve_effect` or `reserve_last_effect`, and never edits saved prefix values. A temporary prefix (`a=1 mapfile a`) therefore absorbs the writes, and the command's existing prefix restore discards them, as in 5.3.15.
 8. Return the producer. `next` starts at `origin` for Overlay and 0 for Replace.
