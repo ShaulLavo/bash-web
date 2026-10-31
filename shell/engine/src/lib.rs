@@ -14,3 +14,6 @@ pub mod process;
 pub mod runtime;
 pub mod state;
 pub use interpreter::{Limits, Session};
+
+#[cfg(test)]
+mod support_contract;
