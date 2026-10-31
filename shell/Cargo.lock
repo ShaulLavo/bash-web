@@ -1664,7 +1664,7 @@ dependencies = [
 [[package]]
 name = "uu_env"
 version = "0.13.0"
-source = "git+https://github.com/ShaulLavo/waffle?rev=4fa31792b6cfd1dcdc34404149572d571dfafd1b#4fa31792b6cfd1dcdc34404149572d571dfafd1b"
+source = "git+https://github.com/ShaulLavo/waffle?rev=3050f69d810fe7c851e487135517698b5dfd93e5#3050f69d810fe7c851e487135517698b5dfd93e5"
 dependencies = [
  "clap",
  "fluent",
@@ -1719,6 +1719,18 @@ dependencies = [
  "thiserror",
  "uucore 0.13.0",
  "windows-sys",
+]
+
+[[package]]
+name = "uu_nl"
+version = "0.13.0"
+source = "git+https://github.com/uutils/coreutils?rev=07763857f6b9a547742a994b58aef0ccd036198b#07763857f6b9a547742a994b58aef0ccd036198b"
+dependencies = [
+ "clap",
+ "fluent",
+ "itoa",
+ "regex",
+ "uucore 0.13.0",
 ]
 
 [[package]]
@@ -1886,8 +1898,9 @@ dependencies = [
 [[package]]
 name = "waffle-coreutils"
 version = "0.0.2"
-source = "git+https://github.com/ShaulLavo/waffle?rev=4fa31792b6cfd1dcdc34404149572d571dfafd1b#4fa31792b6cfd1dcdc34404149572d571dfafd1b"
+source = "git+https://github.com/ShaulLavo/waffle?rev=3050f69d810fe7c851e487135517698b5dfd93e5#3050f69d810fe7c851e487135517698b5dfd93e5"
 dependencies = [
+ "clap",
  "futures",
  "rustix",
  "uu_cp",
@@ -1895,6 +1908,7 @@ dependencies = [
  "uu_head",
  "uu_ls",
  "uu_mv",
+ "uu_nl",
  "uu_rm",
  "uu_sort",
  "uu_touch",
@@ -1907,7 +1921,7 @@ dependencies = [
 [[package]]
 name = "waffle-grep"
 version = "0.0.2"
-source = "git+https://github.com/ShaulLavo/waffle?rev=4fa31792b6cfd1dcdc34404149572d571dfafd1b#4fa31792b6cfd1dcdc34404149572d571dfafd1b"
+source = "git+https://github.com/ShaulLavo/waffle?rev=3050f69d810fe7c851e487135517698b5dfd93e5#3050f69d810fe7c851e487135517698b5dfd93e5"
 dependencies = [
  "futures",
  "regex",
@@ -1917,7 +1931,7 @@ dependencies = [
 [[package]]
 name = "waffle-process-consumer"
 version = "0.0.1"
-source = "git+https://github.com/ShaulLavo/waffle?rev=4fa31792b6cfd1dcdc34404149572d571dfafd1b#4fa31792b6cfd1dcdc34404149572d571dfafd1b"
+source = "git+https://github.com/ShaulLavo/waffle?rev=3050f69d810fe7c851e487135517698b5dfd93e5#3050f69d810fe7c851e487135517698b5dfd93e5"
 dependencies = [
  "serde",
  "serde_json",
@@ -1926,7 +1940,7 @@ dependencies = [
 [[package]]
 name = "waffle-program-support"
 version = "0.0.0"
-source = "git+https://github.com/ShaulLavo/waffle?rev=4fa31792b6cfd1dcdc34404149572d571dfafd1b#4fa31792b6cfd1dcdc34404149572d571dfafd1b"
+source = "git+https://github.com/ShaulLavo/waffle?rev=3050f69d810fe7c851e487135517698b5dfd93e5#3050f69d810fe7c851e487135517698b5dfd93e5"
 dependencies = [
  "futures",
 ]
