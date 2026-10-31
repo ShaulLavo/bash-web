@@ -1,3 +1,5 @@
+import * as fuzzer from "./fuzz-shell-path.ts";
+import { observation, syntheticFixture } from "./fuzz-test-observation.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -69,42 +71,8 @@ const frozenCaseHashes: Record<string, string> = {
   "shell-path-seed-1.json": "eb1e52ed72dc626c8e974c2edd481dd97e766bd8d465ec1bbb640ffd7bb9c77a",
   "shell-path-seed-42.json": "641771a57e8156ee0b9cf5b7081f08bf979396b2452e2b349be2338ff3af47af",
 };
-const observation = (patch = {}) => ({
-  status: 0,
-  signal: null,
-  timedOut: false,
-  error: null,
-  stdout: Buffer.from("ok\n"),
-  stderr: Buffer.alloc(0),
-  ...patch,
-});
-function fixtureFor(): Fixture {
-  const cases = generateCases(1, 0);
-  return {
-    schema: 1,
-    sourceHash: fingerprint(),
-    sourceHashes: sourceHashes(),
-    seed: 1,
-    count: 0,
-    timeoutMs: defaultTimeoutMs,
-    bash: "GNU bash, version 5.3.15(1)-release (test)",
-    oraclePath: "/usr/bin/bash",
-    environment,
-    provenance: "oracle-only",
-    coverage: coverage(cases),
-    cases: cases.map((item) => ({
-      case: item,
-      bash: {
-        status: 0,
-        signal: null,
-        timedOut: false,
-        error: null,
-        stdoutBase64: "",
-        stderrBase64: "",
-      },
-    })),
-  };
-}
+
+const fixtureFor = () => syntheticFixture(fuzzer);
 function scratch(t: import("node:test").TestContext) {
   // Existing: selected temporary root and shared runtimes/toolchains. This test owns
   // only its oracle-test-* directory and run()'s bounded process descendants.
