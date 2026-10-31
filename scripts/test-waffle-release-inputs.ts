@@ -67,3 +67,40 @@ test("an unselected runtime pin or installed builder fails before source acquisi
   assert.throws(() => prepareWaffleBuildInputs(f.root, f.download), /builder differs/);
   assert.equal(f.requests.length, 0);
 });
+
+function changeJson(root: string, path: string, change: (value: Record<string, unknown>) => void) {
+  const file = resolve(root, path);
+  const value: Record<string, unknown> = JSON.parse(readFileSync(file, "utf8"));
+  change(value);
+  writeFileSync(file, JSON.stringify(value));
+}
+
+test("wildcard peer and exact host metadata permit the selected build runtime", (context) => {
+  const f = fixture(context);
+  changeJson(f.root, "sources.lock.json", (value) => {
+    Object.assign(Object(value.waffle), { hostInterface: 1 });
+  });
+  changeJson(f.root, "package.json", (value) => {
+    value.waffleHostInterface = 1;
+    value.peerDependencies = { waffle: "*" };
+  });
+  changeJson(f.root, "node_modules/waffle/package.json", (value) => {
+    value.waffleHostInterface = 1;
+  });
+  assert.equal(prepareWaffleBuildInputs(f.root, f.download).revision, f.selected.revision);
+});
+
+for (const value of [undefined, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, 2]) {
+  test(`invalid installed host metadata ${String(value)} fails before downloads`, (context) => {
+    const f = fixture(context);
+    changeJson(f.root, "sources.lock.json", (selected) => {
+      Object.assign(Object(selected.waffle), { hostInterface: 1 });
+    });
+    changeJson(f.root, "package.json", (pkg) => { pkg.waffleHostInterface = 1; });
+    changeJson(f.root, "node_modules/waffle/package.json", (metadata) => {
+      metadata.waffleHostInterface = value;
+    });
+    assert.throws(() => prepareWaffleBuildInputs(f.root, f.download), /host interface/i);
+    assert.equal(f.requests.length, 0);
+  });
+}
