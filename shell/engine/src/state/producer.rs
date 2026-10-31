@@ -362,6 +362,13 @@ mod tests {
             work,
         ))
     }
+    fn seed(state: &SharedState, work: &mut Work) -> IndexedProducer {
+        let mut producer = begin(state, IndexedMode::Replace, 0, work);
+        for value in ["a", "b"] {
+            push(&mut producer, state, value, work).unwrap_or_else(|_| panic!("seed record fits"));
+        }
+        producer
+    }
     fn values(state: &SharedState) -> Vec<String> {
         let state = state.borrow();
         let mut previous = None;
@@ -429,9 +436,7 @@ mod tests {
     fn record_admission_failure_refunds_work_and_keeps_prefix() {
         let state = State::default().shared();
         let mut work = work();
-        let mut producer = begin(&state, IndexedMode::Replace, 0, &mut work);
-        push(&mut producer, &state, "a", &mut work).unwrap_or_else(|_| panic!("a"));
-        push(&mut producer, &state, "b", &mut work).unwrap_or_else(|_| panic!("b"));
+        let mut producer = seed(&state, &mut work);
         let mut short = Work::new(100, 2, 0);
         assert!(matches!(
             push(&mut producer, &state, "abc", &mut short),
@@ -465,9 +470,7 @@ mod tests {
         let frame = FunctionFrame::enter(state.clone(), Vec::new(), 100).unwrap();
         state.borrow_mut().local("a".into(), "old".into()).unwrap();
         let mut work = work();
-        let mut producer = begin(&state, IndexedMode::Replace, 0, &mut work);
-        push(&mut producer, &state, "a", &mut work).unwrap_or_else(|_| panic!("a"));
-        push(&mut producer, &state, "b", &mut work).unwrap_or_else(|_| panic!("b"));
+        let mut producer = seed(&state, &mut work);
         let used = memory.observation().0;
         let held = state.borrow().held_local_value("a");
         let pressure = memory.admit(16_384 - used - 2).unwrap();

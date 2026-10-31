@@ -3,7 +3,7 @@ mod records;
 use super::{diagnose, endpoint, error_status, scan_bytes, valid_name};
 use crate::{
     expand::Work,
-    interpreter::{Context, Outcome},
+    interpreter::Context,
     io::FdTable,
     state::{
         IndexedMode, IndexedProducer, ProducerError, Rejection, ScalarResolution, SharedState,
@@ -42,13 +42,12 @@ impl Default for Options<'_> {
 }
 
 pub(super) async fn run(
-    name: &str,
-    args: &[String],
+    (name, args): (&str, &[String]),
     state: &SharedState,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<Outcome, i32> {
+) -> Result<i32, i32> {
     let options = options(name, args, fds, context, work).await?;
     let input = match endpoint(fds, options.fd) {
         Ok(input) => input,
@@ -114,7 +113,7 @@ pub(super) async fn run(
             stored = stored.checked_add(1).ok_or(2)?;
         }
         if end == records::End::Input || (options.count != 0 && stored == options.count) {
-            return Ok(Outcome::status(0));
+            return Ok(0);
         }
         reader.reset();
     }
@@ -156,65 +155,76 @@ async fn options<'a>(
     work: &mut Work,
 ) -> Result<Options<'a>, i32> {
     let mut result = Options::default();
-    let mut iter = args.iter();
-    while let Some(arg) = iter.as_slice().first() {
-        work.checkpoint(&context.cancel)
-            .await
-            .map_err(error_status)?;
-        if arg == "--" {
-            iter.next();
-            break;
+    let mut remaining = args;
+    while let Some((word, rest)) = remaining.split_first() {
+        match word.as_str() {
+            "--" => {
+                remaining = rest;
+                break;
+            }
+            "-" => break,
+            word if !word.starts_with('-') => break,
+            _ => remaining = option_word(name, word, rest, &mut result, fds, context, work).await?,
         }
-        if !arg.starts_with('-') || arg == "-" {
-            break;
-        }
-        iter.next();
-        option_word(name, arg, &mut iter, &mut result, fds, context, work).await?;
     }
-    result.names = iter.as_slice();
+    result.names = remaining;
     Ok(result)
 }
 
 async fn option_word<'a>(
     name: &str,
-    arg: &'a str,
-    iter: &mut std::slice::Iter<'a, String>,
+    word: &'a str,
+    rest: &'a [String],
     options: &mut Options<'a>,
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<(), i32> {
-    for (index, flag) in arg.bytes().enumerate().skip(1) {
+) -> Result<&'a [String], i32> {
+    let bytes = word.as_bytes();
+    let mut offset = 1;
+    while bytes.get(offset) == Some(&b't') {
         work.checkpoint(&context.cancel)
             .await
             .map_err(error_status)?;
-        if flag == b't' {
-            options.trim = true;
-            continue;
-        }
-        if flag == b'C' {
-            complain(name, &["-C: callbacks are not supported\n"], fds, context).await?;
-            return Err(2);
-        }
-        if !matches!(flag, b'd' | b'n' | b'O' | b's' | b'u' | b'c') {
-            let flag = [flag];
-            let flag = std::str::from_utf8(&flag).unwrap_or("?");
-            complain(name, &["-", flag, ": invalid option\n"], fds, context).await?;
-            usage(name, fds, context).await?;
-            return Err(2);
-        }
-        let value = if index + 1 < arg.len() {
-            Some(&arg[index + 1..])
-        } else {
-            iter.next().map(String::as_str)
-        };
-        let Some(value) = value else {
-            usage(name, fds, context).await?;
-            return Err(2);
-        };
-        return option_value(name, flag, value, options, fds, context, work).await;
+        options.trim = true;
+        offset += 1;
     }
-    Ok(())
+    let Some(&flag) = bytes.get(offset) else {
+        return Ok(rest);
+    };
+    work.checkpoint(&context.cancel)
+        .await
+        .map_err(error_status)?;
+    if flag == b'C' {
+        complain(name, &["-C: callbacks are not supported\n"], fds, context).await?;
+        return Err(2);
+    }
+    if !matches!(flag, b'd' | b'n' | b'O' | b's' | b'u' | b'c') {
+        let byte = [flag];
+        complain(
+            name,
+            &[
+                "-",
+                std::str::from_utf8(&byte).unwrap_or("?"),
+                ": invalid option\n",
+            ],
+            fds,
+            context,
+        )
+        .await?;
+        usage(name, fds, context).await?;
+        return Err(2);
+    }
+    if offset + 1 < word.len() {
+        option_value(name, flag, &word[offset + 1..], options, fds, context, work).await?;
+        return Ok(rest);
+    }
+    let Some((value, remaining)) = rest.split_first() else {
+        usage(name, fds, context).await?;
+        return Err(2);
+    };
+    option_value(name, flag, value, options, fds, context, work).await?;
+    Ok(remaining)
 }
 
 async fn option_value<'a>(
@@ -271,14 +281,17 @@ fn numeric_diagnostic(flag: u8) -> &'static str {
 
 async fn number(value: &str, context: &Context, work: &mut Work) -> Result<u32, i32> {
     scan_bytes(value.len(), context, work).await?;
-    let value = value.trim_matches(|ch: char| ch.is_ascii_whitespace() || ch == '\u{b}');
-    let negative = value.starts_with('-');
-    let digits = value.strip_prefix(['+', '-']).unwrap_or(value);
+    let number = value.trim_matches(|ch: char| ch.is_ascii_whitespace() || ch == '\u{b}');
+    let (negative, digits) = match number.as_bytes().split_first() {
+        Some((b'-', digits)) => (true, digits),
+        Some((b'+', digits)) => (false, digits),
+        _ => (false, number.as_bytes()),
+    };
     if digits.is_empty() {
         return Err(1);
     }
     let mut result = 0u32;
-    for byte in digits.bytes() {
+    for &byte in digits {
         work.checkpoint(&context.cancel)
             .await
             .map_err(error_status)?;
@@ -319,7 +332,7 @@ async fn reject(
     fds: &FdTable,
     context: &Context,
     work: &mut Work,
-) -> Result<Outcome, i32> {
+) -> Result<i32, i32> {
     let rejection = match error {
         ProducerError::Exec(error) => return Err(error_status(error)),
         ProducerError::Rejected(rejection) => rejection,
@@ -343,11 +356,11 @@ async fn reject(
             complain(name, &[&target, ": unsupported target\n"], fds, context).await?
         }
     }
-    Ok(Outcome::status(if rejection == Rejection::Unsupported {
+    Ok(if rejection == Rejection::Unsupported {
         2
     } else {
         1
-    }))
+    })
 }
 
 async fn complain(name: &str, parts: &[&str], fds: &FdTable, context: &Context) -> Result<(), i32> {
@@ -361,4 +374,128 @@ async fn complain(name: &str, parts: &[&str], fds: &FdTable, context: &Context) 
 
 async fn usage(name: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
     complain(name, &["usage: ", name, USAGE], fds, context).await
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        Limits, Session,
+        executor::{Executor, JoinHandle},
+        io::{Endpoint, FdTable, MemoryFs, pipe},
+        process::InProcessHost,
+    };
+    use futures::FutureExt;
+    use std::rc::Rc;
+
+    const LIMIT: usize = 262_144;
+    struct InputSession {
+        executor: Executor,
+        shell: Session,
+        host: Rc<InProcessHost>,
+    }
+    impl InputSession {
+        fn new() -> Self {
+            let executor = Executor::new();
+            let host = Rc::new(InProcessHost::new(executor.clone()));
+            let filesystem = Rc::new(MemoryFs::new(1024));
+            let limits = Limits {
+                execution_bytes: LIMIT,
+                ..Limits::default()
+            };
+            let shell = Session::new(executor.clone(), host.clone(), filesystem, limits);
+            let result = Self {
+                executor,
+                shell,
+                host,
+            };
+            result.finish(result.shell.start("true").unwrap());
+            result
+        }
+        fn input(&self, input: Endpoint) {
+            let mut descriptors = FdTable::default();
+            descriptors.insert(0, input);
+            descriptors.insert(1, Endpoint::null());
+            descriptors.insert(2, Endpoint::null());
+            self.shell.set_descriptors(descriptors).unwrap();
+        }
+        fn finish(&self, job: JoinHandle<i32>) -> i32 {
+            assert!(
+                (0..100_000).any(|_| {
+                    self.executor.drive(64);
+                    job.is_finished()
+                }),
+                "bounded mapfile completion"
+            );
+            job.now_or_never().unwrap()
+        }
+        fn refunded(&self) {
+            let state = self.shell.state();
+            let state = state.borrow();
+            drop(
+                state
+                    .admit_temporary(LIMIT - state.prefix_capacity_bytes())
+                    .unwrap(),
+            );
+        }
+    }
+    impl Drop for InputSession {
+        fn drop(&mut self) {
+            let mut shutdown = Box::pin(self.shell.shutdown());
+            assert!(
+                (0..1000).any(|_| {
+                    self.executor.drive(64);
+                    shutdown.as_mut().now_or_never().is_some()
+                }),
+                "mapfile fixture shutdown"
+            );
+            assert_eq!(self.executor.drive(64).pending, 0);
+            assert_eq!(self.host.active_count(), 0);
+            assert_eq!(self.host.retained_count(), 0);
+        }
+    }
+
+    #[test]
+    fn mapfile_completion_cancellation_and_shutdown_refund_live_scratch() {
+        let fixture = InputSession::new();
+        fixture.input(Endpoint::bytes(b"first\nsecond\n".to_vec()));
+        assert_eq!(
+            fixture.finish(fixture.shell.start("mapfile -t a").unwrap()),
+            0
+        );
+        fixture.refunded();
+        let (reader, writer) = pipe();
+        assert_eq!(
+            writer.write(b"x\ny\nunfinished").now_or_never(),
+            Some(Ok(14))
+        );
+        fixture.input(reader);
+        let pending = fixture.shell.start("mapfile -t a").unwrap();
+        crate::interpreter::printer_controls::assert_parked(&fixture.executor, &pending);
+        assert!(
+            fixture
+                .shell
+                .state()
+                .borrow()
+                .admit_temporary(LIMIT - 65_535)
+                .is_err()
+        );
+        fixture.shell.interrupt();
+        assert_eq!(fixture.finish(pending), 130);
+        fixture.refunded();
+        assert_eq!(fixture.finish(fixture.shell.start("true").unwrap()), 0);
+        let (reader, writer2) = pipe();
+        fixture.input(reader);
+        let pending = fixture.shell.start("mapfile -t a").unwrap();
+        crate::interpreter::printer_controls::assert_parked(&fixture.executor, &pending);
+        let mut shutdown = Box::pin(fixture.shell.shutdown());
+        assert!((0..1000).any(|_| {
+            fixture.executor.drive(64);
+            shutdown.as_mut().now_or_never().is_some()
+        }));
+        drop(shutdown);
+        drop(pending);
+        fixture.refunded();
+        drop(writer);
+        drop(writer2);
+    }
 }

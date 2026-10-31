@@ -270,16 +270,16 @@ impl shell_engine::io::HostEndpoint for BrokenInput {
     }
 }
 
+fn broken_input(rig: &Rig) {
+    use shell_engine::io::Endpoint;
+    let source = BrokenInput(Endpoint::bytes(b"x\ny\npart".to_vec()));
+    input(rig, Endpoint::host(std::rc::Rc::new(source)));
+}
+
 #[test]
 fn mapfile_input_error_publishes_nonempty_partial_tail() {
-    use shell_engine::io::Endpoint;
     let rig = Rig::new(Limits::default());
-    input(
-        &rig,
-        Endpoint::host(std::rc::Rc::new(BrokenInput(Endpoint::bytes(
-            b"x\ny\npart".to_vec(),
-        )))),
-    );
+    broken_input(&rig);
     assert_eq!(rig.run("mapfile -t a; args \"${a[@]}\""), 0);
     assert_eq!(*rig.calls.borrow(), vec![vec!["x", "y", "part"]]);
 }
@@ -324,14 +324,8 @@ fn mapfile_rejected_target_leaves_shared_input_unread() {
 
 #[test]
 fn mapfile_input_errors_overlay_and_write_only_files_follow_eof_policy() {
-    use shell_engine::io::Endpoint;
     let rig = Rig::new(Limits::default());
-    input(
-        &rig,
-        Endpoint::host(std::rc::Rc::new(BrokenInput(Endpoint::bytes(
-            b"x\ny\npart".to_vec(),
-        )))),
-    );
+    broken_input(&rig);
     assert_eq!(
         rig.run("a=(o0 o1 o2 o3 o4); mapfile -t -O 1 a; args \"${a[@]}\""),
         0

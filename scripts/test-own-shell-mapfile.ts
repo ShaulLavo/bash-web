@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
 import { test } from "node:test";
-import { createWaffleRunner } from "./waffle-compat.ts";
+import { releaseShellRunner } from "./release-shell-runner.ts";
 
 import fixture from "./fixtures/shell-mapfile.json" with { type: "json" };
 assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
-const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");
-const run = await createWaffleRunner({
-  modulePath: resolve(directory, "shell-runtime.wasm"),
-  fixtureDirectory: directory,
-  tmp: "/tmp/spec",
-  env: fixture.env,
-});
+const run = await releaseShellRunner(fixture.env);
 for (const item of fixture.cases)
   test(`production Waffle mapfile ${item.id}`, async () => {
     const actual = await run(item.script);

@@ -29,6 +29,16 @@ nameref targets, projected call-stack arrays, and `PIPESTATUS` are rejected
 before input. Ordinary namerefs, local arrays, case attributes, and temporary
 builtin prefixes use the shared state model.
 
+Without `-O`, the target becomes an empty indexed array before input, even if
+there are no records. Any explicit `-O` preserves elements outside the written
+indices. `-n`, `-s`, and `-O` accept decimal values from 0 through 4294967295,
+including one optional sign and surrounding ASCII whitespace. Nonzero negative
+values fail with status 1. `-c` also rejects every converted zero, including `-0`.
+
+EOF and input errors other than cancellation return status 0 and publish a
+nonempty partial tail. Cancellation returns status 130 and discards the current
+partial record. Completed records remain visible in both cases.
+
 ## Deliberate gaps
 
 The engine stores UTF-8 strings rather than arbitrary bytes, so raw bytes in a
