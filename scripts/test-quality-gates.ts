@@ -324,6 +324,21 @@ test("unreadable chosen duplicate baselines fail closed instead of using another
     assert.deepEqual(duplicateComparison(directory, "baseline.json", "HEAD"), { [cloneId]: 1 });
     writeRepoFile(directory, "baseline.json", JSON.stringify({ fingerprints: {} }));
     assert.deepEqual(duplicateComparison(directory, "baseline.json", "HEAD"), { [cloneId]: 1 });
+    runGit(directory, ["add", "baseline.json"]);
+    runGit(directory, [
+      "-c",
+      "user.name=Quality probe",
+      "-c",
+      "user.email=quality@example.invalid",
+      "commit",
+      "-qm",
+      "Remove clone",
+    ]);
+    assert.deepEqual(
+      duplicateComparison(directory, "baseline.json", duplicateBaseRef({ GITHUB_ACTIONS: "true" })),
+      { [cloneId]: 1 },
+    );
+    assert.deepEqual(duplicateComparison(directory, "baseline.json", "HEAD"), {});
     assert.throws(() => duplicateComparison(directory, "baseline.json", "missing-chosen-ref"));
     assert.throws(() => duplicateComparison(directory, "missing-baseline.json", "HEAD"));
   }));
