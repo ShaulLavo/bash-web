@@ -60,7 +60,8 @@ async function packedRef(
       continue;
     }
     const record = /^([0-9a-f]{40}) (refs\/.*)$/u.exec(line);
-    if (!record || !validRef(record[2])) return { kind: "unknown" };
+    if (!record || record[1] === undefined || record[2] === undefined || !validRef(record[2]))
+      return { kind: "unknown" };
     if (record[2] === ref) result = { kind: "resolved", commit: record[1] };
     canPeel = true;
   }

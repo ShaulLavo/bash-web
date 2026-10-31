@@ -11,9 +11,10 @@ function commitHeaders(bytes: Uint8Array): { tree: string; parents: string[] } {
     break;
   }
   const lines = decoder.decode(bytes.subarray(0, end)).split("\n");
-  requireObject(lines[0]?.startsWith("tree "), "Missing Git commit tree");
+  const [first] = lines;
+  requireObject(first !== undefined && first.startsWith("tree "), "Missing Git commit tree");
   return {
-    tree: oid(lines[0].slice(5)),
+    tree: oid(first.slice(5)),
     parents: lines.filter((line) => line.startsWith("parent ")).map((line) => oid(line.slice(7))),
   };
 }
@@ -38,8 +39,7 @@ export async function stagedChanges(
   const pending = [{ oid: commitHeaders(commit.bytes).tree, path: "", depth: 0 }];
   let count = 0;
   let entries = 0;
-  for (let position = 0; position < pending.length; position++) {
-    const item = pending[position];
+  for (const item of pending) {
     requireObject(item.depth < 128, "Git tree depth exceeds 128");
     const tree = await reader.read(item.oid);
     requireObject(tree.type === "tree");
@@ -99,9 +99,8 @@ async function reachable(
 ): Promise<Set<string>> {
   const result = new Set<string>();
   const pending = [tip];
-  for (let position = 0; position < pending.length; position++) {
+  for (const name of pending) {
     await reader.work.checkpoint();
-    const name = pending[position];
     if (result.has(name)) continue;
     result.add(name);
     let next = parents.get(name);

@@ -166,9 +166,8 @@ async function readIndex(request: StatusRequest, cache: Cache): Promise<ParsedIn
 async function trackedTree(run: Run, index: ParsedIndex): Promise<Tree> {
   const root: Tree = { files: new Map(), directories: new Map() };
   const conflicts = new Set<string>();
-  for (let indexNumber = 0; indexNumber < index.entries.length; indexNumber++) {
+  for (const [indexNumber, entry] of index.entries.entries()) {
     if (indexNumber % 64 === 0) await run.request.budget.checkpoint();
-    const entry = index.entries[indexNumber];
     if (entry.stage) conflicts.add(entry.path);
     addTracked(root, entry);
   }

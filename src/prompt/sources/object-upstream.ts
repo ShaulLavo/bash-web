@@ -36,7 +36,10 @@ function trackingRef(specs: readonly string[], merge: string): string {
     requireObject(!value.startsWith("^"), "Negative Git fetch refspec unsupported");
     const spec = value.replace(/^\+/, "");
     const [source, target, extra] = spec.split(":");
-    requireObject(target && extra === undefined, "Invalid Git fetch refspec");
+    requireObject(
+      source !== undefined && target && extra === undefined,
+      "Invalid Git fetch refspec",
+    );
     const position = source.indexOf("*");
     const mapped =
       position < 0 ? (source === merge ? target : undefined) : wildcardRef(source, target, merge);
@@ -50,7 +53,12 @@ function trackingRef(specs: readonly string[], merge: string): string {
 
 function wildcardRef(source: string, target: string, merge: string): string | undefined {
   const [prefix, suffix, extra] = source.split("*");
-  requireObject(suffix !== undefined && extra === undefined && target.split("*").length === 2);
+  requireObject(
+    prefix !== undefined &&
+      suffix !== undefined &&
+      extra === undefined &&
+      target.split("*").length === 2,
+  );
   if (
     !merge.startsWith(prefix) ||
     !merge.endsWith(suffix) ||
@@ -69,7 +77,7 @@ function parseConfig(text: string): Config {
     if (!line || line.startsWith("#") || line.startsWith(";")) continue;
     if (line.startsWith("[")) {
       const parsed = /^\[([\w.-]+)(?:\s+"((?:[^"\\]|\\.)*)")?\]\s*(?:[#;].*)?$/.exec(line);
-      requireObject(parsed, "Unsupported Git config section");
+      requireObject(parsed && parsed[1] !== undefined, "Unsupported Git config section");
       const name = parsed[1].toLowerCase();
       requireObject(
         !name.startsWith("branch.") && !name.startsWith("remote."),
@@ -82,7 +90,7 @@ function parseConfig(text: string): Config {
       continue;
     }
     const parsed = /^([a-z][\w-]*)\s*(?:=\s*(.*))?$/i.exec(line);
-    requireObject(parsed && section, "Invalid Git config entry");
+    requireObject(parsed && parsed[1] !== undefined && section, "Invalid Git config entry");
     const key = parsed[1].toLowerCase();
     const values = section.get(key) ?? [];
     values.push(unquote(parsed[2] ?? "true"));

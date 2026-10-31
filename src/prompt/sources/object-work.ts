@@ -76,8 +76,10 @@ export class ObjectCursor {
   offset = 0;
   constructor(readonly bytes: Uint8Array) {}
   byte(): number {
-    requireObject(this.offset < this.bytes.length);
-    return this.bytes[this.offset++];
+    const byte = this.bytes[this.offset];
+    requireObject(byte !== undefined);
+    this.offset++;
+    return byte;
   }
   variable(): number {
     let value = 0;
