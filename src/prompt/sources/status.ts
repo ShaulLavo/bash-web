@@ -216,10 +216,11 @@ async function walk(
   tree: Tree,
   inherited: readonly IgnoreRule[],
   excluded = false,
+  missing = false,
 ): Promise<void> {
   await run.request.budget.checkpoint();
   if (++run.directories > 2000) throw new Error("directory limit");
-  const entry = await run.request.filesystem.lookup(pathAt(run, path));
+  const entry = missing ? undefined : await run.request.filesystem.lookup(pathAt(run, path));
   run.request.budget.check();
   if (!path && entry?.kind !== "dir") throw new Error("missing worktree");
   const directory = entry?.kind === "dir" ? entry : undefined;
@@ -239,6 +240,7 @@ async function walk(
       child,
       rules,
       excluded || (await ignored(relative, true, rules, run.request.budget)),
+      !directory,
     );
   }
   if (excluded || !directory || (!run.request.config.counts && run.counts.untracked)) return;
