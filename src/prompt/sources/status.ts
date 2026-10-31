@@ -40,19 +40,26 @@ interface Run {
 }
 
 export class GitStatusSource implements StatusSource {
-  private readonly repositories = new Map<string, Cache>();
-  constructor(
-    private readonly logger?: (message: string, error?: unknown) => void,
-    private readonly objects?: ObjectReader,
-  ) {}
+  readonly #repositories = new Map<string, Cache>();
+  #current = "";
+  readonly #logger: ((message: string, error?: unknown) => void) | undefined;
+  readonly #objects: ObjectReader | undefined;
+  constructor(logger?: (message: string, error?: unknown) => void, objects?: ObjectReader) {
+    this.#logger = logger;
+    this.#objects = objects;
+  }
 
   leave(): void {
-    for (const cache of this.repositories.values()) cache.timeouts = 0;
+    for (const cache of this.#repositories.values()) cache.timeouts = 0;
   }
 
   async read(request: StatusRequest): Promise<StatusSnapshot> {
     const key = `${request.repository.root}\0${request.repository.gitDir}`;
-    let cache = this.repositories.get(key);
+    if (this.#current !== key) {
+      this.leave();
+      this.#current = key;
+    }
+    let cache = this.#repositories.get(key);
     if (!cache) {
       cache = {
         stamp: "",
@@ -64,7 +71,7 @@ export class GitStatusSource implements StatusSource {
         timeouts: 0,
         running: undefined,
       };
-      this.repositories.set(key, cache);
+      this.#repositories.set(key, cache);
     }
     const previous = cache.last.get(cacheKey(request));
     if (previous) request.stale({ ...previous, stale: true });
@@ -72,7 +79,7 @@ export class GitStatusSource implements StatusSource {
     const prior = cache.running;
     const run = Promise.resolve(prior)
       .catch(() => {})
-      .then(() => this.run(request, cache));
+      .then(() => this.#run(request, cache));
     cache.running = run;
     try {
       return await run;
@@ -81,7 +88,7 @@ export class GitStatusSource implements StatusSource {
     }
   }
 
-  private async run(request: StatusRequest, cache: Cache): Promise<StatusSnapshot> {
+  async #run(request: StatusRequest, cache: Cache): Promise<StatusSnapshot> {
     try {
       request.budget.check();
       if (request.repository.head.kind === "unknown") throw new Error("unsupported repository");
@@ -97,8 +104,8 @@ export class GitStatusSource implements StatusSource {
       const tree = await trackedTree(run, index);
       const rules = await baseRules(run);
       await walk(run, "", tree, rules);
-      const objects = this.objects
-        ? await this.objects(request.filesystem, request.repository, index, request.budget)
+      const objects = this.#objects
+        ? await this.#objects(request.filesystem, request.repository, index, request.budget)
         : undefined;
       request.budget.check();
       const result: StatusSnapshot = {
@@ -114,7 +121,7 @@ export class GitStatusSource implements StatusSource {
       const kind = error instanceof Error ? error.message : "read failed";
       if (!cache.logged.has(kind)) {
         cache.logged.add(kind);
-        this.logger?.(`prompt status: ${kind}`);
+        this.#logger?.(`prompt status: ${kind}`);
       }
       return { value: { worktree: { kind: "unknown" } }, stale: false };
     }
@@ -208,14 +215,16 @@ async function walk(
   path: string,
   tree: Tree,
   inherited: readonly IgnoreRule[],
+  excluded = false,
+  missing = false,
 ): Promise<void> {
   await run.request.budget.checkpoint();
   if (++run.directories > 2000) throw new Error("directory limit");
-  const entry = await run.request.filesystem.lookup(pathAt(run, path));
+  const entry = missing ? undefined : await run.request.filesystem.lookup(pathAt(run, path));
   run.request.budget.check();
   if (!path && entry?.kind !== "dir") throw new Error("missing worktree");
   const directory = entry?.kind === "dir" ? entry : undefined;
-  const own = directory?.children.get(".gitignore");
+  const own = excluded ? undefined : directory?.children.get(".gitignore");
   const rules =
     own?.kind === "file"
       ? inherited.concat(
@@ -224,9 +233,17 @@ async function walk(
       : inherited;
   await trackedFiles(run, path, tree, directory);
   for (const [name, child] of tree.directories) {
-    await walk(run, path ? `${path}/${name}` : name, child, rules);
+    const relative = path ? `${path}/${name}` : name;
+    await walk(
+      run,
+      relative,
+      child,
+      rules,
+      excluded || (await ignored(relative, true, rules, run.request.budget)),
+      !directory,
+    );
   }
-  if (!directory || (!run.request.config.counts && run.counts.untracked)) return;
+  if (excluded || !directory || (!run.request.config.counts && run.counts.untracked)) return;
   const names = await untrackedNames(run, path, tree, directory, rules);
   for (const name of names) {
     const metadata = directory.children.get(name);
@@ -243,22 +260,36 @@ async function trackedFiles(
   tree: Tree,
   directory: Directory | undefined,
 ): Promise<void> {
-  const pending: Promise<void>[] = [];
-  for (const [name, entry] of tree.files) {
-    await run.request.budget.checkpoint();
-    pending.push(
-      checkTracked(run, path ? `${path}/${name}` : name, entry, directory?.children.get(name)),
-    );
-    if (pending.length < 8) continue;
+  const pending: Promise<{ error: unknown } | undefined>[] = [];
+  try {
+    for (const [name, entry] of tree.files) {
+      await run.request.budget.checkpoint();
+      pending.push(
+        checkTracked(
+          run,
+          path ? `${path}/${name}` : name,
+          entry,
+          directory?.children.get(name),
+        ).then(
+          () => undefined,
+          (error: unknown) => ({ error }),
+        ),
+      );
+      if (pending.length < 8) continue;
+      await finishHashes(pending);
+      pending.length = 0;
+    }
+  } finally {
     await finishHashes(pending);
-    pending.length = 0;
   }
-  await finishHashes(pending);
 }
-async function finishHashes(pending: readonly Promise<void>[]): Promise<void> {
-  const results = await Promise.allSettled(pending);
-  for (const result of results) if (result.status === "rejected") throw result.reason;
+async function finishHashes(
+  pending: readonly Promise<{ error: unknown } | undefined>[],
+): Promise<void> {
+  const results = await Promise.all(pending);
+  for (const result of results) if (result) throw result.error;
 }
+
 async function checkTracked(
   run: Run,
   path: string,
@@ -272,7 +303,7 @@ async function checkTracked(
     (entry.mode & 0o170000) === 0o160000
   )
     return;
-  if (!metadata) {
+  if (!metadata || metadata.kind === "dir" || metadata.kind === "socket") {
     add(run, "deleted");
     return;
   }
@@ -324,7 +355,7 @@ async function untrackedNames(
   directory: Directory,
   rules: readonly IgnoreRule[],
 ): Promise<readonly string[]> {
-  const key = `${stamp(directory)}:${rules.map((rule) => `${rule.base}:${rule.negate}:${rule.directory}:${rule.pattern.source}`).join("\0")}`;
+  const key = `${stamp(directory)}:${JSON.stringify(rules)}`;
   const cached = run.cache.untracked.get(path);
   if (cached?.stamp === key) return cached.names;
   const names: string[] = [];

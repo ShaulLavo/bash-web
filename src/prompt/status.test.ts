@@ -641,3 +641,28 @@ test("status markers render once in Starship order, including the optional objec
   assert.equal(uncertain?.[0].text, "[…] ");
   assert.equal(uncertain?.[0].style?.dim, true);
 });
+
+test("a symlink replacing a tracked directory never exposes files through that symlink", async (t) => {
+  const parent = await fixture(t, "directory-link");
+  const root = await makeCommittedRepository(parent, "repo");
+  await put(root, "nested/deep/file.txt");
+  await git(root, "add", ".");
+  await git(root, "commit", "-qm", "nested tracked file");
+  await put(parent, "outside/deep/file.txt");
+  await rm(join(root, "nested"), { recursive: true });
+  await symlink(join(parent, "outside"), join(root, "nested"));
+  const fs = realFilesystem(root, true);
+  const lookups: string[] = [];
+  const actual = known(
+    await scan(root, undefined, {
+      ...fs,
+      async lookup(path) {
+        lookups.push(path);
+        return fs.lookup(path);
+      },
+    }),
+  );
+  assert.deepEqual(actual, await oracle(root));
+  assert.equal(actual.deleted, 1);
+  assert.ok(!lookups.some((path) => path.startsWith(`${root}/nested/`)));
+});
