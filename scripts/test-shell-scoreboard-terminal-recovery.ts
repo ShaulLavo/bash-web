@@ -444,7 +444,13 @@ function observationFixture() {
 }
 test("current shared-job observation is fresh, source-bound and sealed only after observing", () => {
   const valid = observationFixture();
-  assert.doesNotThrow(() => assertTerminalFreshObservation(valid.raw, valid.jobs));
+  assert.doesNotThrow(() =>
+    assertTerminalFreshObservation(valid.raw, {
+      observer: valid.jobs[0],
+      sealer: valid.jobs[1],
+      observerAttempt: 2,
+    }),
+  );
   for (const mutate of [
     (v) => {
       v.raw.capturedAt = "2026-10-29T09:00:00Z";
@@ -464,7 +470,13 @@ test("current shared-job observation is fresh, source-bound and sealed only afte
   ] satisfies ((value: ReturnType<typeof observationFixture>) => void)[]) {
     const value = observationFixture();
     mutate(value);
-    assert.throws(() => assertTerminalFreshObservation(value.raw, value.jobs));
+    assert.throws(() =>
+      assertTerminalFreshObservation(value.raw, {
+        observer: value.jobs[0],
+        sealer: value.jobs[1],
+        observerAttempt: 2,
+      }),
+    );
   }
 });
 type PublishRaw = Pick<AcceptedRawScore, "run" | "sourceSha" | "selected"> & {
@@ -528,6 +540,7 @@ function publishCandidate(host: HostFixture, candidate: Candidate, raw: PublishR
         "2026-10-29T10:00:02Z",
         "2026-10-29T10:01:00Z",
       ),
+      step("Run actions/upload-artifact@v4", 3, "2026-10-29T10:01:00Z", "2026-10-29T10:01:01Z"),
     ],
   };
   const sealer = {
@@ -547,8 +560,40 @@ function publishCandidate(host: HostFixture, candidate: Candidate, raw: PublishR
     ],
     { input: JSON.stringify(raw), maxBuffer: 16 * 1024 * 1024 },
   );
+  const observationInput = {
+    sourceSha: candidate.sourceSha,
+    selected: candidate.selected,
+    run: { runId, attempt },
+    capturedAt: typeof raw.capturedAt === "string" ? raw.capturedAt : "2026-10-29T10:00:01Z",
+    inputsSha256: digest(scoringInputs(candidate.root, candidate.sourceSha)),
+    floor: raw.floor,
+  };
+  const observationBytes = execFileSync(
+    "python3",
+    [
+      "-c",
+      "import io,json,sys,zipfile\nb=io.BytesIO();v=json.load(sys.stdin)\nwith zipfile.ZipFile(b,'w',zipfile.ZIP_DEFLATED) as z:\n z.writestr('scoreboard-input.json',json.dumps(v['input'])); z.writestr('own-shell-current.json',json.dumps(v['score'])); z.writestr('own-shell-diagnostics/host.jsonl','diagnostics')\nsys.stdout.buffer.write(b.getvalue())",
+    ],
+    {
+      input: JSON.stringify({ input: observationInput, score: raw.score }),
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
+  const observationArtifact: HostArtifact = {
+    id: 200000 + attempt,
+    name: `own-shell-current-${candidate.sourceSha}-${runId}-${attempt}`,
+    digest: `sha256:${bytesDigest(observationBytes)}`,
+    expired: false,
+    created_at: "2026-10-29T10:01:00.500Z",
+    expires_at: "2027-01-01T00:00:00Z",
+    workflow_run: {
+      id: runId,
+      head_sha: headSha,
+      head_repository_id: authority.repositoryId,
+    },
+  };
   const artifact: HostArtifact = {
-    id: 99993 + attempt,
+    id: 100000 + attempt,
     name: `own-shell-raw-${candidate.sourceSha}-${runId}-${attempt}`,
     digest: `sha256:${bytesDigest(bytes)}`,
     expired: false,
@@ -574,13 +619,20 @@ function publishCandidate(host: HostFixture, candidate: Candidate, raw: PublishR
   const artifacts = previous
     .filter((item) => {
       assertRecord(item);
-      return item.id !== artifact.id;
+      return item.id !== artifact.id && item.id !== observationArtifact.id;
     })
-    .concat([artifact]);
+    .concat([observationArtifact, artifact]);
   set(`/actions/runs/${runId}/artifacts?per_page=100`, {
     total_count: artifacts.length,
     artifacts,
   });
+  set(`/actions/artifacts/${observationArtifact.id}`, observationArtifact);
+  set(`/actions/artifacts/${observationArtifact.id}/zip`, observationBytes, "bytes");
+  set(
+    `/actions/jobs/${observer.id}/logs`,
+    `2026-10-29T10:01:00.600Z SHA256 digest of uploaded artifact zip is ${bytesDigest(observationBytes)}\n2026-10-29T10:01:00.700Z Artifact ${observationArtifact.name} has been successfully uploaded! Final size is ${observationBytes.length} bytes. Artifact ID is ${observationArtifact.id}\n`,
+    "text",
+  );
   set(`/actions/artifacts/${artifact.id}`, artifact);
   set(`/actions/artifacts/${artifact.id}/zip`, bytes, "bytes");
   set(
@@ -731,7 +783,11 @@ async function runMainLifecycle(candidate: MainCandidate): Promise<void> {
   earlier.score.counts = summarize(earlier.score);
   earlier.resultSha256 = digest(earlier.score);
   publishCandidate(host, candidate, earlier);
-  const later = { ...structuredClone(raw), run: { ...run, attempt: 2 } };
+  const later = {
+    ...structuredClone(raw),
+    run: { ...run, attempt: 2 },
+    observationRun: { ...run, attempt: 2 },
+  };
   publishCandidate(host, candidate, later);
   process.env.GITHUB_RUN_ATTEMPT = "2";
   writeFileSync(rawPath, JSON.stringify(later));
@@ -745,6 +801,126 @@ async function runMainLifecycle(candidate: MainCandidate): Promise<void> {
   assert.deepEqual(oracleAt(candidate.root, bootstrap.sourceSha).identity, score.identity);
   assert.equal(raw.inputsSha256, digest(scoringInputs(candidate.root, candidate.sourceSha)));
 }
+function removeArtifact(host: HostFixture, artifact: Record<string, unknown>): void {
+  const id = artifact.id;
+  assert.equal(typeof id, "number");
+  host.values.delete(`json:/actions/artifacts/${id}`);
+  host.values.delete(`bytes:/actions/artifacts/${id}/zip`);
+}
+function publishFailedJobsRerun(
+  host: HostFixture,
+  candidate: Candidate,
+  raw: AcceptedRawScore,
+  rawPath: string,
+): AcceptedRawScore {
+  process.env.GITHUB_RUN_ATTEMPT = "2";
+  sealRaw({
+    root: candidate.root,
+    input: resolve(candidate.root, "prepared.json"),
+    scorePath: resolve(candidate.root, "score.json"),
+    output: resolve(candidate.root, "raw"),
+  });
+  const later: unknown = JSON.parse(readFileSync(rawPath, "utf8"));
+  assertAcceptedRaw(later);
+  assert.deepEqual(later.observationRun, raw.run);
+  publishCandidate(host, candidate, later);
+  const jobs = hostJson(host, `/actions/runs/${later.run.runId}/attempts/2/jobs?per_page=100`);
+  assertJobListing(jobs);
+  jobs.jobs = jobs.jobs.filter((job) => job.name !== "own-shell-observation");
+  jobs.total_count = jobs.jobs.length;
+  const listing = hostJson(host, `/actions/runs/${later.run.runId}/artifacts?per_page=100`);
+  const artifacts = listing.artifacts;
+  if (!Array.isArray(artifacts)) throw new Error("missing artifact listing");
+  const current = artifacts.find((item) => {
+    assertRecord(item);
+    return item.name === `own-shell-current-${candidate.sourceSha}-${later.run.runId}-2`;
+  });
+  assertRecord(current);
+  removeArtifact(host, current);
+  listing.artifacts = artifacts.filter((item) => item !== current);
+  listing.total_count = artifacts.length - 1;
+  writeFileSync(rawPath, JSON.stringify(later));
+  return later;
+}
+interface AcceptedRerunFixture {
+  host: HostFixture;
+  rawPath: string;
+  output: string;
+  later: AcceptedRawScore;
+}
+async function acceptedRerunFixture(candidate: Candidate): Promise<AcceptedRerunFixture> {
+  const host = hostFixture();
+  const { rawPath, output, raw } = await captureFixture(candidate, host);
+  const later = publishFailedJobsRerun(host, candidate, raw, rawPath);
+  process.env.GITHUB_RUN_ATTEMPT = "2";
+  return { host, rawPath, output, later };
+}
+async function foldAcceptedRerun(
+  candidate: Candidate,
+  fixture: AcceptedRerunFixture,
+): Promise<Awaited<ReturnType<typeof foldQualification>>> {
+  const result = await foldQualification({
+    root: candidate.root,
+    client: fixture.host.client,
+    rawPath: fixture.rawPath,
+    output: fixture.output,
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.binding, candidate.selected);
+  assert.equal(fixture.later.run.attempt, 2);
+  return result;
+}
+test("accepted-floor recovery binds an earlier observation artifact to its own attempt on a failed-jobs rerun", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-29T10:00:01Z") });
+  await withCandidate(async (candidate) => {
+    await withQualificationEnvironment(candidate, async () => {
+      await foldAcceptedRerun(candidate, await acceptedRerunFixture(candidate));
+    });
+  });
+});
+async function rejectForeignObservation(
+  candidate: Candidate,
+  mutate: (artifact: Record<string, unknown>) => void,
+): Promise<void> {
+  await withQualificationEnvironment(candidate, async () => {
+    const fixture = await acceptedRerunFixture(candidate);
+    const listing = hostJson(
+      fixture.host,
+      `/actions/runs/${fixture.later.run.runId}/artifacts?per_page=100`,
+    );
+    assert.ok(Array.isArray(listing.artifacts));
+    const observation = listing.artifacts.find((item) => {
+      assertRecord(item);
+      return item.name === `own-shell-current-${candidate.sourceSha}-${fixture.later.run.runId}-1`;
+    });
+    assertRecord(observation);
+    mutate(observation);
+    await assert.rejects(
+      foldAcceptedRerun(candidate, fixture),
+      /wrong artifact run|wrong artifact source|uploader digest differs/,
+    );
+  });
+}
+test("accepted-floor reruns reject observation artifacts from another run or commit, or with a changed digest", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-29T10:00:01Z") });
+  for (const mutate of [
+    (artifact: Record<string, unknown>) => {
+      const workflowRun = artifact.workflow_run;
+      assertRecord(workflowRun);
+      workflowRun.id = 12;
+    },
+    (artifact: Record<string, unknown>) => {
+      const workflowRun = artifact.workflow_run;
+      assertRecord(workflowRun);
+      workflowRun.head_sha = sha(99);
+    },
+    (artifact: Record<string, unknown>) => {
+      artifact.digest = `sha256:${"0".repeat(64)}`;
+    },
+  ]) {
+    await withCandidate((candidate) => rejectForeignObservation(candidate, mutate));
+  }
+});
 test("real preparation, raw sealing and authenticated folding publish only the fresh source floor", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-29T10:00:01Z") });
   await withCandidate(assertMainLifecycle);
@@ -831,6 +1007,7 @@ async function assertPullRequestLifecycle(candidate: PullCandidate): Promise<voi
     false,
     "PR cannot publish main authority",
   );
+  await foldAcceptedRerun(candidate, await acceptedRerunFixture(candidate));
 }
 test("tested PR merge qualifies against the fixed cut but never publishes a main observation", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-29T10:00:01Z") });

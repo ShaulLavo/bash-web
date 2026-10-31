@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { parse } from "yaml";
 import {
+  admitObservation,
   admitQualificationRaw,
   assertAcceptedRecordCheckout,
   assertJobBinding,
@@ -770,6 +771,40 @@ export function assertFreshObservation(
   );
   assertObservationSequence(raw, bound, observed, sealed);
 }
+async function terminalObservationJobs(
+  raw: AcceptedRawScore,
+  context: PreparationContext,
+  sealerJobs: HostJob[],
+): Promise<{
+  observer: HostJob;
+  sealer: HostJob;
+  observerAttempt: number;
+}> {
+  const observationRun = raw.observationRun;
+  assertRunBinding(observationRun);
+  assert.equal(observationRun.runId, raw.run.runId, "wrong observation run");
+  assert.ok(observationRun.attempt <= raw.run.attempt, "observation comes from a later attempt");
+  const observation = await admitObservation({
+    root: context.root,
+    client: context.client,
+    oracle: context.oracle,
+    ...observationRun,
+    sourceSha: raw.sourceSha,
+    selected: raw.selected,
+  });
+  assert.equal(digest(observation.score), raw.resultSha256, "observation score mismatch");
+  assert.equal(observation.input.capturedAt, raw.capturedAt, "observation capture mismatch");
+  assert.deepEqual(observation.input.floor, raw.floor, "observation floor mismatch");
+  return {
+    observer: observation.job,
+    sealer: unique(
+      sealerJobs,
+      (item) => item.name === "own-shell-compatibility",
+      "rerun raw sealer",
+    ),
+    observerAttempt: observation.run.run_attempt,
+  };
+}
 async function freshObservation(
   prepared: PreparedCandidate,
   raw: AcceptedRawScore,
@@ -800,8 +835,10 @@ async function freshObservation(
     (item) => item.name === "own-shell-compatibility",
     "fresh Waffle producer",
   );
-  if (prepared.floor.recovery === "terminal-2026-10-29") assertTerminalFreshObservation(raw, jobs);
-  else assertFreshObservation(raw, producer);
+  if (prepared.floor.recovery === "terminal-2026-10-29") {
+    const provenance = await terminalObservationJobs(raw, context, jobs);
+    assertTerminalFreshObservation(raw, provenance);
+  } else assertFreshObservation(raw, producer);
   assert.equal(context.oracle.environment.runner, "waffle-node", "real Waffle instrument required");
   const observation = Object.freeze({});
   observations.set(observation, structuredClone(raw));

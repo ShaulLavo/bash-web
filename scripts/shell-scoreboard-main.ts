@@ -694,6 +694,166 @@ export function githubClient(token: string | undefined): GithubClient {
   }
   return { request };
 }
+interface ObservationArchive {
+  input: Record<string, unknown>;
+  score: Score;
+  evidence: UploaderEvidence;
+}
+async function readObservationArchive({
+  root,
+  client,
+  run,
+  job,
+  artifact,
+  sourceSha,
+  selected,
+}: {
+  root: string;
+  client: GithubClient;
+  run: HostRun;
+  job: HostJob;
+  artifact: HostArtifact;
+  sourceSha: string;
+  selected?: Binding;
+}): Promise<ObservationArchive> {
+  const logs = await client.request(`/actions/jobs/${job.id}/logs`, "text");
+  const workflow = git(root, [`show`, `${sourceSha}:${authority.workflowPath}`]);
+  const evidence = assertUploader({
+    run,
+    job,
+    artifact,
+    kind: "observation",
+    workflow,
+    logs,
+    testedSource: sourceSha,
+  });
+  const bytes = await client.request(`/actions/artifacts/${artifact.id}/zip`, "bytes");
+  const input = artifactJson(bytes, artifact, "scoreboard-input.json", false);
+  const score = artifactJson(bytes, artifact, "own-shell-current.json", false);
+  assertRecord(input);
+  assert.equal(input.sourceSha, sourceSha, "observation source mismatch");
+  assert.deepEqual(
+    input.run,
+    { runId: run.id, attempt: run.run_attempt },
+    "observation attempt mismatch",
+  );
+  assert.equal(
+    input.inputsSha256,
+    digest(scoringInputs(root, sourceSha)),
+    "observation inputs mismatch",
+  );
+  assertRecord(input.selected);
+  if (selected) assert.deepEqual(input.selected, selected, "observation source binding mismatch");
+  if (!selected) {
+    const beforeSha = fullSha(input.selected.beforeSha);
+    assert.deepEqual(
+      input.selected,
+      { kind: "main-push", sourceSha, beforeSha },
+      "observation source binding mismatch",
+    );
+    assert.equal(
+      git(root, ["merge-base", beforeSha, sourceSha]),
+      beforeSha,
+      "invalid main predecessor",
+    );
+  }
+  const capturedAt = input.capturedAt;
+  if (typeof capturedAt !== "string") throw new Error("missing observation capture time");
+  const bind = successfulStep(job, contracts.observation.bind);
+  const observed = successfulStep(job, contracts.observation.observe);
+  const uploaded = successfulStep(job, contracts.observation.upload);
+  assert.ok(
+    bind.number < observed.number && observed.number < uploaded.number,
+    "observation order",
+  );
+  assert.ok(
+    Date.parse(capturedAt) >= Date.parse(bind.started_at) &&
+      Date.parse(capturedAt) < Date.parse(bind.completed_at) + 1000,
+    "observation capture outside bind step",
+  );
+  assert.ok(
+    Date.parse(bind.completed_at) <= Date.parse(observed.started_at),
+    "observation must start after bind",
+  );
+  assertScore(score);
+  return { input, score, evidence };
+}
+export interface AdmittedObservation {
+  run: HostRun;
+  job: HostJob;
+  input: Record<string, unknown>;
+  score: Score;
+  evidence: UploaderEvidence;
+}
+export async function admitObservation({
+  root,
+  client,
+  oracle,
+  runId,
+  attempt,
+  sourceSha,
+  selected,
+}: {
+  root: string;
+  client: GithubClient;
+  oracle: Oracle;
+  runId: number;
+  attempt: number;
+  sourceSha: string;
+  selected: Binding;
+}): Promise<AdmittedObservation> {
+  const run = await requestRun(
+    client,
+    `/actions/runs/${positive(runId)}/attempts/${positive(attempt)}`,
+  );
+  assert.equal(run.id, runId, "host observation run ID mismatch");
+  assert.equal(run.repository?.id, authority.repositoryId, "wrong observation repository");
+  if (selected.kind !== "pull-request")
+    assert.equal(
+      run.head_repository?.id,
+      authority.repositoryId,
+      "wrong observation head repository",
+    );
+  assert.equal(run.workflow_id, authority.workflowId, "wrong observation workflow ID");
+  assert.equal(run.path, authority.workflowPath, "wrong observation workflow path");
+  assert.equal(run.event, qualificationEvent(selected), "wrong observation event");
+  assert.equal(
+    run.head_sha,
+    selected.kind === "pull-request" ? selected.headSha : sourceSha,
+    "wrong observation source",
+  );
+  assert.equal(run.run_attempt, attempt, "wrong observation attempt");
+  const jobs = await requestJobs(
+    client,
+    `/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,
+  );
+  assert.ok(jobs.total_count <= 100, "too many observation jobs");
+  const observationJobs = jobs.jobs.filter((item) => item.name === contracts.observation.job);
+  assert.equal(observationJobs.length, 1, "missing/ambiguous observation job");
+  const job = observationJobs[0];
+  assertJobIdentity(job, run);
+  assert.equal(job.status, "completed", "unfinished observation producer");
+  assert.equal(job.conclusion, "success", "failed observation producer");
+  const listing = await requestArtifacts(client, `/actions/runs/${runId}/artifacts?per_page=100`);
+  assert.ok(listing.total_count <= 100, "too many observation artifacts");
+  const matches = listing.artifacts.filter(
+    (item) => item.name === `${contracts.observation.prefix}-${sourceSha}-${runId}-${attempt}`,
+  );
+  assert.equal(matches.length, 1, "missing exact observation artifact");
+  const artifact = matches[0];
+  assert.equal(artifact.expired, false, "expired observation artifact");
+  const archive = await readObservationArchive({
+    root,
+    client,
+    run,
+    job,
+    artifact,
+    sourceSha,
+    selected,
+  });
+  validateOwnScore(oracle, archive.score);
+  return { run, job, ...archive };
+}
 export function mainEvidence({
   root,
   oracle,
@@ -850,68 +1010,23 @@ export function mainEvidence({
     if (!matches.length) return;
     const artifact = matches[0];
     if (artifact.expired) throw new FloorPrerequisite("expired-source-artifact", run.head_sha);
-    const workflow = git(root, ["show", `${run.head_sha}:${authority.workflowPath}`]);
     const job = observations[0];
-    const evidence = assertUploader({
+    const archive = await readObservationArchive({
+      root,
+      client,
       run,
       job,
       artifact,
-      kind: "observation",
-      workflow,
-      logs: await client.request(`/actions/jobs/${job.id}/logs`, "text"),
+      sourceSha: run.head_sha,
     });
-    const bind = successfulStep(job, contracts.observation.bind);
-    const observed = successfulStep(job, contracts.observation.observe);
-    const uploaded = successfulStep(job, contracts.observation.upload);
-    assert.ok(bind.number < observed.number, "bind must precede observation");
-    assert.ok(observed.number < uploaded.number, "observation must precede upload");
-    assert.ok(
-      Date.parse(bind.completed_at) <= Date.parse(observed.started_at),
-      "observation must start after bind",
-    );
-    const bytes = await client.request(`/actions/artifacts/${artifact.id}/zip`, "bytes");
-    const input = artifactJson(bytes, artifact, "scoreboard-input.json", false);
-    const score = artifactJson(bytes, artifact, "own-shell-current.json", false);
-    assertRecord(input);
-    assert.equal(input.sourceSha, run.head_sha, "observation source mismatch");
-    assert.deepEqual(
-      input.run,
-      { runId: run.id, attempt: run.run_attempt },
-      "observation attempt mismatch",
-    );
-    assert.equal(
-      input.inputsSha256,
-      digest(scoringInputs(root, run.head_sha)),
-      "observation inputs mismatch",
-    );
-    assertRecord(input.selected);
-    const beforeSha = fullSha(input.selected.beforeSha);
-    assert.deepEqual(
-      input.selected,
-      { kind: "main-push", sourceSha: run.head_sha, beforeSha },
-      "observation source binding mismatch",
-    );
-    assert.equal(
-      git(root, ["merge-base", beforeSha, run.head_sha]),
-      beforeSha,
-      "invalid main predecessor",
-    );
-    assert.ok(typeof input.capturedAt === "string", "missing observation capture time");
-    const capturedAt = Date.parse(input.capturedAt);
-    assert.ok(
-      capturedAt >= Date.parse(bind.started_at) &&
-        capturedAt < Date.parse(bind.completed_at) + 1000,
-      "observation capture outside bind step",
-    );
-    assertScore(score);
-    validateOwnScore(oracle, score);
-    result.scores.push(score);
+    validateOwnScore(oracle, archive.score);
+    result.scores.push(archive.score);
     result.evidence.push({
       kind: "observation",
       sourceSha: run.head_sha,
-      ...evidence,
-      inputSha256: digest(input),
-      payloadSha256: digest(score),
+      ...archive.evidence,
+      inputSha256: digest(archive.input),
+      payloadSha256: digest(archive.score),
       sealer: { jobId: sealer.id, conclusion: "skipped" },
       gate: { jobId: scoreboards[0].id, conclusion: "failure" },
     });
