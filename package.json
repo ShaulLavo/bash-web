@@ -117,7 +117,8 @@
     "prepare:python:browser": "node scripts/test-own-shell-python.ts --prepare-browser",
     "test:python:browser": "node scripts/test-own-shell-python.ts --browser",
     "test:prompt:size": "node --experimental-strip-types scripts/test-prompt-size.ts",
-    "test:prompt": "node scripts/test-prompt.ts"
+    "test:prompt": "node scripts/test-prompt.ts",
+    "test:prompt:browser": "bun scripts/test-prompt-status-browser.ts"
   },
   "dependencies": {
     "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-python-0.0.15.tgz",
