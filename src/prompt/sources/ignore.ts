@@ -1,3 +1,4 @@
+const encoder = new TextEncoder();
 import type { WorkBudget } from "../live";
 export interface IgnoreRule {
   readonly base: string;
@@ -84,10 +85,13 @@ const classes: Readonly<Record<string, string>> = {
 
 type Token = string | RegExp | 0 | 1;
 function compile(source: string, anchored: boolean): IgnoreRule["pattern"] {
-  const parts = source.split("/").map((part) => (part === "**" ? part : tokens(part)));
+  const parts = byteString(source)
+    .split("/")
+    .map((part) => (part === "**" ? part : tokens(part)));
   return {
     source: anchored ? `/${source}` : source,
     test(path, budget) {
+      path = byteString(path);
       return matchParts(
         parts,
         anchored ? path.split("/") : [path.slice(path.lastIndexOf("/") + 1)],
@@ -213,4 +217,10 @@ function bracketPattern(pattern: string, start: number): { text: string; end: nu
     content += pattern[index] === "[" ? "\\[" : pattern[index];
   }
   return { text: "\\[", end: start };
+}
+
+function byteString(text: string): string {
+  let result = "";
+  for (const byte of encoder.encode(text)) result += String.fromCharCode(byte);
+  return result;
 }

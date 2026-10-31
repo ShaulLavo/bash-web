@@ -23,3 +23,5 @@ Line-ending conversion and clean/smudge filters are not applied. A changed file 
 ## Verification
 
 `npm run test:prompt` creates real Git repositories and compares supported working-tree counts with `git status --porcelain=v2 --ignore-submodules=all`. It covers ignore precedence, collapsed untracked directories, all index versions, symlinks, conflicts, submodules, skip-worktree entries and linked worktrees, plus cache reuse, cancellation, deadlines and unknown results.
+
+`npm run test:prompt:browser -- /absolute/path/result.json` runs the Chromium timing and typing proof on the PC. It needs Bun, installed Playwright Chromium, `npm run build:worker`, and `npm run build:shell:browser`. It creates repositories with native Git, imports their actual index and files into a real Waffle memory filesystem, measures 50 warm turns, and traces main-thread tasks. Both bash and zsh editors must preserve typed text and the caret when late status updates the prompt. The browser, runtime workers, fixture repositories and temporary profiles are removed on success or failure.

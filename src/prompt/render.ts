@@ -73,6 +73,9 @@ export async function renderPrompt(
     if (next !== previous) updates.update(next);
     previous = next;
   };
+  const failed = (error: unknown) => {
+    if (!live.signal.aborted) options.logger?.("prompt source failed", error);
+  };
   const work = populate(
     state,
     options,
@@ -83,9 +86,8 @@ export async function renderPrompt(
     onConfig,
     statusLoader,
     refresh,
-  ).catch((error: unknown) => {
-    if (!live.signal.aborted) options.logger?.("prompt source failed", error);
-  });
+    failed,
+  ).catch(failed);
   await waitForPaint(work, baseConfig.paintMs, live.signal);
   const text = renderState(context, versions, state);
   previous = text;
@@ -110,6 +112,7 @@ async function populate(
   onConfig: ((config: ResolvedPromptConfig) => void) | undefined,
   statusLoader: StatusLoader | undefined,
   refresh: () => void,
+  failed: (error: unknown) => void,
 ): Promise<void> {
   if (options.file && loader) {
     const config = await readConfig(options, context, filesystem, budget, loader);
@@ -133,9 +136,20 @@ async function populate(
       item === "git_status",
   );
   await Promise.all([
-    needsDirectory ? populateDirectory(state, filesystem, context, budget, enabled) : undefined,
+    needsDirectory
+      ? populateDirectory(state, filesystem, context, budget, enabled).then(refresh)
+      : undefined,
     needsRepository
-      ? populateRepository(state, filesystem, context, budget, enabled, statusLoader, refresh)
+      ? populateRepository(
+          state,
+          filesystem,
+          context,
+          budget,
+          enabled,
+          statusLoader,
+          refresh,
+          failed,
+        )
       : undefined,
   ]);
   if (!needsRepository) statusLoader?.leave();
@@ -149,6 +163,7 @@ async function populateRepository(
   enabled: readonly unknown[],
   loader: StatusLoader | undefined,
   refresh: () => void,
+  failed: (error: unknown) => void,
 ): Promise<void> {
   const repository = await readRepository(filesystem, context);
   if (!budget.active) return;
@@ -159,6 +174,21 @@ async function populateRepository(
     loader.leave();
     return;
   }
+  void populateStatus(state, filesystem, context, budget, loader, repository, refresh).then(
+    refresh,
+    failed,
+  );
+}
+
+async function populateStatus(
+  state: RenderState,
+  filesystem: TurnFilesystem,
+  context: PromptContext,
+  budget: WorkBudget,
+  loader: StatusLoader,
+  repository: RepositorySnapshot,
+  refresh: () => void,
+): Promise<void> {
   const loaded = await loader.load();
   state.statusRenderer = loaded.render;
   state.gitStatus = await loaded.source.read({
