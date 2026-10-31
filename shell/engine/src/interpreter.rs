@@ -377,6 +377,9 @@ impl Context {
     pub(crate) fn fs(&self) -> &dyn FileSystem {
         self.core.fs.as_ref()
     }
+    pub(crate) fn sleep_until(&self, deadline: std::time::Instant) -> crate::executor::Sleep {
+        self.core.executor.sleep_until(deadline)
+    }
     pub(crate) fn limits(&self) -> &Limits {
         &self.core.limits
     }
@@ -4601,6 +4604,24 @@ mod scope_tests {
         }
     }
 
+    fn pending_read<'a>(
+        option: &str,
+        state: &'a SharedState,
+        fds: &'a FdTable,
+        context: &'a Context,
+        work: &'a mut expand::Work,
+    ) -> std::pin::Pin<Box<impl std::future::Future<Output = Result<Outcome, i32>> + 'a>> {
+        Box::pin(builtins::run(
+            commands::Builtin::Read,
+            "read",
+            vec![option.into(), "value".into()].into(),
+            state,
+            fds,
+            context,
+            work,
+        ))
+    }
+
     fn check_pending_read_cancellation(option: &str) {
         let (state, _fds, context) = replay_context();
         let limit = context.limits().execution_bytes;
@@ -4608,15 +4629,7 @@ mod scope_tests {
         let mut fds = FdTable::default();
         fds.insert(0, reader);
         let mut work = expand::Work::new(1_000_000, 1_000_000, 16);
-        let mut future = Box::pin(builtins::run(
-            commands::Builtin::Read,
-            "read",
-            vec![option.into(), "value".into()].into(),
-            &state,
-            &fds,
-            &context,
-            &mut work,
-        ));
+        let mut future = pending_read(option, &state, &fds, &context, &mut work);
         for _ in 0..1000 {
             assert!(future.as_mut().now_or_never().is_none());
         }
@@ -4632,6 +4645,66 @@ mod scope_tests {
         drop(state.borrow().admit_temporary(limit).unwrap());
         assert!(!state.borrow().bindings().contains_key("value"));
         drop(writer);
+    }
+
+    #[test]
+    fn timed_read_refunds_buffer_and_unregisters_on_timeout_cancel_and_drop() {
+        for ending in ["timeout", "cancel", "drop", "complete"] {
+            timed_read_cleanup(ending);
+        }
+    }
+
+    fn timed_read_cleanup(ending: &str) {
+        let (state, _fds, context) = replay_context();
+        let executor = &context.core.executor;
+        let before = context.core.execution_storage.observation().0;
+        let (reader, writer) = io::pipe();
+        let mut fds = FdTable::default();
+        fds.insert(0, reader.clone());
+        let mut work = expand::Work::new(1_000_000, 1_000_000, 16);
+        let mut future = pending_read("-t60", &state, &fds, &context, &mut work);
+        for _ in 0..1000 {
+            assert!(future.as_mut().now_or_never().is_none());
+            if executor.next_deadline().is_some() {
+                break;
+            }
+        }
+        let deadline = executor.next_deadline().expect("read armed a timer");
+        assert!(context.core.execution_storage.observation().0 > before);
+        match ending {
+            "timeout" => {
+                assert_eq!(executor.fire_timers(deadline), 1);
+            }
+            "cancel" => {
+                executor.fire_timers(deadline);
+                context.cancel.cancel();
+            }
+            "complete" => {
+                assert_eq!(writer.write(b"ok\n").now_or_never(), Some(Ok(3)));
+            }
+            "drop" => {}
+            _ => unreachable!(),
+        }
+        if ending != "drop" {
+            let result =
+                finish_replay(async { future.as_mut().await.unwrap_or_else(Outcome::status) });
+            assert_eq!(
+                result.code,
+                match ending {
+                    "timeout" => 142,
+                    "cancel" => 130,
+                    _ => 0,
+                }
+            );
+        }
+        drop(future);
+        assert!(executor.next_deadline().is_none());
+        assert_eq!(context.core.execution_storage.observation().0, before);
+        assert_eq!(writer.write(b"tail").now_or_never(), Some(Ok(4)));
+        let mut bytes = [0; 4];
+        assert_eq!(reader.read(&mut bytes).now_or_never(), Some(Ok(4)));
+        assert_eq!(&bytes, b"tail");
+        assert!(reader.read(&mut bytes).now_or_never().is_none());
     }
 
     #[test]

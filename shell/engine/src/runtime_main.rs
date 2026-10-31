@@ -27,6 +27,7 @@ mod guest {
         rc::Rc,
         time::Instant,
     };
+    use waffle_program_support::runtime::poll_timeout;
     #[link(wasm_import_module = "shell_terminal")]
     unsafe extern "C" {
         fn phase(value: i32, status: i32);
@@ -202,7 +203,7 @@ mod guest {
             // builtin from starving ready process/pipe events. Idle poll is the
             // ONLY blocking operation; interruption is also checked in budgets.
             runtime
-                .poll(if turn.runnable { 0 } else { -1 })
+                .poll(reactor_timeout(turn.runnable, &executor))
                 .unwrap_or_else(|errno| report_runtime(&session, format!("poll errno {errno}")));
         }
         let status = root.now_or_never().unwrap();
@@ -214,12 +215,21 @@ mod guest {
                 break;
             }
             runtime
-                .poll(if turn.runnable { 0 } else { -1 })
+                .poll(reactor_timeout(turn.runnable, &executor))
                 .unwrap_or_else(|errno| {
                     report_runtime(&session, format!("cleanup poll errno {errno}"))
                 });
         }
         std::process::exit(status);
+    }
+    fn reactor_timeout(runnable: bool, executor: &Executor) -> i32 {
+        if runnable {
+            return 0;
+        }
+        match executor.next_deadline() {
+            Some(deadline) => poll_timeout(false, Some(deadline), Instant::now()),
+            None => -1,
+        }
     }
     fn report_runtime(session: &Session, error: impl std::fmt::Display) -> ! {
         if let Some(endpoint) = session.descriptor(2) {

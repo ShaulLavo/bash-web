@@ -1,4 +1,8 @@
 mod fields;
+mod timeout;
+
+use std::time::Instant;
+use timeout::Timeout;
 
 use super::{diagnose, endpoint, error_status, printf};
 use crate::{
@@ -44,12 +48,14 @@ struct Options<'a> {
     delimiter: Option<u8>,
     prompt: Option<&'a str>,
     silent: bool,
+    timeout: Option<Timeout>,
     names: &'a [String],
 }
 
 async fn options<'a>(
     args: &'a [String],
     context: &Context,
+    fds: &FdTable,
     work: &mut Work,
 ) -> Result<Options<'a>, i32> {
     let mut result = Options::default();
@@ -66,7 +72,7 @@ async fn options<'a>(
             break;
         }
         iter.next();
-        option_word(arg, &mut iter, &mut result, context, work).await?;
+        option_word(arg, &mut iter, &mut result, context, fds, work).await?;
     }
     result.names = iter.as_slice();
     Ok(result)
@@ -77,6 +83,7 @@ async fn option_word<'a>(
     iter: &mut std::slice::Iter<'a, String>,
     options: &mut Options<'a>,
     context: &Context,
+    fds: &FdTable,
     work: &mut Work,
 ) -> Result<(), i32> {
     for (index, flag) in arg.bytes().enumerate().skip(1) {
@@ -91,7 +98,7 @@ async fn option_word<'a>(
             options.silent = true;
             continue;
         }
-        if !matches!(flag, b'n' | b'N' | b'u' | b'd' | b'p') {
+        if !matches!(flag, b'n' | b'N' | b'u' | b'd' | b'p' | b't') {
             return Err(2);
         }
         let value = if index + 1 < arg.len() {
@@ -99,7 +106,7 @@ async fn option_word<'a>(
         } else {
             iter.next().map(String::as_str).ok_or(2)?
         };
-        return option_value(flag, value, options, context, work).await;
+        return option_value(flag, value, options, context, fds, work).await;
     }
     Ok(())
 }
@@ -109,6 +116,7 @@ async fn option_value<'a>(
     value: &'a str,
     options: &mut Options<'a>,
     context: &Context,
+    fds: &FdTable,
     work: &mut Work,
 ) -> Result<(), i32> {
     match flag {
@@ -120,6 +128,7 @@ async fn option_value<'a>(
         b'N' => options.count = Count::Exactly(count(value, context, work).await?),
         b'd' => options.delimiter = Some(value.bytes().next().unwrap_or(0)),
         b'p' => options.prompt = Some(value),
+        b't' => options.timeout = Some(timeout_option(value, context, fds, work).await?),
         b'u' => {
             options.fd = value
                 .parse::<i64>()
@@ -130,6 +139,24 @@ async fn option_value<'a>(
         _ => return Err(2),
     }
     Ok(())
+}
+
+async fn timeout_option(
+    value: &str,
+    context: &Context,
+    fds: &FdTable,
+    work: &mut Work,
+) -> Result<Timeout, i32> {
+    let parsed = timeout::parse(value, &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    if let Some(timeout) = parsed {
+        return Ok(timeout);
+    }
+    diagnose(fds, "read: ", context).await?;
+    diagnose(fds, value, context).await?;
+    diagnose(fds, ": invalid timeout specification\n", context).await?;
+    Err(1)
 }
 
 async fn count(value: &str, context: &Context, work: &mut Work) -> Result<usize, i32> {
@@ -166,13 +193,47 @@ pub(super) async fn run(
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    let options = options(args, context, work).await?;
+    let mut options = options(args, context, fds, work).await?;
+    if options.timeout == Some(Timeout::Ready) {
+        let ready = endpoint(fds, options.fd)?.read_ready().unwrap_or(false);
+        return Ok(Outcome::status(if ready { 0 } else { 1 }));
+    }
     if let Some(name) = options.names.first() {
         validate_name(name, fds, context, work).await?;
     }
     let input = endpoint(fds, options.fd)?;
     prepare_terminal(&options, &input, fds, context).await?;
+    if options.timeout.is_none() {
+        options.timeout = default_timeout(state, context, work).await?;
+    }
     read_record(&options, &input, state, fds, context, work).await
+}
+
+async fn default_timeout(
+    state: &SharedState,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Option<Timeout>, i32> {
+    State::admit_scalar_access(state, "TMOUT", &context.cancel, work)
+        .await
+        .map_err(error_status)?;
+    let length = state.borrow().scalar_parameter("TMOUT").map_or(0, str::len);
+    work.admit_storage(length).map_err(error_status)?;
+    let _storage = context.admit_builtin_buffer(length)?;
+    let value = state
+        .borrow()
+        .scalar_parameter("TMOUT")
+        .unwrap_or("")
+        .to_owned();
+    Ok(
+        match timeout::parse(&value, &context.cancel, work)
+            .await
+            .map_err(error_status)?
+        {
+            Some(timeout @ Timeout::After(_)) => Some(timeout),
+            _ => None,
+        },
+    )
 }
 
 async fn prepare_terminal(
@@ -350,9 +411,41 @@ async fn read_record(
     let mut chunk = Vec::new();
     chunk.try_reserve_exact(chunk_bytes).map_err(|_| 2)?;
     chunk.resize(chunk_bytes, 0);
-    let code = reader.read(input, &mut chunk, context, work).await?;
+    let mut timer = read_timer(options, input, context)?;
+    let elapsed = match timer.as_mut() {
+        Some(sleep) => timeout::arm(sleep).await,
+        None => false,
+    };
+    let code = if elapsed {
+        if context.cancel.probe_now() {
+            return Err(130);
+        }
+        142
+    } else {
+        reader
+            .read(input, &mut chunk, timer.as_mut(), context, work)
+            .await?
+    };
+    drop(timer);
     reader.finish()?;
     assign(reader, code, options, state, fds, context, work).await
+}
+
+fn read_timer(
+    options: &Options<'_>,
+    input: &Endpoint,
+    context: &Context,
+) -> Result<Option<crate::executor::Sleep>, i32> {
+    let Some(Timeout::After(duration)) = options.timeout else {
+        return Ok(None);
+    };
+    if options.count.maximum() == 0
+        || input.descriptor_kind().map_err(|error| error.status())? == DescriptorKind::Regular
+    {
+        return Ok(None);
+    }
+    let deadline = Instant::now().checked_add(duration).ok_or(2)?;
+    Ok(Some(context.sleep_until(deadline)))
 }
 
 impl Reader {
@@ -360,6 +453,7 @@ impl Reader {
         &mut self,
         input: &Endpoint,
         chunk: &mut [u8],
+        mut timer: Option<&mut crate::executor::Sleep>,
         context: &Context,
         work: &mut Work,
     ) -> Result<i32, i32> {
@@ -374,10 +468,17 @@ impl Reader {
                     .saturating_sub(self.bytes.len())
                     .saturating_add(1),
             );
-            let read = input
-                .read_cancelled(&mut chunk[..length], &context.cancel)
-                .await
-                .map_err(|error| error.status())?;
+            let Some(read) = timeout::read(
+                input,
+                &mut chunk[..length],
+                &context.cancel,
+                timer.as_deref_mut(),
+            )
+            .await
+            .map_err(|error| error.status())?
+            else {
+                return Ok(142);
+            };
             if read == 0 {
                 return Ok(1);
             }
