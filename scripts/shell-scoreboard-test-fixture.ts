@@ -2,13 +2,16 @@ import { digest, sealOracle, summarize } from "./shell-scoreboard.ts";
 import type { Score, ScoreCase } from "./shell-scoreboard.ts";
 import type { MainFloor } from "./shell-scoreboard-floor.ts";
 
-export function scoreboardFixture(corpus: string) {
+export function scoreboardFixture(
+  corpus: string,
+  ids: readonly string[] = ["a", "x", "y", "brush-suite:compound_cmds/until:8"],
+) {
   const oracle = sealOracle({
     schema: 1,
     oracle: {},
     environment: {},
     sources: {},
-    cases: ["a", "x", "y", "brush-suite:compound_cmds/until:8"].map((id) => ({
+    cases: ids.map((id) => ({
       id,
       corpus,
       category: "control",
