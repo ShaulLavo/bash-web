@@ -103,7 +103,7 @@ function compile(source: string, anchored: boolean): IgnoreRule["pattern"] {
 function tokens(pattern: string): Token[] {
   const result: Token[] = [];
   for (let index = 0; index < pattern.length; index++) {
-    const char = pattern[index];
+    const char = pattern.charAt(index);
     if (char === "\\") {
       result.push(pattern[++index] ?? "\\");
       continue;
@@ -124,18 +124,11 @@ async function matchParts(
   budget: WorkBudget,
 ): Promise<boolean> {
   let positions = new Set([0]);
-  for (let index = 0; index < pattern.length; index++) {
+  for (const [index, part] of pattern.entries()) {
     const next = new Set<number>();
     for (const offset of positions) {
       await budget.checkpoint();
-      await advance(
-        next,
-        pattern[index],
-        path,
-        offset,
-        index === pattern.length - 1 && index > 0,
-        budget,
-      );
+      await advance(next, part, path, offset, index === pattern.length - 1 && index > 0, budget);
     }
     positions = next;
   }
@@ -151,8 +144,8 @@ async function advance(
   budget: WorkBudget,
 ): Promise<void> {
   if (pattern !== "**") {
-    if (offset < path.length && (await matchName(pattern, path[offset], budget)))
-      next.add(offset + 1);
+    const name = path[offset];
+    if (name !== undefined && (await matchName(pattern, name, budget))) next.add(offset + 1);
     return;
   }
   for (let index = offset + Number(trailing); index <= path.length; index++) next.add(index);
@@ -178,7 +171,7 @@ async function matchName(
     if (
       token === 1 ||
       token === name[index] ||
-      (token instanceof RegExp && token.test(name[index]))
+      (token instanceof RegExp && token.test(name.charAt(index)))
     ) {
       index++;
       pattern++;
@@ -205,8 +198,10 @@ function bracketPattern(pattern: string, start: number): { text: string; end: nu
     if (pattern[index] === "]")
       return { text: `(?!/)[${negate ? "^" : ""}${content}]`, end: index };
     const match = /^\[:([a-z]+):\]/u.exec(pattern.slice(index));
-    if (match && classes[match[1]]) {
-      content += classes[match[1]];
+    const characterClass = match?.[1];
+    const expansion = characterClass === undefined ? undefined : classes[characterClass];
+    if (match && expansion) {
+      content += expansion;
       index += match[0].length - 1;
       continue;
     }

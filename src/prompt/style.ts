@@ -40,10 +40,10 @@ function colorCode(
   if (typeof resolved === "number") return `${extended};5;${Math.max(0, Math.min(255, resolved))}`;
   const named = namedColors[resolved];
   if (named !== undefined) return String(named + (background ? 10 : 0));
-  const match = /^#([0-9a-f]{6})$/i.exec(resolved);
-  if (!match) return undefined;
-  if (!env.trueColor) return `${extended};5;${rgbToAnsi256(match[1])}`;
-  const value = Number.parseInt(match[1], 16);
+  if (!/^#[0-9a-f]{6}$/i.test(resolved)) return undefined;
+  const hex = resolved.slice(1);
+  if (!env.trueColor) return `${extended};5;${rgbToAnsi256(hex)}`;
+  const value = Number.parseInt(hex, 16);
   return `${extended};2;${value >> 16};${(value >> 8) & 255};${value & 255}`;
 }
 

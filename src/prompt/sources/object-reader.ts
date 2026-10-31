@@ -71,7 +71,9 @@ export class ObjectReader {
     const match = /^(commit|tree|blob|tag) ([0-9]+)$/.exec(
       decoder.decode(inflated.subarray(0, end)),
     );
-    requireObject(match && Number(match[2]) === inflated.length - end - 1);
+    requireObject(
+      match && match[1] !== undefined && Number(match[2]) === inflated.length - end - 1,
+    );
     return this.retain({ type: objectType(match[1]), bytes: inflated.subarray(end + 1) });
   }
 
