@@ -1,4 +1,5 @@
 export { createShell } from "./shell";
+export type { PromptContext, PromptLive, PromptProvider, PromptStart } from "./prompt-hook";
 export type {
   RuntimeExit,
   RuntimeProcess,
@@ -7,7 +8,6 @@ export type {
   ShellPrompt,
   PromptWaitOptions,
 } from "./shell";
-export type { PromptContext, PromptLive, PromptProvider, PromptStart } from "./prompt-hook";
 export { installShellCommands, UtilityConflictError } from "./shell-commands";
 export type { ShellCommandOptions, ShellCommandsInstallation } from "./shell-commands";
 export { SharedBridge, control, INPUT_CAPACITY, OUTPUT_CAPACITY } from "./bridge";

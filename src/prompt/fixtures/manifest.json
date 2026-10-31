@@ -1,0 +1,2950 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-31T06:53:47.427Z",
+  "generator": "capture.ts",
+  "starship": {
+    "binary": "/usr/bin/starship",
+    "version": "starship 1.27.0\ntag:v1.27.0\ncommit_hash:f8e4e2155\nbuild_time:2026-10-17 10:19:51 +00:00\nbuild_env:rustc 1.99.0 (b940084d7 2026-09-28) (Arch Linux rust 1:1.99.0-3),",
+    "shellSetting": "fish (chosen because it emits raw ANSI without Bash \\[...\\] markers)"
+  },
+  "hostRuntimeVersions": {
+    "git": "git version 2.56.0",
+    "bun": "1.4.4",
+    "node": "v26.12.1"
+  },
+  "invocation": {
+    "executable": "/usr/bin/starship",
+    "command": "starship prompt --terminal-width=<width> --status=<status> --pipestatus=0 --jobs=<jobs> --shlvl=1 --cmd-duration=<milliseconds>",
+    "config": "No user config: controlled HOME/XDG_CONFIG_HOME and absent STARSHIP_CONFIG path.",
+    "network": "No network access requested or used."
+  },
+  "cases": {
+    "empty": {
+      "cwd": "~/workspace/empty",
+      "statusPorcelainV2": null
+    },
+    "package-public": {
+      "cwd": "~/workspace/package-public",
+      "statusPorcelainV2": null
+    },
+    "package-private": {
+      "cwd": "~/workspace/package-private",
+      "statusPorcelainV2": null
+    },
+    "bun": {
+      "cwd": "~/workspace/bun",
+      "statusPorcelainV2": null
+    },
+    "git-clean": {
+      "cwd": "~/workspace/git-clean",
+      "statusPorcelainV2": "# branch.oid 39c4b28a9c671aa4863dd786b8f917f0f5009c55\n# branch.head main\n"
+    },
+    "git-dirty": {
+      "cwd": "~/workspace/git-dirty",
+      "statusPorcelainV2": "# branch.oid f2e9a90545324f8d85e0f3fb233837afc900e5d2\n# branch.head main\n1 .M N... 100644 100644 100644 90be1f3056c4f471f977a28497b8d4b392c55a02 90be1f3056c4f471f977a28497b8d4b392c55a02 tracked.txt\n"
+    },
+    "git-untracked": {
+      "cwd": "~/workspace/git-untracked",
+      "statusPorcelainV2": "# branch.oid 15b392f3cf270979c137c5789413874c95fdc258\n# branch.head main\n? new.txt\n"
+    },
+    "git-conflicted": {
+      "cwd": "~/workspace/git-conflicted",
+      "statusPorcelainV2": "# branch.oid e63ed0596bc9d08a352d9fbab01d1ee5e9e2d7e3\n# branch.head main\nu UU N... 100644 100644 100644 100644 df967b96a579e45a18b8251732d16804b2e56a55 ba2906d0666cf726c7eaadd2cd3db615dedfdf3a a7453f07505c42ea8d6fdda75fa91710c81c53d6 conflict.txt\n"
+    },
+    "git-stashed": {
+      "cwd": "~/workspace/git-stashed",
+      "statusPorcelainV2": "# branch.oid ae8032dc587cbdca0cb54a1eae6b988458cc0458\n# branch.head main\n"
+    },
+    "git-detached": {
+      "cwd": "~/workspace/git-detached",
+      "statusPorcelainV2": "# branch.oid 82c96ba90b4ffb18d35a96dc283bff8e90251e48\n# branch.head (detached)\n"
+    },
+    "git-mid-rebase": {
+      "cwd": "~/workspace/git-mid-rebase",
+      "statusPorcelainV2": "# branch.oid e63ed0596bc9d08a352d9fbab01d1ee5e9e2d7e3\n# branch.head (detached)\nu UU N... 100644 100644 100644 100644 df967b96a579e45a18b8251732d16804b2e56a55 ba2906d0666cf726c7eaadd2cd3db615dedfdf3a 0f62d67e76ce1255a098942495a846df0f8a2c11 conflict.txt\n"
+    },
+    "git-unborn": {
+      "cwd": "~/workspace/git-unborn",
+      "statusPorcelainV2": "# branch.oid (initial)\n# branch.head main\n? new.txt\n"
+    }
+  },
+  "variants": [
+    {
+      "name": "default",
+      "status": 0,
+      "jobs": 0,
+      "durationMs": 0,
+      "terminalWidth": 80
+    },
+    {
+      "name": "status-1",
+      "status": 1,
+      "jobs": 0,
+      "durationMs": 0,
+      "terminalWidth": 80
+    },
+    {
+      "name": "jobs-2",
+      "status": 0,
+      "jobs": 2,
+      "durationMs": 0,
+      "terminalWidth": 80
+    },
+    {
+      "name": "duration-2500",
+      "status": 0,
+      "jobs": 0,
+      "durationMs": 2500,
+      "terminalWidth": 80
+    },
+    {
+      "name": "width-120",
+      "status": 0,
+      "jobs": 0,
+      "durationMs": 0,
+      "terminalWidth": 120
+    },
+    {
+      "name": "status-1-jobs-2-duration-2500-width-40",
+      "status": 1,
+      "jobs": 2,
+      "durationMs": 2500,
+      "terminalWidth": 40
+    }
+  ],
+  "captures": [
+    {
+      "caseName": "empty",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/empty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/empty/default.ansi",
+      "bytes": 49,
+      "sha256": "5bd4660c13200bf50dd0c3e8774015e8a06f67c2cd7c75501271c3e4f19f7114"
+    },
+    {
+      "caseName": "empty",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/empty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/empty/status-1.ansi",
+      "bytes": 49,
+      "sha256": "4d749c3200819c05f1993ed60e6c9fa4e2da535597db19239a61ef38e0e77ca4"
+    },
+    {
+      "caseName": "empty",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/empty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/empty/jobs-2.ansi",
+      "bytes": 65,
+      "sha256": "0140c78ecaf6f387f754abb8d1ee69dfe519276ef3484d37c2306b5db4dd8f79"
+    },
+    {
+      "caseName": "empty",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/empty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/empty/duration-2500.ansi",
+      "bytes": 68,
+      "sha256": "2ccc9ba5547d5817f7e2e7ada429d0c8b986a19a53ba730a0848b366a5a75083"
+    },
+    {
+      "caseName": "empty",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/empty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/empty/width-120.ansi",
+      "bytes": 49,
+      "sha256": "5bd4660c13200bf50dd0c3e8774015e8a06f67c2cd7c75501271c3e4f19f7114"
+    },
+    {
+      "caseName": "empty",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/empty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/empty/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 84,
+      "sha256": "2e421228fe89b5ce1c42d263b860c0549d18406571b633b28ced4b780830d334"
+    },
+    {
+      "caseName": "package-public",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-public",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-public/default.ansi",
+      "bytes": 118,
+      "sha256": "539827c0a38bbe72a2c6d7897d6d48d31b495d9f50e3bf89c0ceb1ac9fef8c42"
+    },
+    {
+      "caseName": "package-public",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-public",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-public/status-1.ansi",
+      "bytes": 118,
+      "sha256": "2ab6949eb6f826dd18c2e587bfc2fef626ba39e8d13469c83166874b721a1168"
+    },
+    {
+      "caseName": "package-public",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-public",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-public/jobs-2.ansi",
+      "bytes": 134,
+      "sha256": "7548cafc143d87c6cbb89e482cac5f41d766fc41abd4e84b2a0415a7f1511e59"
+    },
+    {
+      "caseName": "package-public",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/package-public",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-public/duration-2500.ansi",
+      "bytes": 137,
+      "sha256": "35b3f8e88accc13a5fe479cb5faab0ef2a16b90b1000626ee777e522c47a444d"
+    },
+    {
+      "caseName": "package-public",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-public",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-public/width-120.ansi",
+      "bytes": 118,
+      "sha256": "539827c0a38bbe72a2c6d7897d6d48d31b495d9f50e3bf89c0ceb1ac9fef8c42"
+    },
+    {
+      "caseName": "package-public",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/package-public",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-public/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 153,
+      "sha256": "c24f92cb32fba55dc4fdfc18eb3321cdab4566b540c650137710efccafafcb55"
+    },
+    {
+      "caseName": "package-private",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-private",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-private/default.ansi",
+      "bytes": 87,
+      "sha256": "eb3a8e379b85be9abe14146a8a168892e09150bd7f019b71ae76a2c5ebe4868f"
+    },
+    {
+      "caseName": "package-private",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-private",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-private/status-1.ansi",
+      "bytes": 87,
+      "sha256": "8cab65a8d2db7d6cf767b9457832ff1c088a07dd4d8b51309326f7a1db1874b1"
+    },
+    {
+      "caseName": "package-private",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-private",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-private/jobs-2.ansi",
+      "bytes": 103,
+      "sha256": "7cf45a0fff75c0e1d0adfa3e37350d23606c407e51562604471cc276ffdae6a5"
+    },
+    {
+      "caseName": "package-private",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/package-private",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-private/duration-2500.ansi",
+      "bytes": 106,
+      "sha256": "6362fffdadea6ff5e53c51da7b0fa6741905372abac5a5e9e0070e533a7f84b4"
+    },
+    {
+      "caseName": "package-private",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/package-private",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-private/width-120.ansi",
+      "bytes": 87,
+      "sha256": "eb3a8e379b85be9abe14146a8a168892e09150bd7f019b71ae76a2c5ebe4868f"
+    },
+    {
+      "caseName": "package-private",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/package-private",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/package-private/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 122,
+      "sha256": "6a43ce6aa5fc7c787f9bd416279a1f0ccf54c25ef233eb4ffe87ffbf7b513f20"
+    },
+    {
+      "caseName": "bun",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/bun",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/bun/default.ansi",
+      "bytes": 106,
+      "sha256": "f46d7cee5d9b173385ad9e23b5ec75572b5f37ce1c4111fd916e21eaa6c9857f"
+    },
+    {
+      "caseName": "bun",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/bun",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/bun/status-1.ansi",
+      "bytes": 106,
+      "sha256": "048e7c6a0bd5a21cb4f64d5b6847b16397a5d7a9b1a5b1053a9d5a60479701e0"
+    },
+    {
+      "caseName": "bun",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/bun",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/bun/jobs-2.ansi",
+      "bytes": 122,
+      "sha256": "0b829a6a3919db25c9925f8fc4ab35d50a2b3f9f73d62fea6cb087a7af1418c3"
+    },
+    {
+      "caseName": "bun",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/bun",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/bun/duration-2500.ansi",
+      "bytes": 125,
+      "sha256": "b184278d6a5a67a5451ef282a47caff8ad98ea0f3cbf038b9b76b53d93f25ac2"
+    },
+    {
+      "caseName": "bun",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/bun",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/bun/width-120.ansi",
+      "bytes": 106,
+      "sha256": "f46d7cee5d9b173385ad9e23b5ec75572b5f37ce1c4111fd916e21eaa6c9857f"
+    },
+    {
+      "caseName": "bun",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/bun",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/bun/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 141,
+      "sha256": "42dae336220bf9e2ec4c50875df0c25a8fec924a803c6c5f2771e2d1dae0240e"
+    },
+    {
+      "caseName": "git-clean",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-clean",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-clean/default.ansi",
+      "bytes": 64,
+      "sha256": "6e087a977b61118982354a73e7c737e2c1649f8cc76fc699751ad2535cc41108"
+    },
+    {
+      "caseName": "git-clean",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-clean",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-clean/status-1.ansi",
+      "bytes": 64,
+      "sha256": "b744b1517bf88643c4f10a9cc0e7b07cde94c5fc9b936b7a5ff22ab1ff37f0f9"
+    },
+    {
+      "caseName": "git-clean",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-clean",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-clean/jobs-2.ansi",
+      "bytes": 80,
+      "sha256": "1ead55857081e247e203f799545f074d4ffc8a187ca51bf8c5f08140e4d2a94f"
+    },
+    {
+      "caseName": "git-clean",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-clean",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-clean/duration-2500.ansi",
+      "bytes": 83,
+      "sha256": "6e269525934f70c13c1b64b56f2f1f0ea6db0e91fc2aea4dbf78e4542b7f17b7"
+    },
+    {
+      "caseName": "git-clean",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-clean",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-clean/width-120.ansi",
+      "bytes": 64,
+      "sha256": "6e087a977b61118982354a73e7c737e2c1649f8cc76fc699751ad2535cc41108"
+    },
+    {
+      "caseName": "git-clean",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-clean",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-clean/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 99,
+      "sha256": "8c099c024eb11d5bd23ed8e23f4b4bc7b730474de8ee73f5d4d7c9049622fdb1"
+    },
+    {
+      "caseName": "git-dirty",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-dirty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-dirty/default.ansi",
+      "bytes": 79,
+      "sha256": "f391222fbb297f1cdb69ec98c8a0df9a2219eeb2dcbd950d27c16e7f29eb07bc"
+    },
+    {
+      "caseName": "git-dirty",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-dirty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-dirty/status-1.ansi",
+      "bytes": 79,
+      "sha256": "00b0d9188914391b762f175e92f0023f5506c651a8d16d6b152f4a258773b533"
+    },
+    {
+      "caseName": "git-dirty",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-dirty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-dirty/jobs-2.ansi",
+      "bytes": 95,
+      "sha256": "b4f102d81c18ad13845b18aa63830ef0335b46722f852765a0b02c23cd68612d"
+    },
+    {
+      "caseName": "git-dirty",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-dirty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-dirty/duration-2500.ansi",
+      "bytes": 98,
+      "sha256": "d92bc80d7ed3118b7a5c60b424fb7fdead255998ab9b12cfa65de75d51d74444"
+    },
+    {
+      "caseName": "git-dirty",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-dirty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-dirty/width-120.ansi",
+      "bytes": 79,
+      "sha256": "f391222fbb297f1cdb69ec98c8a0df9a2219eeb2dcbd950d27c16e7f29eb07bc"
+    },
+    {
+      "caseName": "git-dirty",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-dirty",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-dirty/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 114,
+      "sha256": "d47d6bb0f96c718cd84128f9e3778e5a9ccd5e2d8fab6e8643766e139434ca4a"
+    },
+    {
+      "caseName": "git-untracked",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-untracked",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-untracked/default.ansi",
+      "bytes": 83,
+      "sha256": "7e4575ffdde7375fc1821df537a13b7dd07db6c5cdbf796aaf307e6043677f98"
+    },
+    {
+      "caseName": "git-untracked",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-untracked",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-untracked/status-1.ansi",
+      "bytes": 83,
+      "sha256": "4767262c38842bb285f5952e87e471587e5180d111d015bbdfb862c566f40a48"
+    },
+    {
+      "caseName": "git-untracked",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-untracked",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-untracked/jobs-2.ansi",
+      "bytes": 99,
+      "sha256": "4fbc46fbb15e8403d17409316fce149d26637b9943bf58786f3e61491532b41a"
+    },
+    {
+      "caseName": "git-untracked",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-untracked",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-untracked/duration-2500.ansi",
+      "bytes": 102,
+      "sha256": "46524cf38048dc08d85ada1edf6e724c338adb94b4fdd5d08ae5cb98db9dc660"
+    },
+    {
+      "caseName": "git-untracked",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-untracked",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-untracked/width-120.ansi",
+      "bytes": 83,
+      "sha256": "7e4575ffdde7375fc1821df537a13b7dd07db6c5cdbf796aaf307e6043677f98"
+    },
+    {
+      "caseName": "git-untracked",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-untracked",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-untracked/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 118,
+      "sha256": "bf5a952514caac250e06dcde09ade7156b8f0b11ac217dcd6ec952a722981df8"
+    },
+    {
+      "caseName": "git-conflicted",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-conflicted",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-conflicted/default.ansi",
+      "bytes": 105,
+      "sha256": "212552ccf498c9a9bc6394aa7c7d7f11a6b764ce598b510bcf42e4844ac2dc23"
+    },
+    {
+      "caseName": "git-conflicted",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-conflicted",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-conflicted/status-1.ansi",
+      "bytes": 105,
+      "sha256": "2411c039430d3d7c5202ba11b984002b49d11d2975085293f7f09e54079e4f6b"
+    },
+    {
+      "caseName": "git-conflicted",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-conflicted",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-conflicted/jobs-2.ansi",
+      "bytes": 121,
+      "sha256": "a2bd30693d2d13bb2d03e6c527ec2df3ed4ee1a3be53f46df8de8d8fa47cc3e4"
+    },
+    {
+      "caseName": "git-conflicted",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-conflicted",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-conflicted/duration-2500.ansi",
+      "bytes": 124,
+      "sha256": "4468cc3e3380b002d20cba3be107362feef463e175c339265b0bb7203fd795e0"
+    },
+    {
+      "caseName": "git-conflicted",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-conflicted",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-conflicted/width-120.ansi",
+      "bytes": 105,
+      "sha256": "212552ccf498c9a9bc6394aa7c7d7f11a6b764ce598b510bcf42e4844ac2dc23"
+    },
+    {
+      "caseName": "git-conflicted",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-conflicted",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-conflicted/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 140,
+      "sha256": "5bb2cbff0dbb640ee7c8c27e1e1da59cd10f4292d8e33c837d24da3dd020064a"
+    },
+    {
+      "caseName": "git-stashed",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-stashed",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-stashed/default.ansi",
+      "bytes": 81,
+      "sha256": "f95c26f801d667ac3b5b6b362dab7fbc25af7cce0738ff038c2e000fc09c5813"
+    },
+    {
+      "caseName": "git-stashed",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-stashed",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-stashed/status-1.ansi",
+      "bytes": 81,
+      "sha256": "964ce7f3c483a84923a73b4ca865d86d99e0581212fee79ba4daa463a618e8a9"
+    },
+    {
+      "caseName": "git-stashed",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-stashed",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-stashed/jobs-2.ansi",
+      "bytes": 97,
+      "sha256": "75cba1740ab1d6abc9101a7ded4bee6c327e3442fc964954f862a45a704de385"
+    },
+    {
+      "caseName": "git-stashed",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-stashed",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-stashed/duration-2500.ansi",
+      "bytes": 100,
+      "sha256": "ad9c8e7e3c47cdaa9e47f0fd618e51837d96cf03532c9d41cb99a7f0597f9ec0"
+    },
+    {
+      "caseName": "git-stashed",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-stashed",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-stashed/width-120.ansi",
+      "bytes": 81,
+      "sha256": "f95c26f801d667ac3b5b6b362dab7fbc25af7cce0738ff038c2e000fc09c5813"
+    },
+    {
+      "caseName": "git-stashed",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-stashed",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-stashed/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 116,
+      "sha256": "b64cfa72777ea55ecba4e70a40f46222a12e7bb0fce8387117f638e91d10612f"
+    },
+    {
+      "caseName": "git-detached",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-detached",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-detached/default.ansi",
+      "bytes": 88,
+      "sha256": "d5043f6c1022e5a452b3e21a0d821dc467ee5e61ccba16ff3948d556d6903d22"
+    },
+    {
+      "caseName": "git-detached",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-detached",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-detached/status-1.ansi",
+      "bytes": 88,
+      "sha256": "00363e17d7d2e2067e1c0c04b33ceeb83f7872433a9c4bd9d8c26ef6410337d5"
+    },
+    {
+      "caseName": "git-detached",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-detached",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-detached/jobs-2.ansi",
+      "bytes": 104,
+      "sha256": "e0147b3c289d2241514ab84e1f55dcaaac9124118dec3959a507377a198f6d56"
+    },
+    {
+      "caseName": "git-detached",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-detached",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-detached/duration-2500.ansi",
+      "bytes": 107,
+      "sha256": "38277a7ea78723d257506c467abdc6f78f6d05f5c7c61a0111eae46febeabe0a"
+    },
+    {
+      "caseName": "git-detached",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-detached",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-detached/width-120.ansi",
+      "bytes": 88,
+      "sha256": "d5043f6c1022e5a452b3e21a0d821dc467ee5e61ccba16ff3948d556d6903d22"
+    },
+    {
+      "caseName": "git-detached",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-detached",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-detached/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 123,
+      "sha256": "669b3c853ca44b8795f9b570b8ebf4099fbf2a6a16a683136675396eaab600eb"
+    },
+    {
+      "caseName": "git-mid-rebase",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-mid-rebase",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-mid-rebase/default.ansi",
+      "bytes": 131,
+      "sha256": "ade6fafc0d49cb741a1cdc9fc7ad51aedbbb932d4341669c614b81f879970ffa"
+    },
+    {
+      "caseName": "git-mid-rebase",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-mid-rebase",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-mid-rebase/status-1.ansi",
+      "bytes": 131,
+      "sha256": "f7d56b8dab86a31f33e305c131993117106f50e348b08873f51f74b848573af7"
+    },
+    {
+      "caseName": "git-mid-rebase",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-mid-rebase",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-mid-rebase/jobs-2.ansi",
+      "bytes": 147,
+      "sha256": "8bec02414df8b9fa8a90390e8d42bc79adba0489e25614783ba4f8549df32b20"
+    },
+    {
+      "caseName": "git-mid-rebase",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-mid-rebase",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-mid-rebase/duration-2500.ansi",
+      "bytes": 150,
+      "sha256": "3cb291266fed07470abb13196421149522502989f9c7bd2d80057f3d51ac7ce2"
+    },
+    {
+      "caseName": "git-mid-rebase",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-mid-rebase",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-mid-rebase/width-120.ansi",
+      "bytes": 131,
+      "sha256": "ade6fafc0d49cb741a1cdc9fc7ad51aedbbb932d4341669c614b81f879970ffa"
+    },
+    {
+      "caseName": "git-mid-rebase",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-mid-rebase",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-mid-rebase/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 166,
+      "sha256": "8ccfca2bceefe7929435e86531bef8c641157a55b18cf2ddf912210aff8656a3"
+    },
+    {
+      "caseName": "git-unborn",
+      "variant": {
+        "name": "default",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-unborn",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-unborn/default.ansi",
+      "bytes": 80,
+      "sha256": "4fb3cc29d431c2f7af18d4e5ca5eb4a170cdae4801ed8a8886471cb558d3b6b7"
+    },
+    {
+      "caseName": "git-unborn",
+      "variant": {
+        "name": "status-1",
+        "status": 1,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-unborn",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-unborn/status-1.ansi",
+      "bytes": 80,
+      "sha256": "60279017516b7a27cdb988190f7814e02289da42748ee4e1f88d3b735c8d5517"
+    },
+    {
+      "caseName": "git-unborn",
+      "variant": {
+        "name": "jobs-2",
+        "status": 0,
+        "jobs": 2,
+        "durationMs": 0,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-unborn",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-unborn/jobs-2.ansi",
+      "bytes": 96,
+      "sha256": "0fd1b7fc09fe6f9e615e567dacb230ecd3f9e496b9d56273ad859f1553e0551a"
+    },
+    {
+      "caseName": "git-unborn",
+      "variant": {
+        "name": "duration-2500",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 2500,
+        "terminalWidth": 80
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=80",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-unborn",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-unborn/duration-2500.ansi",
+      "bytes": 99,
+      "sha256": "7ba80f103cd6338398c67969fe8128e4592572be91b87c0160674de87e6246eb"
+    },
+    {
+      "caseName": "git-unborn",
+      "variant": {
+        "name": "width-120",
+        "status": 0,
+        "jobs": 0,
+        "durationMs": 0,
+        "terminalWidth": 120
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=120",
+        "--status=0",
+        "--pipestatus=0",
+        "--jobs=0",
+        "--shlvl=1",
+        "--cmd-duration=0"
+      ],
+      "cwd": "~/workspace/git-unborn",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-unborn/width-120.ansi",
+      "bytes": 80,
+      "sha256": "4fb3cc29d431c2f7af18d4e5ca5eb4a170cdae4801ed8a8886471cb558d3b6b7"
+    },
+    {
+      "caseName": "git-unborn",
+      "variant": {
+        "name": "status-1-jobs-2-duration-2500-width-40",
+        "status": 1,
+        "jobs": 2,
+        "durationMs": 2500,
+        "terminalWidth": 40
+      },
+      "invocation": [
+        "prompt",
+        "--terminal-width=40",
+        "--status=1",
+        "--pipestatus=0",
+        "--jobs=2",
+        "--shlvl=1",
+        "--cmd-duration=2500"
+      ],
+      "cwd": "~/workspace/git-unborn",
+      "env": {
+        "HOME": "<scratch>/home",
+        "XDG_CONFIG_HOME": "<scratch>/home/.config",
+        "STARSHIP_CONFIG": "<scratch>/home/no-user-starship.toml (absent)",
+        "STARSHIP_CACHE": "<scratch>/home/.cache/starship",
+        "STARSHIP_SHELL": "fish",
+        "STARSHIP_SESSION_KEY": "native-fixture-session",
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "PATH": "/home/shaul/.local/share/mise/installs/bun/1.4.4/bin:/home/shaul/.local/share/mise/installs/node/26.12.1/bin:/usr/bin:/bin",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_AUTHOR_DATE": "2026-01-01T00:00:00Z",
+        "GIT_COMMITTER_DATE": "2026-01-01T00:00:00Z"
+      },
+      "output": "outputs/git-unborn/status-1-jobs-2-duration-2500-width-40.ansi",
+      "bytes": 115,
+      "sha256": "a848e10cab7f4d7ccba3aef14e0b18f7347a5993fb1cec6b2aec26cc74988eec"
+    }
+  ],
+  "resourcesBefore": {
+    "scratchRoot": "absent (fresh mkdtemp root created for this run)",
+    "ownedProcesses": [],
+    "network": "not used"
+  },
+  "resourcesCreated": {
+    "scratchRoot": "unique /work/tmp/starship-native-fixtures-* (removed in finally)",
+    "fixtureRepositories": [
+      "git-clean",
+      "git-dirty",
+      "git-untracked",
+      "git-conflicted",
+      "git-stashed",
+      "git-detached",
+      "git-mid-rebase",
+      "git-unborn"
+    ],
+    "childProcesses": "short-lived git, starship, df, which and runtime version probes; none retained"
+  },
+  "storageBefore": "Filesystem              1024-blocks       Used  Available Capacity Mounted on\n/dev/mapper/vgwork-work  3219652532 1688432544 1531219988      53% /work\n/dev/mapper/data_crypt    976268132  423489512  552778620      44% /data\n/dev/mapper/root          115104768   73819136   39142816      66% /",
+  "storageAfter": "Filesystem              1024-blocks       Used  Available Capacity Mounted on\n/dev/mapper/vgwork-work  3219652532 1688443312 1531209220      53% /work\n/dev/mapper/data_crypt    976268132  423489512  552778620      44% /data\n/dev/mapper/root          115104768   73819136   39142816      66% /",
+  "cleanup": {
+    "scratchRoot": "removed after capture",
+    "retained": "only outputs, this script, and manifest under the fixture directory"
+  }
+}
