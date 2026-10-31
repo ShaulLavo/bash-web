@@ -19,7 +19,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./shell": "./src/shell.ts"
+    "./shell": "./src/shell.ts",
+    "./session": "./src/session.ts"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
@@ -62,6 +63,7 @@
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run build:browser:assets",
     "typecheck:browser": "tsc --noEmit",
     "test:browser": "playwright test",
+    "test:session": "node --test scripts/test-session.ts",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.ts",
     "test:terminal:display": "node --test scripts/test-terminal-display.ts",
     "terminal:widths": "node scripts/terminal-widths.ts",
@@ -98,7 +100,7 @@
     "fuzz:shell-echo": "node scripts/fuzz-shell-echo.ts",
     "test:fuzz-shell-echo": "node --test scripts/test-fuzz-shell-echo.ts",
     "fuzz:shell-echo:ci": "node scripts/fuzz-shell-echo.ts --replay scripts/fixtures/shell-echo.json",
-    "quality:js": "npm run test:browser:package && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run check:javascript && npm run test:quality-gates && node --test scripts/test-family-routes.ts",
+    "quality:js": "npm run test:browser:package && npm run test:session && npm run format:check && npm run lint && npm run typecheck && npm run check:unused && npm run check:duplicates && npm run check:javascript && npm run test:quality-gates && node --test scripts/test-family-routes.ts",
     "build:browser:assets": "npm run notices:browser && npm run bundle:browser:assets",
     "test:ci": "node --test --test-concurrency=1 scripts/test-ci-inputs.ts scripts/test-ci-workflow.ts scripts/test-prepare-wasi-tests.ts scripts/test-ci-artifacts.ts scripts/test-ci-notices.ts scripts/test-scoreboard-discovery.ts",
     "prepare:wasi-tests": "node scripts/prepare-wasi-tests.ts .build/ci-native/wasi-tests",
