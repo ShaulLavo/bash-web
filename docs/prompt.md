@@ -28,7 +28,7 @@ Invalid JSON or fields keep the last valid configuration. The provider reports e
 
 The provider never runs `git`, Bun, Node, Python, or another external program. It only uses `lookup` and `readFile`. Host versions are shown only when the host declares them.
 
-The provider paints within 15 ms by default. Background work uses generation checks and coalesced updates. Git segments are reserved for the later repository and status changes.
+The provider paints within 15 ms by default. Background work uses generation checks and coalesced updates. Repository metadata powers `git_branch`, `git_commit` and `git_state`; working-tree status, staged changes and ahead/behind counts remain separate tracks.
 
 The native Starship captures in `src/prompt/fixtures/` record the 1.27.0 reference output. The package tests compare the non-git subset after removing Starship's leading erase-display control, which the prompt hook does not permit.
 

@@ -1,8 +1,9 @@
+import type { RepositorySnapshot } from "./sources/repo-types";
 import { composePrompt } from "./compose";
 import { resolvePromptConfig } from "./config/defaults";
 import { TurnFilesystem, type PromptEntry } from "./fs";
 import { WorkBudget, PromptTurnLive } from "./live";
-import { readDirectory, readManifest } from "./sources";
+import { readDirectory, readManifest, readRepository } from "./sources";
 import type {
   CreatePromptOptions,
   PromptConfig,
@@ -31,6 +32,7 @@ interface RenderState {
   config: ResolvedPromptConfig;
   directory: DirectorySnapshot | undefined;
   manifest: ManifestSnapshot | undefined;
+  repository: RepositorySnapshot | undefined;
 }
 
 export async function renderPrompt(
@@ -45,7 +47,12 @@ export async function renderPrompt(
   const started = performance.now();
   const budget = new WorkBudget(live.signal, baseConfig.backgroundMs);
   const filesystem = new TurnFilesystem(options.filesystem, budget);
-  const state: RenderState = { config: baseConfig, directory: undefined, manifest: undefined };
+  const state: RenderState = {
+    config: baseConfig,
+    directory: undefined,
+    manifest: undefined,
+    repository: undefined,
+  };
   const work = populate(
     state,
     options,
@@ -102,7 +109,33 @@ async function populate(
   const enabled = state.config.layout.filter(
     (item) => typeof item === "string" && !state.config.segments[item].disabled,
   );
-  if (!enabled.some((item) => item === "package" || item === "bun" || item === "nodejs")) return;
+  const needsDirectory = enabled.some(
+    (item) => item === "package" || item === "bun" || item === "nodejs",
+  );
+  const needsRepository = enabled.some(
+    (item) =>
+      item === "git_branch" ||
+      item === "git_commit" ||
+      item === "git_state" ||
+      item === "git_status",
+  );
+  await Promise.all([
+    needsDirectory ? populateDirectory(state, filesystem, context, budget, enabled) : undefined,
+    needsRepository
+      ? readRepository(filesystem, context).then((repository) => {
+          if (budget.active) state.repository = repository;
+        })
+      : undefined,
+  ]);
+}
+
+async function populateDirectory(
+  state: RenderState,
+  filesystem: TurnFilesystem,
+  context: PromptContext,
+  budget: WorkBudget,
+  enabled: readonly unknown[],
+): Promise<void> {
   const directory = await readDirectory(filesystem, context.cwd);
   if (!budget.active) return;
   state.directory = directory;
@@ -135,6 +168,7 @@ function renderState(context: PromptContext, versions: VersionMap, state: Render
     config: state.config,
     directory: state.directory,
     manifest: state.manifest,
+    repository: state.repository,
     versions,
     environment: {
       noColor: context.variables.has("NO_COLOR"),
