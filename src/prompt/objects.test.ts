@@ -211,9 +211,25 @@ async function verifyObjects(repo: string, delta: "offset" | "reference"): Promi
     const object = await reader.read(name);
     assert.equal(object.bytes.length, Number(await git(repo, "cat-file", "-s", name)));
   }
-  await writeFile(join(repo, "large"), "staged packed change");
+  const pack = await readFile(join(packDir, indexes[0].replace(/\.idx$/, ".pack")));
+  const deltaTypes = verification
+    .split("\n")
+    .filter((line) => /^[0-9a-f]{40}\s/.test(line))
+    .map((line) => (pack[Number(line.split(/\s+/)[4])] >> 4) & 7);
+  assert.ok(deltaTypes.includes(delta === "offset" ? 6 : 7), `fixture must encode ${delta} deltas`);
+  await writeFile(join(repo, "large"), `staged packed ${delta} change`);
   await git(repo, "add", "large");
   await expectStaged(repo);
+  await git(
+    repo,
+    "-c",
+    "user.name=Prompt",
+    "-c",
+    "user.email=prompt@example.invalid",
+    "commit",
+    "-qm",
+    delta,
+  );
   await expectCounts(repo);
 }
 

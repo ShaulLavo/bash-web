@@ -28,6 +28,8 @@ export class ObjectReader {
   private readonly cache = new Map<string, Promise<GitObject>>();
   private readonly offsets = new Map<string, Promise<GitObject>>();
   private retained = 0;
+  private fileBytes = 0;
+  private readonly admittedFiles = new Set<string>();
 
   constructor(
     private readonly filesystem: TurnFilesystem,
@@ -189,6 +191,11 @@ export class ObjectReader {
     const bytes = await this.filesystem.readFile(path);
     this.work.check();
     requireObject(!bytes || bytes.length <= 32 * 1024 * 1024, "Git object file exceeds 32 MiB");
+    if (bytes && !this.admittedFiles.has(path)) {
+      this.fileBytes += bytes.length;
+      this.admittedFiles.add(path);
+      requireObject(this.fileBytes <= 64 * 1024 * 1024, "Git object files exceed 64 MiB");
+    }
     return bytes;
   }
 }
