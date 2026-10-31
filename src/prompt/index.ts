@@ -60,7 +60,15 @@ export function createPrompt(options: CreatePromptOptions): PromptProvider {
 }
 
 function configuredVariables(config: ResolvedPromptConfig): Set<string> {
-  const variables = new Set(["HOME", "VIRTUAL_ENV", "COLORTERM", "TERM", "NO_COLOR"]);
+  const variables = new Set([
+    "HOME",
+    "VIRTUAL_ENV",
+    "COLORTERM",
+    "TERM",
+    "NO_COLOR",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+  ]);
   const envVar = config.segments.env_var.variable;
   if (envVar) variables.add(envVar);
   return variables;

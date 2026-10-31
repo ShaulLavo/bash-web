@@ -1,3 +1,4 @@
+import type { RepositorySnapshot } from "../sources/repo-types";
 import type { PromptContext, VersionMap } from "../types";
 import type { Piece } from "../compose";
 
@@ -16,6 +17,7 @@ export interface SegmentInput {
   readonly context: PromptContext;
   readonly directory: DirectorySnapshot | undefined;
   readonly manifest: ManifestSnapshot | undefined;
+  readonly repository: RepositorySnapshot | undefined;
   readonly versions: VersionMap;
 }
 

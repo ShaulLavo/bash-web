@@ -1,3 +1,4 @@
+import type { RepositorySnapshot } from "./sources/repo-types";
 import { styleKey, styleToSgr, type StyleEnvironment } from "./style";
 import type {
   LayoutItem,
@@ -12,6 +13,9 @@ import { renderCharacter } from "./segments/character";
 import { renderCmdDuration } from "./segments/cmd_duration";
 import { renderDirectory } from "./segments/directory";
 import { renderEnvVar } from "./segments/env_var";
+import { renderGitBranch } from "./segments/git_branch";
+import { renderGitCommit } from "./segments/git_commit";
+import { renderGitState } from "./segments/git_state";
 import { renderJobs } from "./segments/jobs";
 import { renderLineBreak } from "./segments/line_break";
 import { renderNodejs } from "./segments/nodejs";
@@ -29,6 +33,7 @@ export interface ComposeInput {
   readonly config: ResolvedPromptConfig;
   readonly directory: DirectorySnapshot | undefined;
   readonly manifest: ManifestSnapshot | undefined;
+  readonly repository: RepositorySnapshot | undefined;
   readonly versions: Readonly<{ bun?: string; node?: string; python?: string }>;
   readonly environment: StyleEnvironment;
 }
@@ -37,6 +42,9 @@ const renderers: Partial<
   Record<SegmentName, (input: SegmentInput, config: never) => Piece[] | undefined>
 > = {
   directory: (input, config) => renderDirectory(input, config),
+  git_branch: (input, config) => renderGitBranch(input, config),
+  git_commit: (input, config) => renderGitCommit(input, config),
+  git_state: (input, config) => renderGitState(input, config),
   package: (input, config) => renderPackage(input, config),
   bun: (input, config) => renderBun(input, config),
   nodejs: (input, config) => renderNodejs(input, config),
@@ -95,6 +103,7 @@ export function composePrompt(input: ComposeInput): string {
     context: input.context,
     directory: input.directory,
     manifest: input.manifest,
+    repository: input.repository,
     versions: input.versions,
   };
   const pieces = input.config.layout.flatMap((item) =>
