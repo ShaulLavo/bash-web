@@ -18,6 +18,7 @@ mod case;
 mod case_attributes;
 pub(crate) mod command_hash;
 pub(crate) mod completion;
+mod producer;
 pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;
@@ -31,6 +32,7 @@ mod view;
 use binding::BindingUndo;
 pub(crate) use binding::BindingUpdate;
 pub(crate) use binding::Indexed;
+pub(crate) use producer::{IndexedMode, IndexedProducer, ProducerError, Rejection};
 pub(crate) use references::{Place, Reference};
 pub use view::Bindings;
 
