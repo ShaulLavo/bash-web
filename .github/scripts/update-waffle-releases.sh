@@ -37,7 +37,7 @@ release_source_revision() {
 }
 
 update_runtime() {
-  local tag version current_version revision specifier archive_sha builder_sha patch_sha tmp
+  local tag version current_version revision specifier archive_sha archive_bytes builder_sha patch_sha tmp
   tag=$(latest_release_tag ShaulLavo/waffle waffle-v)
   version=${tag#waffle-v}
   current_version=$(jq -r '.waffle.version' sources.lock.json)
@@ -50,6 +50,7 @@ update_runtime() {
   curl --fail --location --silent --show-error "$specifier" > "$scratch/runtime.tgz"
   node scripts/check-waffle-release.ts runtime "$scratch/runtime.tgz" "$version"
   archive_sha=$(sha256sum "$scratch/runtime.tgz" | cut -d ' ' -f 1)
+  archive_bytes=$(wc -c < "$scratch/runtime.tgz")
   builder_sha=$(curl --fail --location --silent --show-error \
     "https://raw.githubusercontent.com/ShaulLavo/waffle/${revision}/packages/waffle/scripts/build-wasi-libc.sh" |
     sha256sum | cut -d ' ' -f 1)
@@ -61,11 +62,12 @@ update_runtime() {
   tmp=$(mktemp)
   jq --arg version "$version" --arg revision "$revision" \
     --arg specifier "$specifier" --arg archive_sha "$archive_sha" --arg builder_sha "$builder_sha" \
-    --arg patch_sha "$patch_sha" \
+    --arg patch_sha "$patch_sha" --argjson archive_bytes "$archive_bytes" \
     '.waffle.version = $version
      | .waffle.revision = $revision
      | .waffle.specifier = $specifier
      | .waffle.archiveSha256 = $archive_sha
+     | .waffle.archiveBytes = $archive_bytes
      | .waffle.buildInputs.builderSha256 = $builder_sha
      | .waffle.buildInputs.patchSha256 = $patch_sha
      | .wasiLibc.patchPath |= sub("waffle-inputs/[0-9a-f]{40}/"; "waffle-inputs/" + $revision + "/")
@@ -102,12 +104,14 @@ update_programs() {
 
 update_program_support() {
   [[ "$runtime_updated" == true ]] || return 0
-  local manifest
+  local manifest previous_revision
+  previous_revision=$(sed -nE '/^[[:space:]]*waffle-program-support[[:space:]]*=/{s/.*rev = "([0-9a-f]{40})".*/\1/p;}' shell/engine/Cargo.toml | sed -n '1p')
+  [[ "$previous_revision" =~ ^[0-9a-f]{40}$ ]] || return 1
   for manifest in shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; do
     sed -E -i "/^[[:space:]]*waffle-program-support[[:space:]]*=/{s|(rev = \")[0-9a-f]{40}(\".*)|\\1${runtime_source_revision}\\2|;}" "$manifest"
   done
   if ! git diff --quiet -- shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; then
-    cargo update --manifest-path shell/Cargo.toml -p waffle-program-support
+    cargo update --manifest-path shell/Cargo.toml -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-program-support"
   fi
 }
 

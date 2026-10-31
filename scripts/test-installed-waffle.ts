@@ -35,7 +35,7 @@ test("Bun-prepared Waffle resolves and shares its real Node exports", async () =
   const runtimeArchive = download(selected.waffle.specifier);
   assertBytesIdentity(
     runtimeArchive,
-    { bytes: runtimeArchive.length, sha256: selected.waffle.archiveSha256 },
+    { bytes: selected.waffle.archiveBytes, sha256: selected.waffle.archiveSha256 },
     "selected runtime archive",
   );
   assert.equal(closure.directories.size, 8);
@@ -62,6 +62,7 @@ test("Bun-prepared Waffle resolves and shares its real Node exports", async () =
     ),
     { stdio: "inherit" },
   );
+  console.log(`Imported ${imports.length} family exports after metadata and artifact validation`);
   const node = await import("waffle");
   const runtime = await import("waffle/runtime");
   assert.equal(node.createRuntime, runtime.createRuntime);

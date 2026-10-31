@@ -11,7 +11,7 @@ use shell_engine::{
     process::{InProcessHost, SpawnRequest},
 };
 use std::rc::Rc;
-use waffle_program_support::{executor::Cancel as FamilyCancel, io as family};
+use waffle_native_family_support::{executor::Cancel as FamilyCancel, io as family};
 
 #[derive(Clone, Copy)]
 enum Utility {
