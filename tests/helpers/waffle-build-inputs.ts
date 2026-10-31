@@ -2,6 +2,13 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+export const wasiBuildScripts = [
+  "wasi-build.ts",
+  "verify-wasi-guests.ts",
+  "waffle-release-inputs.ts",
+  "waffle-host-interface.ts",
+];
+
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 
 export function waffleBuildFixture(root: string, builder: string, patch: string) {
