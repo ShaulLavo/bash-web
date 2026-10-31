@@ -38,7 +38,7 @@ impl Binding {
     pub(crate) fn node_bytes() -> usize {
         Indexed::tree_bytes(1) + 12 * std::mem::size_of::<usize>()
     }
-    fn indexed_header_bytes() -> usize {
+    pub(super) fn indexed_header_bytes() -> usize {
         std::mem::size_of::<Indexed>() + 2 * std::mem::size_of::<usize>()
     }
     pub(crate) fn count(&self) -> usize {
@@ -143,7 +143,7 @@ pub struct Indexed {
     value_bytes: usize,
 }
 impl Indexed {
-    fn from_scalar(value: String) -> Self {
+    pub(super) fn from_scalar(value: String) -> Self {
         let mut values = Self::default();
         values.insert(0, value);
         values
@@ -183,7 +183,7 @@ impl Indexed {
             self.remove(index);
         }
     }
-    fn tree_bytes(count: usize) -> usize {
+    pub(super) fn tree_bytes(count: usize) -> usize {
         if count == 0 {
             return 0;
         }

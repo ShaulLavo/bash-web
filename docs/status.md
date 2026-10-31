@@ -69,7 +69,7 @@ Observed at commit `a745a96` with the native `shell-engine`. Each row is a one-l
 | Feature | Try | What happens | Bash |
 | ------- | --- | ------------ | ---- |
 | Associative arrays | `declare -A m=([x]=1 [y]=2); echo ${m[x]} ${#m[@]}` | prints `0` | prints `1 2` |
-| `mapfile`, `readarray` | `mapfile -t a <<< x` | `command not found`, status 127 | reads the array |
+| `mapfile`, `readarray` | `mapfile -t a <<< x` | reads the array | reads the array |
 | Array elements in arithmetic | `arr=(1 2 3); echo $(( arr[0] + arr[2] ))` | status 2, no output | prints `4` |
 | `printf` floating point | `printf "%5.2f\n" 3.14159` | `unsupported format conversion`, status 2 | prints ` 3.14` |
 | Traps running | `trap "echo bye" EXIT; echo hi` | prints `hi` only. `trap` stores and prints bindings, and no event runs one. | prints `hi` then `bye` |

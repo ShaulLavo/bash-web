@@ -1,0 +1,65 @@
+{
+  "bash": "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)",
+  "env": {
+    "PATH": "/usr/bin:/bin",
+    "HOME": "/tmp/spec",
+    "TMP": "/tmp/spec",
+    "LC_ALL": "C.UTF-8"
+  },
+  "cases": [
+    {
+      "id": "basic",
+      "script": "mapfile a <<EOF\nfirst\nsecond\n\nEOF\nprintf 'n=%s:%s:%s:%s\\n' \"${#a[@]}\" \"${a[0]}\" \"${a[1]}\" \"${a[2]}\"",
+      "status": 0,
+      "stdoutBase64": "bj0zOmZpcnN0CjpzZWNvbmQKOgoK"
+    },
+    {
+      "id": "trim",
+      "script": "readarray -t a <<EOF\nfirst\nsecond\nEOF\nprintf 'n=%s:%s:%s\\n' \"${#a[@]}\" \"${a[0]}\" \"${a[1]}\"",
+      "status": 0,
+      "stdoutBase64": "bj0yOmZpcnN0OnNlY29uZAo="
+    },
+    {
+      "id": "delimiter",
+      "script": "printf 'a\\0b\\0tail' | { mapfile -d '' -t a; printf 'n=%s:%s:%s:%s\\n' \"${#a[@]}\" \"${a[0]}\" \"${a[1]}\" \"${a[2]}\"; }",
+      "status": 0,
+      "stdoutBase64": "bj0zOmE6Yjp0YWlsCg=="
+    },
+    {
+      "id": "count-skip-origin",
+      "script": "a=(old0 old1 old2 old3); mapfile -d : -n 2 -s 1 -O 1 -t a <<EOF\nskip:x:y:tail\nEOF\nprintf 'v=%s:%s:%s:%s\\n' \"${a[0]}\" \"${a[1]}\" \"${a[2]}\" \"${a[3]}\"",
+      "status": 0,
+      "stdoutBase64": "dj1vbGQwOng6eTpvbGQzCg=="
+    },
+    {
+      "id": "descriptor",
+      "script": "mapfile -u 3 -t a 3<<EOF\nfd-line\nEOF\nprintf 'v=%s\\n' \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "dj1mZC1saW5lCg=="
+    },
+    {
+      "id": "tail",
+      "script": "mapfile -t a <<EOF\nline\ntail\nEOF\nprintf 'n=%s:%s\\n' \"${#a[@]}\" \"${a[1]}\"",
+      "status": 0,
+      "stdoutBase64": "bj0yOnRhaWwK"
+    },
+    {
+      "id": "scalar-overlay",
+      "script": "b=scalar; mapfile -O 2 -t b <<EOF\nvalue\nEOF\nprintf 'v=%s:%s\\n' \"${b[0]}\" \"${b[2]}\"",
+      "status": 0,
+      "stdoutBase64": "dj1zY2FsYXI6dmFsdWUK"
+    },
+    {
+      "id": "case-upper",
+      "script": "declare -u a; mapfile -t a <<EOF\nmixed\nEOF\nprintf 'v=%s\\n' \"${a[0]}\"",
+      "status": 0,
+      "stdoutBase64": "dj1NSVhFRAo="
+    },
+    {
+      "id": "zero-callback",
+      "script": "mapfile -c -0 a <<EOF\nx\nEOF\nprintf 's=%s n=%s\\n' \"$?\" \"${#a[@]}\"",
+      "status": 0,
+      "stdoutBase64": "cz0xIG49MAo="
+    }
+  ]
+}

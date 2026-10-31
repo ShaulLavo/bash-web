@@ -149,6 +149,8 @@ Implementation is complete only after review, required checks, merge, exact-main
 
 ## Follow-up: read timeouts and mapfile
 
+The accepted implementation contract is recorded in [plan 009](009-read-timeouts-and-mapfile.md).
+
 Status: **Approved**, owner decision on October 31, 2026. Implement real support separately from PR 204's runtime/tooling adoption.
 
 Waffle 0.0.106 provides a process-local `/dev/null`. Three historical floor passes were false: `oils:builtin-read:605`, `oils:builtin-read:619`, and `brush-suite:builtins/mapfile:10`. Earlier redirection failures masked unsupported `read -t` and `mapfile`. The owner approved correcting exactly those three historical memberships, each with a retained reason. The frozen cases, GNU oracle, and all other floor memberships remain unchanged. Once any corrected case passes honestly, the ordinary monotonic floor must retain it.
