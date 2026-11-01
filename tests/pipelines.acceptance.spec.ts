@@ -4,7 +4,10 @@ import { ready, startupReady } from "./helpers/readiness.ts";
 import { execFileSync } from "node:child_process";
 import {
   capturePipelineFailure,
+  createPipelineWorkerRetirementBaseline,
   installPipelineWorkerDiagnostics,
+  type PipelineWorkerObservation,
+  waitForPipelineWorkerRetirement,
 } from "./helpers/pipeline-failure-diagnostics.ts";
 
 // Upstream acceptance copied from /work/reports/browser-shell-research.
@@ -82,6 +85,18 @@ async function tickerLines(page: Page) {
   return page.evaluate(() =>
     window.bashWeb!.readLines().filter((line) => /^CTRL_C_TICK \d+$/.test(line.trim())),
   );
+}
+
+async function pipelineWorkerObservation(page: Page): Promise<PipelineWorkerObservation> {
+  const listedWorkers = page.workers().map((worker) => {
+    const url = worker.url();
+    const marker = "#bash-web-pipeline-worker=";
+    const markerIndex = url.indexOf(marker);
+    const name = markerIndex >= 0 ? decodeURIComponent(url.slice(markerIndex + marker.length)) : "";
+    return { name, url };
+  });
+  const diagnostics = await page.evaluate(() => window.pipelineWorkerDiagnostics);
+  return { listedWorkers, diagnostics };
 }
 
 test("pipeline Ctrl+C stops a real WASI ticker and reuses the shell without leaks or late output", async ({
@@ -175,6 +190,11 @@ test("pipeline Ctrl+C stops every stage and its children", async ({ page }, info
   await capturePipelineFailure(
     async () => {
       await open(page);
+      const baselineObservation = await pipelineWorkerObservation(page);
+      pipelineWorkerBaselines.set(
+        page,
+        createPipelineWorkerRetirementBaseline(baselineObservation),
+      );
       await command(
         page,
         // Keep concurrent protocol markers on the guest's single-write byte path.
@@ -187,7 +207,10 @@ test("pipeline Ctrl+C stops every stage and its children", async ({ page }, info
         .toBeGreaterThanOrEqual(baselineWorkers.get(page)! + 2);
       await page.keyboard.press("Control+c");
       await ready(page);
-      await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
+      await waitForPipelineWorkerRetirement(
+        () => pipelineWorkerObservation(page),
+        pipelineWorkerBaselines.get(page)!,
+      );
       await command(page, "echo STATUS:$?:$KEEP");
       await output(page, "STATUS:130:kept");
     },
@@ -199,10 +222,15 @@ test("pipeline Ctrl+C stops every stage and its children", async ({ page }, info
           workers: window.pipelineWorkerDiagnostics,
         }))
         .catch((error: unknown) => ({ unavailable: String(error).slice(0, 512) }));
+      const workerRetirement = await pipelineWorkerObservation(page).catch((error: unknown) => ({
+        unavailable: String(error).slice(0, 512),
+      }));
       const workers = page.workers();
       await info.attach("pipeline-failure-diagnostics", {
         body: JSON.stringify({
           baselineWorkers: baselineWorkers.get(page),
+          workerRetirementBaseline: pipelineWorkerBaselines.get(page),
+          workerRetirement,
           workerCount: workers.length,
           workerUrls: Array.from({ length: Math.min(workers.length, 64) }, (_, index) =>
             workers[index].url().slice(0, 512),
@@ -351,3 +379,8 @@ for (const name of ["test-start-failure", "test-lazy-start-failure"]) {
     await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
   });
 }
+
+const pipelineWorkerBaselines = new WeakMap<
+  Page,
+  ReturnType<typeof createPipelineWorkerRetirementBaseline>
+>();
