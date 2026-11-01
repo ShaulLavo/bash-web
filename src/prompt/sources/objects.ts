@@ -5,6 +5,7 @@ import type { RepositorySnapshot } from "./repo-types";
 import { ObjectReader } from "./object-reader";
 import { aheadBehind, stagedChanges } from "./object-tree";
 import { readUpstream } from "./object-upstream";
+import { hasPackedReplacement } from "./repo-refs";
 import type { ObjectWork } from "./object-work";
 
 export async function readObjectStatus(
@@ -19,8 +20,9 @@ export async function readObjectStatus(
   const replaced = await known(work, async () => {
     const directory = await filesystem.lookup(`${repository.commonDir}/refs/replace`);
     const grafts = await filesystem.lookup(`${repository.commonDir}/info/grafts`);
-    return Boolean(
-      grafts || (directory && (directory.kind !== "dir" || directory.children.size > 0)),
+    return (
+      Boolean(grafts || (directory && (directory.kind !== "dir" || directory.children.size > 0))) ||
+      (await hasPackedReplacement(filesystem, repository.commonDir))
     );
   });
   if (replaced.kind === "unknown" || replaced.value || head.kind === "unknown")

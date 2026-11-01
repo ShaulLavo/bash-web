@@ -30,11 +30,15 @@ function value<T>(result: Known<T>): T {
   return result.value;
 }
 
-async function status(path: string): Promise<ObjectStatus> {
+async function status(
+  path: string,
+  filesystem = realFilesystem(),
+  work = budget(),
+): Promise<ObjectStatus> {
   const repository = await snapshot(path);
   assert.ok(repository);
   const index = await gitIndex(repository.gitDir);
-  return readObjectStatus(new TurnFilesystem(realFilesystem()), repository, index, budget());
+  return readObjectStatus(new TurnFilesystem(filesystem, work), repository, index, work);
 }
 async function gitIndex(gitDir: string): Promise<ParsedIndex> {
   try {
@@ -369,6 +373,228 @@ test("replacement history never reports ordinary staged or synchronized status",
   const result = await status(repo);
   assert.equal(result.staged.kind, "unknown");
   assert.equal(result.aheadBehind.kind, "unknown");
+});
+
+async function packedReplacement(repo: string): Promise<void> {
+  const before = await git(repo, "rev-parse", "HEAD");
+  await writeFile(join(repo, "tracked.txt"), "replacement tree");
+  await git(repo, "commit", "-qam", "replacement");
+  const replacement = await git(repo, "rev-parse", "HEAD");
+  const ref = `refs/replace/${before}`;
+  await git(repo, "replace", before, replacement);
+  await git(repo, "pack-refs", "--all");
+  const loosePath = join(repo, ".git", ref);
+  if (await realFilesystem().lookup(loosePath)) {
+    const records = await git(repo, "for-each-ref", "--format=%(objectname) %(refname)");
+    await writeFile(
+      join(repo, ".git/packed-refs"),
+      `# pack-refs with: peeled fully-peeled sorted\n${records}\n`,
+    );
+    await rm(loosePath);
+  }
+  const packed = await readFile(join(repo, ".git/packed-refs"), "utf8");
+  assert.ok(packed.split("\n").includes(`${replacement} ${ref}`));
+  assert.equal(await git(repo, "rev-parse", "--verify", ref), replacement);
+  assert.equal(
+    await git(repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/replace/"),
+    `${ref} ${replacement}`,
+  );
+  assert.equal(await realFilesystem().lookup(loosePath), undefined);
+  const directory = await realFilesystem().lookup(join(repo, ".git/refs/replace"));
+  assert.ok(!directory || (directory.kind === "dir" && directory.children.size === 0));
+  await writeFile(join(repo, ".git/refs/heads/main"), `${replacement}\n`);
+  assert.equal(await readFile(join(repo, ".git/HEAD"), "utf8"), "ref: refs/heads/main\n");
+  assert.equal(await readFile(join(repo, ".git/refs/heads/main"), "utf8"), `${replacement}\n`);
+  assert.equal(await git(repo, "rev-parse", "--verify", "HEAD"), replacement);
+}
+
+test("packed-only replacement history never reports ordinary object status with a loose HEAD", async (t) => {
+  const root = await fixture(t, "objects-packed-replace");
+  const repo = await makeCommittedRepository(root, "repo");
+  await packedReplacement(repo);
+  const result = await status(repo);
+  assert.deepEqual(
+    { staged: result.staged.kind, aheadBehind: result.aheadBehind.kind },
+    { staged: "unknown", aheadBehind: "unknown" },
+  );
+});
+
+function expectUnknownObjects(result: ObjectStatus): void {
+  assert.deepEqual(result, { staged: { kind: "unknown" }, aheadBehind: { kind: "unknown" } });
+}
+
+test("packed replacements use the linked worktree common directory and public unknown marker", async (t) => {
+  const root = await fixture(t, "objects-linked-packed-replace");
+  const repo = await makeCommittedRepository(root, "repo");
+  await packedReplacement(repo);
+  const linked = join(root, "linked");
+  await git(repo, "worktree", "add", "-qb", "linked", linked);
+  const repository = await snapshot(linked);
+  assert.ok(repository);
+  assert.equal(repository.commonDir, join(repo, ".git"));
+  assert.notEqual(repository.gitDir, repository.commonDir);
+  assert.equal(await realFilesystem().lookup(join(repository.gitDir, "packed-refs")), undefined);
+  expectUnknownObjects(await status(linked));
+  assert.equal(await renderedStatus(repo), "[…] ");
+  assert.equal(await renderedStatus(linked), "[…] ");
+  await rm(join(repo, ".git/packed-refs"));
+  assert.equal((await status(repo)).staged.kind, "known");
+  assert.equal((await status(repo)).aheadBehind.kind, "known");
+});
+
+test("ordinary packed upstreams and similarly named refs preserve staged and divergence counts", async (t) => {
+  const root = await fixture(t, "objects-packed-boundary");
+  const repo = await makeCommittedRepository(root, "repo");
+  await git(repo, "branch", "upstream");
+  await writeFile(join(repo, "tracked.txt"), "local commit");
+  await git(repo, "commit", "-qam", "local");
+  const head = await git(repo, "rev-parse", "HEAD");
+  const refs = [
+    "refs/replace",
+    `refs/replacements/${head}`,
+    `refs/heads/topic/refs/replace/${head}`,
+    "refs/heads/contains-replace",
+  ];
+  for (const ref of refs) await git(repo, "update-ref", ref, head);
+  await git(repo, "tag", "-am", "peeled tag", "v1");
+  await git(repo, "config", "branch.main.remote", ".");
+  await git(repo, "config", "branch.main.merge", "refs/heads/upstream");
+  await git(repo, "pack-refs", "--all");
+  const packedPath = join(repo, ".git/packed-refs");
+  const packed = await readFile(packedPath, "utf8");
+  for (const ref of refs) assert.ok(packed.split("\n").includes(`${head} ${ref}`));
+  assert.ok(packed.split("\n").includes(`^${head}`));
+  await writeFile(join(repo, ".git/refs/heads/main"), `${head}\n`);
+  await writeFile(join(repo, "staged"), "addition");
+  await git(repo, "add", "staged");
+  await expectStaged(repo);
+  await expectCounts(repo);
+  const filesystem = realFilesystem();
+  let packedReads = 0;
+  const result = await status(repo, {
+    ...filesystem,
+    readFile(path) {
+      if (path === packedPath) packedReads++;
+      return filesystem.readFile(path);
+    },
+  });
+  assert.equal(value(result.staged), 1);
+  assert.deepEqual(value(result.aheadBehind), { ahead: 1, behind: 0 });
+  assert.equal(packedReads, 1, "guard and upstream share the turn's packed-ref read");
+});
+
+test("absent packed refs allow ordinary object status without a file read", async (t) => {
+  const root = await fixture(t, "objects-packed-absent");
+  const repo = await makeCommittedRepository(root, "repo");
+  const filesystem = realFilesystem();
+  const packedPath = join(repo, ".git/packed-refs");
+  assert.equal(await filesystem.lookup(packedPath), undefined);
+  const result = await status(repo, {
+    ...filesystem,
+    readFile(path) {
+      assert.notEqual(path, packedPath);
+      return filesystem.readFile(path);
+    },
+  });
+  assert.equal(value(result.staged), 0);
+  assert.deepEqual(value(result.aheadBehind), { ahead: 0, behind: 0 });
+});
+
+test("malformed packed refs never publish known object categories with a loose HEAD", async (t) => {
+  const root = await fixture(t, "objects-packed-malformed");
+  const repo = await makeCommittedRepository(root, "repo");
+  const head = await git(repo, "rev-parse", "HEAD");
+  const record = `${head} refs/heads/unrelated\n`;
+  const invalid = [
+    record.trimEnd(),
+    `invalid refs/heads/unrelated\n`,
+    `${head} refs/heads/../invalid\n`,
+    `^${head}\n`,
+    `${record}^${head}\n^${head}\n`,
+    `${record}broken\n`,
+    `${head} refs/replace/${head}\nbroken\n`,
+  ];
+  for (const contents of invalid) {
+    await writeFile(join(repo, ".git/packed-refs"), contents);
+    expectUnknownObjects(await status(repo));
+  }
+  await rm(join(repo, ".git/packed-refs"));
+  await mkdir(join(repo, ".git/packed-refs"));
+  expectUnknownObjects(await status(repo));
+});
+
+test("unreadable packed metadata never implies replacements are absent", async (t) => {
+  const root = await fixture(t, "objects-packed-unreadable");
+  const repo = await makeCommittedRepository(root, "repo");
+  const head = await git(repo, "rev-parse", "HEAD");
+  const packedPath = join(repo, ".git/packed-refs");
+  await writeFile(packedPath, `${head} refs/heads/unrelated\n`);
+  const filesystem = realFilesystem();
+  expectUnknownObjects(
+    await status(repo, {
+      ...filesystem,
+      lookup(path) {
+        if (path === packedPath) throw new Error("Injected packed-ref lookup failure");
+        return filesystem.lookup(path);
+      },
+    }),
+  );
+  expectUnknownObjects(
+    await status(repo, {
+      ...filesystem,
+      readFile(path) {
+        if (path === packedPath) throw new Error("Injected packed-ref read failure");
+        return filesystem.readFile(path);
+      },
+    }),
+  );
+  expectUnknownObjects(
+    await status(repo, {
+      ...filesystem,
+      readFile(path) {
+        if (path === packedPath) return Promise.resolve(undefined);
+        return filesystem.readFile(path);
+      },
+    }),
+  );
+});
+
+async function expectInterruptedPackedRead(
+  repo: string,
+  mode: "cancel" | "deadline",
+): Promise<void> {
+  const packedPath = join(repo, ".git/packed-refs");
+  const signal = new AbortController();
+  let now = 0;
+  const work = new WorkBudget(signal.signal, 1000, () => now);
+  const filesystem = realFilesystem();
+  let packedReads = 0;
+  const result = await status(
+    repo,
+    {
+      ...filesystem,
+      async readFile(path) {
+        const bytes = await filesystem.readFile(path);
+        if (path !== packedPath) return bytes;
+        packedReads++;
+        if (mode === "cancel") signal.abort();
+        else now = 1000;
+        return bytes;
+      },
+    },
+    work,
+  );
+  assert.equal(packedReads, 1, mode);
+  expectUnknownObjects(result);
+}
+
+test("cancellation and deadline during the packed-ref read reject both object categories", async (t) => {
+  const root = await fixture(t, "objects-packed-cancelled");
+  const repo = await makeCommittedRepository(root, "repo");
+  const head = await git(repo, "rev-parse", "HEAD");
+  await writeFile(join(repo, ".git/packed-refs"), `${head} refs/heads/unrelated\n`);
+  await expectInterruptedPackedRead(repo, "cancel");
+  await expectInterruptedPackedRead(repo, "deadline");
 });
 
 test("corrupt pack trailers and mismatched index pack checksums show unknown", async (t) => {

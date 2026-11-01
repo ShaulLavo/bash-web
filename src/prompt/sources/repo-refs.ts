@@ -26,7 +26,7 @@ export async function resolveRef(
     seen.add(current);
     const path = `${commonDir}/${current}`;
     const entry = await filesystem.lookup(path);
-    if (!entry) return packedRef(filesystem, commonDir, current);
+    if (!entry) return packedRef(filesystem, commonDir, (candidate) => candidate === current);
     if (entry.kind !== "file") return { kind: "unknown" };
     const bytes = await filesystem.readFile(path);
     if (!bytes) return { kind: "unknown" };
@@ -38,10 +38,19 @@ export async function resolveRef(
   return { kind: "unknown" };
 }
 
+export async function hasPackedReplacement(
+  filesystem: TurnFilesystem,
+  commonDir: string,
+): Promise<boolean> {
+  const result = await packedRef(filesystem, commonDir, (ref) => ref.startsWith("refs/replace/"));
+  if (result.kind === "unknown") throw new Error("Unknown packed Git refs");
+  return result.kind === "resolved";
+}
+
 async function packedRef(
   filesystem: TurnFilesystem,
   commonDir: string,
-  ref: string,
+  matches: (ref: string) => boolean,
 ): Promise<RefValue> {
   const path = `${commonDir}/packed-refs`;
   const entry = await filesystem.lookup(path);
@@ -62,7 +71,7 @@ async function packedRef(
     const record = /^([0-9a-f]{40}) (refs\/.*)$/u.exec(line);
     if (!record || record[1] === undefined || record[2] === undefined || !validRef(record[2]))
       return { kind: "unknown" };
-    if (record[2] === ref) result = { kind: "resolved", commit: record[1] };
+    if (matches(record[2])) result = { kind: "resolved", commit: record[1] };
     canPeel = true;
   }
   return result;
