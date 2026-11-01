@@ -371,6 +371,50 @@ test("replacement history never reports ordinary staged or synchronized status",
   assert.equal(result.aheadBehind.kind, "unknown");
 });
 
+async function packedReplacement(repo: string): Promise<void> {
+  const before = await git(repo, "rev-parse", "HEAD");
+  await writeFile(join(repo, "tracked.txt"), "replacement tree");
+  await git(repo, "commit", "-qam", "replacement");
+  const replacement = await git(repo, "rev-parse", "HEAD");
+  const ref = `refs/replace/${before}`;
+  await git(repo, "replace", before, replacement);
+  await git(repo, "pack-refs", "--all");
+  const loosePath = join(repo, ".git", ref);
+  if (await realFilesystem().lookup(loosePath)) {
+    const records = await git(repo, "for-each-ref", "--format=%(objectname) %(refname)");
+    await writeFile(
+      join(repo, ".git/packed-refs"),
+      `# pack-refs with: peeled fully-peeled sorted\n${records}\n`,
+    );
+    await rm(loosePath);
+  }
+  const packed = await readFile(join(repo, ".git/packed-refs"), "utf8");
+  assert.ok(packed.split("\n").includes(`${replacement} ${ref}`));
+  assert.equal(await git(repo, "rev-parse", "--verify", ref), replacement);
+  assert.equal(
+    await git(repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/replace/"),
+    `${ref} ${replacement}`,
+  );
+  assert.equal(await realFilesystem().lookup(loosePath), undefined);
+  const directory = await realFilesystem().lookup(join(repo, ".git/refs/replace"));
+  assert.ok(!directory || (directory.kind === "dir" && directory.children.size === 0));
+  await writeFile(join(repo, ".git/refs/heads/main"), `${replacement}\n`);
+  assert.equal(await readFile(join(repo, ".git/HEAD"), "utf8"), "ref: refs/heads/main\n");
+  assert.equal(await readFile(join(repo, ".git/refs/heads/main"), "utf8"), `${replacement}\n`);
+  assert.equal(await git(repo, "rev-parse", "--verify", "HEAD"), replacement);
+}
+
+test("packed-only replacement history never reports ordinary object status with a loose HEAD", async (t) => {
+  const root = await fixture(t, "objects-packed-replace");
+  const repo = await makeCommittedRepository(root, "repo");
+  await packedReplacement(repo);
+  const result = await status(repo);
+  assert.deepEqual(
+    { staged: result.staged.kind, aheadBehind: result.aheadBehind.kind },
+    { staged: "unknown", aheadBehind: "unknown" },
+  );
+});
+
 test("corrupt pack trailers and mismatched index pack checksums show unknown", async (t) => {
   const root = await fixture(t, "objects-pack-checksum");
   const repo = await makeCommittedRepository(root, "repo");
