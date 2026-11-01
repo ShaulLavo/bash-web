@@ -21,7 +21,7 @@ Object work shares the status run's cancellation signal and deadline. Parsing an
 
 Waffle's `readFile` returns a whole file. The input-file limit is checked when that admitted read completes; it cannot prevent the filesystem's initial allocation. Decompression checks its output limit while reading, before accepting the full inflated result.
 
-Unsupported pack-index versions, SHA-256 repositories, reftables, invalid UTF-8 paths, configuration includes, worktree-specific upstream configuration, and negative fetch refspecs show unknown. Missing or corrupt objects never imply a clean or synchronized repository. Alternate object directories are not searched. Replacement refs and legacy grafts show unknown instead of reporting counts from the unreplaced graph.
+Unsupported pack-index versions, SHA-256 repositories, reftables, invalid UTF-8 paths, configuration includes, worktree-specific upstream configuration, and negative fetch refspecs show unknown. Missing or corrupt objects never imply a clean or synchronized repository. Alternate object directories are not searched. Loose or packed replacement refs and legacy grafts show unknown instead of reporting counts from the unreplaced graph.
 
 ## Verification
 
