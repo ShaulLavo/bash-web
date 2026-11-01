@@ -4,7 +4,7 @@ export interface WorkerIdentity {
   url: string;
   createdAt: number;
   terminationRequestedAt: number | null;
-  launch: { pid: number | null; args: string[] } | null;
+  launch: { pid: number | null; args: string[]; order: number } | null;
 }
 
 interface PipelineWorkerDiagnostics {
@@ -165,11 +165,11 @@ function checkWorkerRoles(
   const listed = new Set(observation.listedWorkers.map((worker) => worker.name));
   const rows = observation.diagnostics.workers.filter((worker) => listed.has(worker.name));
   const persistent = new Set(baseline.persistentWorkerNames);
-  const poolCapacities = new Map(baseline.idlePools.map((pool) => [pool.url, pool.capacity]));
+  const poolCapacity = baseline.idlePools.reduce((total, pool) => total + pool.capacity, 0);
+  const poolUrl = lastProcessWorkerUrl(observation.diagnostics.workers);
   const active = rows.filter((worker) => worker.terminationRequestedAt === null);
   const unexpected = active.filter(
-    (worker) =>
-      !persistent.has(worker.name) && (worker.launch !== null || !poolCapacities.has(worker.url)),
+    (worker) => !persistent.has(worker.name) && (worker.launch !== null || worker.url !== poolUrl),
   );
   if (unexpected.length > 0) {
     return {
@@ -178,24 +178,28 @@ function checkWorkerRoles(
       observation,
     };
   }
-  const counts = new Map<string, number>();
-  for (const worker of active) {
-    if (persistent.has(worker.name)) continue;
-    counts.set(worker.url, (counts.get(worker.url) ?? 0) + 1);
-  }
-  const overflowing = baseline.idlePools.filter(
-    (pool) => (counts.get(pool.url) ?? 0) > pool.capacity,
-  );
-  if (overflowing.length > 0) {
+  const idleCount = active.filter((worker) => !persistent.has(worker.name)).length;
+  if (idleCount > poolCapacity) {
     return { status: "failed", reason: "unrequested idle worker pool grew", observation };
   }
   const activeNames = new Set(active.map((worker) => worker.name));
   const baselineRecovered =
     baseline.persistentWorkerNames.every((name) => activeNames.has(name)) &&
-    baseline.idlePools.every((pool) => counts.get(pool.url) === pool.capacity);
+    idleCount === poolCapacity;
   const retiring = rows.some((worker) => worker.terminationRequestedAt !== null);
   if (baselineRecovered && !retiring) return { status: "retired" };
   return { status: "pending", retirementOnly: baselineRecovered && retiring, observation };
+}
+
+function lastProcessWorkerUrl(workers: readonly WorkerIdentity[]): string | undefined {
+  let order = 0;
+  let url: string | undefined;
+  for (const worker of workers) {
+    if (worker.launch === null || worker.launch.order <= order) continue;
+    order = worker.launch.order;
+    url = worker.url;
+  }
+  return url;
 }
 
 export async function waitForPipelineWorkerRetirement(
@@ -271,6 +275,7 @@ export function installPipelineWorkerDiagnostics() {
   const diagnostics: Window["pipelineWorkerDiagnostics"] = { workers: [], omittedWorkers: 0 };
   window.pipelineWorkerDiagnostics = diagnostics;
   let nextId = 0;
+  let nextLaunch = 0;
   function identity(id: number, name: string, url: string | URL): WorkerIdentity | undefined {
     if (diagnostics.workers.length === 64) {
       diagnostics.omittedWorkers++;
@@ -298,7 +303,7 @@ export function installPipelineWorkerDiagnostics() {
       const arg: unknown = message.args[index];
       args.push(typeof arg === "string" ? arg.slice(0, 128) : "[non-string]");
     }
-    return { pid: typeof pid === "number" ? pid : null, args };
+    return { pid: typeof pid === "number" ? pid : null, args, order: ++nextLaunch };
   }
   window.Worker = class extends window.Worker {
     private readonly diagnostic: WorkerIdentity | undefined;

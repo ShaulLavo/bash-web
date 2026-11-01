@@ -279,7 +279,7 @@ function rotatingPool() {
   const shell = {
     ...makeWorker(2, "shell", null),
     url: "shell-worker.js",
-    launch: { pid: 1, args: ["shell-engine", "-i"] },
+    launch: { pid: 1, args: ["shell-engine", "-i"], order: 1 },
   };
   const idle = (id: number, name: string, terminationRequestedAt: number | null) => ({
     ...makeWorker(id, name, terminationRequestedAt),
@@ -317,7 +317,7 @@ test("replacement pool growth and an unrequested leased child both fail", () => 
     diagnostics: { workers: current.diagnostics.workers.concat([extra]), omittedWorkers: 0 },
   });
   assert.equal(overflow.status, "failed");
-  const child = { ...extra, launch: { pid: 7, args: ["test-guest", "cat"] } };
+  const child = { ...extra, launch: { pid: 7, args: ["test-guest", "cat"], order: 2 } };
   const leaked = checkPipelineWorkerRetirement(baseline, {
     listedWorkers: listed,
     diagnostics: { workers: current.diagnostics.workers.concat([child]), omittedWorkers: 0 },
@@ -343,7 +343,7 @@ test("only terminate-requested leftovers receive an additional bounded grace", a
 
 test("grace never hides an unrequested child or missing persistent worker", async () => {
   const { baseline, current, idle } = rotatingPool();
-  const child = { ...idle(14, "unrequested", null), launch: { pid: 7, args: ["cat"] } };
+  const child = { ...idle(14, "unrequested", null), launch: { pid: 7, args: ["cat"], order: 2 } };
   const extra = {
     listedWorkers: current.listedWorkers.concat([{ name: child.name, url: child.url }]),
     diagnostics: { workers: current.diagnostics.workers.concat([child]), omittedWorkers: 0 },
@@ -358,4 +358,54 @@ test("grace never hides an unrequested child or missing persistent worker", asyn
   const absent = fakeRetirementWait(baseline, [missing], 5_000, 3_000);
   await assert.rejects(absent.promise, /after 5000 ms/);
   assert.equal(absent.now(), 5_000);
+});
+
+test("the idle pool follows the last process launch across worker scripts", () => {
+  const { baseline, current } = rotatingPool();
+  const preview = {
+    ...makeWorker(14, "grep", 10),
+    url: "preview1-worker.js",
+    launch: { pid: 2, args: ["grep", "unmatched"], order: 2 },
+  };
+  const rows = current.diagnostics.workers
+    .map((worker) =>
+      worker.name.startsWith("replacement-") ? { ...worker, url: preview.url } : worker,
+    )
+    .concat([preview]);
+  const healthy = { ...current, diagnostics: { workers: rows, omittedWorkers: 0 } };
+  assert.equal(checkPipelineWorkerRetirement(baseline, healthy).status, "retired");
+});
+
+test("idle allowance follows launch order rather than construction order", () => {
+  const { baseline, current } = rotatingPool();
+  const latest = {
+    ...makeWorker(3, "idle-a", 10),
+    url: "shell-worker.js",
+    launch: { pid: 7, args: ["test-guest", "cat"], order: 5 },
+  };
+  const laterConstructed = {
+    ...makeWorker(15, "later-constructed", 10),
+    url: "preview1-worker.js",
+    launch: { pid: 6, args: ["grep", "unmatched"], order: 4 },
+  };
+  const replacementRows = current.diagnostics.workers
+    .filter((worker) => worker.id !== 3)
+    .map((worker) =>
+      worker.name.startsWith("replacement-") ? { ...worker, url: latest.url } : worker,
+    );
+  const healthy = {
+    ...current,
+    diagnostics: { workers: replacementRows.concat([latest, laterConstructed]), omittedWorkers: 0 },
+  };
+  assert.equal(checkPipelineWorkerRetirement(baseline, healthy).status, "retired");
+  const foreign = {
+    ...healthy,
+    diagnostics: {
+      workers: healthy.diagnostics.workers.map((worker) =>
+        worker.name.startsWith("replacement-") ? { ...worker, url: "unlaunched.js" } : worker,
+      ),
+      omittedWorkers: 0,
+    },
+  };
+  assert.equal(checkPipelineWorkerRetirement(baseline, foreign).status, "failed");
 });
