@@ -140,7 +140,7 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.108/waffle-0.0.108.tgz",
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.109/waffle-0.0.109.tgz",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
@@ -154,7 +154,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.108": true
+    "waffle@0.0.109": true
   },
   "trustedDependencies": [
     "waffle",
