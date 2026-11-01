@@ -34,7 +34,12 @@ jobs:
         run: |
           set -euo pipefail
           bash .github/scripts/test-publish-update.sh
-          bash .github/scripts/test-update-waffle-releases.sh
+          no_rg="$RUNNER_TEMP/no-rg"
+          mkdir "$no_rg"
+          trap 'rm -f "$no_rg/rg"; rmdir "$no_rg"' EXIT
+          printf '%s\n' '#!/usr/bin/env bash' 'exit 127' > "$no_rg/rg"
+          chmod +x "$no_rg/rg"
+          PATH="$no_rg:$PATH" bash .github/scripts/test-update-waffle-releases.sh
           bash .github/scripts/update-waffle-releases.sh
           bash .github/scripts/check-update-paths.sh
           mkdir "$RUNNER_TEMP/dependency-update"
