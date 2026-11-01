@@ -169,6 +169,7 @@ function fakeRetirementWait(
   baseline: ReturnType<typeof createPipelineWorkerRetirementBaseline>,
   snapshots: PipelineWorkerObservation[],
   timeoutMs = 5_000,
+  retirementGraceMs = 0,
 ) {
   let now = 0;
   let index = 0;
@@ -181,6 +182,7 @@ function fakeRetirementWait(
     baseline,
     {
       timeoutMs,
+      retirementGraceMs,
       pollIntervalMs: 100,
       now: () => now,
       sleep: async (milliseconds) => {
@@ -230,7 +232,7 @@ test("a requested worker that never retires fails at the deadline", async () => 
     [makeWorker(1, "baseline-fs", null), makeWorker(2, "pipeline-child", 10)],
   );
   const wait = fakeRetirementWait(baseline, [pending], 500);
-  await assert.rejects(wait.promise, /timed out after 500 ms/);
+  await assert.rejects(wait.promise, /after 500 ms/);
   assert.equal(wait.now(), 500);
 });
 
@@ -270,4 +272,90 @@ test("identity and coverage failures fail closed", () => {
   if (omitted.status === "failed") {
     assert.match(omitted.reason, /omitted 1 row/);
   }
+});
+
+function rotatingPool() {
+  const fs = makeWorker(1, "filesystem", null);
+  const shell = {
+    ...makeWorker(2, "shell", null),
+    url: "shell-worker.js",
+    launch: { pid: 1, args: ["shell-engine", "-i"] },
+  };
+  const idle = (id: number, name: string, terminationRequestedAt: number | null) => ({
+    ...makeWorker(id, name, terminationRequestedAt),
+    url: "shell-worker.js",
+  });
+  const initial = pipelineObservation(
+    ["filesystem", "shell", "idle-a", "idle-b"],
+    [fs, shell, idle(3, "idle-a", null), idle(4, "idle-b", null)],
+  );
+  const current = pipelineObservation(
+    ["filesystem", "shell", "replacement-a", "replacement-b"],
+    [
+      fs,
+      shell,
+      idle(3, "idle-a", 10),
+      idle(4, "idle-b", 10),
+      idle(12, "replacement-a", null),
+      idle(13, "replacement-b", null),
+    ],
+  );
+  return { baseline: createPipelineWorkerRetirementBaseline(initial), current, idle };
+}
+
+test("single-use pool workers may be replaced without growing the baseline pool", () => {
+  const { baseline, current } = rotatingPool();
+  assert.equal(checkPipelineWorkerRetirement(baseline, current).status, "retired");
+});
+
+test("replacement pool growth and an unrequested leased child both fail", () => {
+  const { baseline, current, idle } = rotatingPool();
+  const extra = idle(14, "extra", null);
+  const listed = current.listedWorkers.concat([{ name: extra.name, url: extra.url }]);
+  const overflow = checkPipelineWorkerRetirement(baseline, {
+    listedWorkers: listed,
+    diagnostics: { workers: current.diagnostics.workers.concat([extra]), omittedWorkers: 0 },
+  });
+  assert.equal(overflow.status, "failed");
+  const child = { ...extra, launch: { pid: 7, args: ["test-guest", "cat"] } };
+  const leaked = checkPipelineWorkerRetirement(baseline, {
+    listedWorkers: listed,
+    diagnostics: { workers: current.diagnostics.workers.concat([child]), omittedWorkers: 0 },
+  });
+  assert.equal(leaked.status, "failed");
+});
+
+test("only terminate-requested leftovers receive an additional bounded grace", async () => {
+  const { baseline, current, idle } = rotatingPool();
+  const child = idle(14, "stopping-child", 10);
+  const pending = {
+    listedWorkers: current.listedWorkers.concat([{ name: child.name, url: child.url }]),
+    diagnostics: { workers: current.diagnostics.workers.concat([child]), omittedWorkers: 0 },
+  };
+  const delayed = Array.from({ length: 57 }, () => pending).concat([current]);
+  const wait = fakeRetirementWait(baseline, delayed, 5_000, 3_000);
+  await wait.promise;
+  assert.equal(wait.now(), 5_700);
+  const stuck = fakeRetirementWait(baseline, [pending], 5_000, 3_000);
+  await assert.rejects(stuck.promise, /after 8000 ms/);
+  assert.equal(stuck.now(), 8_000);
+});
+
+test("grace never hides an unrequested child or missing persistent worker", async () => {
+  const { baseline, current, idle } = rotatingPool();
+  const child = { ...idle(14, "unrequested", null), launch: { pid: 7, args: ["cat"] } };
+  const extra = {
+    listedWorkers: current.listedWorkers.concat([{ name: child.name, url: child.url }]),
+    diagnostics: { workers: current.diagnostics.workers.concat([child]), omittedWorkers: 0 },
+  };
+  const wait = fakeRetirementWait(baseline, [extra], 5_000, 3_000);
+  await assert.rejects(wait.promise, /no termination request/);
+  assert.equal(wait.now(), 0);
+  const missing = {
+    ...current,
+    listedWorkers: current.listedWorkers.filter((w) => w.name !== "shell"),
+  };
+  const absent = fakeRetirementWait(baseline, [missing], 5_000, 3_000);
+  await assert.rejects(absent.promise, /after 5000 ms/);
+  assert.equal(absent.now(), 5_000);
 });

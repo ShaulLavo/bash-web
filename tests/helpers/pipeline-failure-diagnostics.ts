@@ -25,15 +25,18 @@ export interface PipelineWorkerObservation {
 export interface PipelineWorkerRetirementBaseline {
   listedWorkerNames: string[];
   diagnosticWorkerIds: number[];
+  persistentWorkerNames: string[];
+  idlePools: { url: string; capacity: number }[];
 }
 
 export type PipelineWorkerRetirementCheck =
   | { status: "retired" }
-  | { status: "pending"; observation: PipelineWorkerObservation }
+  | { status: "pending"; retirementOnly: boolean; observation: PipelineWorkerObservation }
   | { status: "failed"; reason: string; observation: PipelineWorkerObservation };
 
 export interface WaitForPipelineWorkerRetirementOptions {
   timeoutMs?: number;
+  retirementGraceMs?: number;
   pollIntervalMs?: number;
   now?: () => number;
   sleep?: (milliseconds: number) => Promise<void>;
@@ -48,9 +51,21 @@ declare global {
 export function createPipelineWorkerRetirementBaseline(
   observation: PipelineWorkerObservation,
 ): PipelineWorkerRetirementBaseline {
+  const listedWorkerNames = observation.listedWorkers.map((worker) => worker.name);
+  const listed = new Set(listedWorkerNames);
+  const rows = observation.diagnostics.workers.filter((worker) => listed.has(worker.name));
+  const processUrls = new Set(
+    rows.filter((worker) => worker.launch !== null).map((worker) => worker.url),
+  );
+  const idle = rows.filter((worker) => worker.launch === null && processUrls.has(worker.url));
+  const idleNames = new Set(idle.map((worker) => worker.name));
+  const capacities = new Map<string, number>();
+  for (const worker of idle) capacities.set(worker.url, (capacities.get(worker.url) ?? 0) + 1);
   return {
-    listedWorkerNames: observation.listedWorkers.map((worker) => worker.name),
+    listedWorkerNames,
     diagnosticWorkerIds: observation.diagnostics.workers.map((worker) => worker.id),
+    persistentWorkerNames: listedWorkerNames.filter((name) => !idleNames.has(name)),
+    idlePools: Array.from(capacities, ([url, capacity]) => ({ url, capacity })),
   };
 }
 
@@ -66,7 +81,6 @@ export function checkPipelineWorkerRetirement(
     };
   }
 
-  const baselineNames = new Set(baseline.listedWorkerNames);
   const currentNames = observation.listedWorkers.map((worker) => worker.name);
   const diagnosticByName = new Map<string, WorkerIdentity>(
     observation.diagnostics.workers.map((worker): [string, WorkerIdentity] => [
@@ -141,24 +155,47 @@ export function checkPipelineWorkerRetirement(
     };
   }
 
-  const extraWorkers = observation.listedWorkers.filter(
-    (worker) => !baselineNames.has(worker.name),
+  return checkWorkerRoles(baseline, observation);
+}
+
+function checkWorkerRoles(
+  baseline: PipelineWorkerRetirementBaseline,
+  observation: PipelineWorkerObservation,
+): PipelineWorkerRetirementCheck {
+  const listed = new Set(observation.listedWorkers.map((worker) => worker.name));
+  const rows = observation.diagnostics.workers.filter((worker) => listed.has(worker.name));
+  const persistent = new Set(baseline.persistentWorkerNames);
+  const poolCapacities = new Map(baseline.idlePools.map((pool) => [pool.url, pool.capacity]));
+  const active = rows.filter((worker) => worker.terminationRequestedAt === null);
+  const unexpected = active.filter(
+    (worker) =>
+      !persistent.has(worker.name) && (worker.launch !== null || !poolCapacities.has(worker.url)),
   );
-  const unrequestedExtraWorkers = extraWorkers.filter(
-    (worker) => diagnosticByName.get(worker.name)?.terminationRequestedAt === null,
-  );
-  if (unrequestedExtraWorkers.length > 0) {
+  if (unexpected.length > 0) {
     return {
       status: "failed",
-      reason: `unexpected live worker(s) had no termination request: ${formatWorkers(unrequestedExtraWorkers)}`,
+      reason: `unexpected live worker(s) had no termination request: ${formatWorkers(unexpected)}`,
       observation,
     };
   }
-
-  if (extraWorkers.length === 0 && currentNames.length === baseline.listedWorkerNames.length) {
-    return { status: "retired" };
+  const counts = new Map<string, number>();
+  for (const worker of active) {
+    if (persistent.has(worker.name)) continue;
+    counts.set(worker.url, (counts.get(worker.url) ?? 0) + 1);
   }
-  return { status: "pending", observation };
+  const overflowing = baseline.idlePools.filter(
+    (pool) => (counts.get(pool.url) ?? 0) > pool.capacity,
+  );
+  if (overflowing.length > 0) {
+    return { status: "failed", reason: "unrequested idle worker pool grew", observation };
+  }
+  const activeNames = new Set(active.map((worker) => worker.name));
+  const baselineRecovered =
+    baseline.persistentWorkerNames.every((name) => activeNames.has(name)) &&
+    baseline.idlePools.every((pool) => counts.get(pool.url) === pool.capacity);
+  const retiring = rows.some((worker) => worker.terminationRequestedAt !== null);
+  if (baselineRecovered && !retiring) return { status: "retired" };
+  return { status: "pending", retirementOnly: baselineRecovered && retiring, observation };
 }
 
 export async function waitForPipelineWorkerRetirement(
@@ -171,6 +208,8 @@ export async function waitForPipelineWorkerRetirement(
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? ((milliseconds: number) => delay(milliseconds));
   const deadline = now() + timeoutMs;
+  const retirementGraceMs = options.retirementGraceMs ?? 3_000;
+  let retirementDeadline: number | undefined;
   let observation = await observe();
 
   while (true) {
@@ -180,10 +219,14 @@ export async function waitForPipelineWorkerRetirement(
       throw new Error(`pipeline worker retirement failed: ${check.reason}`);
     }
 
-    const remainingMs = deadline - now();
+    const at = now();
+    if (at >= deadline && check.retirementOnly && retirementDeadline === undefined) {
+      retirementDeadline = deadline + retirementGraceMs;
+    }
+    const remainingMs = (check.retirementOnly ? (retirementDeadline ?? deadline) : deadline) - at;
     if (remainingMs <= 0) {
       throw new Error(
-        `pipeline worker retirement timed out after ${timeoutMs} ms with ${check.observation.listedWorkers.length} listed worker(s): ${formatWorkers(check.observation.listedWorkers)}`,
+        `pipeline worker retirement timed out with ${check.observation.listedWorkers.length} listed worker(s) after ${at - (deadline - timeoutMs)} ms: ${formatWorkers(check.observation.listedWorkers)}`,
       );
     }
     await sleep(Math.min(pollIntervalMs, remainingMs));
