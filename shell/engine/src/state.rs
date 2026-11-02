@@ -460,18 +460,7 @@ impl State {
         let functions = snapshot_map(source, |s| &s.functions, cancel, work).await?;
         let call_stack = CallStack::snapshot(source, cancel, work).await?;
         let pipestatus = snapshot_vec(source, |s| &s.pipestatus, cancel, work).await?;
-        let positional_memory = source
-            .borrow()
-            .positional_memory
-            .as_ref()
-            .map(|memory| {
-                memory
-                    .borrow()
-                    .fork()
-                    .map(|ticket| Rc::new(RefCell::new(ticket)))
-            })
-            .transpose()
-            .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
+        let positional_memory = fork_memory(source.borrow().positional_memory.as_ref())?;
         let positional = snapshot_vec(source, |s| &s.positional, cancel, work).await?;
         let last_async = snapshot_value(source, |s| Some(&s.last_async), cancel, work).await?;
         let (local_count, prefix_count) = {
@@ -1397,10 +1386,7 @@ impl State {
             .is_some_and(|local| local.readonly)
     }
     pub(crate) fn readonly(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
-        let name = self.assignment_name(name)?;
-        if let Some(value) = value {
-            self.assign_parameter(name.clone(), value)?;
-        }
+        let name = self.prepare_assignment(name, value)?;
         let owner = self
             .locals
             .iter_mut()
@@ -1414,12 +1400,17 @@ impl State {
         Ok(())
     }
     pub(crate) fn export(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
+        let name = self.prepare_assignment(name, value)?;
+        self.exported.insert(name);
+        Ok(())
+    }
+
+    fn prepare_assignment(&mut self, name: String, value: Option<String>) -> Result<String, i32> {
         let name = self.assignment_name(name)?;
         if let Some(value) = value {
             self.assign_parameter(name.clone(), value)?;
         }
-        self.exported.insert(name);
-        Ok(())
+        Ok(name)
     }
     /// Resolve attributes and values to one binding. Admit the retained set
     /// node and all temporary/assignment keys before copying the target name.
@@ -1827,17 +1818,7 @@ impl SnapshotValue for references::SavedBinding {
 }
 impl SnapshotValue for LocalVariable {
     fn snapshot_clone(&self) -> Result<Self, Error> {
-        let memory = self
-            .memory
-            .as_ref()
-            .map(|memory| {
-                memory
-                    .borrow()
-                    .fork()
-                    .map(|ticket| Rc::new(RefCell::new(ticket)))
-            })
-            .transpose()
-            .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
+        let memory = fork_memory(self.memory.as_ref())?;
         Ok(Self {
             incarnation: self.incarnation,
             getopts: self.getopts,
@@ -1856,6 +1837,20 @@ impl SnapshotValue for LocalVariable {
             .snapshot_bytes()
             .saturating_add(self.nameref.snapshot_bytes())
     }
+}
+
+fn fork_memory(
+    memory: Option<&Rc<RefCell<crate::exec::StorageAllocation>>>,
+) -> Result<Option<Rc<RefCell<crate::exec::StorageAllocation>>>, Error> {
+    memory
+        .map(|memory| {
+            memory
+                .borrow()
+                .fork()
+                .map(|ticket| Rc::new(RefCell::new(ticket)))
+        })
+        .transpose()
+        .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))
 }
 impl SnapshotValue for StoredFunction {
     fn snapshot_bytes(&self) -> usize {
