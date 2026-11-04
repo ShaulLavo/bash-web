@@ -5,7 +5,6 @@
     "004c0440ddd7464a": 1,
     "0076d082fe35dba7": 1,
     "02a3a4ec08607ddf": 1,
-    "03e405bda45e8005": 1,
     "0424aabc5636df65": 1,
     "0441c0e8b4b8b742": 1,
     "04c191c88d7c9fa1": 1,
@@ -70,7 +69,6 @@
     "412c9c33dce6fada": 1,
     "41720d26acd87cea": 1,
     "418b3e94c60a1e39": 1,
-    "427f5cc780a84c30": 1,
     "428f4fc51f733e99": 1,
     "42e0421710d03419": 1,
     "438437735b69b793": 1,
@@ -260,7 +258,6 @@
     "d1abb8c0d8ce4de5": 1,
     "d2988392171b9f77": 1,
     "d364cfad2f9bcfbd": 1,
-    "d3d0b4ea9a63fd70": 1,
     "d4d5fdfe7f325c41": 1,
     "d693be26d8c63a5f": 1,
     "d6a37e6c1ed75e79": 1,
@@ -325,11 +322,6 @@
       "kind": "deferred",
       "reason": "Remove scripts/fuzz-shell-braces.ts:661-671 (validateFixtureIdentity); scripts/fuzz-shell-control-flow.ts:1077-1087 (validateFixture); The clone includes release evidence validation. A mistake could admit a changed Bash observation. The protected fixture hashes and all existing negative probes must be reviewed together outside this lane.",
       "plan": "plans/008-duplicate-baseline.md#fuzz-validation"
-    },
-    "03e405bda45e8005": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/ast_copy.rs:297-304 (admit); shell/engine/src/ast_copy.rs:307-314 (admit); The copies operate on transactional bindings and memory accounting. Targeted failure-at-each-allocation tests are needed before extraction; a mechanical helper substitution is not enough evidence.",
-      "plan": "plans/008-duplicate-baseline.md#engine-state"
     },
     "0424aabc5636df65": {
       "kind": "deferred",
@@ -628,11 +620,6 @@
     "418b3e94c60a1e39": {
       "kind": "fixture",
       "reason": "Independent test setup or assertions for shell/parser/tests/api.rs:11-16 (argument); shell/parser/tests/api.rs:440-445 (replacement_operands_keep_bare_braces_and_single_quote_backslashes_bounded); preserve scenario-specific failure evidence."
-    },
-    "427f5cc780a84c30": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/state.rs:1397-1402 (readonly); shell/engine/src/state.rs:1414-1419 (export); The copies operate on transactional bindings and memory accounting. Targeted failure-at-each-allocation tests are needed before extraction; a mechanical helper substitution is not enough evidence.",
-      "plan": "plans/008-duplicate-baseline.md#engine-state"
     },
     "428f4fc51f733e99": {
       "kind": "fixture",
@@ -1494,11 +1481,6 @@
       "kind": "deferred",
       "reason": "Remove shell/parser/src/parser/mod.rs:1407-1415 (parse_trailing_redirects); shell/parser/src/parser/mod.rs:1421-1429 (parse_trailing_redirects); This is owned, modified Bashkit-derived production code, not an upstream exception. Its provenance is recorded in sources.lock.json, whose updates are prohibited in this lane; parser API and Bash compatibility probes must accompany the cleanup.",
       "plan": "plans/008-duplicate-baseline.md#parser-redirects"
-    },
-    "d3d0b4ea9a63fd70": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/state.rs:464-472 (snapshot); shell/engine/src/state.rs:1830-1838 (snapshot_clone); The copies operate on transactional bindings and memory accounting. Targeted failure-at-each-allocation tests are needed before extraction; a mechanical helper substitution is not enough evidence.",
-      "plan": "plans/008-duplicate-baseline.md#engine-state"
     },
     "d4d5fdfe7f325c41": {
       "kind": "deferred",

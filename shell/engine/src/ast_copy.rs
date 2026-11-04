@@ -299,23 +299,13 @@ pub(crate) async fn admit(
                     operator,
                     operand,
                     colon_variant: _,
-                } => {
-                    push(&mut stack, Visit::Text(name), work)?;
-                    push(&mut stack, Visit::Text(operand), work)?;
-                    push(&mut stack, Visit::ParameterOp(operator), work)?;
-                }
+                } => push_parameter_parts(&mut stack, name, operand, Some(operator), work)?,
                 WordPart::IndirectExpansion {
                     name,
                     operator,
                     operand,
                     colon_variant: _,
-                } => {
-                    push(&mut stack, Visit::Text(name), work)?;
-                    push(&mut stack, Visit::Text(operand), work)?;
-                    if let Some(operator) = operator {
-                        push(&mut stack, Visit::ParameterOp(operator), work)?;
-                    }
-                }
+                } => push_parameter_parts(&mut stack, name, operand, operator.as_ref(), work)?,
                 WordPart::ArrayAccess { name, index } => {
                     push(&mut stack, Visit::Text(name), work)?;
                     push(&mut stack, Visit::Text(index), work)?;
@@ -505,6 +495,21 @@ fn push_optional_text<'a>(
 ) -> Result<(), Error> {
     if let Some(text) = text {
         push(stack, Visit::Text(text), work)?;
+    }
+    Ok(())
+}
+
+fn push_parameter_parts<'a>(
+    stack: &mut Vec<Visit<'a>>,
+    name: &'a str,
+    operand: &'a str,
+    operator: Option<&'a ParameterOp>,
+    work: &mut Work,
+) -> Result<(), Error> {
+    push(&mut *stack, Visit::Text(name), work)?;
+    push(&mut *stack, Visit::Text(operand), work)?;
+    if let Some(operator) = operator {
+        push(stack, Visit::ParameterOp(operator), work)?;
     }
     Ok(())
 }
