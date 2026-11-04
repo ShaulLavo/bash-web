@@ -591,6 +591,19 @@ export function assertUploader({
   };
 }
 
+/**
+ * The host recorded its own times for 2026-11-01 08:00-09:00Z (01:00-02:00 PDT) as the repeated
+ * PST hour, one hour late; runner step times and log lines kept the true instant (main runs
+ * 41286306282 and 41286577653). A host time inside that closed hour denotes either instant.
+ */
+const repeatedHostHours = Object.freeze([Date.parse("2026-11-01T09:00:00Z")]);
+function hostInstants(value: string): number[] {
+  const recorded = Date.parse(value);
+  const repeated = repeatedHostHours.some(
+    (start) => recorded >= start && recorded < start + 3_600_000,
+  );
+  return repeated ? [recorded, recorded - 3_600_000] : [recorded];
+}
 function assertUploadLog({
   artifact,
   uploaded,
@@ -602,10 +615,12 @@ function assertUploadLog({
   logs: string;
   name: string;
 }): void {
-  const created = Date.parse(artifact.created_at);
   assert.ok(
-    created >= Date.parse(uploaded.started_at) &&
-      created < Date.parse(uploaded.completed_at) + 1000,
+    hostInstants(artifact.created_at).some(
+      (created) =>
+        created >= Date.parse(uploaded.started_at) &&
+        created < Date.parse(uploaded.completed_at) + 1000,
+    ),
     "artifact is outside this upload step",
   );
   const lines = logs
