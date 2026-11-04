@@ -30,7 +30,10 @@ export type SessionOptions = Omit<ShellOptions, "terminal" | "script"> & {
 };
 const PASTE_LIMIT = 262144;
 const INPUT_CHUNK = 65536;
+const DRAFT_LIMIT = 65536;
 const encoder = new TextEncoder();
+const SUBMIT_START = encoder.encode("\x05\x15\x0b\x1b[200~");
+const SUBMIT_END = encoder.encode("\x1b[201~\r");
 type DeliverySpan = {
   startedAt: number;
   drainedAt: number;
@@ -190,9 +193,19 @@ export class BrowserSession {
     if (!shell || this.disposed) throw new Error("Shell is closed");
     if (Atomics.load(this.bridge.state, control.phase) === 2)
       throw new Error("Shell is running a foreground command");
+    const draft = encoder.encode(command);
+    if (draft.length > DRAFT_LIMIT)
+      throw new RangeError(
+        "Submission exceeds the 64 KiB draft limit before newline normalization.",
+      );
+    if (command.includes("\x1b[201~"))
+      throw new RangeError("Submission contains the reserved bracketed-paste terminator.");
+    const input = new Uint8Array(SUBMIT_START.length + draft.length + SUBMIT_END.length);
+    input.set(SUBMIT_START);
+    input.set(draft, SUBMIT_START.length);
+    input.set(SUBMIT_END, SUBMIT_START.length + draft.length);
     const ready = await shell.waitForPrompt({ signal: this.admission.signal });
-    // Ctrl+E reaches the whole draft's end in zsh mode; Ctrl+U and Ctrl+K clear both sides.
-    this.input(`\x05\x15\x0b${command}\r`);
+    this.input(input);
     this.acceptPrompt(
       await shell.waitForPrompt({ after: ready.generation, signal: this.admission.signal }),
     );

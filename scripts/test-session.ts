@@ -304,13 +304,135 @@ test("resize forwards the new grid and an idle prompt updates its receipt", asyn
   assert.deepEqual(session.lastPrompt, { generation: 2n, status: 130 });
 });
 
+function submissionFrame(command: string): string {
+  return `\x05\x15\x0b\x1b[200~${command}\x1b[201~\r`;
+}
+
+async function drainSubmission(bridge: SharedBridge, length: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (let turnIndex = 0; turnIndex < 20 && received < length; turnIndex++) {
+    await turn();
+    const bytes = bridge.receive(65536);
+    chunks.push(bytes);
+    received += bytes.length;
+  }
+  assert.equal(received, length, "the complete frame drains within twenty pump turns");
+  return Uint8Array.from(Buffer.concat(chunks));
+}
+
+for (const command of [
+  "printf 'first\nsecond'\nfalse",
+  "a\r\nb\rc",
+  "",
+  "literal\ttab",
+  "literal\x00\x03\x05\x15\x0b\x7fcontrols",
+  "false delimiter \x1b[201x and \x1b[200~",
+  "x".repeat(65536),
+  "é".repeat(32768),
+].concat(
+  ["\x1b", "\x1b[", "\x1b[2", "\x1b[20", "\x1b[201"].flatMap((suffix) => [
+    "x".repeat(65536 - suffix.length) + suffix,
+    "x".repeat(65536 - 9 - 1) + suffix,
+  ]),
+)) {
+  const length = new TextEncoder().encode(command).length;
+  test(
+    `submission frames ${length} UTF-8 bytes ending ${JSON.stringify(command.slice(-16))}`,
+    { timeout: 3000 },
+    async (context) => {
+      const f = fixture(context);
+      const session = await f.starting;
+      const submitting = session.submit(command);
+      void submitting.catch(() => {});
+      const frame = new TextEncoder().encode(submissionFrame(command));
+      assert.deepEqual(await drainSubmission(f.bridge, frame.length), frame);
+      assert.equal(session.metrics.inputBytes, frame.length);
+      assert.equal(f.bridge.availableInput(), 0);
+      f.bridge.publishPrompt(1);
+      assert.equal(await submitting, undefined);
+      assert.equal(session.lastExit, 1);
+    },
+  );
+}
+
+for (const command of [
+  "x".repeat(65537),
+  "é".repeat(32768) + "x",
+  "é".repeat(32769),
+  "\r\n".repeat(32769),
+  "prefix\x1b[201~suffix",
+]) {
+  for (const pending of [false, true]) {
+    test(
+      `submission rejects ${new TextEncoder().encode(command).length} bytes before mutation, pending draft ${pending}`,
+      { timeout: 3000 },
+      async (context) => {
+        const f = fixture(context);
+        const session = await f.starting;
+        const draft = pending ? "d".repeat(65536 + 17) : "";
+        session.input(draft);
+        const inputBytes = session.metrics.inputBytes;
+        const write = Atomics.load(f.bridge.state, api.control.inputWrite);
+        const read = Atomics.load(f.bridge.state, api.control.inputRead);
+        const submitted = session.submit(command).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        await turn();
+        const written = Atomics.load(f.bridge.state, api.control.inputWrite);
+        const acceptedBytes = session.metrics.inputBytes;
+        f.bridge.publishPrompt(0);
+        const error = await submitted;
+        assert.ok(
+          error instanceof RangeError,
+          "unrepresentable drafts must reject, not await a guest receipt",
+        );
+        assert.match(error.message, command.includes("\x1b[201~") ? /paste terminator/ : /64 KiB/);
+        assert.equal(written, write);
+        assert.equal(Atomics.load(f.bridge.state, api.control.inputRead), read);
+        assert.equal(acceptedBytes, inputBytes);
+        assert.deepEqual(
+          await drainSubmission(f.bridge, draft.length),
+          new TextEncoder().encode(draft),
+        );
+        await turn();
+        assert.equal(f.bridge.availableInput(), 0, "rejection did not leave queued bytes");
+        const next = session.submit("true");
+        const frame = new TextEncoder().encode(submissionFrame("true"));
+        assert.deepEqual(await drainSubmission(f.bridge, frame.length), frame);
+        f.bridge.publishPrompt(0);
+        await next;
+      },
+    );
+  }
+}
+
+test(
+  "submission framing counts toward the unchanged page queue limit",
+  { timeout: 3000 },
+  async (context) => {
+    const f = fixture(context);
+    const session = await f.starting;
+    const draft = new Uint8Array(262144).fill(100);
+    session.input(draft);
+    const inputBytes = session.metrics.inputBytes;
+    await assert.rejects(session.submit("x".repeat(65536)), /256 KiB/);
+    assert.equal(session.metrics.inputBytes, inputBytes);
+    assert.deepEqual(await drainSubmission(f.bridge, draft.length), draft);
+    await turn();
+    assert.equal(f.bridge.availableInput(), 0);
+  },
+);
+
 test("submission replaces the whole zsh draft with Ctrl+E, Ctrl+U, Ctrl+K and hands off output", async (context) => {
   const f = fixture(context, { lineEditor: { mode: "zsh" } });
   const session = await f.starting;
   const submitting = session.submit("printf new");
+  void submitting.catch(() => {});
   assert.equal(session.running, true);
   await turn();
-  assert.equal(new TextDecoder().decode(f.bridge.receive(65536)), "\x05\x15\x0bprintf new\r");
+  assert.equal(new TextDecoder().decode(f.bridge.receive(65536)), submissionFrame("printf new"));
   phase(f.bridge, 2);
   await turn();
   assert.equal(session.state, "running");
@@ -351,15 +473,18 @@ test("a prompt published after the phase snapshot wins before submit resolves", 
 test("submissions serialize and recover after a rejected oversized submission", async (context) => {
   const f = fixture(context);
   const session = await f.starting;
-  await assert.rejects(session.submit("x".repeat(262144)), /256 KiB/);
-  const first = session.submit("one");
+  await assert.rejects(session.submit("x".repeat(262144)), /64 KiB/);
+  const first = session.submit("one\nfalse");
   const second = session.submit("two");
   await turn();
-  assert.equal(new TextDecoder().decode(f.bridge.receive(65536)), "\x05\x15\x0bone\r");
-  f.bridge.publishPrompt(0);
-  await first;
+  assert.equal(new TextDecoder().decode(f.bridge.receive(65536)), submissionFrame("one\nfalse"));
   await turn();
-  assert.equal(new TextDecoder().decode(f.bridge.receive(65536)), "\x05\x15\x0btwo\r");
+  assert.equal(f.bridge.availableInput(), 0, "the next submission waits for the final receipt");
+  f.bridge.publishPrompt(1);
+  await first;
+  assert.equal(session.lastExit, 1);
+  await turn();
+  assert.equal(new TextDecoder().decode(f.bridge.receive(65536)), submissionFrame("two"));
   f.bridge.publishPrompt(0);
   await second;
 });

@@ -42,9 +42,11 @@ Storage readiness precedes shell admission. `onStorageState` reports filesystem 
 
 ## Programmatic submission and prompt receipts
 
-`submit(command)` serializes programmatic submissions. It refuses to write into a running foreground command. Before the command, it sends Ctrl+E, Ctrl+U, and Ctrl+K, replacing the entire edited draft in both Bash and zsh editing modes. The Ctrl+E is required when the cursor is inside a multiline zsh draft.
+`submit(command)` serializes programmatic submissions. It refuses to write into a running foreground command. Before the command, it sends Ctrl+E, Ctrl+U, and Ctrl+K, replacing the entire edited draft in both Bash and zsh editing modes. The three-key sequence clears both sides of the cursor, including a multiline zsh draft. Accepted command text uses the editor's bracketed-paste protocol, followed by one Enter. Embedded newlines remain in one draft. The editor normalizes CRLF and CR to LF and preserves tabs and other control bytes as literal text.
 
-The promise resolves after the next prompt receipt and queued output handoff. A terminal view may still parse those writes asynchronously. `lastPrompt` exposes the latest atomic generation and status, and `lastExit` exposes its status, initially zero. Neither property parses output text to find prompts.
+`submit` rejects commands larger than 64 KiB of encoded UTF-8, counted before newline normalization. It also rejects the exact reserved paste terminator `ESC [ 201 ~`. Both refusals use `RangeError` before writing clearing keys or command bytes, so the existing draft stays intact. Partial terminator prefixes and false delimiters remain literal. These limits do not change raw `input` or its separate 256 KiB page queue. Submission framing counts toward that queue, not the 64 KiB draft. A refused submission does not block later submissions.
+
+The promise resolves with no return value after the resulting prompt receipt and queued output handoff. A terminal view may still parse those writes asynchronously. `lastPrompt` exposes the latest atomic generation and status, and `lastExit` exposes its status, initially zero. Neither property parses output text to find prompts.
 
 ## Prompt-provider integration
 
@@ -54,4 +56,4 @@ The promise resolves after the next prompt receipt and queued output handoff. A 
 
 This is a display session, not a script runner, terminal renderer, runtime owner, or prompt provider. It requires cross-origin isolation, `SharedArrayBuffer`, and `Atomics.waitAsync`. `markRendered`, `metrics`, and `runtimeSnapshot` retain the demo's optional diagnostics; `crash()` exercises its failure path.
 
-`npm run test:session` checks lifecycle, input bounds, newline conversion, receipts, submission, resize, cancellation, and disposal with real shared bridges and a controlled shell-admission fixture. `tests/session-submit.spec.ts` exercises multiline replacement through the demo's public session in both editing modes. `tests/session-drain.spec.ts` checks worker wakeups and bounded drains. These tests make no claim about bun-wasm's consumer browser suite.
+`npm run test:session` checks lifecycle, input bounds, newline conversion, receipts, submission, resize, cancellation, and disposal with real shared bridges and a controlled shell-admission fixture. `tests/session-submit.spec.ts` exercises multiline replacement, exactly-once execution, final status, and refusal without draft loss in both editing modes. `tests/session-drain.spec.ts` checks worker wakeups and bounded drains. These tests make no claim about bun-wasm's consumer browser suite.

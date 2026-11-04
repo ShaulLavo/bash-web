@@ -192,6 +192,47 @@ test("artifact ID/digest/upload-window and unique reviewed uploader are host-bou
     }),
   );
 });
+// Main run 41286577653, job 124792323892: the upload step and its log ran at 08:10:4xZ, but the host
+// recorded artifact 13076280499 at 09:10:44Z, in the repeated 01:00-02:00 Pacific hour of 2026-11-01.
+function repeatedHourUpload(createdAt: string) {
+  const input = provenance();
+  for (const step of input.job.steps) {
+    step.started_at = "2026-11-01T08:10:43Z";
+    step.completed_at = "2026-11-01T08:10:44Z";
+  }
+  input.artifact.created_at = createdAt;
+  input.logs = input.logs.replaceAll("2026-10-24T17:00:01", "2026-11-01T08:10:44");
+  return input;
+}
+test("a host time in the repeated 2026-11-01 Pacific hour may denote the instant an hour earlier", () => {
+  assert.equal(assertUploader(repeatedHourUpload("2026-11-01T09:10:44Z")).artifactId, 30);
+  assert.equal(assertUploader(repeatedHourUpload("2026-11-01T08:10:44Z")).artifactId, 30);
+  for (const createdAt of [
+    "2026-11-01T09:10:45Z",
+    "2026-11-01T09:10:42Z",
+    "2026-11-01T10:10:44Z",
+    "2026-11-01T07:10:44Z",
+  ])
+    assert.throws(
+      () => assertUploader(repeatedHourUpload(createdAt)),
+      /artifact is outside this upload step/,
+    );
+  const later = repeatedHourUpload("2026-11-01T10:10:44Z");
+  for (const step of later.job.steps) {
+    step.started_at = "2026-11-01T09:10:43Z";
+    step.completed_at = "2026-11-01T09:10:44Z";
+  }
+  later.logs = later.logs.replaceAll("2026-11-01T08:10:44", "2026-11-01T09:10:44");
+  assert.throws(() => assertUploader(later), /artifact is outside this upload step/);
+  const nextYear = provenance();
+  for (const step of nextYear.job.steps) {
+    step.started_at = "2027-11-07T08:10:43Z";
+    step.completed_at = "2027-11-07T08:10:44Z";
+  }
+  nextYear.artifact.created_at = "2027-11-07T09:10:44Z";
+  nextYear.logs = nextYear.logs.replaceAll("2026-10-24T17:00:01", "2027-11-07T08:10:44");
+  assert.throws(() => assertUploader(nextYear), /artifact is outside this upload step/);
+});
 test("a successfully uploaded regression receipt stays authoritative, never green", () => {
   const input = provenance("floor");
   input.job.conclusion = "failure";
