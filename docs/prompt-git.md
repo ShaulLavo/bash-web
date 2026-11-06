@@ -20,3 +20,7 @@ The `git_branch`, `git_commit` and `git_state` segments render this metadata. A 
 ## Limits
 
 Stash reflogs are counted only up to 64 KiB. A missing or oversized reflog still reports stash presence without a count. Repository discovery reads the working-directory ancestor batch and then only the selected Git metadata paths; a prompt outside a repository does not scan unrelated descendants.
+
+Packed refs admit at most 1 MiB of raw bytes, including newlines. Each packed record admits at most 4,096 raw bytes, excluding its final LF. This record limit applies to ordinary refs, comments and peeled records. Loose ref files followed by the ref resolver admit at most 4,096 raw bytes in total, including any LF. These limits do not apply to the separately read `HEAD` or other metadata files.
+
+Ref parsing checks the turn's cancellation signal and deadline before parsing, at least every 64 packed records, and before accepting a packed match or absence. The entire admitted packed file must validate. Oversize, corrupt or interrupted refs stay unknown. These prompt limits are not Git format limits, and they cannot prevent the filesystem's initial whole-file allocation or cancel an admitted read.

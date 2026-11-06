@@ -1,6 +1,9 @@
 import type { TurnFilesystem } from "../fs";
 
 const decoder = new TextDecoder();
+const recordDecoder = new TextDecoder("utf-8", { ignoreBOM: true });
+const maxPackedBytes = 1024 * 1024;
+const maxRefBytes = 4096;
 export type RefValue =
   | { readonly kind: "resolved"; readonly commit: string }
   | { readonly kind: "missing" | "unknown" };
@@ -29,7 +32,8 @@ export async function resolveRef(
     if (!entry) return packedRef(filesystem, commonDir, (candidate) => candidate === current);
     if (entry.kind !== "file") return { kind: "unknown" };
     const bytes = await filesystem.readFile(path);
-    if (!bytes) return { kind: "unknown" };
+    if (!bytes || bytes.length > maxRefBytes) return { kind: "unknown" };
+    await filesystem.checkpoint();
     const text = decoder.decode(bytes).trim();
     if (/^[0-9a-f]{40}$/u.test(text)) return { kind: "resolved", commit: text };
     if (!text.startsWith("ref: ")) return { kind: "unknown" };
@@ -57,12 +61,18 @@ async function packedRef(
   if (!entry) return { kind: "missing" };
   if (entry.kind !== "file") return { kind: "unknown" };
   const bytes = await filesystem.readFile(path);
-  if (!bytes || (bytes.length && bytes[bytes.length - 1] !== 10)) return { kind: "unknown" };
-  const lines = decoder.decode(bytes).split("\n");
-  lines.pop();
+  if (!bytes || bytes.length > maxPackedBytes || (bytes.length && bytes[bytes.length - 1] !== 10))
+    return { kind: "unknown" };
+  await filesystem.checkpoint();
   let result: RefValue = { kind: "missing" };
   let canPeel = false;
-  for (const line of lines) {
+  let records = 0;
+  for (let offset = 0; offset < bytes.length;) {
+    const end = bytes.indexOf(10, offset);
+    if (end - offset > maxRefBytes) return { kind: "unknown" };
+    if (++records % 64 === 0) await filesystem.checkpoint();
+    const line = (offset === 0 ? decoder : recordDecoder).decode(bytes.subarray(offset, end));
+    offset = end + 1;
     if (line.startsWith("#")) continue;
     if (canPeel && /^\^[0-9a-f]{40}$/u.test(line)) {
       canPeel = false;
@@ -74,6 +84,7 @@ async function packedRef(
     if (matches(record[2])) result = { kind: "resolved", commit: record[1] };
     canPeel = true;
   }
+  await filesystem.checkpoint();
   return result;
 }
 

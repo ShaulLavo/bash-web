@@ -37,6 +37,10 @@ export class TurnFilesystem {
     return request;
   }
 
+  checkpoint(): Promise<void> {
+    return this.budget?.checkpoint() ?? Promise.resolve();
+  }
+
   get requestCount(): number {
     return this.count;
   }
