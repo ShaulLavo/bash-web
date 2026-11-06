@@ -76,19 +76,24 @@ export function createShellTerminals(
     pendingMode = undefined;
     if (root && phase === 1) root.acknowledgeInputDiscard();
   };
+  // The shell can resume before the page retires an exited raw foreground group.
+  // Reassert its input mode at the read boundary, not at unrelated host imports.
+  const prepareInput = () => {
+    const phase = root ? Atomics.load(root.state, control.phase) : undefined;
+    if (phase === 1 || phase === 2) pendingMode = phase === 1 ? "raw" : "cooked";
+    prepare();
+  };
   const resolve = (target: 0 | 1 | 2) => {
     const endpoint = attachment.resolve(target);
     if (!root || target !== 0) return endpoint;
     const readiness = endpoint.readiness.bind(endpoint);
     const tryRead = endpoint.tryRead!.bind(endpoint);
-    // A native poll/read can stay inside one host import across the flush.
-    // Prepare before its next terminal turn, never inside the policy callback.
     endpoint.readiness = () => {
-      prepare();
+      prepareInput();
       return readiness();
     };
     endpoint.tryRead = (chunks) => {
-      prepare();
+      prepareInput();
       return tryRead(chunks);
     };
     return endpoint;

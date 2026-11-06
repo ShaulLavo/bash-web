@@ -67,7 +67,10 @@ child-exit cleanup even when adapter entry fails.
 Foreground selection and restoration use that same authority. Input discard awaits
 one bounded Waffle flush without changing selection, mode, membership or leases.
 Deferred foreground admission uses a separate control turn. Root stdin polls and
-reads apply pending prompt preparation before entering their terminal turn.
+reads apply the shell's current input mode before entering their terminal turn.
+This also covers a builtin read resuming before page-side foreground exit cleanup:
+it must not consume a raw carriage return left under the departed guest's mode.
+Unrelated host imports do not change a foreground guest's input mode.
 Quiescence stops new controller tasks, aborts and joins control and input waits,
 then disposes terminal state before physical worker stop.
 Aborting one root's wait does not cancel a shared input transport. The runtime and
