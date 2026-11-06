@@ -17,6 +17,9 @@ export const renderGitBranch: SegmentRenderer<GitBranchConfig> = (input, config)
 
 function truncate(value: string, length: number | undefined, symbol: string): string {
   if (length === undefined || value.length <= length) return value;
-  if (length <= symbol.length) return symbol.slice(0, length);
-  return `${value.slice(0, length - symbol.length)}${symbol}`;
+  const points = Array.from(value);
+  if (points.length <= length) return value;
+  const symbolPoints = Array.from(symbol);
+  if (length <= symbolPoints.length) return symbolPoints.slice(0, length).join("");
+  return `${points.slice(0, length - symbolPoints.length).join("")}${symbol}`;
 }
