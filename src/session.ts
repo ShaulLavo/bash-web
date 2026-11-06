@@ -58,6 +58,7 @@ export class BrowserSession {
   private readonly bridge = new SharedBridge();
   private readonly newlines = new TerminalNewlines();
   private receipt?: ShellPrompt;
+  private pendingReady = false;
   private currentState?: SessionState;
   private submissions = Promise.resolve();
   private pendingSubmissions = 0;
@@ -211,14 +212,19 @@ export class BrowserSession {
     );
   }
   private acceptPrompt(receipt: ShellPrompt): void {
-    if (this.disposed || (this.receipt && receipt.generation <= this.receipt.generation)) return;
-    // The guest publishes before the page pump. Hand off all queued output before settling submit.
-    const output = this.bridge.drain(this.bridge.output.length);
-    if (output.length) this.deliver(output);
-    if (this.disposed) return;
-    this.receipt = receipt;
-    if (Atomics.load(this.bridge.state, control.phase) === 1 && !this.bridge.cancelled())
-      this.setState("ready");
+    if (this.disposed || (this.receipt && receipt.generation < this.receipt.generation)) return;
+    if (this.receipt?.generation !== receipt.generation) {
+      // The guest publishes before the page pump. Hand off all queued output before settling submit.
+      const output = this.bridge.drain(this.bridge.output.length);
+      if (output.length) this.deliver(output);
+      if (this.disposed) return;
+      this.receipt = receipt;
+      this.pendingReady = true;
+    }
+    if (!this.pendingReady || Atomics.load(this.bridge.state, control.phase) !== 1) return;
+    if (this.bridge.cancelled()) return;
+    this.pendingReady = false;
+    this.setState("ready");
   }
   private setState(state: SessionState, detail?: string): void {
     if (state === this.currentState) return;

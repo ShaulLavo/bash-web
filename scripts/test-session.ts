@@ -239,6 +239,25 @@ function pumpSession(session: BrowserSession): void {
   Reflect.apply(pump, session, []);
 }
 
+test("a prompt deferred for interrupt acknowledgement becomes ready exactly once", async (context) => {
+  const f = fixture(context);
+  const session = await f.starting;
+  phase(f.bridge, 2);
+  pumpSession(session);
+  assert.equal(session.state, "running");
+  Atomics.store(f.bridge.state, api.control.cancel, 1);
+  f.bridge.publishPrompt(130);
+  pumpSession(session);
+  assert.deepEqual(session.lastPrompt, { generation: 2n, status: 130 });
+  assert.equal(session.state, "running");
+  f.bridge.acknowledgeInputDiscard();
+  pumpSession(session);
+  assert.equal(f.bridge.cancelled(), false);
+  assert.equal(session.state, "ready");
+  pumpSession(session);
+  assert.deepEqual(f.states, ["starting", "ready", "running", "ready"]);
+});
+
 test("ready callbacks see the current receipt for failing and successful raw commands", async (context) => {
   let session: BrowserSession | undefined;
   const snapshots: { prompt: BrowserSession["lastPrompt"]; exit: number; state: SessionState }[] =
