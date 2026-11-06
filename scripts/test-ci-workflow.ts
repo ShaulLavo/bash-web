@@ -403,8 +403,9 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
   assert.ok(Array.isArray(floor.steps));
   const download = floor.steps
     .map(object)
-    .find((step) => step.uses === "actions/download-artifact@v4");
+    .find((step) => step.uses === "actions/download-artifact@v8");
   assert.ok(download);
+  assert.equal(object(download.with)["digest-mismatch"], "error");
   assert.equal(
     object(download.with)["artifact-ids"],
     "${{ needs.own-shell-compatibility.outputs.raw-artifact-id }}",
@@ -551,8 +552,9 @@ test("scoreboard and observation run independently using one shared node build",
   assert.ok(Array.isArray(publisher.steps));
   const download = publisher.steps
     .map(object)
-    .find((step) => step.uses === "actions/download-artifact@v4");
+    .find((step) => step.uses === "actions/download-artifact@v8");
   assert.ok(download);
+  assert.equal(object(download.with)["digest-mismatch"], "error");
   assert.equal(
     object(download.with)["artifact-ids"],
     "${{ needs.own-shell-observation.outputs.current-artifact-id }}",

@@ -376,8 +376,9 @@ jobs:
         with:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
+          digest-mismatch: error
           artifact-ids: ${{ needs.own-shell-observation.outputs.current-artifact-id }}
           merge-multiple: true
           path: ${{ runner.temp }}
@@ -408,8 +409,9 @@ jobs:
         with:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
+          digest-mismatch: error
           artifact-ids: ${{ needs.own-shell-compatibility.outputs.raw-artifact-id }}
           merge-multiple: true
           path: ${{ runner.temp }}/scoreboard-raw

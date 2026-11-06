@@ -65,8 +65,9 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
+          digest-mismatch: error
           name: dependency-update
           path: ${{ runner.temp }}/dependency-update
       - name: Refresh the standing update PR and dispatch CI
