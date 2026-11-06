@@ -85,6 +85,14 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function artifactDownload(steps: unknown): Record<string, unknown> {
+  assert.ok(Array.isArray(steps));
+  const download = steps.map(object).find((step) => step.uses === "actions/download-artifact@v8");
+  assert.ok(download);
+  assert.equal(object(download.with)["digest-mismatch"], "error");
+  return object(download.with);
+}
+
 function assertPreStepEnv(env: unknown, scope: string) {
   if (!env) return;
   for (const [key, value] of Object.entries(object(env))) {
@@ -423,16 +431,12 @@ test("raw publication and the blocking cheap fold have no dependency cycle or wh
     object(raw.outputs)["raw-artifact-id"],
     "${{ steps.raw-upload.outputs.artifact-id }}",
   );
-  assert.ok(Array.isArray(floor.steps));
-  const download = floor.steps
-    .map(object)
-    .find((step) => step.uses === "actions/download-artifact@v8");
-  assert.ok(download);
-  assert.equal(object(download.with)["digest-mismatch"], "error");
+  const download = artifactDownload(floor.steps);
   assert.equal(
-    object(download.with)["artifact-ids"],
+    download["artifact-ids"],
     "${{ needs.own-shell-compatibility.outputs.raw-artifact-id }}",
   );
+  assert.ok(Array.isArray(floor.steps));
   const names = floor.steps.map((step: unknown) => object(step).name);
   assert.ok(names.indexOf("Upload cumulative main floor") < names.indexOf("Enforce qualification"));
   assert.doesNotMatch(
@@ -576,17 +580,12 @@ test("scoreboard and observation run independently using one shared node build",
       1,
     );
   assert.deepEqual(object(scoreboard.env), object(observation.env));
-  assert.ok(Array.isArray(publisher.steps));
-  const download = publisher.steps
-    .map(object)
-    .find((step) => step.uses === "actions/download-artifact@v8");
-  assert.ok(download);
-  assert.equal(object(download.with)["digest-mismatch"], "error");
+  const download = artifactDownload(publisher.steps);
   assert.equal(
-    object(download.with)["artifact-ids"],
+    download["artifact-ids"],
     "${{ needs.own-shell-observation.outputs.current-artifact-id }}",
   );
-  assert.equal(object(download.with).path, "${{ runner.temp }}");
+  assert.equal(download.path, "${{ runner.temp }}");
   const current = object(observation.outputs);
   assert.equal(current["current-artifact-id"], "${{ steps.current-upload.outputs.artifact-id }}");
   assert.ok(Array.isArray(observation.steps));
