@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import test from "node:test";
+import test, { after, before } from "node:test";
 import { gunzipSync } from "node:zlib";
 import {
   prepareCandidate,
@@ -129,53 +137,64 @@ function hostBytes(host: HostFixture, path: string): Buffer {
   assert.ok(Buffer.isBuffer(value));
   return value;
 }
+const preparedRoot = mkdtempSync(resolve(process.env.TMPDIR || tmpdir(), "terminal-floor-seed-"));
+after(() => {
+  rmSync(preparedRoot, { recursive: true, force: true });
+  assert.equal(existsSync(preparedRoot), false);
+});
+before(() => prepareCandidateRoot(preparedRoot));
+function prepareCandidateRoot(root: string): void {
+  git(root, ["init", "-q"]);
+  git(root, ["config", "user.name", "Score fixture"]);
+  git(root, ["config", "user.email", "score@example.invalid"]);
+  const common = git(project, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  mkdirSync(resolve(root, ".git/objects/info"), { recursive: true });
+  writeFileSync(resolve(root, ".git/objects/info/alternates"), `${resolve(common, "objects")}\n`);
+  execFileSync("git", ["index-pack", "--stdin"], {
+    cwd: root,
+    input: readFileSync(new URL("./test-data/terminal-floor-sources.pack", import.meta.url)),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  git(root, ["remote", "add", "origin", root]);
+  git(root, ["read-tree", terminalCut.sourceSha]);
+  const bytes = readFileSync(resolve(project, terminalCut.recordPath));
+  const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
+    cwd: root,
+    input: bytes,
+    encoding: "utf8",
+  }).trim();
+  git(root, ["update-index", "--add", "--cacheinfo", "100644", blob, terminalCut.recordPath]);
+  const tree = git(root, ["write-tree"]);
+  const sourceSha = git(root, [
+    "-c",
+    "commit.gpgsign=false",
+    "commit-tree",
+    tree,
+    "-p",
+    terminalCut.sourceSha,
+    "-m",
+    "fixed-cut recovery fixture",
+  ]);
+  git(root, ["update-ref", "HEAD", sourceSha]);
+  const paths = git(root, [
+    "ls-tree",
+    "-r",
+    "--name-only",
+    sourceSha,
+    "--",
+    "scoreboard/accepted-gains",
+  ]).split("\n");
+  for (const path of paths) {
+    mkdirSync(resolve(root, path, ".."), { recursive: true });
+    writeFileSync(resolve(root, path), git(root, ["show", `${sourceSha}:${path}`]) + "\n");
+  }
+}
 async function withCandidate(body: (candidate: MainCandidate) => Promise<void>): Promise<void> {
   const root = mkdtempSync(resolve(process.env.TMPDIR || tmpdir(), "terminal-floor-"));
   try {
-    git(root, ["init", "-q"]);
-    git(root, ["config", "user.name", "Score fixture"]);
-    git(root, ["config", "user.email", "score@example.invalid"]);
-    const common = git(project, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-    mkdirSync(resolve(root, ".git/objects/info"), { recursive: true });
-    writeFileSync(resolve(root, ".git/objects/info/alternates"), `${resolve(common, "objects")}\n`);
-    execFileSync("git", ["index-pack", "--stdin"], {
-      cwd: root,
-      input: readFileSync(new URL("./test-data/terminal-floor-sources.pack", import.meta.url)),
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    git(root, ["remote", "add", "origin", root]);
-    git(root, ["read-tree", terminalCut.sourceSha]);
-    const bytes = readFileSync(resolve(project, terminalCut.recordPath));
-    const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
-      cwd: root,
-      input: bytes,
-      encoding: "utf8",
-    }).trim();
-    git(root, ["update-index", "--add", "--cacheinfo", "100644", blob, terminalCut.recordPath]);
-    const tree = git(root, ["write-tree"]);
-    const sourceSha = git(root, [
-      "-c",
-      "commit.gpgsign=false",
-      "commit-tree",
-      tree,
-      "-p",
-      terminalCut.sourceSha,
-      "-m",
-      "fixed-cut recovery fixture",
-    ]);
-    git(root, ["update-ref", "HEAD", sourceSha]);
-    const paths = git(root, [
-      "ls-tree",
-      "-r",
-      "--name-only",
-      sourceSha,
-      "--",
-      "scoreboard/accepted-gains",
-    ]).split("\n");
-    for (const path of paths) {
-      mkdirSync(resolve(root, path, ".."), { recursive: true });
-      writeFileSync(resolve(root, path), git(root, ["show", `${sourceSha}:${path}`]) + "\n");
-    }
+    cpSync(preparedRoot, root, { recursive: true });
+    git(root, ["remote", "set-url", "origin", root]);
+    const sourceSha = git(root, ["rev-parse", "HEAD"]);
     const selected: MainPushBinding = {
       kind: "main-push",
       sourceSha,
