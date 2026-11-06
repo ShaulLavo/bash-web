@@ -21,13 +21,16 @@ test("the existing shell check stays red if any producer or moved check fails or
     shell.needs,
     Object.keys(jobs).filter((key) => key !== "shell"),
   );
-  assert.equal(shell.if, "always()");
+  assert.equal(
+    shell.if,
+    "${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}",
+  );
   assert.ok(Array.isArray(shell.steps));
   assert.equal(shell.steps.length, 1);
   const gate: unknown = shell.steps[0];
   assert.ok(gate && typeof gate === "object" && "run" in gate && typeof gate.run === "string");
-  assert.match(gate.run, /needs\.\*\.result/);
-  assert.match(gate.run, /!= 'success'/);
+  assert.match(gate.run, /all\(\.\[\]; \.result == \$expected\)/);
+  assert.match(gate.run, /expected=success/);
   assert.match(gate.run, /exit 1/);
 });
 
@@ -134,15 +137,29 @@ function commands(job: unknown): string {
 test("the actual aggregate shell command rejects each non-success result in every position", () => {
   const workflowJobs = jobs();
   const aggregate = object(workflowJobs.shell);
-  assert.equal(aggregate.if, "always()");
+  assert.equal(
+    aggregate.if,
+    "${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}",
+  );
   const needs = aggregate.needs;
   assert.ok(Array.isArray(needs));
   const command = commands(aggregate);
-  const evaluate = (results: readonly string[]) =>
-    spawnSync("bash", [
-      "-euc",
-      command.replace(/\$\{\{ join\(needs\.\*\.result, ' '\) \}\}/, results.join(" ")),
-    ]).status;
+  const evaluate = (results: readonly string[], code = "true") => {
+    const status = Object.fromEntries(needs.map((key, index) => [key, results[index]]));
+    return spawnSync("bash", ["-euc", command], {
+      env: {
+        ...process.env,
+        CHANGES: status.changes,
+        CODE: code,
+        PREPARE: status.prepare,
+        LAYERS: status.layers,
+        QUALITY: status.quality,
+        RESULTS: JSON.stringify(
+          Object.fromEntries(needs.map((key) => [key, { result: status[key] }])),
+        ),
+      },
+    }).status;
+  };
   assert.equal(evaluate(needs.map(() => "success")), 0);
   for (const failure of ["failure", "skipped", "cancelled"]) {
     for (const position of needs.keys())
@@ -151,6 +168,12 @@ test("the actual aggregate shell command rejects each non-success result in ever
         0,
       );
   }
+  const docs = needs.map((key) =>
+    ["changes", "prepare", "layers", "quality"].includes(key) ? "success" : "skipped",
+  );
+  assert.equal(evaluate(docs, "false"), 0);
+  assert.notEqual(evaluate(docs, "true"), 0);
+  assert.notEqual(evaluate(docs, ""), 0);
 });
 
 test("each moved current-main gate has one owner", () => {
@@ -380,12 +403,15 @@ test("browser apt uses the runner's existing HTTPS fallbacks instead of the slow
   }
 });
 
-test("main concurrency is isolated by source while PRs retain latest-head cancellation", () => {
+test("non-PR runs are isolated while PRs retain latest-head cancellation", () => {
   const workflow = object(
     parse(readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8")),
   );
   const concurrency = object(workflow.concurrency);
-  assert.match(String(concurrency.group), /github\.event\.pull_request\.number \|\| github\.sha/);
+  assert.match(
+    String(concurrency.group),
+    /github\.event\.pull_request\.number \|\| github\.run_id/,
+  );
   assert.equal(concurrency["cancel-in-progress"], "${{ github.event_name == 'pull_request' }}");
 });
 
@@ -517,7 +543,11 @@ test("scoreboard and observation run independently using one shared node build",
   assert.deepEqual(observation.needs, ["prepare", "native"]);
   assert.deepEqual(publisher.needs, ["prepare", "own-shell-scoreboard", "own-shell-observation"]);
   for (const job of [scoreboard, observation, publisher]) {
-    assert.ok(!("if" in job), "failed or skipped prerequisites must block publication");
+    assert.equal(
+      job.if,
+      "${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}",
+      "failed or skipped prerequisites must block publication through implicit success()",
+    );
     assert.ok(!("continue-on-error" in job));
     assert.ok(Array.isArray(job.steps));
     const checked = job.steps.map(object).filter((step) => typeof step.run === "string");

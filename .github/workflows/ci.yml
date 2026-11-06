@@ -3,15 +3,42 @@ on:
   push:
     branches:
       - main
-  pull_request: null
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: shell-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  changes:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ github.event_name != 'pull_request' || steps.paths.outputs.code == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: paths
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '**'
+              - '!docs/**/*.md'
+              - '!README.md'
+              - '!AGENTS.md'
+              - '!LICENSE'
+
   prepare:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,6 +71,7 @@ jobs:
           compression-level: 0
           retention-days: 1
   layers:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -68,6 +96,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   quality:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -85,7 +114,8 @@ jobs:
       - run: npm run typecheck:guest-build
       - run: npm run typecheck:ci
   native:
-    needs: prepare
+    if: ${{ needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    needs: [prepare, changes]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -155,7 +185,8 @@ jobs:
           retention-days: 3
   # Downstream jobs need only native's builds, so its tests run beside them.
   native-checks:
-    needs: prepare
+    if: ${{ needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    needs: [prepare, changes]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -200,6 +231,7 @@ jobs:
           cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
           npm run test:terminal:display
   wasi:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -220,6 +252,7 @@ jobs:
           ulimit -c 0
           npm run test:shell:wasi -- --prebuilt .build/ci-native
   fuzz:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -255,6 +288,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
   own-shell-scoreboard:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -301,6 +335,7 @@ jobs:
         env:
           SCOREBOARD_TEST_SHARD: ${{ matrix.shard }}/3
   own-shell-observation:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     permissions:
       contents: read
       actions: read
@@ -357,6 +392,7 @@ jobs:
             ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
   own-shell-compatibility:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     outputs:
       raw-artifact-id: ${{ steps.raw-upload.outputs.artifact-id }}
     permissions:
@@ -392,6 +428,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   score-floor:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - own-shell-compatibility
@@ -436,6 +473,7 @@ jobs:
         run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
   # Playwright runs one worker per runner, so the suite is sharded across runners.
   browser:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -484,6 +522,7 @@ jobs:
           retention-days: 3
   shell:
     needs:
+      - changes
       - prepare
       - layers
       - quality
@@ -496,14 +535,23 @@ jobs:
       - own-shell-compatibility
       - score-floor
       - browser
-    if: always()
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Require every check
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          PREPARE: ${{ needs.prepare.result }}
+          LAYERS: ${{ needs.layers.result }}
+          QUALITY: ${{ needs.quality.result }}
+          RESULTS: ${{ toJSON(needs) }}
         run: |
-          for result in ${{ join(needs.*.result, ' ') }}; do
-            if [[ "$result" != 'success' ]]; then
-              exit 1
-            fi
-          done
+          [[ $CHANGES == success && $PREPARE == success && $LAYERS == success && $QUALITY == success ]]
+          case "$CODE" in
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) exit 1 ;;
+          esac
+          echo "$RESULTS" | jq -e --arg expected "$expected" 'del(.changes, .prepare, .layers, .quality) | all(.[]; .result == $expected)'
