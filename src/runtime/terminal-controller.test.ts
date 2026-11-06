@@ -1018,12 +1018,7 @@ test("queued stale acknowledgement cannot clear the next generation interrupt", 
 
 for (const operation of ["readiness", "tryRead", "prepare"] as const) {
   test(`a root prompt parked behind discard resumes through ${operation}`, async (context) => {
-    const f = await fixture(context);
-    const root = attachRootTerminal(context, f);
-    f.bridge.publishPrompt(0);
-    root.ready();
-    Atomics.store(f.bridge.state, control.phase, 2);
-    root.phase(2);
+    const { f, root } = await runningRootFixture(context);
     const input = root.resolve(0);
     const controls = terminalControls(input)!;
     assert.equal(terminalValue(controls.snapshot()).mode, "cooked");
@@ -1064,5 +1059,59 @@ for (const operation of ["readiness", "tryRead", "prepare"] as const) {
     const byte = new Uint8Array(1);
     assert.equal(input.tryRead!([byte]), 1);
     assert.equal(byte[0], 66);
+  });
+}
+
+async function runningRootFixture(context: TestContext) {
+  const f = await fixture(context);
+  const root = attachRootTerminal(context, f);
+  f.bridge.publishPrompt(0);
+  root.ready();
+  Atomics.store(f.bridge.state, control.phase, 2);
+  root.phase(2);
+  return { f, root };
+}
+
+async function pendingForegroundExit(context: TestContext) {
+  const { f, root } = await runningRootFixture(context);
+  const child = f.reserve();
+  await f.start(child);
+  attachChildTerminal(context, f, child.transport);
+  const held = holdControl(context, f.authority);
+  f.beforeStop.push(async () => held.release());
+  f.supervisor.exit(child.pid, 0);
+  await f.supervisor.waitForExit(f.root.pid, child.pid);
+  await held.started;
+  return { f, root, release: held.release };
+}
+
+for (const operation of ["readiness", "tryRead"] as const) {
+  test(`root ${operation} restores cooked input before foreground exit cleanup`, async (context) => {
+    const { f, root, release } = await pendingForegroundExit(context);
+    const input = root.resolve(0);
+    const controls = terminalControls(input)!;
+    assert.equal(terminalValue(controls.snapshot()).mode, "raw");
+    assert.equal(f.bridge.send(Uint8Array.of(121)), 1);
+    if (operation === "readiness") assert.equal(input.readiness().readable, false);
+    if (operation === "tryRead") assert.equal(input.tryRead!([new Uint8Array(1)]), -6);
+    assert.equal(f.input.available(), 1, "an incomplete cooked line stays queued");
+    assert.equal(terminalValue(controls.snapshot()).mode, "cooked");
+    assert.equal(f.bridge.send(Uint8Array.of(13, 10, 122, 13)), 4);
+    const byte = new Uint8Array(1);
+    const actual: number[] = [];
+    for (let index = 0; index < 4; index++) {
+      assert.equal(input.tryRead!([byte]), 1);
+      actual.push(byte[0]!);
+    }
+    assert.deepEqual(actual, [121, 10, 122, 10]);
+    release();
+    await f.flush();
+    assert.equal(f.input.available(), 0);
+    f.bridge.publishPrompt(0);
+    root.phase(1);
+    assert.equal(f.bridge.send(Uint8Array.of(120)), 1);
+    assert.equal(input.tryRead!([byte]), 1, "the next prompt reads raw input without a newline");
+    assert.equal(byte[0], 120);
+    assert.equal(terminalValue(controls.snapshot()).mode, "raw");
   });
 }
