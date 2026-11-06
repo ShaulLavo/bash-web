@@ -3,8 +3,9 @@ description: Reuse this run's source-exact CLI, WASI guests and utility receipts
 runs:
   using: composite
   steps:
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
+        digest-mismatch: error
         name: native-${{ github.sha }}
         path: .build/ci-native
     - uses: ./.github/actions/wasi-sdk
