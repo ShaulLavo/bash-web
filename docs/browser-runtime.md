@@ -26,6 +26,13 @@ that asset. There is no automatic retry loop.
 never calls `createRuntime`, creates a hidden runtime, or takes ownership of the
 runtime the application passed in.
 
+The shell declares its guest memory from the same bytes it compiles before
+adopting a root. The standalone producer uses one defined, private memory with
+an explicit maximum; imported, shared, or uncapped memories are unsupported.
+Waffle mints each root's shared-control grant. The adapter forwards worker
+allocation receipts and acknowledges physical termination before releasing the
+root's memory charge. Descendant workers receive their own grants from Waffle.
+
 A shell's `done` promise reports its exit code and any launch/runtime diagnostic.
 For a failed executable start, the shell owns the command-specific diagnostic
 and inherited fd 2 lifetime. Waffle reports typed startup failure to a
