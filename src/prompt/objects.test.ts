@@ -650,3 +650,67 @@ test("unmerged paths remain conflicted, not ordinary staged changes", async (t) 
   assert.equal(value((await status(repo)).staged), 1);
   assert.equal(await renderedStatus(repo), "[=+] ");
 });
+
+for (const mode of ["cancel", "deadline"] as const) {
+  test(`packed replacement scanning observes ${mode} during parsing and recovers next turn`, async (t) => {
+    const root = await fixture(t, `objects-packed-parse-${mode}`);
+    const repo = await makeCommittedRepository(root, "repo");
+    const head = await git(repo, "rev-parse", "HEAD");
+    const packedPath = join(repo, ".git/packed-refs");
+    await writeFile(packedPath, `${head} refs/heads/unrelated\n${"# comment\n".repeat(128)}`);
+    const controller = new AbortController();
+    let now = 0;
+    let checkpoints = 0;
+    let readCompleted = false;
+    class ParsingBudget extends WorkBudget {
+      override async checkpoint(): Promise<void> {
+        assert.ok(readCompleted, "packed file was read before interruption");
+        await super.checkpoint();
+        if (++checkpoints !== 2) return;
+        if (mode === "cancel") controller.abort();
+        else now = 1000;
+        this.check();
+      }
+    }
+    const work = new ParsingBudget(controller.signal, 1000, () => now);
+    const filesystem = realFilesystem();
+    const result = await status(
+      repo,
+      {
+        ...filesystem,
+        async readFile(path) {
+          const bytes = await filesystem.readFile(path);
+          if (path === packedPath) readCompleted = true;
+          return bytes;
+        },
+      },
+      work,
+    );
+    expectUnknownObjects(result);
+    assert.equal(checkpoints, 2);
+    const fresh = await status(repo);
+    assert.equal(value(fresh.staged), 0);
+    assert.deepEqual(value(fresh.aheadBehind), { ahead: 0, behind: 0 });
+  });
+}
+
+test("oversized packed replacement metadata is unknown with a valid loose HEAD and recovers", async (t) => {
+  const root = await fixture(t, "objects-packed-oversized");
+  const repo = await makeCommittedRepository(root, "repo");
+  const head = await git(repo, "rev-parse", "HEAD");
+  const path = join(repo, ".git/packed-refs");
+  const valid = `${head} refs/heads/unrelated\n`;
+  const oversized = [
+    valid + `#${"x".repeat(4095)}\n`.repeat(256),
+    valid + `#${"é".repeat(2048)}\n`,
+  ];
+  assert.equal(await readFile(join(repo, ".git/refs/heads/main"), "utf8"), `${head}\n`);
+  for (const contents of oversized) {
+    await writeFile(path, contents);
+    expectUnknownObjects(await status(repo));
+  }
+  await writeFile(path, valid);
+  const fresh = await status(repo);
+  assert.equal(value(fresh.staged), 0);
+  assert.deepEqual(value(fresh.aheadBehind), { ahead: 0, behind: 0 });
+});

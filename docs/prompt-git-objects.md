@@ -23,6 +23,8 @@ Waffle's `readFile` returns a whole file. The input-file limit is checked when t
 
 Unsupported pack-index versions, SHA-256 repositories, reftables, invalid UTF-8 paths, configuration includes, worktree-specific upstream configuration, and negative fetch refspecs show unknown. Missing or corrupt objects never imply a clean or synchronized repository. Alternate object directories are not searched. Loose or packed replacement refs and legacy grafts show unknown instead of reporting counts from the unreplaced graph.
 
+The packed replacement scan uses the [ref parsing limits](prompt-git.md#limits), including the 1 MiB raw-file and 4,096-byte raw-record ceilings and work checkpoints. An oversized, corrupt or interrupted scan leaves both object categories unknown, never known replacement absence. A fresh turn reads and checks the metadata again.
+
 ## Verification
 
 `npm run test:prompt` creates fixtures with native Git. It compares staged paths without rename detection and ahead/behind counts with `git diff --cached --no-renames` and `git rev-list --left-right --count`. Tests cover loose objects, a packed clone, both real delta encodings, unborn and diverged branches, custom and packed upstream refs, missing upstreams, linked worktrees, equal-tip reads, corruption, cancellation, and the 2,000-commit boundary. The size gate checks that objects stay outside the eager prompt graph and that their incremental download stays within 5,500 gzip bytes.

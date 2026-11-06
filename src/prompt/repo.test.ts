@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 import { test } from "node:test";
 import { createPrompt } from "./index";
 import { TurnFilesystem } from "./fs";
+import { WorkBudget } from "./live";
+import { resolveRef } from "./sources/repo-refs";
 import { readRef, readRepository } from "./sources/repo";
 import { composePrompt } from "./compose";
 import { resolvePromptConfig } from "./config/defaults";
@@ -448,4 +450,227 @@ test("corrupt or incomplete stash logs preserve presence without inventing count
     await writeFile(path, contents);
     assert.deepEqual((await snapshot(repo))?.stash, { present: true });
   }
+});
+
+const refCommit = "a".repeat(40);
+const packedMain = `${refCommit} refs/heads/main\n`;
+
+class RefParsingBudget extends WorkBudget {
+  checkpoints = 0;
+  readCompleted = false;
+  onCheckpoint: (count: number) => void = () => {};
+
+  override async checkpoint(): Promise<void> {
+    assert.ok(this.readCompleted, "parser checkpoint must follow a successful read");
+    this.checkpoints++;
+    await super.checkpoint();
+    this.onCheckpoint(this.checkpoints);
+    this.check();
+  }
+}
+
+function refFiles(contents: string, loose = false, work?: RefParsingBudget): TurnFilesystem {
+  const path = `/git/${loose ? "refs/heads/main" : "packed-refs"}`;
+  const bytes = new TextEncoder().encode(contents);
+  return new TurnFilesystem(
+    {
+      lookup: async (candidate) =>
+        candidate === path ? { kind: "file", ino: 1, mtime: 1 } : undefined,
+      readFile: async (candidate) => {
+        assert.equal(candidate, path);
+        if (work) work.readCompleted = true;
+        return bytes;
+      },
+    },
+    work,
+  );
+}
+
+function packedBytes(size: number): string {
+  const remaining = size - Buffer.byteLength(packedMain);
+  const comment = `#${"x".repeat(4095)}\n`;
+  const tail = remaining % comment.length;
+  assert.ok(tail > 1);
+  return (
+    packedMain +
+    comment.repeat(Math.floor(remaining / comment.length)) +
+    `#${"x".repeat(tail - 2)}\n`
+  );
+}
+
+function unicodeRecord(size: number): string {
+  const prefix = `${refCommit} refs/heads/`;
+  const remaining = size - prefix.length;
+  return prefix + "é".repeat(Math.floor(remaining / 2)) + "x".repeat(remaining % 2);
+}
+
+for (const delta of [-1, 0, 1]) {
+  test(`packed refs enforce the raw file ceiling at 1 MiB ${delta >= 0 ? "+" : ""}${delta}`, async () => {
+    const contents = packedBytes(1024 * 1024 + delta);
+    assert.equal(Buffer.byteLength(contents), 1024 * 1024 + delta);
+    assert.deepEqual(
+      await resolveRef(refFiles(contents), "/git", "refs/heads/main"),
+      delta > 0 ? { kind: "unknown" } : { kind: "resolved", commit: refCommit },
+    );
+  });
+
+  test(`packed refs enforce the raw record ceiling at 4096 ${delta >= 0 ? "+" : ""}${delta}`, async () => {
+    const record = unicodeRecord(4096 + delta);
+    assert.equal(Buffer.byteLength(record), 4096 + delta);
+    assert.ok(record.length < 4096, "UTF-16 length must not stand in for bytes");
+    assert.deepEqual(
+      await resolveRef(refFiles(`${packedMain}${record}\n`), "/git", "refs/heads/main"),
+      delta > 0 ? { kind: "unknown" } : { kind: "resolved", commit: refCommit },
+    );
+  });
+
+  test(`loose refs count all raw file bytes at 4096 ${delta >= 0 ? "+" : ""}${delta}`, async () => {
+    const remaining = 4096 + delta - refCommit.length - 1;
+    const contents =
+      refCommit + "\u3000".repeat(Math.floor(remaining / 3)) + " ".repeat(remaining % 3) + "\n";
+    assert.equal(Buffer.byteLength(contents), 4096 + delta);
+    assert.deepEqual(
+      await resolveRef(refFiles(contents, true), "/git", "refs/heads/main"),
+      delta > 0 ? { kind: "unknown" } : { kind: "resolved", commit: refCommit },
+    );
+  });
+
+  test(`packed comments count raw record bytes at 4096 ${delta >= 0 ? "+" : ""}${delta}`, async () => {
+    const comment = `#${"x".repeat(4095 + delta)}\n`;
+    assert.deepEqual(
+      await resolveRef(refFiles(packedMain + comment), "/git", "refs/heads/main"),
+      delta > 0 ? { kind: "unknown" } : { kind: "resolved", commit: refCommit },
+    );
+  });
+}
+
+for (const kind of ["ordinary", "comments", "peeled"] as const) {
+  test(`packed parsing checkpoints include every 64 ${kind} records`, async () => {
+    const record = `${refCommit} refs/heads/other\n`;
+    const records =
+      kind === "comments"
+        ? "# comment\n".repeat(128)
+        : kind === "peeled"
+          ? `${record}^${refCommit}\n`.repeat(64)
+          : record.repeat(128);
+    const work = new RefParsingBudget(new AbortController().signal, 60_000);
+    assert.deepEqual(
+      await resolveRef(refFiles(records + packedMain, false, work), "/git", "refs/heads/main"),
+      { kind: "resolved", commit: refCommit },
+    );
+    assert.equal(
+      work.checkpoints,
+      4,
+      "before parsing, after 64 and 128 records, and before return",
+    );
+  });
+}
+
+for (const mode of ["cancel", "deadline"] as const) {
+  test(`packed parsing observes ${mode} inside an admitted file`, async () => {
+    const controller = new AbortController();
+    let now = 0;
+    const work = new RefParsingBudget(controller.signal, 1000, () => now);
+    work.onCheckpoint = (count) => {
+      if (count !== 2) return;
+      if (mode === "cancel") controller.abort();
+      else now = 1000;
+    };
+    const contents = packedMain + "# comment\n".repeat(128);
+    await assert.rejects(
+      resolveRef(refFiles(contents, false, work), "/git", "refs/heads/main"),
+      mode === "cancel" ? /cancelled/u : /deadline/u,
+    );
+    assert.equal(work.checkpoints, 2);
+    const fresh = new RefParsingBudget(new AbortController().signal, 60_000);
+    assert.deepEqual(
+      await resolveRef(refFiles(contents, false, fresh), "/git", "refs/heads/main"),
+      { kind: "resolved", commit: refCommit },
+    );
+    assert.equal(fresh.checkpoints, 4, "the same file completes with a live budget");
+  });
+}
+
+for (const ref of ["refs/heads/main", "refs/heads/missing"]) {
+  test(`packed parsing checks the final budget before returning ${ref}`, async () => {
+    let now = 0;
+    const work = new RefParsingBudget(new AbortController().signal, 1000, () => now);
+    work.onCheckpoint = (count) => {
+      if (count === 2) now = 1000;
+    };
+    await assert.rejects(resolveRef(refFiles(packedMain, false, work), "/git", ref), /deadline/u);
+    assert.equal(work.checkpoints, 2);
+  });
+}
+
+test("cached packed bytes still check cancellation before parsing", async () => {
+  const controller = new AbortController();
+  const work = new RefParsingBudget(controller.signal, 60_000);
+  const filesystem = refFiles(packedMain, false, work);
+  await filesystem.lookup("/git/refs/heads/main");
+  await filesystem.lookup("/git/packed-refs");
+  await filesystem.readFile("/git/packed-refs");
+  controller.abort();
+  await assert.rejects(resolveRef(filesystem, "/git", "refs/heads/main"), /cancelled/u);
+  assert.equal(work.checkpoints, 1);
+});
+
+test("packed refs validate the complete file after matches and distinguish missing from unknown", async () => {
+  const invalid = [
+    packedMain.slice(0, -1),
+    `${packedMain}broken\n`,
+    `${packedMain}^${refCommit}x\n`,
+    `${packedMain}#${"x".repeat(4096)}\n`,
+  ];
+  for (const contents of invalid) {
+    assert.deepEqual(await resolveRef(refFiles(contents), "/git", "refs/heads/main"), {
+      kind: "unknown",
+    });
+    assert.deepEqual(await resolveRef(refFiles(contents), "/git", "refs/heads/missing"), {
+      kind: "unknown",
+    });
+  }
+  assert.deepEqual(await resolveRef(refFiles(""), "/git", "refs/heads/main"), { kind: "missing" });
+  assert.deepEqual(await resolveRef(refFiles(packedMain), "/git", "refs/heads/missing"), {
+    kind: "missing",
+  });
+});
+
+test("repository discovery contains cancellation during packed parsing as unknown", async (t) => {
+  const root = await fixture(t, "git-packed-parse-cancel");
+  const repo = await makeCommittedRepository(root, "repo");
+  await git(repo, "pack-refs", "--all", "--prune");
+  const path = join(repo, ".git/packed-refs");
+  await writeFile(path, (await readFile(path, "utf8")) + "# comment\n".repeat(128));
+  const controller = new AbortController();
+  const work = new RefParsingBudget(controller.signal, 60_000);
+  const base = realFilesystem();
+  work.onCheckpoint = (count) => {
+    if (count === 2) controller.abort();
+  };
+  const filesystem = new TurnFilesystem(
+    {
+      ...base,
+      async readFile(candidate) {
+        const bytes = await base.readFile(candidate);
+        if (candidate === path) work.readCompleted = true;
+        return bytes;
+      },
+    },
+    work,
+  );
+  assert.deepEqual((await readRepository(filesystem, context(repo)))?.head, { kind: "unknown" });
+  assert.ok(work.checkpoints >= 2);
+  assert.equal((await snapshot(repo))?.head.kind, "attached");
+});
+
+test("packed record decoding does not hide a byte order mark after the first record", async () => {
+  assert.deepEqual(await resolveRef(refFiles(`\uFEFF${packedMain}`), "/git", "refs/heads/main"), {
+    kind: "resolved",
+    commit: refCommit,
+  });
+  assert.deepEqual(
+    await resolveRef(refFiles(`${packedMain}\uFEFF${packedMain}`), "/git", "refs/heads/main"),
+    { kind: "unknown" },
+  );
 });
