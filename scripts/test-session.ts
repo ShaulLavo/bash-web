@@ -232,6 +232,116 @@ test("ready, running and exited follow the guest while the runtime stays borrowe
   assert.equal(f.owner.disposals, 0);
 });
 
+function pumpSession(session: BrowserSession): void {
+  const pump: unknown = Reflect.get(session, "pump");
+  assert.equal(typeof pump, "function");
+  if (typeof pump !== "function") throw new Error("Missing session pump");
+  Reflect.apply(pump, session, []);
+}
+
+test("ready callbacks see the current receipt for failing and successful raw commands", async (context) => {
+  let session: BrowserSession | undefined;
+  const snapshots: { prompt: BrowserSession["lastPrompt"]; exit: number; state: SessionState }[] =
+    [];
+  const f = fixture(context, {
+    onState(state) {
+      if (state !== "ready" || !session) return;
+      snapshots.push({ prompt: session.lastPrompt, exit: session.lastExit, state: session.state });
+    },
+  });
+  session = await f.starting;
+  for (const status of [1, 0]) {
+    session.input(status ? "false\r" : "true\r");
+    f.bridge.receive(65536);
+    phase(f.bridge, 2);
+    pumpSession(session);
+    assert.equal(session.state, "running");
+    f.bridge.publishPrompt(status);
+    pumpSession(session);
+    f.bridge.signal();
+    pumpSession(session);
+  }
+  assert.deepEqual(snapshots, [
+    { prompt: { generation: 2n, status: 1 }, exit: 1, state: "ready" },
+    { prompt: { generation: 3n, status: 0 }, exit: 0, state: "ready" },
+  ]);
+});
+
+test("phase 1 before a new receipt stays running until the receipt is published", async (context) => {
+  let session: BrowserSession | undefined;
+  const prompts: BrowserSession["lastPrompt"][] = [];
+  const f = fixture(context, {
+    onState(state) {
+      if (state === "ready" && session) prompts.push(session.lastPrompt);
+    },
+  });
+  session = await f.starting;
+  phase(f.bridge, 2);
+  pumpSession(session);
+  pumpSession(session);
+  assert.equal(session.state, "running");
+  phase(f.bridge, 1);
+  pumpSession(session);
+  assert.equal(session.state, "running");
+  assert.deepEqual(prompts, []);
+  assert.deepEqual(session.lastPrompt, { generation: 1n, status: 0 });
+  f.bridge.publishPrompt(5);
+  pumpSession(session);
+  f.bridge.signal();
+  pumpSession(session);
+  assert.equal(session.state, "ready");
+  assert.deepEqual(prompts, [{ generation: 2n, status: 5 }]);
+});
+
+test("startup ready callbacks can cancel before create resolves without later states", async (context) => {
+  const controller = new AbortController();
+  const states: SessionState[] = [];
+  const f = fixture(context, {
+    signal: controller.signal,
+    onState(state) {
+      states.push(state);
+      if (state === "ready") controller.abort();
+    },
+  });
+  await assert.rejects(f.starting, /cancelled/);
+  f.bridge.publishPrompt(1);
+  await turn();
+  assert.deepEqual(states, ["starting", "ready"]);
+  assert.equal(f.disposals(), 1);
+  assert.equal(f.owner.disposals, 0);
+});
+
+test("disposal in a ready callback stops pump waits and later notifications", async (context) => {
+  let session: BrowserSession | undefined;
+  let disposing: Promise<void> | undefined;
+  const states: SessionState[] = [];
+  const f = fixture(context, {
+    onState(state) {
+      states.push(state);
+      if (state === "ready" && session) disposing = session.dispose();
+    },
+  });
+  session = await f.starting;
+  phase(f.bridge, 2);
+  pumpSession(session);
+  const waits = context.mock.method(Atomics, "waitAsync");
+  f.bridge.publishPrompt(1);
+  pumpSession(session);
+  assert.ok(disposing);
+  assert.equal(waits.mock.callCount(), 0);
+  assert.equal(Reflect.get(session, "timer"), undefined);
+  await disposing;
+  phase(f.bridge, 2);
+  f.bridge.publishPrompt(0);
+  pumpSession(session);
+  await turn();
+  assert.deepEqual(states, ["starting", "ready", "running", "ready"]);
+  assert.equal(Reflect.get(session, "timer"), undefined);
+  assert.equal(waits.mock.callCount(), 0);
+  assert.equal(f.disposals(), 1);
+  assert.equal(f.owner.disposals, 0);
+});
+
 test("failure drains final output before reporting its detail and disposes once", async (context) => {
   const f = fixture(context);
   const session = await f.starting;
