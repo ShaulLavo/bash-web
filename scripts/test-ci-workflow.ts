@@ -21,13 +21,10 @@ test("the existing shell check stays red if any producer or moved check fails or
     shell.needs,
     Object.keys(jobs).filter((key) => key !== "shell"),
   );
-  assert.equal(
-    shell.if,
-    "${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}",
-  );
+  assert.equal(shell.if, "always()");
   assert.ok(Array.isArray(shell.steps));
-  assert.equal(shell.steps.length, 1);
-  const gate: unknown = shell.steps[0];
+  assert.equal(shell.steps.length, 2);
+  const gate: unknown = shell.steps[1];
   assert.ok(gate && typeof gate === "object" && "run" in gate && typeof gate.run === "string");
   assert.match(gate.run, /all\(\.\[\]; \.result == \$expected\)/);
   assert.match(gate.run, /expected=success/);
@@ -137,13 +134,13 @@ function commands(job: unknown): string {
 test("the actual aggregate shell command rejects each non-success result in every position", () => {
   const workflowJobs = jobs();
   const aggregate = object(workflowJobs.shell);
-  assert.equal(
-    aggregate.if,
-    "${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}",
-  );
+  assert.equal(aggregate.if, "always()");
   const needs = aggregate.needs;
   assert.ok(Array.isArray(needs));
-  const command = commands(aggregate);
+  assert.ok(Array.isArray(aggregate.steps));
+  const command = object(aggregate.steps.at(-1)).run;
+  assert.equal(typeof command, "string");
+  assert.ok(typeof command === "string");
   const evaluate = (results: readonly string[], code = "true") => {
     const status = Object.fromEntries(needs.map((key, index) => [key, results[index]]));
     return spawnSync("bash", ["-euc", command], {

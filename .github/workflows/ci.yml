@@ -535,10 +535,15 @@ jobs:
       - own-shell-compatibility
       - score-floor
       - browser
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
+      - name: Require a ready PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo '::error::Mark this PR ready for review to run the required checks.'
+          exit 1
       - name: Require every check
         env:
           CHANGES: ${{ needs.changes.result }}
