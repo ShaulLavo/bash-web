@@ -355,7 +355,8 @@ for (const mode of ["handled", "exit"] as const) {
         after: initial.generation,
         signal: context.signal,
       });
-      assert.deepEqual(prompt, { generation: initial.generation + 1n, status: 0 }, output());
+      assert.equal(prompt.generation, initial.generation + 1n);
+      assert.equal(prompt.status, 0, output());
       assert.ok(output().includes("[y]"), output());
       assert.equal(Atomics.load(shell.terminal.state, api.control.cancel), 0);
       await send(shell, "false", context.signal);

@@ -1018,12 +1018,7 @@ test("queued stale acknowledgement cannot clear the next generation interrupt", 
 
 for (const operation of ["readiness", "tryRead", "prepare"] as const) {
   test(`a root prompt parked behind discard resumes through ${operation}`, async (context) => {
-    const f = await fixture(context);
-    const root = attachRootTerminal(context, f);
-    f.bridge.publishPrompt(0);
-    root.ready();
-    Atomics.store(f.bridge.state, control.phase, 2);
-    root.phase(2);
+    const { f, root } = await runningRootFixture(context);
     const input = root.resolve(0);
     const controls = terminalControls(input)!;
     assert.equal(terminalValue(controls.snapshot()).mode, "cooked");
@@ -1067,13 +1062,18 @@ for (const operation of ["readiness", "tryRead", "prepare"] as const) {
   });
 }
 
-async function pendingForegroundExit(context: TestContext) {
+async function runningRootFixture(context: TestContext) {
   const f = await fixture(context);
   const root = attachRootTerminal(context, f);
   f.bridge.publishPrompt(0);
   root.ready();
   Atomics.store(f.bridge.state, control.phase, 2);
   root.phase(2);
+  return { f, root };
+}
+
+async function pendingForegroundExit(context: TestContext) {
+  const { f, root } = await runningRootFixture(context);
   const child = f.reserve();
   await f.start(child);
   attachChildTerminal(context, f, child.transport);
