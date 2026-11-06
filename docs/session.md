@@ -46,7 +46,7 @@ Storage readiness precedes shell admission. `onStorageState` reports filesystem 
 
 `submit` rejects commands larger than 64 KiB of encoded UTF-8, counted before newline normalization. It also rejects the exact reserved paste terminator `ESC [ 201 ~`. Both refusals use `RangeError` before writing clearing keys or command bytes, so the existing draft stays intact. Partial terminator prefixes and false delimiters remain literal. These limits do not change raw `input` or its separate 256 KiB page queue. Submission framing counts toward that queue, not the 64 KiB draft. A refused submission does not block later submissions.
 
-The promise resolves with no return value after the resulting prompt receipt and queued output handoff. A terminal view may still parse those writes asynchronously. `lastPrompt` exposes the latest atomic generation and status, and `lastExit` exposes its status, initially zero. Neither property parses output text to find prompts.
+The promise resolves with no return value after the resulting prompt receipt and queued output handoff. A terminal view may still parse those writes asynchronously. `lastPrompt` exposes the latest atomic generation and status, and `lastExit` exposes its status, initially zero. Ready callbacks see the receipt that made the session ready. Neither property parses output text to find prompts.
 
 ## Prompt-provider integration
 
