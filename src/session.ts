@@ -382,7 +382,6 @@ export class BrowserSession {
     }
     if (phase !== this.phase && !this.bridge.cancelled()) {
       this.phase = phase;
-      if (phase === 1 && this.receipt) this.setState("ready");
       if (phase === 2) this.setState("running");
       if (phase === 3) this.setState("exited");
     }
