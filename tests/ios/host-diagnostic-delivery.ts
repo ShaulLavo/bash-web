@@ -10,7 +10,9 @@ export interface HostAttachment {
 }
 type Sink = typeof writeResult;
 type Emit = (label: string, detail: string) => void;
+type DescriptorSelector = (teardownResult: unknown) => unknown;
 interface DeliveryOptions {
+  selectDescriptor: DescriptorSelector;
   write?: Sink;
   emit?: Emit;
 }
@@ -101,13 +103,23 @@ async function deliverCase(
   caseId: string,
   write: Sink,
   emit: Emit,
+  selectDescriptor: DescriptorSelector,
 ): Promise<CaseDelivery> {
   const settled = settledDescriptor(results, caseId);
   if (settled.kind === "missing")
     return { caseId, status: "not-returned", emitted: 0, written: false, detail: settled.detail };
   let emitted = 0;
   try {
-    const returned = descriptor(settled.value);
+    const selected = selectDescriptor(settled.value);
+    if (selected === undefined || selected === null)
+      return {
+        caseId,
+        status: "not-returned",
+        emitted: 0,
+        written: false,
+        detail: "No diagnostic descriptor selected",
+      };
+    const returned = descriptor(selected);
     const pending = pendingText(returned.body);
     emit("Pending browser startup awaits", pending);
     emitted++;
@@ -123,7 +135,7 @@ async function deliverCase(
 export async function finalizeHostDiagnostics(
   resultPath: string,
   originalExit: number,
-  options: DeliveryOptions = {},
+  options: DeliveryOptions,
 ): Promise<number> {
   const write = options.write ?? writeResult;
   const emit = options.emit ?? ((label, detail) => console.error(label, detail));
@@ -143,7 +155,16 @@ export async function finalizeHostDiagnostics(
       )
         throw new Error("Missing persisted suite results");
       for (const caseId of result.selected)
-        cases.push(await deliverCase(resultPath, result.results, caseId, write, emit));
+        cases.push(
+          await deliverCase(
+            resultPath,
+            result.results,
+            caseId,
+            write,
+            emit,
+            options.selectDescriptor,
+          ),
+        );
     }
   } catch (error) {
     kind = "unreadable";
@@ -173,9 +194,10 @@ export async function finalizeHostDiagnostics(
 export async function nativeMainWithDiagnostics<R>(
   adapter: SuiteAdapter<R>,
   args: string[],
+  selectDescriptor: DescriptorSelector,
 ): Promise<number> {
   const exit = await nativeMain(adapter, args);
   const path = args[1];
   if (args.length !== 2 || args[0] !== "--result" || !path || !isAbsolute(path)) return exit;
-  return finalizeHostDiagnostics(path, exit);
+  return finalizeHostDiagnostics(path, exit, { selectDescriptor });
 }
