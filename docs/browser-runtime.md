@@ -657,3 +657,9 @@ message. Its deliberate interceptor-bypass control rejects missing observation;
 the standalone CLI path uses Node WASI, not the browser Waffle executor. Production
 `src/runtime/worker.ts` only sets `host.onmessage` and invokes Waffle bootstrap; it
 does not replace postMessage or supply a version-specific custom host.
+
+### Native test diagnostic delivery
+
+The prompt-status native CLI awaits the common host, then delivers only actual settled teardown descriptors through `tests/ios/host-diagnostic-delivery.ts`. It prints the original host console arguments and atomically appends exact named attachments to `<result>.attachments.json`. `<result>.diagnostic-delivery.json` records the original exit and per-case delivery facts before the CLI exits. Missing or unconfirmed descriptors remain not returned; they do not create a snapshot or cleanup receipt.
+
+The helper never rewrites the common host result or primary failure. A sink failure remains secondary and nonzero. A delivery failure after an otherwise successful run returns infrastructure exit 2. Page collection and the original body and teardown clocks are unchanged. The same attachment container can retain future measurement records without replacement.

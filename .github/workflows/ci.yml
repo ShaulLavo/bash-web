@@ -513,6 +513,8 @@ jobs:
           BASH_WEB_PYTHON_SHELL_WASM: public/programs/shell-engine.wasm
       - run: npm run test:runtime:terminal
         if: matrix.shard == 1
+      - run: npm run test:ios:adapters
+        if: matrix.shard == 1
       - run: npm run test:browser -- --shard=${{ matrix.shard }}/3
       - uses: actions/upload-artifact@v4
         if: failure()

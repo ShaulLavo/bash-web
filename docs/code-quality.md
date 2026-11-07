@@ -98,7 +98,7 @@ validators and frozen-payload hashes continue to enforce those observations.
 
 ## Typechecking host and browser code
 
-`npm run typecheck` uses the installed TypeScript CLI to list every root in the existing project. It checks browser and Node roots with the original DOM types, and the three explicit native-runner roots in `tsconfig.bun.json` with Bun types. Every root belongs to one check. A Bun root outside the complete project is an error. Imported dependencies remain checked by TypeScript in each environment.
+`npm run typecheck` uses the installed TypeScript CLI to list every root in the existing project. It checks browser and Node roots with the original DOM types, and the explicit Bun host roots in `tsconfig.bun.json` with Bun types. Every root belongs to one check. A Bun root outside the complete project is an error. Imported dependencies remain checked by TypeScript in each environment.
 
 `npm run typecheck:browser` also checks all production source with `tsconfig.browser.json`, without Bun ambient overloads. The strict prompt-consumer check remains independent. A Bun-host pass cannot hide a browser-only diagnostic. Neither check filters diagnostics or adds a source exclusion.
 
