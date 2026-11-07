@@ -278,6 +278,9 @@ test("typecheck recipes cover every root in its intended host environment", () =
     new Set(host.files),
     new Set(
       [
+        "scripts/test-prompt-hook-ios.ts",
+        "tests/ios/prompt-hook-adapter.ts",
+        "tests/ios/prompt-hook.unit.ts",
         "scripts/test-prompt-status-ios.ts",
         "tests/ios/prompt-status-adapter.ts",
         "tests/ios/prompt-status.unit.ts",

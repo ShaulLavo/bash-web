@@ -7,6 +7,8 @@
     "tests/*.unit.ts",
     "tests/ios/*.unit.ts",
     "tests/ios/prompt-status-page.ts",
+    "tests/ios/prompt-hook-page.ts",
+    "scripts/test-prompt-hook-ios.ts",
     "scripts/test-prompt-status-ios.ts",
     "tests/helpers/git-consumer.ts",
     "tests/types/prompt-consumer/consumer.ts",

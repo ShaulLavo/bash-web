@@ -156,6 +156,7 @@ function hostControl(task: HostCase["task"], script: HostCase["script"]): HostCa
   return {
     signal: new AbortController().signal,
     remainingMs: () => 60_000,
+    allocateDatabase: async () => assert.fail("P01 must never allocate persistent storage"),
     task,
     script,
     sleep: (ms) => delay(ms),
@@ -381,6 +382,6 @@ test("Bun host typing never replaces the separate DOM production gate", () => {
   assert.deepEqual(host.types, ["node", "bun"]);
   const roots = partitionTypecheckRoots(project.files, host.files);
   assert.deepEqual(roots.dom.concat(roots.bun).sort(), project.files.toSorted());
-  assert.equal(roots.bun.length, 5);
+  assert.equal(roots.bun.length, 8);
   assert.throws(() => partitionTypecheckRoots(["browser.ts"], ["omitted.ts"]));
 });

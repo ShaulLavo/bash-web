@@ -516,6 +516,8 @@ jobs:
       - run: npm run test:ios:adapters
         if: matrix.shard == 1
       - run: npm run test:browser -- --shard=${{ matrix.shard }}/3
+        env:
+          BASH_WEB_MEASURE: "1"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
