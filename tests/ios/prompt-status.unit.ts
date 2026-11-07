@@ -9,26 +9,22 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import type { HostCase, HostVerdict } from "waffle/testing/page-runner";
 import {
-  checkPromptStatusReceipts,
   drivePromptStatus,
   promptStatusAdapter,
   promptStatusModuleTask,
 } from "./prompt-status-adapter.ts";
+import { checkPromptStatusReceipts } from "../helpers/prompt-status-receipts.ts";
+import { partitionTypecheckRoots, readTypecheckProject } from "../../scripts/typecheck-projects.ts";
 import { promptStatusCase } from "./prompt-status-contract.ts";
 import { promptStatusDiagnostics } from "./prompt-status-diagnostics.ts";
 
-const receipts = [
-  { generation: "1", status: 0 },
-  { generation: "2", status: 1 },
-  { generation: "3", status: 0 },
-  { generation: "4", status: 1 },
-  { generation: "5", status: 0 },
-];
+const receipts = [0, 1, 0, 1, 0].map((status, index) => ({
+  generation: String(index + 1),
+  status,
+}));
 
-test("the complete original input files remain unchanged", async () => {
+test("the original diagnostic and reader input files remain unchanged", async () => {
   const expected = {
-    "tests/prompt-status.spec.ts":
-      "f181ab0056f163592fc3a5762c64dc7654cbeb98a54d9e480922ab384ae12dbe",
     "tests/helpers/browser-test.ts":
       "55f15bf3fcb61bd96388958cf28f9f8689bd12b909f899decc63f649c7001520",
     "tests/helpers/signal-status-guest.ts":
@@ -59,11 +55,19 @@ test("the whole proof, send/until, finally and esbuild options have byte parity"
   const original = await readFile("tests/prompt-status.spec.ts", "utf8");
   const fixture = await readFile("tests/helpers/prompt-status-fixture.ts", "utf8");
   assert.equal(buildBlock(fixture), buildBlock(original));
-  const start = original.indexOf("  expect(receipts).toEqual([");
-  const end = original.indexOf("\n  ]);", start);
+  const shared = await readFile("tests/helpers/prompt-status-receipts.ts", "utf8");
+  const start = shared.indexOf("  expect(receipts).toEqual([");
+  const end = shared.indexOf("\n  ]);", start);
   assert.ok(start >= 0 && end > start);
+  assert.equal(
+    createHash("sha256")
+      .update(shared.slice(start, end + "\n  ]);".length))
+      .digest("hex"),
+    "b4ed609296ac532c60399bd8634776d837a6fc2ab1a99f403406d7537a98ca04",
+  );
+  assert.ok(original.includes("checkPromptStatusReceipts(receipts);"));
   const adapter = await readFile("tests/ios/prompt-status-adapter.ts", "utf8");
-  assert.ok(adapter.includes(original.slice(start, end + "\n  ]);".length)));
+  assert.ok(adapter.includes("checkPromptStatusReceipts(receipts);"));
 });
 
 test("one inventory entry preserves the original exact title and complete host receipts", async () => {
@@ -365,4 +369,17 @@ test("empty IOS_UDID stops the actual public CLI before native allocation", asyn
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
+});
+
+test("Bun host typing never replaces the separate DOM production gate", () => {
+  const project = readTypecheckProject("tsconfig.json");
+  const host = readTypecheckProject("tsconfig.bun.json");
+  const browser = readTypecheckProject("tsconfig.browser.json");
+  assert.deepEqual(project.types, ["vite/client", "node", "@webgpu/types"]);
+  assert.deepEqual(browser.types, project.types);
+  assert.deepEqual(host.types, ["node", "bun"]);
+  const roots = partitionTypecheckRoots(project.files, host.files);
+  assert.deepEqual(roots.dom.concat(roots.bun).sort(), project.files.toSorted());
+  assert.equal(roots.bun.length, 3);
+  assert.throws(() => partitionTypecheckRoots(["browser.ts"], ["omitted.ts"]));
 });

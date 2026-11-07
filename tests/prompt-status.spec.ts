@@ -1,5 +1,6 @@
 import { build } from "esbuild";
-import { test, expect } from "./helpers/browser-test";
+import { test } from "./helpers/browser-test";
+import { checkPromptStatusReceipts } from "./helpers/prompt-status-receipts.ts";
 
 test("public API retains completed status and resumes a handled reader in Chromium", async ({
   page,
@@ -83,11 +84,5 @@ window.promptStatusProof = (async () => {
     const proof: unknown = Reflect.get(window, "promptStatusProof");
     return await proof;
   });
-  expect(receipts).toEqual([
-    { generation: "1", status: 0 },
-    { generation: "2", status: 1 },
-    { generation: "3", status: 0 },
-    { generation: "4", status: 1 },
-    { generation: "5", status: 0 },
-  ]);
+  checkPromptStatusReceipts(receipts);
 });

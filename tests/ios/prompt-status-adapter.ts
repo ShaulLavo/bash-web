@@ -3,18 +3,9 @@ import { build } from "esbuild";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { HostCase, SuiteAdapter } from "waffle/testing/page-runner";
+import { checkPromptStatusReceipts } from "../helpers/prompt-status-receipts.ts";
 import { compilePromptStatusFixture } from "../helpers/prompt-status-fixture.ts";
 import { promptStatusCase, type PromptStatusRequest } from "./prompt-status-contract.ts";
-
-export function checkPromptStatusReceipts(receipts: unknown): void {
-  expect(receipts).toEqual([
-    { generation: "1", status: 0 },
-    { generation: "2", status: 1 },
-    { generation: "3", status: 0 },
-    { generation: "4", status: 1 },
-    { generation: "5", status: 0 },
-  ]);
-}
 
 export function promptStatusModuleTask(compiled: string): string {
   return `

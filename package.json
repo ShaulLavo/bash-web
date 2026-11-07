@@ -24,7 +24,7 @@
     "./session": "./src/session.ts"
   },
   "scripts": {
-    "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
+    "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig*.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
     "test:rust": "node scripts/check-shell-parser.ts && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
@@ -62,7 +62,7 @@
     "sources:browser": "node scripts/sources.ts",
     "build:shell:browser": "node scripts/build-shell-browser.ts",
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run build:browser:assets",
-    "typecheck:browser": "tsc --noEmit",
+    "typecheck:browser": "tsc --noEmit -p tsconfig.browser.json",
     "test:browser": "playwright test",
     "test:session": "node --test scripts/test-session.ts",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.ts",
@@ -86,7 +86,7 @@
     "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
     "compat": "npm run compat:shell",
     "lint": "oxlint --config .oxlintrc.json --deny-warnings src scripts tests vite.config.ts playwright.config.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/typecheck-projects.ts",
     "typecheck:prompt-consumer": "tsc -p tests/types/prompt-consumer/tsconfig.json",
     "check:unused": "knip --config .knip.jsonc --treat-config-hints-as-errors",
     "check:duplicates": "node scripts/check-duplicates.ts",
@@ -130,6 +130,7 @@
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz",
     "@playwright/test": "1.64.0",
+    "@types/bun": "1.4.4",
     "@types/node": "26.6.3",
     "@webgpu/types": "0.1.74",
     "esbuild": "0.28.2",
