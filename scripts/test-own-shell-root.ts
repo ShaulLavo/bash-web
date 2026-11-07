@@ -28,7 +28,11 @@ async function runFixture(runtime: Runtime, output: Buffer[]) {
   return runRoot(
     runtime,
     waffle,
-    await WebAssembly.compile(fixture(2)),
+    {
+      module: await WebAssembly.compile(fixture(2)),
+      // This fixture's producer emits one uncapped wasm32 memory.
+      memory: [{ kind: "private", origin: "defined", maximumPages: waffle.pages(65_536) }],
+    },
     { modulePath: "", tmp: "/", env: {}, fixtureDirectory: "" },
     "fixture",
     (_fd, bytes) => output.push(Buffer.from(bytes)),

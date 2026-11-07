@@ -5,6 +5,7 @@ import type { RuntimeWorkerMessage, RuntimeWorkerRequest } from "waffle/browser/
 import type { ProgramPackage } from "waffle/programs";
 import { installNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 import type * as Api from "./waffle-node-api.ts";
+import type { compileShellModule } from "../src/runtime/shell-memory.ts";
 
 export interface WaffleCaseOptions {
   readonly modulePath: string;
@@ -46,11 +47,23 @@ function loadApi(): Promise<typeof Api> {
   api ??= import(new URL("api.mjs", nodeDirectory).href) as Promise<typeof Api>;
   return api;
 }
-const modules = new Map<string, Promise<WebAssembly.Module>>();
-function compiled(path: string): Promise<WebAssembly.Module> {
+type RootModule = Awaited<ReturnType<typeof compileShellModule>>;
+type RootApi = Pick<
+  typeof import("waffle/proc/worker-client"),
+  "createWorkerProcessTransport" | "workerProcessState" | "workerProcessSlots"
+> &
+  Pick<typeof import("waffle/proc/outcome"), "claimOutcome" | "readOutcome"> &
+  Pick<typeof import("waffle/proc/wait-status"), "waitStatus">;
+const modules = new Map<string, Promise<RootModule>>();
+function compiled(path: string): Promise<RootModule> {
   let module = modules.get(path);
   if (!module)
-    modules.set(path, (module = readFile(path).then((bytes) => WebAssembly.compile(bytes))));
+    modules.set(
+      path,
+      (module = Promise.all([readFile(path), loadApi()]).then(([bytes, api]) =>
+        api.compileShellModule(Uint8Array.from(bytes).buffer),
+      )),
+    );
   return module;
 }
 
@@ -110,7 +123,7 @@ async function provision(runtime: Runtime, options: WaffleCaseOptions, waffle: t
     await runtime.filesystem.drain();
     runtime.registerProgram(path, {
       adapter,
-      module: () => compiled(`${options.fixtureDirectory}/${file}`),
+      module: async () => (await compiled(`${options.fixtureDirectory}/${file}`)).module,
       cooperative: true,
     });
   }
@@ -174,8 +187,8 @@ export async function createWaffleRunner(options: WaffleCaseOptions) {
 
 export async function runRoot(
   runtime: Runtime,
-  waffle: typeof Api,
-  module: WebAssembly.Module,
+  waffle: RootApi,
+  guest: RootModule,
   options: WaffleCaseOptions,
   code: string,
   output: (fd: number, bytes: Uint8Array) => void,
@@ -194,9 +207,14 @@ export async function runRoot(
   const service = await runtime.processes();
   let acknowledged = false;
   let worker: Worker | undefined;
-  const stop = () => void worker?.terminate();
+  let stopping: Promise<void> | undefined;
+  const stop = () =>
+    (stopping ??= Promise.resolve(worker?.terminate()).then(() => {
+      if (!runtime.disposed) service.rootStopped(transport.pid);
+    }));
   onStop(() => void service.kill(transport.pid, 9).catch(stop));
   const controller = {
+    memory: guest.memory,
     filesystem: identity,
     output,
     acknowledged: () => acknowledged,
@@ -228,7 +246,9 @@ export async function runRoot(
     root.onmessageerror = () => reject(new Error("root worker message decode failed"));
     root.onmessage = ({ data }: MessageEvent<RuntimeWorkerMessage>) => {
       if (runtime.disposed) return;
-      if (data.type === "runtime-proc") {
+      if (data.type === "shared-control-allocation") {
+        service.rootControlAllocated(transport.pid, data.buffer);
+      } else if (data.type === "runtime-proc") {
         if (waffle.readOutcome(state.signals.outcome)?.kind === "signaled")
           service.rejectRuntimeMessage(data, transport.pid);
         else void service.runtimeMessage(data, transport.pid).catch(reject);
@@ -244,7 +264,8 @@ export async function runRoot(
       }
     };
     const request: RuntimeWorkerRequest = {
-      module,
+      module: guest.module,
+      controlGrant: service.rootControlGrant(transport.pid),
       args,
       // The baseline's standalone CLI entry defaulted PATH to /usr/bin:/bin; the
       // runtime entry inherits only its environment, so the instrument supplies it.
@@ -263,5 +284,6 @@ export async function runRoot(
         (slot) => !waffle.readOutcome(waffle.workerProcessState(transport, slot).signals.outcome),
       );
   while (live() && !runtime.disposed) await new Promise((resolve) => setTimeout(resolve, 2));
+  await stop();
   return status;
 }

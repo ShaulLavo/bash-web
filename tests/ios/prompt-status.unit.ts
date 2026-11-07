@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
@@ -342,11 +343,19 @@ test("empty IOS_UDID stops the actual public CLI before native allocation", asyn
   const scratch = await mkdtemp(join(process.env.TMPDIR ?? "/work/tmp", "prompt-status-cli-"));
   try {
     const path = join(scratch, "result.json");
-    const command = spawnSync("bun", ["scripts/test-prompt-status-ios.ts", "--result", path], {
-      env: { ...process.env, IOS_UDID: "" },
-      encoding: "utf8",
-      timeout: 15_000,
-    });
+    const command = spawnSync(
+      "bun",
+      [
+        fileURLToPath(new URL("../../scripts/test-prompt-status-ios.ts", import.meta.url)),
+        "--result",
+        path,
+      ],
+      {
+        env: { ...process.env, IOS_UDID: "" },
+        encoding: "utf8",
+        timeout: 15_000,
+      },
+    );
     assert.equal(command.status, 3, command.stderr);
     assert.deepEqual(JSON.parse(await readFile(path, "utf8")), {
       suite: "bash-prompt-status",

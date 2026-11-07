@@ -3,20 +3,21 @@ import { declareModuleMemory, pages, type MemoryDeclaration } from "waffle";
 // The standalone shell producer owns one defined, private, capped memory. Waffle's
 // public declaration writer records it for child launches but returns no root list.
 function rootMemory(source: Uint8Array): readonly MemoryDeclaration[] {
+  const bytes = new DataView(source.buffer, source.byteOffset, source.byteLength);
   let offset = 8;
   const integer = () => {
     let value = 0;
     let shift = 0;
     let byte: number;
     do {
-      byte = source[offset++];
+      byte = bytes.getUint8(offset++);
       value += (byte & 127) * 2 ** shift;
       shift += 7;
     } while (byte & 128);
     return value;
   };
   while (offset < source.length) {
-    const section = source[offset++];
+    const section = bytes.getUint8(offset++);
     const end = integer() + offset;
     if (section !== 5) {
       offset = end;

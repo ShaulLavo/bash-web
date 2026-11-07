@@ -1,8 +1,9 @@
 // Original regression: real runtime_proc admission must stay quiet before adapter launch.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BrowserProcessBroker } from "waffle/browser/process-broker";
+import type { BrowserProcessBroker } from "waffle/browser/process-broker";
 import { createRuntimeTerminalCodec } from "waffle/browser/runtime-terminals";
+import { createFixtureBroker } from "../../tests/helpers/runtime-owner";
 import { DescriptorTable } from "waffle/core/descriptors";
 import { createFilesystemIdentity } from "waffle/fs/protocol";
 import { ProcessIdentityAllocator } from "waffle/proc/identity";
@@ -53,7 +54,7 @@ async function verifyRuntimeChild(
 }
 
 for (const mode of ["runtime-terminal", "runtime-pipe", "host-root"] as const) {
-  test(`lazy loader diagnostic ownership: ${mode}`, async () => {
+  test(`lazy loader diagnostic ownership: ${mode}`, async (context) => {
     const identities = new ProcessIdentityAllocator();
     const table = new ProcessTable(identities);
     let metadata = 0;
@@ -74,7 +75,7 @@ for (const mode of ["runtime-terminal", "runtime-pipe", "host-root"] as const) {
     const output: string[] = [];
     const errors: unknown[] = [];
     const notices: WorkerProcessMessage[] = [];
-    const broker = new BrowserProcessBroker({
+    const { broker } = await createFixtureBroker(context, {
       identities,
       table,
       registry,
@@ -136,10 +137,11 @@ for (const mode of ["runtime-terminal", "runtime-pipe", "host-root"] as const) {
       let parentPid: number;
       let pid: number;
       if (mode === "host-root") {
-        parentPid = await broker.adoptRoot({ descriptors });
+        parentPid = await broker.adoptRoot({ descriptors, memory: [] });
         pid = supervisor.reserveSpawn(parentPid, request);
       } else {
         await broker.adoptRuntimeRoot(root, {
+          memory: [],
           output: (_fd, bytes) => output.push(new TextDecoder().decode(bytes)),
         });
         parent = new WorkerProcessClient({
