@@ -211,6 +211,8 @@ Starting evidence contains 7 exact and 0 structural occurrences.
 
 Extract repeated stderr writes, loop-step handling, child signal forwarding, resolution diagnostics, and reader outcome handling. Preserve status, scope, cancellation, and trap ordering.
 
+Completed on November 7, 2026: the two command-query missing-name branches share one streaming diagnostic helper. Quiet queries, original operand bytes, write order, status, cancellation, and descriptor ownership stay unchanged. Focused tests cover missing and slash-qualified operands, mixed successful queries, cancellation, and broken pipes. Removed only exact fingerprint `606b48116a4df88e` after the real check failed before extraction and both scans passed afterward. The other interpreter clones remain deferred.
+
 interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.
 
 Affected paths:

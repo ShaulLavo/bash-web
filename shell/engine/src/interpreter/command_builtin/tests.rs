@@ -218,6 +218,61 @@ impl Rig {
 }
 
 #[test]
+fn command_query_missing_diagnostics_preserve_quiet_and_verbose_bytes() {
+    for flag in ["-v", "-V"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run("printf data > nonexec"), 0);
+        let (error, captured) = io::capture(4096);
+        let mut fds = rig.session.core.descriptors.borrow().clone();
+        fds.insert(2, error);
+        rig.session.set_descriptors(fds).unwrap();
+        for operand in ["absent", "./nonexec", "missing/probe", "雪/nope", ""] {
+            assert_eq!(rig.run(&format!("command {flag} '{operand}'")), 1);
+        }
+        assert!(rig.output.bytes().is_empty());
+        let expected = if flag == "-V" {
+            "command: absent: not found\ncommand: ./nonexec: not found\ncommand: missing/probe: not found\ncommand: 雪/nope: not found\ncommand: : not found\n"
+        } else {
+            ""
+        };
+        assert_eq!(captured.bytes(), expected.as_bytes());
+        assert_eq!(rig.host.spawns.get(), 0);
+        rig.shutdown();
+    }
+}
+
+#[test]
+fn command_query_mixed_operands_keep_diagnostic_order_and_success_status() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(rig.run("printf data > nonexec"), 0);
+    let mut fds = rig.session.core.descriptors.borrow().clone();
+    fds.insert(2, fds.get(1).unwrap().clone());
+    rig.session.set_descriptors(fds).unwrap();
+    assert_eq!(rig.run("command -V absent true ./nonexec"), 0);
+    assert_eq!(
+        rig.output.bytes(),
+        b"command: absent: not found\ntrue is a shell builtin\ncommand: ./nonexec: not found\n"
+    );
+    rig.shutdown();
+}
+
+#[test]
+fn command_query_blocked_diagnostics_cancel_and_propagate_broken_pipe() {
+    for source in ["command -V absent", "command -V ./nonexec"] {
+        let rig = Rig::new(Limits::default());
+        assert_eq!(rig.run("printf data > nonexec"), 0);
+        let before = rig.session.core.execution_storage.observation().0;
+        let reader = block_output(&rig, 2);
+        let job = rig.session.start(&format!("a=temporary {source}")).unwrap();
+        cancel_prefix_and_refund(&rig, job, before);
+        drop(reader);
+        assert_eq!(rig.run(source), 141);
+        assert_eq!(rig.host.spawns.get(), 0);
+        rig.shutdown();
+    }
+}
+
+#[test]
 fn lookup_live_storage_refunds_each_failed_candidate() {
     for source in ["probe", "command -v probe", "type -p probe"] {
         let rig = Rig::new(Limits {
