@@ -8,6 +8,8 @@
     "tests/ios/*.unit.ts",
     "tests/ios/prompt-status-page.ts",
     "tests/ios/prompt-hook-page.ts",
+    "tests/ios/session-drain-page.ts",
+    "scripts/test-session-drain-ios.ts",
     "scripts/test-prompt-hook-ios.ts",
     "scripts/test-prompt-status-ios.ts",
     "tests/helpers/git-consumer.ts",
