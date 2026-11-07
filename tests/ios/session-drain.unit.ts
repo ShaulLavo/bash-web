@@ -80,9 +80,12 @@ function drive(id: string, host = new ControlledDrainHost()) {
   return entry.drive(host);
 }
 
-function parityOperation(operation: DrainOperation, completedDrainTask: boolean): DrainOperation {
+async function parityOperation(
+  operation: DrainOperation,
+  completedDrainTask: boolean,
+): Promise<DrainOperation> {
   if (operation.kind === "sleep") return operation;
-  if (!completedDrainTask) return { kind: operation.kind, source: tokens(operation.source) };
+  if (!completedDrainTask) return { kind: operation.kind, source: await tokens(operation.source) };
   assert.equal(operation.kind, "task");
   const wrapped = /^await new Promise\(\(resolve\) => \{([\s\S]*)\}\);$/u.exec(operation.source);
   assert.ok(wrapped?.[1], "D06 uses one awaited completion task");
@@ -92,7 +95,7 @@ function parityOperation(operation: DrainOperation, completedDrainTask: boolean)
   assert.match(source, completion, "D06 completes only after restoring the original timer");
   return {
     kind: "script",
-    source: tokens(source.replace(completion, 'Reflect.set(window, "setTimeout", timeout);')),
+    source: await tokens(source.replace(completion, 'Reflect.set(window, "setTimeout", timeout);')),
   };
 }
 
@@ -143,6 +146,24 @@ function assertAttachment(value: unknown): void {
   assert.deepEqual(JSON.parse(String(attachment.body)), { unavailable: true });
 }
 
+describe("source parity grouping", () => {
+  test("rejects arithmetic grouping that changes the complete D05 expected array", async () => {
+    const original = "Array.from({ length: 1000 }, (_, i) => 32 + (i % 200))";
+    const changed = "Array.from({ length: 1000 }, (_, i) => (32 + i) % 200)";
+    assert.notEqual(await tokens(original), await tokens(changed));
+    assert.equal(Array.from({ length: 1000 }, (_, i) => 32 + (i % 200))[168], 200);
+    assert.equal(Array.from({ length: 1000 }, (_, i) => (32 + i) % 200)[168], 0);
+  });
+
+  test("normalizes only expression wrappers, not returns inside a callback", async () => {
+    assert.equal(await tokens("return ({ value: 1 });"), await tokens("({ value: 1 })"));
+    assert.notEqual(
+      await tokens("const read = () => { return bytes; };"),
+      await tokens("const read = () => { bytes; };"),
+    );
+  });
+});
+
 describe("original session-drain inventory and expressions", () => {
   test("retains all 12 titles and both loop expansions in source order", async () => {
     const original = await originalSessionDrainCases();
@@ -180,9 +201,11 @@ describe("original session-drain inventory and expressions", () => {
         String(Reflect.get(Object(host.operations[0]), "source")),
         /script\.onload.*resolve\(\)/s,
       );
-      const body = host.operations
-        .slice(2)
-        .map((operation, index) => parityOperation(operation, item.id === "D06" && index === 0));
+      const body = await Promise.all(
+        host.operations
+          .slice(2)
+          .map((operation, index) => parityOperation(operation, item.id === "D06" && index === 0)),
+      );
       assert.deepEqual(body, original[index]?.operations, `${item.id} expression parity`);
       assert.ok(JSON.stringify(result).length < 1024, `${item.id} keeps arrays out of reports`);
     }

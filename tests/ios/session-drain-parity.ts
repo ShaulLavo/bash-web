@@ -55,7 +55,26 @@ function argumentsOf(source: string): string[] {
   return parts.concat([source.slice(start).trim()]).filter(Boolean);
 }
 
-export function tokens(source: string, bindings: Bindings = {}): string {
+async function expressionSource(source: string): Promise<string> {
+  const { code } = await transform(
+    `async function parity() {
+${source}
+}`,
+    {
+      loader: "ts",
+      target: "esnext",
+    },
+  );
+  let body = code.slice(code.indexOf("{") + 1, code.lastIndexOf("}")).trim();
+  if (body.endsWith(";")) body = body.slice(0, -1).trim();
+  if (body.startsWith("return ")) body = body.slice("return ".length).trim();
+  while (body.startsWith("(") && closing(body, 0) === body.length - 1)
+    body = body.slice(1, -1).trim();
+  return body;
+}
+
+export async function tokens(source: string, bindings: Bindings = {}): Promise<string> {
+  source = await expressionSource(source);
   const result: string[] = [];
   const pattern =
     /\s+|(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)|[A-Za-z_$][\w$]*|(?:\d+(?:\.\d+)?(?:e[+-]?\d+)?)|./giy;
@@ -75,7 +94,7 @@ export function tokens(source: string, bindings: Bindings = {}): string {
     if (!match) throw new Error("Unrecognized source token");
     const text = match[0];
     index = pattern.lastIndex;
-    if (/^\s|^\/\/|^\/\*/u.test(text) || [";", "return", "(", ")"].includes(text)) continue;
+    if (/^\s|^\/\/|^\/\*/u.test(text) || text === ";") continue;
     result.push(
       Object.hasOwn(bindings, text)
         ? JSON.stringify(bindings[text])
@@ -97,7 +116,7 @@ function expandParts(body: string): string {
   return body;
 }
 
-function bodyOperations(body: string, bindings: Bindings): DrainOperation[] {
+async function bodyOperations(body: string, bindings: Bindings): Promise<DrainOperation[]> {
   body = expandParts(body);
   const result: DrainOperation[] = [];
   const pattern = /page\.(evaluate|waitForTimeout)\(/gu;
@@ -120,7 +139,7 @@ function bodyOperations(body: string, bindings: Bindings): DrainOperation[] {
     if (parameter) local[parameter] = bindings[args[1] ?? ""] ?? "";
     result.push({
       kind: callback.startsWith("async") ? "task" : "script",
-      source: tokens(expression, local),
+      source: await tokens(expression, local),
     });
   }
   return result;
@@ -143,8 +162,8 @@ export async function originalSessionDrainCases() {
       const label = title.slice(1, -1).replace(`\u0024{${variable}}`, value);
       result.push({
         label,
-        operations: bodyOperations(callback.slice(bodyStart), bindings),
-        assertions: assertionCalls(callback.slice(bodyStart)),
+        operations: await bodyOperations(callback.slice(bodyStart), bindings),
+        assertions: await assertionCalls(callback.slice(bodyStart)),
       });
     }
     pattern.lastIndex = end + 1;
@@ -163,14 +182,14 @@ function loopValues(source: string, variable: string): string[] {
   return parsed;
 }
 
-function assertionCalls(body: string): string[] {
+async function assertionCalls(body: string): Promise<string[]> {
   body = expandParts(body);
   const pattern = /\.(toBe|toEqual|toMatch|toBeLessThan|toBeLessThanOrEqual)\(/gu;
   const assertions: string[] = [];
   for (let match = pattern.exec(body); match; match = pattern.exec(body)) {
     const start = match.index + match[0].length - 1,
       end = closing(body, start);
-    assertions.push(`${match[1]} ${tokens(body.slice(start + 1, end))}`);
+    assertions.push(`${match[1]} ${await tokens(body.slice(start + 1, end))}`);
     pattern.lastIndex = end + 1;
   }
   return assertions;
@@ -195,11 +214,13 @@ export async function portSessionDrainAssertions(): Promise<string[][]> {
     "race",
     "interrupt",
   ];
-  return names.map((name) => {
-    const nameIndex = code.indexOf(`async function ${name}(`);
-    if (nameIndex < 0) throw new Error(`Missing ${name} assertion body`);
-    const parameters = code.indexOf("(", nameIndex);
-    const start = code.indexOf("{", closing(code, parameters));
-    return assertionCalls(code.slice(start + 1, closing(code, start)));
-  });
+  return Promise.all(
+    names.map(async (name) => {
+      const nameIndex = code.indexOf(`async function ${name}(`);
+      if (nameIndex < 0) throw new Error(`Missing ${name} assertion body`);
+      const parameters = code.indexOf("(", nameIndex);
+      const start = code.indexOf("{", closing(code, parameters));
+      return assertionCalls(code.slice(start + 1, closing(code, start)));
+    }),
+  );
 }
