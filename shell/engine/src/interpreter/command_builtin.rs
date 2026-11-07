@@ -542,20 +542,12 @@ pub(super) async fn query(
             let path = match resolution {
                 Resolution::Executable(path) => path,
                 Resolution::NonExecutable(_, _) if name.contains('/') => {
-                    if options.verbose {
-                        diagnostic(fds, context, b"command: ").await?;
-                        diagnostic(fds, context, name.as_bytes()).await?;
-                        diagnostic(fds, context, b": not found\n").await?;
-                    }
+                    query_not_found(fds, context, name, options.verbose).await?;
                     continue;
                 }
                 Resolution::NonExecutable(path, _) => path,
                 Resolution::Missing => {
-                    if options.verbose {
-                        diagnostic(fds, context, b"command: ").await?;
-                        diagnostic(fds, context, name.as_bytes()).await?;
-                        diagnostic(fds, context, b": not found\n").await?;
-                    }
+                    query_not_found(fds, context, name, options.verbose).await?;
                     continue;
                 }
             };
@@ -578,6 +570,20 @@ pub(super) async fn query(
         found = true;
     }
     Ok(Outcome::status(i32::from(!found)))
+}
+
+async fn query_not_found(
+    fds: &Descriptors,
+    context: &Context,
+    name: &str,
+    verbose: bool,
+) -> Result<(), i32> {
+    if !verbose {
+        return Ok(());
+    }
+    diagnostic(fds, context, b"command: ").await?;
+    diagnostic(fds, context, name.as_bytes()).await?;
+    diagnostic(fds, context, b": not found\n").await
 }
 
 #[cfg(test)]
