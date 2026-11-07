@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -126,7 +127,7 @@ test("the original setup/body clock and separate diagnostic teardown clock remai
 
 test("assets serve only the page bootstrap and normal-produced workers and typed WASM", async () => {
   const assets = await promptStatusAdapter.assets({
-    scratch: process.env.TMPDIR ?? "/work/tmp",
+    scratch: tmpdir(),
     signal: new AbortController().signal,
   });
   assert.deepEqual(Object.keys(assets).sort(), [
@@ -344,7 +345,7 @@ test("automatic failure diagnostics preserve messages, attachment and unavailabl
 });
 
 test("empty IOS_UDID stops the actual public CLI before native allocation", async () => {
-  const scratch = await mkdtemp(join(process.env.TMPDIR ?? "/work/tmp", "prompt-status-cli-"));
+  const scratch = await mkdtemp(join(tmpdir(), "prompt-status-cli-"));
   try {
     const path = join(scratch, "result.json");
     const command = spawnSync(

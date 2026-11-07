@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { writeResult } from "waffle/testing/page-runner";
@@ -22,7 +23,7 @@ async function value(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, "utf8"));
 }
 async function fixture(run: (path: string) => Promise<void>) {
-  const directory = await mkdtemp(join(process.env.TMPDIR ?? "/work/tmp", "diagnostic-sink-"));
+  const directory = await mkdtemp(join(tmpdir(), "diagnostic-sink-"));
   try {
     await run(join(directory, "result.json"));
   } finally {
