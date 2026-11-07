@@ -283,6 +283,7 @@ test("typecheck recipes cover every root in its intended host environment", () =
         "tests/ios/session-drain-controls.ts",
         "tests/ios/session-drain-parity.ts",
         "tests/ios/session-drain.unit.ts",
+        "tests/ios/session-drain-host.unit.ts",
         "tests/ios/session-drain-cli.unit.ts",
         "scripts/test-prompt-hook-ios.ts",
         "tests/ios/prompt-hook-adapter.ts",

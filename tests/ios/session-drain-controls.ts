@@ -6,6 +6,10 @@ export type DrainOperation =
   | { kind: "sleep"; ms: number };
 
 export class ControlledDrainHost implements HostCase {
+  async allocateDatabase(): Promise<string> {
+    throw new Error("Memory-only session drain must not allocate durable storage");
+  }
+
   readonly signal = new AbortController().signal;
   readonly operations: DrainOperation[] = [];
   readonly context: Context;

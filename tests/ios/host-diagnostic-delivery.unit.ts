@@ -8,6 +8,7 @@ import { appendHostAttachments, finalizeHostDiagnostics } from "./host-diagnosti
 
 const name = "browser-startup-diagnostics";
 const contentType = "application/json";
+const direct = { selectDescriptor: (value: unknown) => value };
 const primary = "original body failure must survive";
 function diagnostic(body = JSON.stringify({ unavailable: true }, null, 2)) {
   return { name, body, contentType };
@@ -51,7 +52,7 @@ for (const [body, pending] of [
       const before = await original(path, suite({ status: "pass", result: returned }));
       const calls: string[][] = [];
       assert.equal(
-        await finalizeHostDiagnostics(path, 1, { emit: (...args) => calls.push(args) }),
+        await finalizeHostDiagnostics(path, 1, { ...direct, emit: (...args) => calls.push(args) }),
         1,
       );
       assert.deepEqual(calls, [
@@ -83,7 +84,7 @@ test("diagnostic append preserves measurement attachment records exactly", () =>
     await appendHostAttachments(path, [measure]);
     const returned = diagnostic();
     const before = await original(path, suite({ status: "pass", result: returned }));
-    assert.equal(await finalizeHostDiagnostics(path, 1, { emit() {} }), 1);
+    assert.equal(await finalizeHostDiagnostics(path, 1, { ...direct, emit() {} }), 1);
     assert.deepEqual(await value(`${path}.attachments.json`), {
       attachments: [measure, { caseId: "P01", ...returned }],
     });
@@ -101,7 +102,7 @@ for (const teardown of [
       const before = await original(path, suite(teardown));
       const calls: string[][] = [];
       assert.equal(
-        await finalizeHostDiagnostics(path, 2, { emit: (...args) => calls.push(args) }),
+        await finalizeHostDiagnostics(path, 2, { ...direct, emit: (...args) => calls.push(args) }),
         2,
       );
       assert.deepEqual(calls, []);
@@ -122,7 +123,7 @@ for (const returned of [
   test(`malformed descriptor is secondary and nonzero: ${JSON.stringify(returned)}`, () =>
     fixture(async (path) => {
       const before = await original(path, suite({ status: "pass", result: returned }));
-      assert.equal(await finalizeHostDiagnostics(path, 1, { emit() {} }), 1);
+      assert.equal(await finalizeHostDiagnostics(path, 1, { ...direct, emit() {} }), 1);
       assert.match(
         JSON.stringify(await value(`${path}.diagnostic-delivery.json`)),
         /"status":"failed"/,
@@ -142,7 +143,7 @@ for (const initial of [0, 1, 2]) {
         await writeResult(target, source);
       };
       assert.equal(
-        await finalizeHostDiagnostics(path, initial, { write, emit() {} }),
+        await finalizeHostDiagnostics(path, initial, { ...direct, write, emit() {} }),
         initial === 0 ? 2 : initial,
       );
       assert.match(
@@ -158,6 +159,7 @@ test("host console failure is secondary, recorded and nonzero", () =>
     const before = await original(path, suite({ status: "pass", result: diagnostic() }));
     assert.equal(
       await finalizeHostDiagnostics(path, 0, {
+        ...direct,
         emit() {
           throw new Error("stderr refused");
         },
@@ -174,6 +176,7 @@ test("receipt write rejection reports secondary failure without rewriting result
     const calls: string[][] = [];
     assert.equal(
       await finalizeHostDiagnostics(path, 0, {
+        ...direct,
         write: async () => {
           throw new Error("receipt refused");
         },
@@ -192,7 +195,7 @@ test("precondition results are not invented suite results", () =>
     const before = await original(path, { exit: 3, precondition: "no native resources allocated" });
     const calls: string[][] = [];
     assert.equal(
-      await finalizeHostDiagnostics(path, 3, { emit: (...args) => calls.push(args) }),
+      await finalizeHostDiagnostics(path, 3, { ...direct, emit: (...args) => calls.push(args) }),
       3,
     );
     assert.deepEqual(calls, []);
@@ -206,3 +209,97 @@ test("precondition results are not invented suite results", () =>
     await assert.rejects(readFile(`${path}.attachments.json`), { code: "ENOENT" });
     assert.equal(await readFile(path, "utf8"), before);
   }));
+
+function envelopeDescriptor(result: unknown): unknown {
+  assert.ok(result && typeof result === "object" && "attachments" in result);
+  assert.ok(Array.isArray(result.attachments));
+  return result.attachments[0] ?? null;
+}
+
+test("explicit envelope selector receives actual persisted teardown result", () =>
+  fixture(async (path) => {
+    const returned = diagnostic(' {"startup":{"pending":["worker ready"]}}\n');
+    const envelope = { id: "D01", afterEach: "pass", attachments: [returned] };
+    const before = await original(path, suite({ status: "pass", result: envelope }));
+    const selected: unknown[] = [];
+    const calls: string[][] = [];
+    assert.equal(
+      await finalizeHostDiagnostics(path, 1, {
+        selectDescriptor(result) {
+          selected.push(result);
+          return envelopeDescriptor(result);
+        },
+        emit: (...args) => calls.push(args),
+      }),
+      1,
+    );
+    assert.deepEqual(selected, [envelope]);
+    assert.deepEqual(calls, [
+      ["Pending browser startup awaits", "worker ready"],
+      ["Browser startup diagnostics", returned.body],
+    ]);
+    assert.deepEqual(await value(`${path}.attachments.json`), {
+      attachments: [{ caseId: "P01", ...returned }],
+    });
+    assert.equal(await readFile(path, "utf8"), before);
+  }));
+
+test("explicit selector refusal is secondary even for a valid direct descriptor", () =>
+  fixture(async (path) => {
+    const before = await original(path, suite({ status: "pass", result: diagnostic() }));
+    const calls: string[][] = [];
+    assert.equal(
+      await finalizeHostDiagnostics(path, 0, {
+        selectDescriptor() {
+          throw new Error("caller refused descriptor");
+        },
+        emit: (...args) => calls.push(args),
+      }),
+      2,
+    );
+    assert.deepEqual(calls, []);
+    assert.match(
+      JSON.stringify(await value(`${path}.diagnostic-delivery.json`)),
+      /caller refused descriptor/,
+    );
+    assert.equal(await readFile(path, "utf8"), before);
+  }));
+
+test("empty selected envelope stays not-returned without automatic shape detection", () =>
+  fixture(async (path) => {
+    const before = await original(path, suite({ status: "pass", result: { attachments: [] } }));
+    assert.equal(
+      await finalizeHostDiagnostics(path, 0, { selectDescriptor: envelopeDescriptor, emit() {} }),
+      0,
+    );
+    assert.match(
+      JSON.stringify(await value(`${path}.diagnostic-delivery.json`)),
+      /"status":"not-returned"/,
+    );
+    await assert.rejects(readFile(`${path}.attachments.json`), { code: "ENOENT" });
+    assert.equal(await readFile(path, "utf8"), before);
+  }));
+
+for (const status of ["fail", "timeout", "aborted"]) {
+  test(`unconfirmed ${status} teardown never invokes the selector`, () =>
+    fixture(async (path) => {
+      const before = await original(path, suite({ status, result: diagnostic() }));
+      let selected = false;
+      assert.equal(
+        await finalizeHostDiagnostics(path, 1, {
+          selectDescriptor() {
+            selected = true;
+            throw new Error("must not select an unsettled result");
+          },
+          emit() {},
+        }),
+        1,
+      );
+      assert.equal(selected, false);
+      assert.match(
+        JSON.stringify(await value(`${path}.diagnostic-delivery.json`)),
+        /"status":"not-returned"/,
+      );
+      assert.equal(await readFile(path, "utf8"), before);
+    }));
+}

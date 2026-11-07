@@ -20,7 +20,12 @@ import {
   portSessionDrainAssertions,
   tokens,
 } from "./session-drain-parity";
-import { record, sessionDrainIds, sessionDrainInventory } from "./session-drain-support";
+import {
+  record,
+  selectSessionDrainDiagnostic,
+  sessionDrainIds,
+  sessionDrainInventory,
+} from "./session-drain-support";
 
 const cases = sessionDrainCases();
 const pass: HostVerdict = { status: "pass", result: { assertions: "pass" } };
@@ -479,4 +484,24 @@ test("public-entry asset compilation uses the original fixture and bundled page"
     sessionDrainInventory.map((item) => item.id),
     sessionDrainIds,
   );
+});
+
+test("session drain explicitly selects only its completed teardown envelope", () => {
+  const returned = {
+    name: "browser-startup-diagnostics",
+    contentType: "application/json",
+    body: "false",
+  };
+  assert.equal(
+    selectSessionDrainDiagnostic({ afterEach: "pass", attachments: [returned] }),
+    returned,
+  );
+  assert.equal(selectSessionDrainDiagnostic({ afterEach: "pass", attachments: [] }), null);
+  for (const value of [
+    returned,
+    null,
+    { afterEach: "fail", attachments: [returned] },
+    { afterEach: "pass", attachments: [returned, returned] },
+  ])
+    assert.throws(() => selectSessionDrainDiagnostic(value));
 });

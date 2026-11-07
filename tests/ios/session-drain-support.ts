@@ -32,3 +32,11 @@ export function finiteNumber(value: unknown): number {
     throw new Error("Expected a finite number from the page");
   return value;
 }
+
+export function selectSessionDrainDiagnostic(result: unknown): unknown {
+  if (!record(result) || result.afterEach !== "pass" || !Array.isArray(result.attachments))
+    throw new Error("Missing completed session drain teardown envelope");
+  if (result.attachments.length > 1)
+    throw new Error("Unexpected session drain diagnostic attachment inventory");
+  return result.attachments[0] ?? null;
+}

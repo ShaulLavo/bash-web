@@ -1,4 +1,9 @@
-import { nativeMain } from "waffle/testing/page-runner";
+import { nativeMainWithDiagnostics } from "../tests/ios/host-diagnostic-delivery.ts";
 import { sessionDrainAdapter } from "../tests/ios/session-drain";
+import { selectSessionDrainDiagnostic } from "../tests/ios/session-drain-support";
 
-process.exit(await nativeMain(sessionDrainAdapter, process.argv.slice(2)));
+process.exitCode = await nativeMainWithDiagnostics(
+  sessionDrainAdapter,
+  process.argv.slice(2),
+  selectSessionDrainDiagnostic,
+);
