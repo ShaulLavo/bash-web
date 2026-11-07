@@ -105,7 +105,6 @@
     "5d7fe009a5198f3d": 1,
     "5f16af179fc35550": 1,
     "5f94218b2725e3b3": 1,
-    "606b48116a4df88e": 1,
     "64485f0881600adf": 1,
     "669aee7aced54f7f": 1,
     "66b21b5951360ac5": 1,
@@ -783,11 +782,6 @@
       "kind": "deferred",
       "reason": "Remove shell/parser/src/parser/mod.rs:4997-5004 (parse_braced_parameter); shell/parser/src/parser/mod.rs:5591-5598 (scan_word_parts); The paths are owned parser code with local Bash fixes. The required provenance update is protected here, and deduplication must not erase the different quoting contexts or work-budget behavior.",
       "plan": "plans/008-duplicate-baseline.md#parser-parameters"
-    },
-    "606b48116a4df88e": {
-      "kind": "deferred",
-      "reason": "Remove shell/engine/src/interpreter/command_builtin.rs:544-551 (query); shell/engine/src/interpreter/command_builtin.rs:553-560 (query); interpreter.rs is under the prompt/session integration and the neutral-support migration. Concurrent edits to context, process group, and cancellation paths are not safe in this lane.",
-      "plan": "plans/008-duplicate-baseline.md#engine-interpreter"
     },
     "64485f0881600adf": {
       "kind": "fixture",
