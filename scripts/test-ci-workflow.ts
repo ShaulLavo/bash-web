@@ -244,6 +244,8 @@ test("quality package recipes preserve complete current selections", () => {
   const scripts = object(pkg.scripts);
   assert.equal(scripts["typecheck:browser"], "tsc --noEmit -p tsconfig.browser.json");
   assert.equal(scripts.typecheck, "node scripts/typecheck-projects.ts");
+  assert.equal(scripts["test:ios:adapters"], "bun test ./tests/ios/*.unit.ts");
+  assert.equal(commands(jobs().browser).match(/npm run test:ios:adapters\b/g)?.length, 1);
   assert.equal(
     scripts["quality:js"],
     "npm run test:browser:package && npm run test:prompt && npm run test:prompt:size && npm run test:session && npm run format:check && npm run lint && npm run typecheck && npm run typecheck:prompt-consumer && npm run check:unused && npm run check:duplicates && npm run check:javascript && npm run test:quality-gates && node --test scripts/test-family-routes.ts",

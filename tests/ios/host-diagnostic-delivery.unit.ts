@@ -116,6 +116,7 @@ for (const teardown of [
 for (const returned of [
   diagnostic("not JSON"),
   { ...diagnostic(), name: "wrong" },
+  { attachments: [diagnostic()] },
   { ...diagnostic(), body: 42 },
   { ...diagnostic(), contentType: "text/plain" },
   diagnostic('{"startup":{"pending":[2]}}'),

@@ -31,19 +31,23 @@ function closing(source: string, start: number): number {
   throw new Error("Unclosed original source block");
 }
 
+function expressionEnd(source: string, start: number): number {
+  const first = source[start];
+  if (['"', "'", "`"].includes(first)) return quotedEnd(source, start) - 1;
+  if (["(", "{", "["].includes(first)) return closing(source, start);
+  return start;
+}
+
 function argumentsOf(source: string): string[] {
   let start = 0;
   const parts: string[] = [];
   for (let index = 0; index < source.length; index++) {
+    const end = expressionEnd(source, index);
+    if (end !== index) {
+      index = end;
+      continue;
+    }
     const char = source[index];
-    if (char === '"' || char === "'" || char === "`") {
-      index = quotedEnd(source, index) - 1;
-      continue;
-    }
-    if (char === "(" || char === "{" || char === "[") {
-      index = closing(source, index);
-      continue;
-    }
     if (char !== ",") continue;
     parts.push(source.slice(start, index).trim());
     start = index + 1;

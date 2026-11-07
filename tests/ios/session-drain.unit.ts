@@ -14,6 +14,7 @@ import {
   sessionDrainList,
   sessionDrainPreparationMs,
 } from "./session-drain";
+import * as drainPage from "./session-drain-page";
 import { ControlledDrainHost, type DrainOperation } from "./session-drain-controls";
 import {
   originalSessionDrainCases,
@@ -108,6 +109,10 @@ function pageControl(session: unknown, bashWeb?: unknown, bundle = pageBundle) {
     console: { error: (...args: unknown[]) => logs.push(args) },
   });
   runInContext(bundle, context);
+  assert.deepEqual(
+    Object.keys(runInContext("DrainPageControls", context)).sort(),
+    Object.keys(drainPage).sort(),
+  );
   async function teardown(verdict: HostVerdict = pass): Promise<unknown> {
     context.verdict = verdict;
     return await runInContext(
