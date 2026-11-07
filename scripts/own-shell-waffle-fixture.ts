@@ -12,8 +12,8 @@ export const directory = resolve(
   process.env.CARGO_TARGET_DIR ?? ".build/shell",
   "wasm32-wasip1/release",
 );
-export const shell = await WebAssembly.compile(
-  await readFile(resolve(directory, "shell-runtime.wasm")),
+export const shell = await api.compileShellModule(
+  Uint8Array.from(await readFile(resolve(directory, "shell-runtime.wasm"))).buffer,
 );
 
 export async function prepareWaffleDirectories(

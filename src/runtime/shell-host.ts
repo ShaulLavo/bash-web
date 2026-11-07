@@ -2,7 +2,8 @@
 // Root launch/outcome fencing originally follows bun-wasm web/src/runner.ts at
 // 8d3d416aa9cb23718ed3487a33d0b06e8e373672. This adapter no longer creates an FS,
 // broker or supervisor: the supplied Waffle Runtime is their sole page owner.
-import type { ProcessService, Runtime } from "waffle";
+import type { MemoryDeclaration, ProcessService, Runtime } from "waffle";
+import { compileShellModule } from "./shell-memory";
 import { markStartup, type StartupObserver } from "./startup-diagnostics";
 import { claimOutcome, readOutcome } from "waffle/proc/outcome";
 import { waitStatus } from "waffle/proc/wait-status";
@@ -35,7 +36,11 @@ const executable = "/programs/shell-engine.wasm";
 interface Registration {
   wasmUrl: string;
   workerUrl: string;
-  module(observer?: StartupObserver): Promise<{ module: WebAssembly.Module; size: number }>;
+  module(observer?: StartupObserver): Promise<{
+    module: WebAssembly.Module;
+    size: number;
+    memory: readonly MemoryDeclaration[];
+  }>;
   initialize(observer?: StartupObserver): Promise<void>;
 }
 const registrations = new WeakMap<Runtime, Registration>();
@@ -69,7 +74,7 @@ export function registerShell(runtime: Runtime, options: ShellOptions): Registra
 function createRegistration(runtime: Runtime, wasmUrl: string, workerUrl: string): Registration {
   // Share successful loads and in-flight attempts, but let a later explicit caller
   // try again after failure. An individual facade never retries its own startup.
-  let loaded: Promise<{ module: WebAssembly.Module; size: number }> | undefined;
+  let loaded: ReturnType<Registration["module"]> | undefined;
   const module = (observer?: StartupObserver) => {
     if (!loaded) {
       const attempt = (async () => {
@@ -81,9 +86,9 @@ function createRegistration(runtime: Runtime, wasmUrl: string, workerUrl: string
         const bytes = await response.arrayBuffer();
         markStartup(observer, "shell-wasm-body-resolved");
         markStartup(observer, "shell-wasm-compile-requested");
-        const module = await WebAssembly.compile(bytes);
+        const compiled = await compileShellModule(bytes);
         markStartup(observer, "shell-wasm-compile-resolved");
-        return { module, size: bytes.byteLength };
+        return { ...compiled, size: bytes.byteLength };
       })();
       loaded = attempt;
       void attempt.catch(() => {
@@ -262,6 +267,7 @@ export async function startShell(
       await quiesceTerminal(admission);
       await worker?.terminate();
       filesystem.port.close();
+      if (accepted && !runtime.disposed) service!.rootStopped(state.pid);
       observation.stopped();
       if (!accepted || retired) {
         stopDrain();
@@ -351,6 +357,7 @@ export async function startShell(
     markStartup(options.onStartupStage, "shell-processes-resolved");
     markStartup(options.onStartupStage, "shell-root-adopt-requested");
     await service.adoptRuntimeRoot(transport, {
+      memory: loaded.memory,
       filesystem: identity,
       prepareDescendant: terminalController.prepareDescendant,
       acknowledged: () => acknowledged,
@@ -413,6 +420,10 @@ export async function startShell(
     worker = service.takeWorker(registration.workerUrl);
     worker.onmessage = ({ data: message }: MessageEvent<ShellWorkerMessage>) => {
       if (runtime.disposed) return;
+      if (message.type === "shared-control-allocation") {
+        service!.rootControlAllocated(state.pid, message.buffer);
+        return;
+      }
       if (finished) {
         if (message.type === "runtime-proc") service!.rejectRuntimeMessage(message, state.pid);
         return;
@@ -448,6 +459,7 @@ export async function startShell(
     worker.onmessageerror = () =>
       finish({ code: 1, error: "Shell worker message could not be decoded" });
     const request: ShellWorkerRequest = {
+      controlGrant: service.rootControlGrant(state.pid),
       module: loaded.module,
       args: shellArguments(options, promptHost),
       env,

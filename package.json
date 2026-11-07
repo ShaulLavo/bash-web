@@ -24,7 +24,7 @@
     "./session": "./src/session.ts"
   },
   "scripts": {
-    "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
+    "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig*.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
     "test:rust": "node scripts/check-shell-parser.ts && cargo fmt --manifest-path shell/Cargo.toml --all --check && cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2",
     "build:shell": "node scripts/build-shell.ts",
     "check:capabilities": "node scripts/check-shell-capabilities.ts",
@@ -62,7 +62,7 @@
     "sources:browser": "node scripts/sources.ts",
     "build:shell:browser": "node scripts/build-shell-browser.ts",
     "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run build:browser:assets",
-    "typecheck:browser": "tsc --noEmit",
+    "typecheck:browser": "tsc --noEmit -p tsconfig.browser.json",
     "test:browser": "playwright test",
     "test:session": "node --test scripts/test-session.ts",
     "test:runtime:terminal": "node --expose-gc scripts/test-runtime-terminal.ts",
@@ -86,7 +86,7 @@
     "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
     "compat": "npm run compat:shell",
     "lint": "oxlint --config .oxlintrc.json --deny-warnings src scripts tests vite.config.ts playwright.config.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/typecheck-projects.ts",
     "typecheck:prompt-consumer": "tsc -p tests/types/prompt-consumer/tsconfig.json",
     "check:unused": "knip --config .knip.jsonc --treat-config-hints-as-errors",
     "check:duplicates": "node scripts/check-duplicates.ts",
@@ -119,7 +119,8 @@
     "test:python:browser": "node scripts/test-own-shell-python.ts --browser",
     "test:prompt:size": "node --experimental-strip-types scripts/test-prompt-size.ts",
     "test:prompt": "node scripts/test-prompt.ts",
-    "test:prompt:browser": "bun scripts/test-prompt-status-browser.ts"
+    "test:prompt:browser": "bun scripts/test-prompt-status-browser.ts",
+    "test:ios:adapters": "bun test ./tests/ios/*.unit.ts"
   },
   "dependencies": {
     "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-python-0.0.15.tgz",
@@ -130,6 +131,7 @@
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz",
     "@playwright/test": "1.64.0",
+    "@types/bun": "1.4.4",
     "@types/node": "26.6.3",
     "@webgpu/types": "0.1.74",
     "esbuild": "0.28.2",
@@ -140,7 +142,7 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.110/waffle-0.0.110.tgz",
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.111/waffle-0.0.111.tgz",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
@@ -154,7 +156,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "waffle@0.0.110": true
+    "waffle@0.0.111": true
   },
   "trustedDependencies": [
     "waffle",

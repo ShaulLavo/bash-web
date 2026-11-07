@@ -75,7 +75,7 @@ async function shell(runtime: Runtime, script: string) {
   const status = await runRoot(
     runtime,
     waffle,
-    await WebAssembly.compile(await readFile(guest)),
+    await waffle.compileShellModule(Uint8Array.from(await readFile(guest)).buffer),
     {
       modulePath: guest,
       tmp: "/",

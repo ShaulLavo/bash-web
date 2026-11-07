@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import type { ProcessService, Runtime, RuntimeConsumer } from "waffle";
 import {
-  BrowserProcessBroker,
   type ProcessController,
   type RuntimeRootOptions,
   type WorkerLaunchOptions,
@@ -24,7 +23,6 @@ import {
 } from "waffle/fs/protocol";
 import { ProcessIdentityAllocator } from "waffle/proc/identity";
 import { DescriptorTable } from "waffle/core/descriptors";
-import { requestSignal } from "waffle/proc/signals";
 import { claimOutcome } from "waffle/proc/outcome";
 import { SharedBridge, control, OUTPUT_CAPACITY } from "../bridge";
 import {
@@ -33,6 +31,7 @@ import {
   workerProcessState,
   type WorkerProcessTransport,
 } from "waffle/proc/worker-client";
+import { createFixtureBroker } from "../../tests/helpers/runtime-owner";
 import { createShell } from "../shell";
 import { runtimeSnapshot } from "./diagnostics";
 import { registerShell } from "./shell-host";
@@ -43,7 +42,7 @@ function quiesceFilesystem(identity: FilesystemIdentity): Promise<void> {
   revokeFilesystem(identity);
   return waitForFilesystemQuiescence(identity);
 }
-function fixture(
+async function fixture(
   context: TestContext,
   failConstructor = false,
   startFailure?: 2 | 13,
@@ -83,27 +82,62 @@ function fixture(
       throw new Error("Borrowed capability used after page disposal");
     }
   };
-  const service = {
-    workerMemory() {
-      live();
-      return [];
+  context.after(() => runtime.dispose());
+  const identities = new ProcessIdentityAllocator();
+  const {
+    runtime: owner,
+    service: ownedService,
+    createBroker,
+  } = await createFixtureBroker(context, {
+    identities,
+    table: new ProcessTable(identities),
+    registry: new ExecutableRegistry(),
+    filesystem: {
+      connect(identity) {
+        const connection = connectFilesystemIdentity(identity);
+        ports.push(connection);
+        return connection.client;
+      },
+      revoke: revokeFilesystem,
+      reap: reapFilesystem,
+      quiesce: quiesceFilesystem,
     },
+    launch() {
+      throw new Error("No descendant launch in the facade fixture");
+    },
+  });
+  const service: ProcessService = {
+    ...ownedService,
     async ready() {
       live();
+      const supervisor = await ownedService.ready();
       return {
-        table: new Map(),
+        ...supervisor,
         onChildExit(listener: (event: ChildExitEvent) => void) {
           exitListeners.add(listener);
-          return () => exitListeners.delete(listener);
+          const unobserve = supervisor.onChildExit(listener);
+          return () => {
+            exitListeners.delete(listener);
+            unobserve();
+          };
         },
       };
     },
     async adoptRuntimeRoot(transport: WorkerProcessTransport, options: RuntimeRootOptions) {
       live();
-      roots.set(workerProcessState(transport).pid, { transport, options });
-    },
-    outputDrained() {
-      live();
+      const pid = workerProcessState(transport).pid;
+      await ownedService.adoptRuntimeRoot(transport, {
+        ...options,
+        async quiesce() {
+          await options.quiesce?.();
+          events.push("fenced");
+        },
+        retired() {
+          options.retired?.();
+          roots.delete(pid);
+        },
+      });
+      roots.set(pid, { transport, options });
     },
     takeWorker(url: string) {
       live();
@@ -112,26 +146,17 @@ function fixture(
     async rootExit(pid: number, status: number) {
       live();
       rootStatuses.push(status);
-      const root = roots.get(pid)!;
-      await Promise.all([root.options.quiesce?.(), quiesceFilesystem(root.options.filesystem!)]);
-      events.push("fenced");
-      root.options.retired?.();
-      roots.delete(pid);
+      await ownedService.rootExit(pid, status);
     },
-    async killJob(job: number, signal: 9) {
-      live();
-      for (const root of roots.values()) {
-        const state = workerProcessState(root.transport);
-        if (state.job === job) requestSignal(state.signals, signal);
-      }
-    },
-  } as unknown as ProcessService;
-  const runtime = {
-    identities: new ProcessIdentityAllocator(),
+  };
+  const runtime: Runtime = {
+    ...owner,
+    identities,
     get disposed() {
       return disposed;
     },
     filesystem: {
+      ...owner.filesystem,
       async mkdirp() {
         live();
       },
@@ -205,8 +230,9 @@ function fixture(
       events.push("owner-fenced");
       await Promise.all(Array.from(consumers, (consumer) => consumer.stop()));
       consumers.clear();
+      await owner.dispose();
     },
-  } as unknown as Runtime;
+  };
   globalThis.fetch = async () => new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
   globalThis.Worker = class {
     onmessage?: (message: { data: unknown }) => void;
@@ -256,6 +282,7 @@ function fixture(
   };
   return {
     runtime,
+    createBroker,
     firstRelease,
     options,
     service,
@@ -283,7 +310,7 @@ function fixture(
 
 for (const failure of [2, 13] as const)
   test(`shared startup failure ${failure} preserves its diagnostic and publishes shell wait status`, async (context) => {
-    const host = fixture(context, false, failure);
+    const host = await fixture(context, false, failure);
     const terminal = new SharedBridge();
     const status = failure === 2 ? 127 : 126;
     await assert.rejects(createShell({ ...host.options, terminal }), /Probe startup failure/);
@@ -296,7 +323,7 @@ for (const failure of [2, 13] as const)
   });
 
 test("later shell admissions retry a failed shared fetch without invalidating a successful module", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   let fetches = 0;
   globalThis.fetch = async () =>
     ++fetches === 1
@@ -318,7 +345,7 @@ test("later shell admissions retry a failed shared fetch without invalidating a 
 });
 
 test("page disposal cancels a shell stalled before executable fetch completes", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   let complete!: (response: Response) => void;
   globalThis.fetch = () =>
     new Promise((resolve) => {
@@ -335,8 +362,8 @@ test("page disposal cancels a shell stalled before executable fetch completes", 
   complete(new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)));
 });
 
-test("failed program registration releases the adapter lease for a later retry", (context) => {
-  const host = fixture(context, false, undefined, false, 1);
+test("failed program registration releases the adapter lease for a later retry", async (context) => {
+  const host = await fixture(context, false, undefined, false, 1);
   assert.throws(() => registerShell(host.runtime, host.options), /Program registration refused/);
   assert.equal(host.adapters.size, 0);
   assert.doesNotThrow(() => registerShell(host.runtime, host.options));
@@ -344,7 +371,7 @@ test("failed program registration releases the adapter lease for a later retry",
 });
 
 test("a later shell retries failed filesystem initialization", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const mkdirp = host.runtime.filesystem.mkdirp;
   let attempts = 0;
   host.runtime.filesystem.mkdirp = async (...args) => {
@@ -362,7 +389,7 @@ test("a later shell retries failed filesystem initialization", async (context) =
 });
 
 test("supervisor completion settles a root without a repeating page timer", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const timers = context.mock.method(globalThis, "setTimeout");
   const shell = await createShell(host.options);
   assert.equal(timers.mock.calls.length, 0, "idle roots must not start a polling timer");
@@ -378,8 +405,8 @@ test("supervisor completion settles a root without a repeating page timer", asyn
   assert.equal(host.terminated, 1);
 });
 
-test("internal adapter registration is reusable without fetching assets or admitting a shell", (context) => {
-  const host = fixture(context);
+test("internal adapter registration is reusable without fetching assets or admitting a shell", async (context) => {
+  const host = await fixture(context);
   let fetches = 0;
   globalThis.fetch = async () => {
     fetches++;
@@ -396,7 +423,7 @@ test("internal adapter registration is reusable without fetching assets or admit
 });
 
 test("a pre-aborted shell creates no registration or retained resources", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const controller = new AbortController();
   const reason = new Error("Embedding cancelled startup");
   controller.abort(reason);
@@ -411,7 +438,7 @@ test("a pre-aborted shell creates no registration or retained resources", async 
 });
 
 test("aborting one pending shared fetch releases only its shell admission", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const controller = new AbortController();
   let enter!: () => void;
   const fetching = new Promise<void>((resolve) => {
@@ -445,7 +472,7 @@ test("aborting one pending shared fetch releases only its shell admission", asyn
 });
 
 test("abort joins an in-flight broker admission before closing its filesystem identity", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const controller = new AbortController();
   let enter!: () => void;
   const adopting = new Promise<void>((resolve) => {
@@ -488,7 +515,7 @@ test("abort joins an in-flight broker admission before closing its filesystem id
 });
 
 test("abort after worker admission waits for its fence and physical stop", async (context) => {
-  const host = fixture(context, false, undefined, true);
+  const host = await fixture(context, false, undefined, true);
   const controller = new AbortController();
   const reason = new Error("Embedding cancelled worker startup");
   const rejected = assert.rejects(
@@ -506,7 +533,7 @@ test("abort after worker admission waits for its fence and physical stop", async
 
 for (const mode of ["host-policy", "host-default", "post-start", "exit126", "exit127"] as const) {
   test(`real host broker preserves adapter diagnostic policy: ${mode}`, async (testContext) => {
-    const host = fixture(testContext);
+    const host = await fixture(testContext);
     registerShell(host.runtime, host.options);
     const adapter = host.adapters.get("bash-web:preview1")!;
     const registry = new ExecutableRegistry();
@@ -521,7 +548,7 @@ for (const mode of ["host-policy", "host-default", "post-start", "exit126", "exi
       code: "ENOEXEC",
     });
     let launched!: ProcessContext;
-    const broker = new BrowserProcessBroker({
+    const broker = host.createBroker({
       identities: host.runtime.identities,
       table: new ProcessTable(host.runtime.identities),
       registry,
@@ -647,7 +674,7 @@ for (const mode of ["host-policy", "host-default", "post-start", "exit126", "exi
 }
 
 test("the shell adapter forwards source admission instrumentation to the worker bootstrap", async (testContext) => {
-  const host = fixture(testContext);
+  const host = await fixture(testContext);
   registerShell(host.runtime, host.options);
   const adapter = host.adapters.get("bash-web:preview1")!;
   const module = new WebAssembly.Module(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
@@ -687,7 +714,7 @@ test("the shell adapter forwards source admission instrumentation to the worker 
 });
 
 test("foreign terminal output drops are surfaced in runtime diagnostics", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const terminal = new SharedBridge();
   const error = context.mock.method(console, "error", () => {});
   const shell = await createShell({ ...host.options, terminal });
@@ -731,7 +758,7 @@ test("drain delivers bytes and wakes observers when a listener throws", (context
   assert.deepEqual(terminal.drain(), new Uint8Array());
 });
 
-async function backpressuredRoot(host: ReturnType<typeof fixture>, bytes: Uint8Array) {
+async function backpressuredRoot(host: Awaited<ReturnType<typeof fixture>>, bytes: Uint8Array) {
   const terminal = new SharedBridge();
   const shell = await createShell({ ...host.options, terminal });
   const root = host.roots.get(shell.process.pid)!;
@@ -748,7 +775,7 @@ async function backpressuredRoot(host: ReturnType<typeof fixture>, bytes: Uint8A
 }
 
 test("bounded root output resumes only after actual terminal drains", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const bytes = new Uint8Array(400000);
   for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;
   const { terminal, shell, root, drained, pendingBytes } = await backpressuredRoot(host, bytes);
@@ -776,7 +803,7 @@ test("bounded root output resumes only after actual terminal drains", async (con
 });
 
 test("retained root output drains after physical stop until actual retirement", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const bytes = new Uint8Array(OUTPUT_CAPACITY + 17).fill(42);
   const { terminal, shell, root, drained, pendingBytes } = await backpressuredRoot(host, bytes);
   // Runtime 98 retains the root and its output while a descendant remains alive.
@@ -796,7 +823,7 @@ test("retained root output drains after physical stop until actual retirement", 
 });
 
 test("shell facades borrow one page runtime and dispose only their own process tree", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const first = await createShell({ ...host.options, script: "echo first" });
   const second = await createShell({ ...host.options, script: "echo second" });
   assert.notEqual(first.process.pid, second.process.pid);
@@ -815,7 +842,7 @@ test("shell facades borrow one page runtime and dispose only their own process t
 });
 
 test("direct terminal child gets owned output and cleanup stays behind its fence", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   let releaseFence!: () => void;
   const fence = new Promise<void>((resolve) => {
     releaseFence = resolve;
@@ -923,7 +950,7 @@ test("direct terminal child gets owned output and cleanup stays behind its fence
 });
 
 test("worker construction failure retires the fork without disposing its owner", async (context) => {
-  const host = fixture(context, true);
+  const host = await fixture(context, true);
   await assert.rejects(createShell(host.options), /Worker construction refused/);
   assert.equal(host.runtime.disposed, false);
   assert.equal(host.ownerDisposals, 0);
@@ -934,7 +961,7 @@ test("worker construction failure retires the fork without disposing its owner",
 });
 
 test("page disposal retains a lazy shell consumer until its owner fences and stops it", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   let entered!: () => void;
   const fetching = new Promise<void>((resolve) => {
     entered = resolve;
@@ -961,7 +988,7 @@ test("page disposal retains a lazy shell consumer until its owner fences and sto
 });
 
 test("an unobserved cached registration reports work first started by an observed shell", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   registerShell(host.runtime, host.options);
   const diagnostics = createStartupDiagnostics(1);
   const shell = await createShell({ ...host.options, onStartupStage: diagnostics.observe });
@@ -982,7 +1009,7 @@ test("an unobserved cached registration reports work first started by an observe
 
 for (const failed of ["fetch", "mkdir"] as const)
   test(`a new start observes a new shared ${failed} attempt, not the stopped generation`, async (context) => {
-    const host = fixture(context);
+    const host = await fixture(context);
     let attempts = 0;
     if (failed === "fetch")
       globalThis.fetch = async () =>
@@ -1018,7 +1045,7 @@ for (const failed of ["fetch", "mkdir"] as const)
   });
 
 test("a live borrowed runtime does not retain disposed no-observer shell options", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const gc = globalThis.gc;
   assert.ok(gc, "The runtime unit runner must enable --expose-gc");
   const references = await (async () => {
@@ -1052,7 +1079,7 @@ test("a live borrowed runtime does not retain disposed no-observer shell options
 
 for (const stalled of ["mkdir", "fetch"] as const)
   test(`startup diagnostics name a stalled ${stalled} without marking it resolved`, async (context) => {
-    const host = fixture(context);
+    const host = await fixture(context);
     const diagnostics = createStartupDiagnostics(1);
     let entered!: () => void;
     const waiting = new Promise<void>((resolve) => {
@@ -1092,7 +1119,7 @@ for (const stalled of ["mkdir", "fetch"] as const)
   });
 
 test("startup observer throws and rejections cannot change shell ownership or readiness", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   let calls = 0;
   const shell = await createShell({
     ...host.options,
@@ -1109,7 +1136,7 @@ test("startup observer throws and rejections cannot change shell ownership or re
 });
 
 test("a borrowed runtime with cached registration does not synthesize earlier startup stages", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const first = await createShell(host.options);
   await first.dispose();
   const diagnostics = createStartupDiagnostics(2);
@@ -1123,7 +1150,7 @@ test("a borrowed runtime with cached registration does not synthesize earlier st
 
 for (const mode of [undefined, "bash", "zsh"] as const)
   test(`interactive shell forwards editor mode ${mode ?? "default"} in its own arguments`, async (context) => {
-    const host = fixture(context);
+    const host = await fixture(context);
     const shell = await createShell({
       ...host.options,
       lineEditor: mode ? { mode } : undefined,
@@ -1138,7 +1165,7 @@ for (const mode of [undefined, "bash", "zsh"] as const)
   });
 
 test("a zsh editor option does not change script execution arguments", async (context) => {
-  const host = fixture(context);
+  const host = await fixture(context);
   const shell = await createShell({
     ...host.options,
     script: "printf ok",

@@ -14,22 +14,28 @@ const entries = (await tests("src/runtime", ".test.ts")).concat(
   await tests("tests", ".unit.ts"),
 );
 if (entries.length === 0) throw new Error("No runtime or terminal unit tests found");
-for (const entry of entries) {
-  const compiled = await build({
-    entryPoints: [entry],
-    bundle: true,
-    format: "esm",
-    platform: "neutral",
-    conditions: ["browser"],
-    mainFields: ["browser", "module", "main"],
-    external: ["node:*"],
-    write: false,
-    // Tests replace browser workers; imported adapter URL construction still needs
-    // a file base rather than the data: URL of this in-memory test bundle.
-    define: { "import.meta.url": JSON.stringify(pathToFileURL(entry).href) },
-    footer: { js: "//# sourceURL=bash-web-runtime-terminal.test.mjs" },
-  });
-  for (const file of compiled.outputFiles) {
-    await import("data:text/javascript;base64," + Buffer.from(file.contents).toString("base64"));
-  }
+// One page must load one Waffle package instance. Separate bundles duplicated its
+// issued-declaration registry while sharing the page-wide reservation ledger.
+const compiled = await build({
+  stdin: {
+    contents: entries.map((entry) => `import ${JSON.stringify(entry)};`).join("\n"),
+    resolveDir: root,
+    sourcefile: "runtime-terminal.test.ts",
+  },
+  bundle: true,
+  format: "esm",
+  platform: "neutral",
+  conditions: ["browser"],
+  mainFields: ["browser", "module", "main"],
+  external: ["node:*"],
+  write: false,
+  // Tests replace browser workers; imported adapter URL construction still needs
+  // a file base rather than the data: URL of this in-memory test bundle.
+  define: {
+    "import.meta.url": JSON.stringify(pathToFileURL(resolve(root, "src/runtime/unit.ts")).href),
+  },
+  footer: { js: "//# sourceURL=bash-web-runtime-terminal.test.mjs" },
+});
+for (const file of compiled.outputFiles) {
+  await import("data:text/javascript;base64," + Buffer.from(file.contents).toString("base64"));
 }

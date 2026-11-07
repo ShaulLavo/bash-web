@@ -26,6 +26,13 @@ that asset. There is no automatic retry loop.
 never calls `createRuntime`, creates a hidden runtime, or takes ownership of the
 runtime the application passed in.
 
+The shell declares its guest memory from the same bytes it compiles before
+adopting a root. The standalone producer uses one defined, private memory with
+an explicit maximum; imported, shared, or uncapped memories are unsupported.
+Waffle mints each root's shared-control grant. The adapter forwards worker
+allocation receipts and acknowledges physical termination before releasing the
+root's memory charge. Descendant workers receive their own grants from Waffle.
+
 A shell's `done` promise reports its exit code and any launch/runtime diagnostic.
 For a failed executable start, the shell owns the command-specific diagnostic
 and inherited fd 2 lifetime. Waffle reports typed startup failure to a
@@ -650,3 +657,9 @@ message. Its deliberate interceptor-bypass control rejects missing observation;
 the standalone CLI path uses Node WASI, not the browser Waffle executor. Production
 `src/runtime/worker.ts` only sets `host.onmessage` and invokes Waffle bootstrap; it
 does not replace postMessage or supply a version-specific custom host.
+
+### Native test diagnostic delivery
+
+The prompt-status native CLI awaits the common host, then delivers only actual settled teardown descriptors through `tests/ios/host-diagnostic-delivery.ts`. It prints the original host console arguments and atomically appends exact named attachments to `<result>.attachments.json`. `<result>.diagnostic-delivery.json` records the original exit and per-case delivery facts before the CLI exits. Missing or unconfirmed descriptors remain not returned; they do not create a snapshot or cleanup receipt.
+
+The helper never rewrites the common host result or primary failure. A sink failure remains secondary and nonzero. A delivery failure after an otherwise successful run returns infrastructure exit 2. Page collection and the original body and teardown clocks are unchanged. The same attachment container can retain future measurement records without replacement.

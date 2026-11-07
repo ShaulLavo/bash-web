@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import test from "node:test";
 import { parse } from "yaml";
+import { partitionTypecheckRoots, readTypecheckProject } from "./typecheck-projects.ts";
 
 test("the existing shell check stays red if any producer or moved check fails or skips", () => {
   const workflow: unknown = parse(
@@ -241,7 +242,8 @@ test("each moved current-main gate has one owner", () => {
 test("quality package recipes preserve complete current selections", () => {
   const pkg = object(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")));
   const scripts = object(pkg.scripts);
-  assert.equal(scripts["typecheck:browser"], scripts.typecheck);
+  assert.equal(scripts["typecheck:browser"], "tsc --noEmit -p tsconfig.browser.json");
+  assert.equal(scripts.typecheck, "node scripts/typecheck-projects.ts");
   assert.equal(
     scripts["quality:js"],
     "npm run test:browser:package && npm run test:prompt && npm run test:prompt:size && npm run test:session && npm run format:check && npm run lint && npm run typecheck && npm run typecheck:prompt-consumer && npm run check:unused && npm run check:duplicates && npm run check:javascript && npm run test:quality-gates && node --test scripts/test-family-routes.ts",
@@ -256,6 +258,37 @@ test("quality package recipes preserve complete current selections", () => {
     /node scripts\/scoreboard-tests\.ts/,
   );
   assert.doesNotMatch(expanded(String(scripts["test:shell:scoreboard"])), /scripts\/test-/);
+});
+
+test("typecheck recipes cover every root in its intended host environment", () => {
+  const project = readTypecheckProject("tsconfig.json");
+  const browser = readTypecheckProject("tsconfig.browser.json");
+  const host = readTypecheckProject("tsconfig.bun.json");
+  const roots = partitionTypecheckRoots(project.files, host.files);
+  const source = resolve(import.meta.dirname, "../src") + sep;
+  assert.deepEqual(browser.types, project.types);
+  assert.ok(!browser.types.includes("bun"));
+  assert.deepEqual(host.types, ["node", "bun"]);
+  assert.deepEqual(
+    new Set(browser.files),
+    new Set(project.files.filter((file) => file.startsWith(source))),
+  );
+  assert.ok(browser.files.every((file) => roots.dom.includes(file)));
+  assert.deepEqual(
+    new Set(host.files),
+    new Set(
+      [
+        "scripts/test-prompt-status-ios.ts",
+        "tests/ios/prompt-status-adapter.ts",
+        "tests/ios/prompt-status.unit.ts",
+        "tests/ios/host-diagnostic-delivery.ts",
+        "tests/ios/host-diagnostic-delivery.unit.ts",
+      ].map((file) => resolve(import.meta.dirname, "..", file)),
+    ),
+  );
+  assert.deepEqual(new Set(roots.bun), new Set(host.files));
+  assert.equal(roots.dom.length + roots.bun.length, project.files.length);
+  assert.deepEqual(new Set(roots.dom.concat(roots.bun)), new Set(project.files));
 });
 
 test("Python browser coverage consumes published family assets and remains blocking", () => {

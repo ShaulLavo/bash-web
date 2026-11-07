@@ -199,10 +199,16 @@ async function workerLifetime(t: TestContext, mode: "frozen" | "live", bypassInt
   // Valid finite WASI/browser stand-in. Dispatch is held below, so no guest code executes:
   // this control exercises the shipped entrypoint and real worker lifetime, not shell semantics.
   const bytes = Buffer.from(
-    "0061736d0100000001090260000060017f017f0211010762726f7773657205736c6565700001030201000503010001071302065f73746172740000066d656d6f727902000a0b01090041b0ea0110001a0b",
+    "0061736d0100000001090260000060017f017f0211010762726f7773657205736c656570000103020100050401010101071302065f73746172740000066d656d6f727902000a0b01090041b0ea0110001a0b",
     "hex",
   );
   assert.equal(WebAssembly.validate(bytes), true);
+  const instance = new WebAssembly.Instance(new WebAssembly.Module(bytes), {
+    browser: { sleep: () => 0 },
+  });
+  const memory = instance.exports.memory;
+  assert.ok(memory instanceof WebAssembly.Memory);
+  assert.throws(() => memory.grow(1), RangeError);
   await writeFile(wasm, bytes);
   const child = owner.start(
     `

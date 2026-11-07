@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "bun"]
+  },
+  "files": [
+    "scripts/test-prompt-status-ios.ts",
+    "tests/ios/prompt-status-adapter.ts",
+    "tests/ios/prompt-status.unit.ts",
+    "tests/ios/host-diagnostic-delivery.ts",
+    "tests/ios/host-diagnostic-delivery.unit.ts"
+  ],
+  "include": []
+}

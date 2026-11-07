@@ -5,6 +5,9 @@
   "entry": [
     "src/{runtime,browser,prompt}/*.test.ts",
     "tests/*.unit.ts",
+    "tests/ios/*.unit.ts",
+    "tests/ios/prompt-status-page.ts",
+    "scripts/test-prompt-status-ios.ts",
     "tests/helpers/git-consumer.ts",
     "tests/types/prompt-consumer/consumer.ts",
     "scripts/bash-compat-worker.ts",

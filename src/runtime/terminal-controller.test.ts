@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { Worker } from "node:worker_threads";
-import { BrowserProcessBroker } from "waffle/browser/process-broker";
+import type { BrowserProcessBroker } from "waffle/browser/process-broker";
+import { createFixtureBroker } from "../../tests/helpers/runtime-owner";
 import type { RootPreparationCompletion, RootDescendantPreparation } from "waffle";
 import {
   attachTerminal,
@@ -49,12 +50,21 @@ type FixtureOptions = {
   settled?: RootDescendantPreparation["settled"];
 };
 async function fixture(context: TestContext, options: FixtureOptions = {}) {
+  context.after(async () => {
+    for (const cleanup of beforeStop) await cleanup();
+    controller.stop();
+    await broker.dispose();
+    await controller.quiesce();
+    attachment.dispose();
+    descriptors.dispose();
+    assert.deepEqual(failures, options.expectedFailures ?? []);
+  });
   const identities = new ProcessIdentityAllocator();
   const registry = new ExecutableRegistry();
   registry.register("unit", { adapter: "unit", module });
   const failures: unknown[] = [];
   const launched: number[] = [];
-  const broker = new BrowserProcessBroker({
+  const { broker } = await createFixtureBroker(context, {
     identities,
     table: new ProcessTable(identities),
     registry,
@@ -89,6 +99,7 @@ async function fixture(context: TestContext, options: FixtureOptions = {}) {
   root.data = { filesystem, ...controller.metadata };
   const preparation = controller.prepareDescendant;
   await broker.adoptRuntimeRoot(root, {
+    memory: [],
     filesystem,
     prepareDescendant: {
       terminal: preparation.terminal,
@@ -154,15 +165,7 @@ async function fixture(context: TestContext, options: FixtureOptions = {}) {
       terminalValue(await authority.control(() => ({ kind: "ok", value: undefined })));
   };
   const beforeStop: (() => Promise<void>)[] = [];
-  context.after(async () => {
-    for (const cleanup of beforeStop) await cleanup();
-    controller.stop();
-    await broker.dispose();
-    await controller.quiesce();
-    attachment.dispose();
-    descriptors.dispose();
-    assert.deepEqual(failures, options.expectedFailures ?? []);
-  });
+
   return {
     root,
     bridge,

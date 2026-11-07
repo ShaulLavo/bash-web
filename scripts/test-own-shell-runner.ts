@@ -86,6 +86,17 @@ function assertFixtureResult(result: WorkerResult, label: string) {
   assert.deepEqual(Buffer.from(result.stdout), Buffer.from([255, 0]), label);
   assert.equal(Buffer.from(result.stderr).toString(), "err", label);
 }
+test("runner fixtures cap their actual memory at their initial page count", () => {
+  for (const outputSize of [2, 4 * 1024 * 1024 + 1]) {
+    const instance = new WebAssembly.Instance(new WebAssembly.Module(fixture(outputSize)), {
+      wasi_snapshot_preview1: { fd_write: () => 0, proc_exit: () => {} },
+    });
+    const memory = instance.exports.memory;
+    assert.ok(memory instanceof WebAssembly.Memory);
+    assert.equal(memory.buffer.byteLength, Math.ceil((outputSize + 32) / 65536) * 65536);
+    assert.throws(() => memory.grow(1), RangeError);
+  }
+});
 test("own-shell worker preserves raw stdout, separate stderr and status", async () => {
   assertFixtureResult(await runFixture(2), "worker");
 });
