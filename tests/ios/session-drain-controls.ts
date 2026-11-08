@@ -6,6 +6,10 @@ export type DrainOperation =
   | { kind: "sleep"; ms: number };
 
 export class ControlledDrainHost implements HostCase {
+  async openPeer(): ReturnType<HostCase["openPeer"]> {
+    throw new Error("Memory-only session drain must not open peer pages");
+  }
+
   async allocateDatabase(): Promise<string> {
     throw new Error("Memory-only session drain must not allocate durable storage");
   }

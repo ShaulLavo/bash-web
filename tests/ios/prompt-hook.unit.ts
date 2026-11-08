@@ -147,6 +147,7 @@ function host(overrides: Partial<HostCase> = {}): HostCase {
   return {
     signal: new AbortController().signal,
     remainingMs: () => 60_000,
+    openPeer: async () => assert.fail("unexpected peer page"),
     allocateDatabase: async () => assert.fail("unexpected allocation"),
     task: async () => assert.fail("unexpected task"),
     script: async () => assert.fail("unexpected script"),
