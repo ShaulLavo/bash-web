@@ -18,7 +18,10 @@
     "tests/ios/prompt-status-adapter.ts",
     "tests/ios/prompt-status.unit.ts",
     "tests/ios/host-diagnostic-delivery.ts",
-    "tests/ios/host-diagnostic-delivery.unit.ts"
+    "tests/ios/host-diagnostic-delivery.unit.ts",
+    "tests/ios/startup-diagnostics.ts",
+    "tests/ios/startup-diagnostics-assets.ts",
+    "scripts/test-startup-diagnostics-ios.ts"
   ],
   "include": []
 }
