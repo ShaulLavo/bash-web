@@ -42,7 +42,7 @@ async function directoryAssets(directory: string): Promise<[string, Blob][]> {
   );
 }
 
-export async function startupAssets({ signal }: PreparationContext) {
+export async function startupAssets({ signal }: PreparationContext, labels: readonly string[]) {
   signal.throwIfAborted();
   const page = await build({
     entryPoints: [resolve("tests/ios/startup-diagnostics-page.ts")],
@@ -50,6 +50,7 @@ export async function startupAssets({ signal }: PreparationContext) {
     format: "esm",
     platform: "browser",
     write: false,
+    define: { __startupLabels: JSON.stringify(labels) },
   });
   const entries: [string, Blob | string][] = await directoryAssets(resolve("dist/assets"));
   for (const name of ["shell-engine", "test-guest", "test-spin"])

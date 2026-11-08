@@ -21,7 +21,10 @@
     "tests/ios/host-diagnostic-delivery.unit.ts",
     "tests/ios/startup-diagnostics.ts",
     "tests/ios/startup-diagnostics-assets.ts",
-    "scripts/test-startup-diagnostics-ios.ts"
+    "scripts/test-startup-diagnostics-ios.ts",
+    "scripts/test-startup-diagnostics-local.ts",
+    "tests/ios/startup-diagnostics.unit.ts",
+    "tests/ios/host-control.ts"
   ],
   "include": []
 }

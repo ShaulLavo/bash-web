@@ -50,6 +50,7 @@ One page per feature, each stating exactly what is supported and what is left ou
 - [Shell fuzzing](shell-fuzzing.md): Run and record the differential fuzzers
 - [CI inputs and job ownership](ci.md): See what each CI job owns and caches
 - [Code quality gates](code-quality.md): Run lint, types, duplicate, and Rust quality checks
+- [Startup diagnostics on the page host](startup-diagnostics-host.md): Run the unchanged startup cases through the shared host
 
 Frozen records that scripts check live in [`evidence/`](evidence/README.md). They are not documentation.
 

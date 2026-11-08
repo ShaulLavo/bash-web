@@ -31,30 +31,35 @@ const poll: ReadinessPoll = async (sample, options) => {
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function observation(value: unknown): ReadinessObservation {
+function readinessSnapshot(value: unknown): value is NonNullable<ReadinessObservation["snapshot"]> {
+  if (!record(value)) return false;
+  if (value.state !== undefined && typeof value.state !== "string") return false;
+  if (value.error !== undefined && typeof value.error !== "string") return false;
+  return (
+    value.storage === undefined ||
+    (record(value.storage) && typeof value.storage.status === "string")
+  );
+}
+export function startupObservation(value: unknown): ReadinessObservation {
   if (!record(value)) throw new Error("Invalid startup observation");
   const snapshot = value.snapshot;
-  const failure = typeof value.failure === "string" ? value.failure : undefined;
-  if (snapshot === undefined) return { failure };
-  if (!record(snapshot)) throw new Error("Invalid startup snapshot");
-  const storage = snapshot.storage;
-  if (storage !== undefined && (!record(storage) || typeof storage.status !== "string"))
-    throw new Error("Invalid startup storage observation");
-  return {
-    failure,
-    snapshot: {
-      state: typeof snapshot.state === "string" ? snapshot.state : undefined,
-      error: typeof snapshot.error === "string" ? snapshot.error : undefined,
-      storage:
-        record(storage) && typeof storage.status === "string"
-          ? { status: storage.status }
-          : undefined,
-      startup: snapshot.startup,
-    },
-  };
+  const failure = value.failure;
+  if (failure !== undefined && typeof failure !== "string")
+    throw new Error("Invalid failure observation");
+  if (snapshot !== undefined && !readinessSnapshot(snapshot))
+    throw new Error("Invalid startup snapshot");
+  return { snapshot, failure };
 }
 
+type StartupEvent =
+  | { kind: "evaluation-start"; operation: string; source: string }
+  | { kind: "evaluation-end"; operation: string; value: unknown }
+  | { kind: "readiness-start" | "readiness-end"; phase: "shell" | "storage" | "startup" }
+  | { kind: "timeout"; timeoutMs: number }
+  | { kind: "workspace"; acknowledged: string };
+
 export class StartupPage {
+  readonly evidence: StartupEvent[] = [];
   private effectiveTimeout = 60_000;
   private evaluation = 0;
   private navigated = false;
@@ -82,18 +87,22 @@ return {workspace:query.get("workspace"),test:query.get("test"),renderer:query.g
       throw new Error("Startup query was not bound before demo evaluation");
     const acknowledged = await this.host.allocateDatabase(this.prefix);
     expect(acknowledged).toBe(binding.workspace);
+    this.evidence.push({ kind: "workspace", acknowledged });
     this.navigated = true;
     await this.host.task(demoTask(this.demo));
   }
   async evaluate(callback: () => unknown): Promise<unknown> {
     const key = `startup-evaluation-${this.evaluation++}`;
+    this.evidence.push({ kind: "evaluation-start", operation: key, source: callback.toString() });
     await this.host.task(`const value = await (${callback.toString()})();
 (window.__startupValues ??= new Map()).set(${JSON.stringify(key)}, value);`);
-    return this.host.script(`const key=${JSON.stringify(key)};
+    const value = await this.host.script(`const key=${JSON.stringify(key)};
 const value=window.__startupValues.get(key);window.__startupValues.delete(key);return value;`);
+    this.evidence.push({ kind: "evaluation-end", operation: key, value });
+    return value;
   }
   private read = async () =>
-    observation(
+    startupObservation(
       await this.host.script(`return {
 snapshot:window.bashWeb?.snapshot(),
 failure:document.querySelector('[role="alert"]')?.textContent?.trim()
@@ -103,21 +112,28 @@ failure:document.querySelector('[role="alert"]')?.textContent?.trim()
     return storageBudget(this.effectiveTimeout, (timeout) => {
       this.host.setTimeout(timeout);
       this.effectiveTimeout = timeout;
+      this.evidence.push({ kind: "timeout", timeoutMs: timeout });
     });
   }
   async ready(): Promise<void> {
+    this.evidence.push({ kind: "readiness-start", phase: "shell" });
     await waitForShellReady(this.read, poll);
+    this.evidence.push({ kind: "readiness-end", phase: "shell" });
   }
   async storageReady(): Promise<void> {
+    this.evidence.push({ kind: "readiness-start", phase: "storage" });
     const settled = this.storageCredit();
     try {
       await waitForStorageReady(this.read, poll);
+      this.evidence.push({ kind: "readiness-end", phase: "storage" });
     } finally {
       settled();
     }
   }
   async startupReady(): Promise<void> {
+    this.evidence.push({ kind: "readiness-start", phase: "startup" });
     await waitForStartup(this.read, poll, this.storageCredit());
+    this.evidence.push({ kind: "readiness-end", phase: "startup" });
   }
 }
 
@@ -173,15 +189,16 @@ export async function createStartupAdapter(
   const inventory = originals.map((item) => ({
     id: item.id,
     label: item.label,
-    request: () => ({ id: item.id, labels }),
+    request: () => ({ id: item.id }),
     query: (run: string) => ({
       test: "1",
       renderer: "canvas",
       workspace: `startup-${item.id}-${run}`,
     }),
     async drive(host: HostCase) {
-      await item.run(new StartupPage(host, `startup-${item.id}`, demo));
-      return { id: item.id, assertions: "pass" };
+      const page = new StartupPage(host, `startup-${item.id}`, demo);
+      await item.run(page);
+      return { id: item.id, assertions: "pass", evidence: page.evidence };
     },
   }));
   return {
@@ -189,12 +206,7 @@ export async function createStartupAdapter(
     inventory: () => inventory,
     page: { path: "/", script: "/startup-diagnostics-page.js" },
     budgets: () => ({ ...startupBudgets }),
-    async assets(context) {
-      return {
-        ...(await startupAssets(context)),
-        "/startup-inventory.json": new Blob([JSON.stringify(labels)], { type: "application/json" }),
-      };
-    },
+    assets: (context) => startupAssets(context, labels),
     policy: {
       requireResult: true,
       listIds(value) {
@@ -213,9 +225,9 @@ export async function createStartupAdapter(
         if (!record(value) || !record(value.body) || !record(value.teardown))
           throw new Error("Missing startup body and teardown result");
         expect(value.body.status).toBe("pass");
-        expect(value.body.result).toEqual({ id, assertions: "pass" });
+        expect(value.body.result).toMatchObject({ id, assertions: "pass" });
         expect(value.teardown.status).toBe("pass");
-        expect(value.teardown.result).toEqual({ diagnostic: null, disposed: true });
+        expect(value.teardown.result).toEqual({ diagnostic: null, disposal: { status: "pass" } });
       },
     },
   };

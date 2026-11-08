@@ -9,6 +9,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import type { HostCase } from "waffle/testing/page-runner";
+import { unusedHostCapabilities } from "./host-control";
 import { checkPromptHookResult, recordPromptHookCosts } from "../helpers/prompt-hook-assertions.ts";
 import { promptHookBody, promptHookCostsBody } from "../helpers/prompt-hook-fixture.ts";
 import {
@@ -145,6 +146,7 @@ test("hosted inventory is exactly H01/H02 and requires the flag before resources
 
 function host(overrides: Partial<HostCase> = {}): HostCase {
   return {
+    ...unusedHostCapabilities,
     signal: new AbortController().signal,
     remainingMs: () => 60_000,
     allocateDatabase: async () => assert.fail("unexpected allocation"),

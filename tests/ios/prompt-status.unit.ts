@@ -9,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import type { HostCase, HostVerdict } from "waffle/testing/page-runner";
+import { unusedHostCapabilities } from "./host-control";
 import {
   drivePromptStatus,
   promptStatusAdapter,
@@ -154,6 +155,7 @@ test("assets serve only the page bootstrap and normal-produced workers and typed
 
 function hostControl(task: HostCase["task"], script: HostCase["script"]): HostCase {
   return {
+    ...unusedHostCapabilities,
     signal: new AbortController().signal,
     remainingMs: () => 60_000,
     allocateDatabase: async () => assert.fail("P01 must never allocate persistent storage"),
