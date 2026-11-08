@@ -543,7 +543,9 @@ jobs:
       - browser
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
+    permissions:
+      statuses: write
     steps:
       - name: Require a ready PR
         if: github.event_name == 'pull_request' && github.event.pull_request.draft
@@ -551,6 +553,7 @@ jobs:
           echo '::error::Mark this PR ready for review to run the required checks.'
           exit 1
       - name: Require every check
+        id: verdict
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
@@ -566,3 +569,19 @@ jobs:
             *) exit 1 ;;
           esac
           echo "$RESULTS" | jq -e --arg expected "$expected" 'del(.changes, .prepare, .layers, .quality) | all(.[]; .result == $expected)'
+
+      # Dispatch job checks do not satisfy PR requirements. Commit statuses do.
+      - name: Report the real CI verdict on the tested commit
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/waffle-updates' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD: ${{ github.sha }}
+          RESULT: ${{ steps.verdict.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          state=failure
+          if [[ "$RESULT" == success ]]; then state=success; fi
+          gh api --method POST "repos/$GH_REPO/statuses/$HEAD" \
+            -f context="shell" -f state="$state" -f target_url="$RUN_URL" \
+            -f description="Dispatched CI: $RESULT"
