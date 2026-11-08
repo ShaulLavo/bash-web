@@ -24,8 +24,8 @@ test("the existing shell check stays red if any producer or moved check fails or
   );
   assert.equal(shell.if, "always()");
   assert.ok(Array.isArray(shell.steps));
-  assert.equal(shell.steps.length, 2);
-  const gate: unknown = shell.steps[1];
+  assert.equal(shell.steps.length, 3);
+  const gate: unknown = shell.steps.map(object).find((step) => step.id === "verdict");
   assert.ok(gate && typeof gate === "object" && "run" in gate && typeof gate.run === "string");
   assert.match(gate.run, /all\(\.\[\]; \.result == \$expected\)/);
   assert.match(gate.run, /expected=success/);
@@ -147,7 +147,7 @@ test("the actual aggregate shell command rejects each non-success result in ever
   const needs = aggregate.needs;
   assert.ok(Array.isArray(needs));
   assert.ok(Array.isArray(aggregate.steps));
-  const command = object(aggregate.steps.at(-1)).run;
+  const command = object(aggregate.steps.map(object).find((step) => step.id === "verdict")).run;
   assert.equal(typeof command, "string");
   assert.ok(typeof command === "string");
   const evaluate = (results: readonly string[], code = "true") => {
