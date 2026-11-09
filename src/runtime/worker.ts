@@ -39,6 +39,21 @@ function wrapNamespace(namespace: WebAssembly.ModuleImports, before: () => void)
   }
 }
 export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellWorkerRequest> {
+  try {
+    return createShellExecutor(request);
+  } catch (error) {
+    // Terminal acquisition can lose to collection before bootstrap captures its observer.
+    // Let bootstrap select the canonical outcome and own filesystem cleanup first.
+    return {
+      setup() {
+        throw error;
+      },
+      run: preview1Executor.run,
+    };
+  }
+}
+
+function createShellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellWorkerRequest> {
   const data = request.runtimeProcess?.data as ShellWorkerData | undefined;
   const terminal = request.terminal ?? request.shellOutput ?? data?.shellTerminal;
   const admission =
