@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { claimOutcome, readOutcome } from "waffle/proc/outcome";
-import { captureNativeReturn, captureProcessObserver } from "waffle/proc/observation";
+import {
+  captureNativeReturn,
+  captureProcessObserver,
+  type ProcessObservation,
+} from "waffle/proc/observation";
 import { createWorkerProcessTransport, workerProcessState } from "waffle/proc/worker-client";
 import { createFilesystemIdentity, connectFilesystemIdentity } from "waffle/fs/protocol";
 import { pages } from "waffle";
@@ -245,6 +249,13 @@ for (const mode of ["void", "fulfilled", "held", "reentrant", "late", "pre-adopt
       let pageDisposal: Promise<void> | undefined;
       let ownerStop = () => Promise.resolve();
       let transport: Parameters<typeof captureProcessObserver>[0] | undefined;
+      const beforeRootStopped: ProcessObservation[] = [];
+      const rootStopped = service.rootStopped.bind(service);
+      service.rootStopped = (pid) => {
+        assert.ok(transport);
+        beforeRootStopped.push(captureProcessObserver(transport).read());
+        rootStopped(pid);
+      };
       const worker = nativeShellWorker(context, (native) => {
         nativeStops++;
         entered.resolve();
@@ -316,6 +327,9 @@ for (const mode of ["void", "fulfilled", "held", "reentrant", "late", "pre-adopt
       }
       await disposing;
       await reentrant;
+      assert.ok(beforeRootStopped.length > 0);
+      for (const observation of beforeRootStopped)
+        assert.deepEqual(observation, { kind: "terminated" });
       assert.equal(nativeStops, 1);
       assert.deepEqual(await observerWorker.observe(transport), { kind: "terminated" });
       assert.equal(runtime.disposed, false);

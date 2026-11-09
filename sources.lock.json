@@ -88,7 +88,7 @@
     "archiveBytes": 3580810
   },
   "wafflePrograms": {
-    "version": "0.0.15",
+    "version": "0.0.16",
     "revision": "3050f69d810fe7c851e487135517698b5dfd93e5",
     "provenance": "Function indices from the exact named optimized outputs in the published derivations. Capture verifies the named hashes, reruns scanner and memory checks, and proves that removing only name custom sections yields the released bytes exactly. Final SHA-256 binds these symbols to unchanged executable bytes. Historical local guest provenance is unchanged.",
     "guests": {
@@ -616,14 +616,14 @@
       }
     },
     "releaseManifest": {
-      "url": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/program-release.json",
-      "bytes": 616752,
-      "sha256": "ce29ce655d6de6658d859d3d3fcfcf0d3bc383a2824c462ad0daddec8707a270"
+      "url": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.16/program-release.json",
+      "sha256": "c502306e1c5e2931ae14b2a7f0a9975a05cb5345032f7ae4540e7a53be8357ce",
+      "bytes": 617767
     },
     "runtime": {
-      "url": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.107/waffle-0.0.107.tgz",
-      "bytes": 2280858,
-      "sha256": "2da9ad3a055369e7ba2922ca127e1bb802b7d9e5f8b358852c0934f2951be5d0"
+      "url": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.114/waffle-0.0.114.tgz",
+      "bytes": 3580810,
+      "sha256": "84a624f85f6843449ca2c96c113cb9609e8f4df634df17082e46246413f8245e"
     }
   },
   "wasiLibc": {

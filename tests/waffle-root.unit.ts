@@ -2,20 +2,34 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createSharedControlAllocator } from "waffle";
 import type { RuntimeWorkerRequest } from "waffle/browser/worker";
+import { BrowserProcessBroker } from "waffle/browser/process-broker";
 import {
   createWorkerProcessTransport,
   workerProcessState,
   workerProcessSlots,
 } from "waffle/proc/worker-client";
 import { claimOutcome, readOutcome } from "waffle/proc/outcome";
-import { captureProcessObserver } from "waffle/proc/observation";
+import { captureProcessObserver, type ProcessObservation } from "waffle/proc/observation";
 import { waitStatus } from "waffle/proc/wait-status";
 import { runRoot } from "../scripts/waffle-compat";
 import { captureShellWorkerStop } from "../src/runtime/native-stop";
 import { createFixtureRuntime } from "./helpers/runtime-owner";
 
 test("compatibility root carries minted control ownership through actual stop", async (context) => {
-  const runtime = createFixtureRuntime(context);
+  let observer: ReturnType<typeof captureProcessObserver> | undefined;
+  const beforeRootStopped: ProcessObservation[] = [];
+  const runtime = createFixtureRuntime(context, {
+    processHost(options) {
+      const broker = new BrowserProcessBroker(options);
+      const rootStopped = broker.rootStopped.bind(broker);
+      broker.rootStopped = (pid) => {
+        assert.ok(observer);
+        beforeRootStopped.push(observer.read());
+        rootStopped(pid);
+      };
+      return broker;
+    },
+  });
   const service = await runtime.processes();
   const previousWorker = globalThis.Worker;
   const stop = Promise.withResolvers<void>();
@@ -63,7 +77,7 @@ test("compatibility root carries minted control ownership through actual stop", 
   );
   const request = await posted.promise;
   assert.ok(request.runtimeProcess);
-  const observer = captureProcessObserver(request.runtimeProcess);
+  observer = captureProcessObserver(request.runtimeProcess);
   const pid = request.runtimeProcess.pid;
   const allocate = createSharedControlAllocator(request.controlGrant, (buffer) =>
     service.rootControlAllocated(pid, buffer),
@@ -83,6 +97,9 @@ test("compatibility root carries minted control ownership through actual stop", 
   });
   stop.resolve();
   assert.equal(await running, 7);
+  assert.ok(beforeRootStopped.length > 0);
+  for (const observation of beforeRootStopped)
+    assert.deepEqual(observation, { kind: "terminated" });
   assert.deepEqual(observer.read(), { kind: "terminated" });
   assert.deepEqual(captureProcessObserver(request.runtimeProcess).read(), { kind: "terminated" });
   assert.throws(() => service.rootControlGrant(pid), /grant|root/i);
