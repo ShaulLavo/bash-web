@@ -9,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import type { HostCase, HostVerdict } from "waffle/testing/page-runner";
+import { hostCaseControl } from "./host-case-control.ts";
 import {
   drivePromptStatus,
   promptStatusAdapter,
@@ -153,15 +154,11 @@ test("assets serve only the page bootstrap and normal-produced workers and typed
 });
 
 function hostControl(task: HostCase["task"], script: HostCase["script"]): HostCase {
-  return {
-    signal: new AbortController().signal,
-    remainingMs: () => 60_000,
-    openPeer: async () => assert.fail("unexpected peer page"),
+  return hostCaseControl({
     allocateDatabase: async () => assert.fail("P01 must never allocate persistent storage"),
     task,
     script,
-    sleep: (ms) => delay(ms),
-  };
+  });
 }
 
 test("drive compiles inside case execution and awaits the task before reading actual receipts", async () => {
@@ -383,6 +380,6 @@ test("Bun host typing never replaces the separate DOM production gate", () => {
   assert.deepEqual(host.types, ["node", "bun"]);
   const roots = partitionTypecheckRoots(project.files, host.files);
   assert.deepEqual(roots.dom.concat(roots.bun).sort(), project.files.toSorted());
-  assert.equal(roots.bun.length, 15);
+  assert.equal(roots.bun.length, 16);
   assert.throws(() => partitionTypecheckRoots(["browser.ts"], ["omitted.ts"]));
 });

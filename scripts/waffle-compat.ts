@@ -53,7 +53,8 @@ type RootApi = Pick<
   "createWorkerProcessTransport" | "workerProcessState" | "workerProcessSlots"
 > &
   Pick<typeof import("waffle/proc/outcome"), "claimOutcome" | "readOutcome"> &
-  Pick<typeof import("waffle/proc/wait-status"), "waitStatus">;
+  Pick<typeof import("waffle/proc/wait-status"), "waitStatus"> &
+  Pick<typeof import("../src/runtime/native-stop.ts"), "captureShellWorkerStop">;
 const modules = new Map<string, Promise<RootModule>>();
 function compiled(path: string): Promise<RootModule> {
   let module = modules.get(path);
@@ -208,8 +209,9 @@ export async function runRoot(
   let acknowledged = false;
   let worker: Worker | undefined;
   let stopping: Promise<void> | undefined;
+  const stopWorker = waffle.captureShellWorkerStop(transport);
   const stop = () =>
-    (stopping ??= Promise.resolve(worker?.terminate()).then(() => {
+    (stopping ??= Promise.resolve(stopWorker(worker)).then(() => {
       if (!runtime.disposed) service.rootStopped(transport.pid);
     }));
   onStop(() => void service.kill(transport.pid, 9).catch(stop));

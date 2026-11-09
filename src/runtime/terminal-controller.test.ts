@@ -264,8 +264,9 @@ for (const variant of ["not-entered", "adapter-invoked"] as const) {
     const events: string[] = [];
     let broker: BrowserProcessBroker;
     const f = await fixture(context, {
-      launch() {
-        if (variant === "adapter-invoked") throw new Error("Intentional adapter rejection");
+      launch(process) {
+        if (variant === "adapter-invoked")
+          process.startFailed(new Error("Intentional adapter rejection"));
       },
       after(descendant, turn) {
         if (variant === "not-entered")
@@ -284,7 +285,8 @@ for (const variant of ["not-entered", "adapter-invoked"] as const) {
     f.supervisor.onChildExit(() => events.push("exit"));
     const child = f.reserve();
     await f.start(child);
-    await f.supervisor.waitForExit(f.root.pid, child.pid);
+    const outcome = await f.supervisor.waitForExit(f.root.pid, child.pid);
+    if (variant === "adapter-invoked") assert.equal(outcome.kind, "start-failed");
     await f.flush();
     assert.deepEqual(events, [variant, "exit"]);
     assert.equal(f.launched.length, variant === "not-entered" ? 0 : 1);

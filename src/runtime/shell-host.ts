@@ -4,6 +4,7 @@
 // broker or supervisor: the supplied Waffle Runtime is their sole page owner.
 import type { MemoryDeclaration, ProcessService, Runtime } from "waffle";
 import { compileShellModule } from "./shell-memory";
+import { captureShellWorkerStop } from "./native-stop";
 import { markStartup, type StartupObserver } from "./startup-diagnostics";
 import { claimOutcome, readOutcome } from "waffle/proc/outcome";
 import { waitStatus } from "waffle/proc/wait-status";
@@ -186,6 +187,7 @@ export async function startShell(
     cwd,
   });
   const state = workerProcessState(transport);
+  const stopWorker = captureShellWorkerStop(transport);
   const admission = createTerminalAdmission();
   attachTerminal(admission, terminal.buffer);
   const workerData = {
@@ -265,7 +267,7 @@ export async function startShell(
       unobserveExit();
       await terminalController?.quiesce();
       await quiesceTerminal(admission);
-      await worker?.terminate();
+      await stopWorker(worker);
       filesystem.port.close();
       if (accepted && !runtime.disposed) service!.rootStopped(state.pid);
       observation.stopped();

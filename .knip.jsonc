@@ -13,6 +13,7 @@
     "scripts/test-prompt-hook-ios.ts",
     "scripts/test-prompt-status-ios.ts",
     "tests/helpers/git-consumer.ts",
+    "tests/helpers/native-return-worker.ts",
     "tests/types/prompt-consumer/consumer.ts",
     "scripts/bash-compat-worker.ts",
     // Filename-discovered scoreboard tests are independent executable roots.

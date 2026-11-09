@@ -9,6 +9,17 @@ async function tests(directory: string, suffix: string): Promise<string[]> {
     .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
     .map((entry) => resolve(root, directory, entry.name));
 }
+await build({
+  absWorkingDir: root,
+  entryPoints: ["tests/helpers/native-return-worker.ts"],
+  outfile: ".build/native-return-worker.mjs",
+  bundle: true,
+  format: "esm",
+  platform: "neutral",
+  conditions: ["browser"],
+  external: ["node:*"],
+  target: "node26",
+});
 const entries = (await tests("src/runtime", ".test.ts")).concat(
   await tests("src/browser", ".test.ts"),
   await tests("tests", ".unit.ts"),

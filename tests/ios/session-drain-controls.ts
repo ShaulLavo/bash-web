@@ -6,6 +6,14 @@ export type DrainOperation =
   | { kind: "sleep"; ms: number };
 
 export class ControlledDrainHost implements HostCase {
+  holdAsset(): never {
+    throw new Error("Session drain must not hold asset requests");
+  }
+
+  setTimeout(): never {
+    throw new Error("Session drain must not change its timeout");
+  }
+
   async openPeer(): ReturnType<HostCase["openPeer"]> {
     throw new Error("Memory-only session drain must not open peer pages");
   }
