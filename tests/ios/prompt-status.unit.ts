@@ -9,6 +9,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import type { HostCase, HostVerdict } from "waffle/testing/page-runner";
+import { hostCaseControl } from "./host-case-control.ts";
 import {
   drivePromptStatus,
   promptStatusAdapter,
@@ -153,17 +154,11 @@ test("assets serve only the page bootstrap and normal-produced workers and typed
 });
 
 function hostControl(task: HostCase["task"], script: HostCase["script"]): HostCase {
-  return {
-    signal: new AbortController().signal,
-    remainingMs: () => 60_000,
-    holdAsset: () => assert.fail("unexpected asset hold"),
-    setTimeout: () => assert.fail("unexpected timeout change"),
-    openPeer: async () => assert.fail("unexpected peer page"),
+  return hostCaseControl({
     allocateDatabase: async () => assert.fail("P01 must never allocate persistent storage"),
     task,
     script,
-    sleep: (ms) => delay(ms),
-  };
+  });
 }
 
 test("drive compiles inside case execution and awaits the task before reading actual receipts", async () => {

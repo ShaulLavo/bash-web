@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
-import type { HostCase } from "waffle/testing/page-runner";
+import { hostCaseControl as host } from "./host-case-control.ts";
 import { checkPromptHookResult, recordPromptHookCosts } from "../helpers/prompt-hook-assertions.ts";
 import { promptHookBody, promptHookCostsBody } from "../helpers/prompt-hook-fixture.ts";
 import {
@@ -142,21 +142,6 @@ test("hosted inventory is exactly H01/H02 and requires the flag before resources
   );
   assert.throws(() => allocation({ kind: "indexeddb", name: "prompt-costs-run" }, [], "run"));
 });
-
-function host(overrides: Partial<HostCase> = {}): HostCase {
-  return {
-    signal: new AbortController().signal,
-    remainingMs: () => 60_000,
-    holdAsset: () => assert.fail("unexpected asset hold"),
-    setTimeout: () => assert.fail("unexpected timeout change"),
-    openPeer: async () => assert.fail("unexpected peer page"),
-    allocateDatabase: async () => assert.fail("unexpected allocation"),
-    task: async () => assert.fail("unexpected task"),
-    script: async () => assert.fail("unexpected script"),
-    sleep: (ms) => delay(ms),
-    ...overrides,
-  };
-}
 
 const costs = {
   lookupMemory: { median: 1, p95: 2, samples: 200 },

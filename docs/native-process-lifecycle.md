@@ -16,6 +16,8 @@ The shell worker calls Waffle bootstrap synchronously. Constructing the shell ex
 
 The adapter does not add a launch quota, synthesize a signal from an observation error, or support an older lifecycle shape. Child launch and native ownership remain Waffle services.
 
+A selected startup failure does not certify native ownership. A launcher that owns no native agent can report `ProcessContext.startFailed` and return its owned handle. A throw or rejection before returning a handle leaves uncertain ownership and must not make strong disposal pass.
+
 ## Verification scope
 
 `npm run test:runtime:terminal` discovers `src/runtime/native-return.test.ts` in normal CI. Its CPU Workers import the emitted production shell worker, execute a real guest as a positive control, and inspect the canonical observation in the worker context. Controls cover held, void, fulfilled, throwing, rejected, reentrant, pre-adoption, and late-acquisition paths. These CPU checks do not establish native iOS acceptance or physical reader closure.
