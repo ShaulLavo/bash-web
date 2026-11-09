@@ -22,3 +22,4 @@ export { noPromptHost, shellTerminalImports } from "../src/runtime/guest-imports
 export { signalStatusGuest } from "../tests/helpers/signal-status-guest";
 
 export { compileShellModule } from "../src/runtime/shell-memory";
+export { captureShellWorkerStop } from "../src/runtime/native-stop";

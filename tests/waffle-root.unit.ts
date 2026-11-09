@@ -8,8 +8,10 @@ import {
   workerProcessSlots,
 } from "waffle/proc/worker-client";
 import { claimOutcome, readOutcome } from "waffle/proc/outcome";
+import { captureProcessObserver } from "waffle/proc/observation";
 import { waitStatus } from "waffle/proc/wait-status";
 import { runRoot } from "../scripts/waffle-compat";
+import { captureShellWorkerStop } from "../src/runtime/native-stop";
 import { createFixtureRuntime } from "./helpers/runtime-owner";
 
 test("compatibility root carries minted control ownership through actual stop", async (context) => {
@@ -51,6 +53,7 @@ test("compatibility root carries minted control ownership through actual stop", 
       claimOutcome,
       readOutcome,
       waitStatus,
+      captureShellWorkerStop,
     },
     { module, memory: [] },
     { modulePath: "", tmp: "/", env: {}, fixtureDirectory: "" },
@@ -60,6 +63,7 @@ test("compatibility root carries minted control ownership through actual stop", 
   );
   const request = await posted.promise;
   assert.ok(request.runtimeProcess);
+  const observer = captureProcessObserver(request.runtimeProcess);
   const pid = request.runtimeProcess.pid;
   const allocate = createSharedControlAllocator(request.controlGrant, (buffer) =>
     service.rootControlAllocated(pid, buffer),
@@ -73,7 +77,13 @@ test("compatibility root carries minted control ownership through actual stop", 
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(terminated, 1);
   assert.equal(settled, false, "logical completion must join actual termination");
+  assert.deepEqual(observer.read(), {
+    kind: "selected",
+    result: { kind: "exited", code: 7, status: 7 },
+  });
   stop.resolve();
   assert.equal(await running, 7);
+  assert.deepEqual(observer.read(), { kind: "terminated" });
+  assert.deepEqual(captureProcessObserver(request.runtimeProcess).read(), { kind: "terminated" });
   assert.throws(() => service.rootControlGrant(pid), /grant|root/i);
 });
