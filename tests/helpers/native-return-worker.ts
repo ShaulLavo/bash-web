@@ -1,10 +1,12 @@
-import { parentPort } from "node:worker_threads";
+import { parentPort, workerData } from "node:worker_threads";
 import { captureProcessObserver } from "waffle/proc/observation";
 import type { ProcessObservationTransfer } from "waffle/proc/observation";
 import type { ShellWorkerRequest } from "../../src/runtime/worker";
 
 if (!parentPort) throw new Error("Native-return control has no parent port");
 const port = parentPort;
+const entry: unknown = workerData.entry;
+if (typeof entry !== "string") throw new Error("Native-return control has no shell worker asset");
 const events = new EventTarget();
 Object.defineProperties(globalThis, {
   postMessage: { value: (message: unknown) => port.postMessage(message), configurable: true },
@@ -21,7 +23,7 @@ port.on("message", async (command: Command) => {
       port.postMessage({ id: command.id, observed });
       return;
     }
-    await import("../../src/runtime/worker");
+    await import(entry);
     const handler: unknown = Reflect.get(globalThis, "onmessage");
     if (typeof handler !== "function") throw new Error("Shell worker did not install its entry");
     await handler(new MessageEvent("message", { data: command.request }));
