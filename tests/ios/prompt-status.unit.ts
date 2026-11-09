@@ -156,6 +156,8 @@ function hostControl(task: HostCase["task"], script: HostCase["script"]): HostCa
   return {
     signal: new AbortController().signal,
     remainingMs: () => 60_000,
+    holdAsset: () => assert.fail("unexpected asset hold"),
+    setTimeout: () => assert.fail("unexpected timeout change"),
     openPeer: async () => assert.fail("unexpected peer page"),
     allocateDatabase: async () => assert.fail("P01 must never allocate persistent storage"),
     task,

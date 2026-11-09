@@ -147,6 +147,8 @@ function host(overrides: Partial<HostCase> = {}): HostCase {
   return {
     signal: new AbortController().signal,
     remainingMs: () => 60_000,
+    holdAsset: () => assert.fail("unexpected asset hold"),
+    setTimeout: () => assert.fail("unexpected timeout change"),
     openPeer: async () => assert.fail("unexpected peer page"),
     allocateDatabase: async () => assert.fail("unexpected allocation"),
     task: async () => assert.fail("unexpected task"),
