@@ -380,6 +380,6 @@ test("Bun host typing never replaces the separate DOM production gate", () => {
   assert.deepEqual(host.types, ["node", "bun"]);
   const roots = partitionTypecheckRoots(project.files, host.files);
   assert.deepEqual(roots.dom.concat(roots.bun).sort(), project.files.toSorted());
-  assert.equal(roots.bun.length, 16);
+  assert.equal(roots.bun.length, 21);
   assert.throws(() => partitionTypecheckRoots(["browser.ts"], ["omitted.ts"]));
 });
