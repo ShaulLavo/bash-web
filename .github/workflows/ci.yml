@@ -515,6 +515,21 @@ jobs:
         if: matrix.shard == 1
       - run: npm run test:ios:adapters
         if: matrix.shard == 1
+      - name: Run complete Python page-host controls
+        if: matrix.shard == 1
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-chromium.json" chromium
+          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-firefox.json" firefox
+      - name: Retain complete Python host results and measurements
+        if: always() && matrix.shard == 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-host-${{ github.sha }}
+          path: ${{ runner.temp }}/python-host-*.json*
+          retention-days: 7
+          if-no-files-found: ignore
       - run: npm run test:browser -- --shard=${{ matrix.shard }}/3
         env:
           BASH_WEB_MEASURE: "1"

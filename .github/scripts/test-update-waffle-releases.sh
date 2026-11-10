@@ -107,8 +107,8 @@ write_stubs() {
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-  *'releases?per_page=100'*waffle-v*) printf '%s\n' "waffle-v${RELEASE_RUNTIME}" ;;
-  *'releases?per_page=100'*programs-v*) printf '%s\n' "programs-v${RELEASE_PROGRAM}" ;;
+  *'releases?per_page=100'*waffle-v*) printf '%s\n' "waffle-v0.0.1" "waffle-v${RELEASE_RUNTIME}" "waffle-v0.0.2" ;;
+  *'releases?per_page=100'*programs-v*) printf '%s\n' "programs-v0.0.1" "programs-v${RELEASE_PROGRAM}" "programs-v0.0.2" ;;
   *) echo "unexpected gh call: $*" >&2; exit 1 ;;
 esac
 GH
@@ -332,4 +332,4 @@ run_incompatible_runtime_fixture() {
 run_incompatible_runtime_fixture
 run_no_runtime_fixture
 run_guard_negative_fixture
-printf '%s\n' 'Waffle updater fixtures passed: peeled and lightweight refs, runtime-owned support, no-runtime preservation, repeat stability, narrow manifest guards, and rejected failed/missing/invalid refs.'
+printf '%s\n' 'Waffle updater fixtures passed: unordered release selection, peeled and lightweight refs, runtime-owned support, no-runtime preservation, repeat stability, narrow manifest guards, and rejected failed/missing/invalid refs.'

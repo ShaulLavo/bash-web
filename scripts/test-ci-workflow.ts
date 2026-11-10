@@ -301,6 +301,26 @@ test("typecheck recipes cover every root in its intended host environment", () =
         "scripts/test-startup-diagnostics-ios.ts",
         "scripts/test-startup-diagnostics-local.ts",
         "tests/ios/host-case-control.ts",
+        "tests/ios/python-assets.ts",
+        "tests/ios/python-assets.unit.ts",
+        "tests/ios/python-bootstrap.ts",
+        "tests/ios/python-bootstrap.unit.ts",
+        "tests/ios/python-contract.ts",
+        "tests/ios/python-evaluation.ts",
+        "tests/ios/python-evaluation.unit.ts",
+        "tests/ios/python-expect.ts",
+        "tests/ios/python-expect.unit.ts",
+        "tests/ios/python-measurement.ts",
+        "tests/ios/python-measurement.unit.ts",
+        "tests/ios/python-original.ts",
+        "tests/ios/python-original.unit.ts",
+        "tests/ios/python-wait.ts",
+        "tests/ios/python-wait.unit.ts",
+        "tests/ios/python-adapter.ts",
+        "tests/ios/python-page.ts",
+        "scripts/test-python-local.ts",
+        "scripts/test-python-ios.ts",
+        "tests/ios/python-page.unit.ts",
       ].map((file) => resolve(import.meta.dirname, "..", file)),
     ),
   );
@@ -317,6 +337,14 @@ test("Python browser coverage consumes published family assets and remains block
   const prepare = commands(browser);
   assert.ok(prepare.indexOf("prepare:python:browser") < prepare.indexOf("npm run test:browser"));
   assert.doesNotMatch(prepare, /build:python|download-artifact.*python/);
+  for (const engine of ["chromium", "firefox"])
+    assert.equal(
+      prepare.split(
+        `bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-${engine}.json" ${engine}`,
+      ).length - 1,
+      1,
+      engine,
+    );
   const preparation = readFileSync(new URL("./test-own-shell-python.ts", import.meta.url), "utf8");
   assert.match(preparation, /node_modules\/@waffle\/python\/assets/);
   assert.match(preparation, /waffle\/browser\/preview1-worker/);
@@ -363,7 +391,7 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
   assert.ok(upload);
   assert.match(String(object(upload.with).path), /echo-diagnostics\//);
   const text = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-  assert.equal(text.match(/TMPDIR: \$\{\{ runner.temp \}\}/g)?.length, 2);
+  assert.equal(text.match(/TMPDIR: \$\{\{ runner.temp \}\}/g)?.length, 3);
   const darwin = object(
     parse(readFileSync(new URL("../.github/workflows/printf-darwin.yml", import.meta.url), "utf8")),
   );

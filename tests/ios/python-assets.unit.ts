@@ -92,9 +92,9 @@ test("loads all eight actual prepared roots and all 2,650 released payload rows 
   );
 }, 30_000);
 
-test("records the selected installed .20 interpreter and manifest raw identities", async () => {
+test("records the selected installed .21 interpreter and manifest raw identities", async () => {
   assert.equal(prepared.source.package, "@waffle/python");
-  assert.equal(prepared.source.version, "0.0.20");
+  assert.equal(prepared.source.version, "0.0.21");
   assert.equal(prepared.source.interpreter.bytes, 6_671_815);
   assert.equal(
     prepared.source.interpreter.sha256,

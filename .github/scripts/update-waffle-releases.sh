@@ -11,7 +11,7 @@ latest_release_tag() {
   local prefix=$2
   gh api "repos/${repository}/releases?per_page=100" --paginate \
     --jq ".[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith(\"${prefix}\")) | .tag_name" |
-    sed -n '1p'
+    sort -V | tail -n 1
 }
 
 release_source_revision() {
