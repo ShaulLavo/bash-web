@@ -12,6 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { PreparationContext, RunOptions } from "waffle/testing/page-runner";
 import { preparedPythonAssets, validatePythonAssetManifest } from "./python-assets";
@@ -27,7 +28,7 @@ const roots = [
   "python.wasm",
   "python-stdlib.json",
 ];
-const context: PreparationContext = { scratch: "/work/tmp", signal: new AbortController().signal };
+const context: PreparationContext = { scratch: tmpdir(), signal: new AbortController().signal };
 let manifest: ReturnType<typeof validatePythonAssetManifest>;
 let prepared: Awaited<ReturnType<typeof preparedPythonAssets>>;
 
@@ -200,7 +201,7 @@ test("rejects duplicate URLs and duplicate filesystem paths without silently ove
 });
 
 async function withRoots(check: (root: string) => Promise<void>): Promise<void> {
-  const root = await mkdtemp("/work/tmp/bash-python-assets-");
+  const root = await mkdtemp(resolve(tmpdir(), "bash-python-assets-"));
   try {
     for (const name of roots) await copyFile(resolve(preparedRoot, name), resolve(root, name));
     await check(root);

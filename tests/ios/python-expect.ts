@@ -13,12 +13,21 @@ function softToBe(failures: Error[], actual: unknown, message?: string) {
   };
 }
 
-export function createPythonExpectContext() {
+export function createPythonExpectContext(beforePoll?: () => Promise<void>) {
+  function poll<T>(
+    sample: () => T | Promise<T>,
+    options?: Parameters<typeof playwrightExpect.poll>[1],
+  ) {
+    return playwrightExpect.poll(async () => {
+      await beforePoll?.();
+      return sample();
+    }, options);
+  }
   const failures: Error[] = [];
   const expect = Object.assign(
     <T>(actual: T, message?: string) => playwrightExpect(actual, message),
     {
-      poll: playwrightExpect.poll,
+      poll: beforePoll ? poll : playwrightExpect.poll,
       soft: (actual: unknown, message?: string) => softToBe(failures, actual, message),
     },
   );

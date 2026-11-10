@@ -24,7 +24,27 @@
     "scripts/test-startup-diagnostics-ios.ts",
     "scripts/test-startup-diagnostics-local.ts",
     "tests/ios/startup-diagnostics.unit.ts",
-    "tests/ios/host-case-control.ts"
+    "tests/ios/host-case-control.ts",
+    "tests/ios/python-assets.ts",
+    "tests/ios/python-assets.unit.ts",
+    "tests/ios/python-bootstrap.ts",
+    "tests/ios/python-bootstrap.unit.ts",
+    "tests/ios/python-contract.ts",
+    "tests/ios/python-evaluation.ts",
+    "tests/ios/python-evaluation.unit.ts",
+    "tests/ios/python-expect.ts",
+    "tests/ios/python-expect.unit.ts",
+    "tests/ios/python-measurement.ts",
+    "tests/ios/python-measurement.unit.ts",
+    "tests/ios/python-original.ts",
+    "tests/ios/python-original.unit.ts",
+    "tests/ios/python-wait.ts",
+    "tests/ios/python-wait.unit.ts",
+    "tests/ios/python-adapter.ts",
+    "tests/ios/python-page.ts",
+    "scripts/test-python-local.ts",
+    "scripts/test-python-ios.ts",
+    "tests/ios/python-page.unit.ts"
   ],
   "include": []
 }
