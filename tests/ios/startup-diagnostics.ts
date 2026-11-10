@@ -101,13 +101,14 @@ const value=window.__startupValues.get(key);window.__startupValues.delete(key);r
     this.evidence.push({ kind: "evaluation-end", operation: key, value });
     return value;
   }
-  private read = async () =>
-    startupObservation(
-      await this.host.script(`return {
+  private read = async () => {
+    const value = await this.host.script(`return JSON.stringify({
 snapshot:window.bashWeb?.snapshot(),
 failure:document.querySelector('[role="alert"]')?.textContent?.trim()
-};`),
-    );
+});`);
+    if (typeof value !== "string") throw new Error("Invalid startup observation JSON");
+    return startupObservation(JSON.parse(value));
+  };
   private storageCredit(): () => void {
     return storageBudget(this.effectiveTimeout, (timeout) => {
       this.host.setTimeout(timeout);
