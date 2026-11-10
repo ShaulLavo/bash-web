@@ -4,7 +4,7 @@ The Python adapter executes both complete bodies from `tests/python.spec.ts`. Th
 
 The adapter requires Waffle's real browser observation API. Each case declares `workers-and-requests` before navigation. Browser Worker objects keep stable host identity, and request callbacks preserve original URLs, duplicates and order. The fixture's existing Worker ledger remains independent of that browser observation. No constructor wrapper, process counter or Resource Timing query replaces it.
 
-The selected public Waffle 0.0.119 provides these methods. All eight program families use the matching 0.0.21 release and host interface 2. Source or desktop controls do not establish Simulator Safari support.
+The selected public Waffle 0.0.120 provides these methods. All eight program families use the matching 0.0.22 release and host interface 2. Source or desktop controls do not establish Simulator Safari support.
 
 ## Prepared inputs
 

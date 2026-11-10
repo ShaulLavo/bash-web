@@ -10,7 +10,7 @@ default-run = "shell-engine"
 [dependencies]
 shell-parser = { path = "../parser" }
 futures.workspace = true
-waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "de3828f4ba6cbfc374d4713cd1de8578c8456ae1", features = [
+waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "f1eb74b67486d9dd27223d22a93d322b6f324483", features = [
   "cooperative-wasi",
 ] }
 pin-project-lite = "0.2.17"
@@ -28,6 +28,6 @@ name = "shell-runtime"
 path = "src/runtime_main.rs"
 
 [dev-dependencies]
-waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "de3828f4ba6cbfc374d4713cd1de8578c8456ae1", features = [
+waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "f1eb74b67486d9dd27223d22a93d322b6f324483", features = [
   "stack-observation",
 ] }
