@@ -31,7 +31,7 @@ class StartupControl implements HostCase {
           this.events.push("restart-entered");
           return this.restart.promise;
         },
-        snapshot: () => ({ state: "ready", storage: { status: "ready" } }),
+        snapshot: () => ({ state: "ready", error: undefined, storage: { status: "ready" } }),
       },
     },
     document: { querySelector: () => undefined },
@@ -68,6 +68,21 @@ class StartupControl implements HostCase {
     assert.fail("unit control has no host polling delay");
   }
 }
+
+class WebDriverStartupControl extends StartupControl {
+  override async script(source: string): Promise<unknown> {
+    const value = await super.script(source);
+    return JSON.parse(
+      JSON.stringify(value, (_key, item: unknown) => (item === undefined ? null : item)),
+    );
+  }
+}
+
+test("readiness observes an absent alert and unset snapshot error through WebDriver JSON cloning", async () => {
+  const host = new WebDriverStartupControl();
+  await new StartupPage(host, "startup-S02", demo).startupReady();
+  assert.deepEqual(host.events, ["script", "script"]);
+});
 
 test("all four originals are compiled without changing their bytes or assertion bodies", async () => {
   const source = await readFile(new URL("../startup-diagnostics.spec.ts", import.meta.url));
