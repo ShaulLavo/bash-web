@@ -240,4 +240,6 @@ test("readiness keeps the whole original observation instead of projecting away 
   assert.equal(observed.snapshot, snapshot);
   assert.equal(observed.failure, "real alert");
   assert.throws(() => startupObservation({ snapshot: { state: 12 } }));
+  assert.throws(() => startupObservation({ snapshot: { error: null } }));
+  assert.throws(() => startupObservation({ failure: null }));
 });
