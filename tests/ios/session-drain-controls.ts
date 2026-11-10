@@ -22,6 +22,15 @@ export class ControlledDrainHost implements HostCase {
     throw new Error("Memory-only session drain must not allocate durable storage");
   }
 
+  async workers(): Promise<never> {
+    throw new Error("unexpected browser Worker observation");
+  }
+  onRequest(): never {
+    throw new Error("unexpected browser request observation");
+  }
+  async press(): Promise<never> {
+    throw new Error("unexpected key input");
+  }
   readonly signal = new AbortController().signal;
   readonly operations: DrainOperation[] = [];
   readonly context: Context;

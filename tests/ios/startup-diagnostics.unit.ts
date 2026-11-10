@@ -20,6 +20,15 @@ const demo = {
 };
 
 class StartupControl implements HostCase {
+  async workers(): Promise<never> {
+    assert.fail("unexpected browser Worker observation");
+  }
+  onRequest(): never {
+    assert.fail("unexpected browser request observation");
+  }
+  async press(): Promise<never> {
+    assert.fail("unexpected key input");
+  }
   readonly signal = new AbortController().signal;
   readonly events: string[] = [];
   readonly timeouts: number[] = [];
