@@ -6,7 +6,7 @@ import type {} from "../../scripts/measure-python";
 const lifetime = new AbortController();
 if (typeof window !== "undefined") Reflect.set(window, "__pythonAdapterSignal", lifetime.signal);
 
-export async function pythonTeardown(request: PythonRequest) {
+async function pythonTeardown(request: PythonRequest) {
   lifetime.abort(new Error("Python case teardown"));
   await window.pythonAcceptance?.close();
   return { id: request.id, disposal: "pass" };
