@@ -24,7 +24,7 @@
     "scripts/test-startup-diagnostics-ios.ts",
     "scripts/test-startup-diagnostics-local.ts",
     "tests/ios/startup-diagnostics.unit.ts",
-    "tests/ios/host-control.ts"
+    "tests/ios/host-case-control.ts"
   ],
   "include": []
 }

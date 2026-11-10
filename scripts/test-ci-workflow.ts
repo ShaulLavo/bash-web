@@ -295,12 +295,12 @@ test("typecheck recipes cover every root in its intended host environment", () =
         "tests/ios/prompt-status.unit.ts",
         "tests/ios/host-diagnostic-delivery.ts",
         "tests/ios/host-diagnostic-delivery.unit.ts",
-        "tests/ios/host-control.ts",
         "tests/ios/startup-diagnostics.ts",
         "tests/ios/startup-diagnostics-assets.ts",
         "tests/ios/startup-diagnostics.unit.ts",
         "scripts/test-startup-diagnostics-ios.ts",
         "scripts/test-startup-diagnostics-local.ts",
+        "tests/ios/host-case-control.ts",
       ].map((file) => resolve(import.meta.dirname, "..", file)),
     ),
   );

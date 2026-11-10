@@ -9,7 +9,7 @@ npm run build:browser
 TMPDIR=/work/tmp npm run test:startup:local -- /absolute/path/startup-result.json
 ```
 
-The local runner uses Chromium, not an iPhone. `scripts/test-startup-diagnostics-ios.ts` is the native entry. Native execution and adoption of a supported Waffle release remain separate gates. The draft requires the development SDK's query, mutable timeout, and ordinary-asset hold contracts. The committed Waffle dependency does not yet provide those contracts. There is no old-package fallback.
+The local runner uses Chromium, not an iPhone. `scripts/test-startup-diagnostics-ios.ts` is the native entry. Native execution remains a separate gate. The adapter uses the query, mutable timeout, and ordinary-asset hold contracts in the supported Waffle 0.0.117 release with the programs 0.0.19 package closure. It borrows the normal demo's single runtime and adds no relay dependency or old-package fallback. This integration does not establish a native allocation cure.
 
 Each case binds `test=1`, `renderer=canvas`, and a distinct workspace before the demo loads. The adapter waits for the exact workspace allocation acknowledgement before importing the normal emitted demo module. It serves the complete emitted asset directory and the original shell and test guests with their ordinary types and bytes. Finish deletes only the four acknowledged databases.
 

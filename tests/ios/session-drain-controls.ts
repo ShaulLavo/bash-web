@@ -1,4 +1,3 @@
-import { unusedHostCapabilities } from "./host-control";
 import { createContext, runInContext, type Context } from "node:vm";
 import type { HostCase } from "waffle/testing/page-runner";
 
@@ -7,9 +6,17 @@ export type DrainOperation =
   | { kind: "sleep"; ms: number };
 
 export class ControlledDrainHost implements HostCase {
-  holdAsset = unusedHostCapabilities.holdAsset;
-  openPeer = unusedHostCapabilities.openPeer;
-  setTimeout = unusedHostCapabilities.setTimeout;
+  holdAsset(): never {
+    throw new Error("Session drain must not hold asset requests");
+  }
+
+  setTimeout(): never {
+    throw new Error("Session drain must not change its timeout");
+  }
+
+  async openPeer(): ReturnType<HostCase["openPeer"]> {
+    throw new Error("Memory-only session drain must not open peer pages");
+  }
 
   async allocateDatabase(): Promise<string> {
     throw new Error("Memory-only session drain must not allocate durable storage");
