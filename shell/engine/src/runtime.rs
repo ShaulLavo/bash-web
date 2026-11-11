@@ -227,6 +227,10 @@ impl Child {
         ProcessError::StartFailed(errno, diagnostic)
     }
 }
+enum StartPending {
+    Startup,
+    Diagnostic,
+}
 struct State {
     abi: Rc<dyn Abi>,
     executor: Executor,
@@ -258,33 +262,53 @@ impl Runtime {
             window_changed: Cell::new(false),
         }))
     }
-    fn spawn_diagnostic(&self, pid: u32) -> String {
+    fn spawn_diagnostic(&self, pid: u32) -> Result<String, i32> {
         let mut bytes = [0; 4096];
-        let Ok(count) = self.0.abi.spawn_error(pid, &mut bytes) else {
-            return String::new();
-        };
+        let count = self.0.abi.spawn_error(pid, &mut bytes)?;
         // A required length larger than capacity means the ABI copied nothing.
         let Some(bytes) = bytes.get(..count) else {
-            return String::new();
+            return Ok(String::new());
         };
         // Only retain complete UTF-8; invalid host bytes must not expand the bound.
         let length = std::str::from_utf8(bytes)
             .err()
             .map_or(count, |error| error.valid_up_to());
-        String::from_utf8(bytes[..length].to_vec()).expect("validated spawn diagnostic")
+        Ok(String::from_utf8(bytes[..length].to_vec()).expect("validated spawn diagnostic"))
     }
-    fn observe_start(&self, pid: u32, child: &Child) -> Result<(), ProcessError> {
+    fn start_failure(&self, pid: u32, errno: i32) -> Result<ProcessError, StartPending> {
+        let diagnostic = match self.spawn_diagnostic(pid) {
+            Err(AGAIN) => return Err(StartPending::Diagnostic),
+            result => result.unwrap_or_default(),
+        };
+        Ok(ProcessError::StartFailed(errno, diagnostic))
+    }
+    fn observe_start(
+        &self,
+        pid: u32,
+        child: &Child,
+    ) -> Result<Result<(), ProcessError>, StartPending> {
         if let Some(result) = child.startup.borrow().as_ref() {
-            return result.clone();
+            return Ok(result.clone());
         }
         let result = match self.0.abi.start_status(pid) {
             Ok(0) => Ok(()),
-            Ok(errno) => Err(ProcessError::StartFailed(errno, self.spawn_diagnostic(pid))),
-            Err(AGAIN) => return Err(ProcessError::Runtime(AGAIN)),
+            Ok(errno) => Err(self.start_failure(pid, errno)?),
+            Err(AGAIN) => return Err(StartPending::Startup),
             Err(errno) => Err(ProcessError::Runtime(errno)),
         };
         *child.startup.borrow_mut() = Some(result.clone());
-        result
+        Ok(result)
+    }
+    async fn wait_startup(&self, pid: u32, child: &Child) -> Result<(), ProcessError> {
+        loop {
+            match self.observe_start(pid, child) {
+                Ok(result) => return result,
+                Err(StartPending::Startup) => self.0.support.ready(6, pid).await,
+                // CHILD_START is already level-ready during diagnostic publication.
+                // Yield to other tasks and the reactor instead of waiting on it again.
+                Err(StartPending::Diagnostic) => crate::executor::yield_now().await,
+            }
+        }
     }
     /// Without job control (`sh -c`, scripts), foreground commands stay in the shell's
     /// own job, as POSIX keeps them in its process group, so a signal to the caller's
@@ -658,11 +682,9 @@ impl ProcessHost for Runtime {
             job,
             fds,
         };
-        let pid = self
-            .0
-            .abi
-            .spawn(&spec)
-            .map_err(|errno| ProcessError::StartFailed(errno, self.spawn_diagnostic(0)))?;
+        let pid = self.0.abi.spawn(&spec).map_err(|errno| {
+            ProcessError::StartFailed(errno, self.spawn_diagnostic(0).unwrap_or_default())
+        })?;
         // Spawn has synchronously retained inherited endpoints. Dropping request's
         // descriptor table now cannot close the child's open descriptions.
         let runtime_job = match if joined {
@@ -747,14 +769,7 @@ impl ProcessHost for Runtime {
                 .get(&pid)
                 .cloned()
                 .ok_or(ProcessError::UnknownProcess(pid))?;
-            loop {
-                match runtime.observe_start(pid as u32, &child) {
-                    Err(ProcessError::Runtime(AGAIN)) => {
-                        runtime.0.support.ready(6, pid as u32).await
-                    }
-                    result => return result,
-                }
-            }
+            runtime.wait_startup(pid as u32, &child).await
         }
         .boxed_local()
     }
@@ -766,15 +781,11 @@ impl ProcessHost for Runtime {
         let runtime = self.clone();
         async move {
             let child = child.ok_or(ProcessError::UnknownProcess(pid))?;
+            // Startup observation copies the diagnostic before wait can consume it.
+            let _ = runtime.wait_startup(pid as u32, &child).await;
             loop {
                 if let Some(status) = child.status.get() {
                     return status.map_err(|errno| child.start_failure(errno));
-                }
-                // Observe startup before collection. A pending-to-failed transition
-                // between start_status and wait must not discard the diagnostic.
-                if runtime.observe_start(pid as u32, &child) == Err(ProcessError::Runtime(AGAIN)) {
-                    runtime.0.support.ready(6, pid as u32).await;
-                    continue;
                 }
                 match runtime.0.abi.wait(pid as u32) {
                     Ok(result) => {

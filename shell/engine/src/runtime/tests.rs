@@ -4409,11 +4409,11 @@ fn child_start_diagnostic_survives_collection_and_shared_waits_without_wait_star
 fn spawn_diagnostic_copy_is_bounded_and_keeps_errno_if_query_fails() {
     let (_, fake, runtime) = setup();
     *fake.spawn_diagnostic.borrow_mut() = "é".repeat(2048).into_bytes();
-    assert_eq!(runtime.spawn_diagnostic(0), "é".repeat(2048));
+    assert_eq!(runtime.spawn_diagnostic(0).unwrap(), "é".repeat(2048));
     fake.spawn_diagnostic.borrow_mut().push(b'x');
-    assert_eq!(runtime.spawn_diagnostic(0), "");
+    assert_eq!(runtime.spawn_diagnostic(0).unwrap(), "");
     *fake.spawn_diagnostic.borrow_mut() = vec![b'a', 0xff];
-    assert_eq!(runtime.spawn_diagnostic(0), "a");
+    assert_eq!(runtime.spawn_diagnostic(0).unwrap(), "a");
     fake.diagnostic_error.set(Some(21));
     fake.spawn_errors
         .borrow_mut()
@@ -4485,4 +4485,43 @@ fn shell_startup_message_keeps_the_4096_byte_diagnostic_bound() {
     assert_eq!(output.bytes().len(), prefix.len() + 4096 + 1);
     assert_eq!(fake.diagnostic_reads.borrow().as_slice(), &[(100, 4096)]);
     shutdown_session(&executor, &runtime, &fake, session);
+}
+
+#[test]
+fn pending_diagnostic_publication_yields_and_survives_shared_waits() {
+    let (executor, fake, runtime) = setup();
+    let group = runtime.allocate_group();
+    fake.outcomes
+        .borrow_mut()
+        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
+    fake.diagnostic_error.set(Some(AGAIN));
+    let pid = runtime
+        .spawn(request(&runtime, "/startup-tool", group))
+        .unwrap();
+    executor.drive(64);
+    let start = executor.spawn(runtime.wait_start(pid));
+    let first = executor.spawn(runtime.wait(pid));
+    let second = executor.spawn(runtime.wait(pid));
+    executor.drive(8);
+    assert_eq!(fake.start_status(pid as u32), Ok(45));
+    assert!(!start.is_finished());
+    assert!(!first.is_finished());
+    assert!(!second.is_finished());
+    assert!(!fake.children.borrow()[&(pid as u32)].collected.get());
+    assert!(runtime.0.children.borrow()[&pid].startup.borrow().is_none());
+    assert_eq!(
+        runtime.0.support.waiter_count(),
+        0,
+        "must not resubscribe to level-ready CHILD_START"
+    );
+    fake.diagnostic_error.set(None);
+    *fake.spawn_diagnostic.borrow_mut() = b"CompileError: published later".to_vec();
+    let expected = ProcessError::StartFailed(45, "CompileError: published later".into());
+    assert_eq!(finish(&executor, &runtime, start), Err(expected.clone()));
+    assert_eq!(finish(&executor, &runtime, first), Err(expected.clone()));
+    assert_eq!(finish(&executor, &runtime, second), Err(expected));
+    assert_eq!(fake.spawn_error(pid as u32, &mut [0; 4096]), Err(12));
+    assert_eq!(runtime.retained_count(), 0);
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert_eq!(executor.drive(64).pending, 0);
 }
