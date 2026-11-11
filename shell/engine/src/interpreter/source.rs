@@ -216,7 +216,7 @@ fn io_message(error: IoError) -> String {
         IoError::Runtime(errno) => errno,
         error => return error.to_string(),
     };
-    crate::process::ProcessError::StartFailed(errno).to_string()
+    crate::process::ProcessError::StartFailed(errno, String::new()).to_string()
 }
 
 async fn open(path: &str, fds: &Descriptors, context: &Context) -> Result<Endpoint, IoError> {

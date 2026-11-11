@@ -47,6 +47,9 @@ struct Fake {
     wait_job_calls: RefCell<Vec<u32>>,
     descendant_gates: RefCell<BTreeMap<u32, Cancel>>,
     spawn_errors: RefCell<BTreeMap<String, i32>>,
+    spawn_diagnostic: RefCell<Vec<u8>>,
+    diagnostic_reads: RefCell<Vec<(u32, usize)>>,
+    diagnostic_error: Cell<Option<i32>>,
     outcomes: RefCell<BTreeMap<String, WaitResult>>,
     startup_gate: RefCell<Option<Cancel>>,
     failure_cleanup_gate: RefCell<Option<Cancel>>,
@@ -96,6 +99,9 @@ impl Fake {
             wait_job_calls: RefCell::new(Vec::new()),
             descendant_gates: RefCell::new(BTreeMap::new()),
             spawn_errors: RefCell::new(BTreeMap::new()),
+            spawn_diagnostic: RefCell::new(Vec::new()),
+            diagnostic_reads: RefCell::new(Vec::new()),
+            diagnostic_error: Cell::new(None),
             outcomes: RefCell::new(BTreeMap::new()),
             startup_gate: RefCell::new(None),
             failure_cleanup_gate: RefCell::new(None),
@@ -606,6 +612,23 @@ impl Abi for Fake {
         });
         Ok(pid)
     }
+    fn spawn_error(&self, pid: u32, output: &mut [u8]) -> Result<usize, i32> {
+        self.diagnostic_reads.borrow_mut().push((pid, output.len()));
+        if let Some(errno) = self.diagnostic_error.get() {
+            return Err(errno);
+        }
+        if pid != 0 {
+            let _ = self.retained_child(pid)?;
+            if !matches!(self.start_status(pid), Ok(errno) if errno != 0) {
+                return Ok(0);
+            }
+        }
+        let bytes = self.spawn_diagnostic.borrow();
+        if bytes.len() <= output.len() {
+            output[..bytes.len()].copy_from_slice(&bytes);
+        }
+        Ok(bytes.len())
+    }
     fn job_of(&self, pid: u32) -> Result<u32, i32> {
         if pid == 0 {
             return Ok(SHELL_JOB);
@@ -883,11 +906,11 @@ fn typed_start_failure_is_consumed_and_reaped_even_when_errno_is_again() {
         executor.drive(64);
         assert_eq!(
             first.now_or_never(),
-            Some(Err(ProcessError::StartFailed(errno)))
+            Some(Err(ProcessError::StartFailed(errno, String::new())))
         );
         assert_eq!(
             second.now_or_never(),
-            Some(Err(ProcessError::StartFailed(errno)))
+            Some(Err(ProcessError::StartFailed(errno, String::new())))
         );
         assert_eq!(runtime.retained_count(), 0);
         assert_eq!(fake.reaped_jobs.borrow().len(), 1);
@@ -946,7 +969,7 @@ fn typed_start_failure_spawn_errors_stay_synchronous_without_child_or_job() {
             .insert("/startup-tool".into(), errno);
         assert_eq!(
             runtime.spawn(request(&runtime, "/startup-tool", group)),
-            Err(ProcessError::Runtime(errno))
+            Err(ProcessError::StartFailed(errno, String::new()))
         );
         assert!(fake.children.borrow().is_empty());
         assert!(fake.requests.borrow().is_empty());
@@ -996,7 +1019,7 @@ fn child_start_readiness_is_non_consuming_and_precedes_terminal_cleanup() {
         assert_eq!(runtime.0.support.waiter_count(), 1);
         gate.cancel();
         let expected = match outcome {
-            WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno)),
+            WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno, String::new())),
             _ => Ok(()),
         };
         assert_eq!(finish(&executor, &runtime, started), expected);
@@ -1017,7 +1040,7 @@ fn child_start_readiness_is_non_consuming_and_precedes_terminal_cleanup() {
         cleanup.cancel();
         let expected = match outcome {
             WaitResult::Exited(code) => Ok(code),
-            WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno)),
+            WaitResult::StartFailed(errno) => Err(ProcessError::StartFailed(errno, String::new())),
             _ => unreachable!(),
         };
         assert_eq!(wait_status(&executor, &runtime, pid), expected);
@@ -1252,7 +1275,7 @@ fn start_failure_pipeline_delivers_diagnostic_before_eof() {
             output,
             format!(
                 "/usr/bin/bash: /startup-tool: {}\nstatus:0:{code} 0\n",
-                ProcessError::StartFailed(errno)
+                ProcessError::StartFailed(errno, String::new())
             )
             .as_bytes()
         );
@@ -1316,7 +1339,7 @@ fn synchronous_fork_failure_uses_parent_stderr_and_not_command_redirection() {
             error_output.bytes(),
             format!(
                 "/usr/bin/bash: fork: {}\n",
-                ProcessError::StartFailed(errno)
+                ProcessError::StartFailed(errno, String::new())
             )
             .as_bytes()
         );
@@ -4314,4 +4337,152 @@ mod support_contract {
         assert!(source.runtime_fd().is_none());
         assert!(source.host_owner().is_none());
     }
+}
+
+#[test]
+fn spawn_diagnostics_reach_shell_stderr_for_sync_and_child_startup_errors() {
+    for synchronous in [true, false] {
+        assert_shell_spawn_diagnostic(synchronous);
+    }
+}
+
+fn assert_shell_spawn_diagnostic(synchronous: bool) {
+    let (executor, fake, runtime) = setup();
+    if synchronous {
+        fake.spawn_errors
+            .borrow_mut()
+            .insert("/startup-tool".into(), 29);
+    } else {
+        fake.outcomes
+            .borrow_mut()
+            .insert("/startup-tool".into(), WaitResult::StartFailed(29));
+    }
+    *fake.spawn_diagnostic.borrow_mut() = b"ProcessError: worker failed: original cause".to_vec();
+    let (stderr, output) = io::capture(8192);
+    fake.fds.borrow_mut().insert(2, stderr);
+    let session = runtime_session(&executor, &runtime);
+    assert_eq!(
+        finish(
+            &executor,
+            &runtime,
+            session.start("/startup-tool; echo continued").unwrap()
+        ),
+        254
+    );
+    assert_eq!(
+        output.bytes(),
+        b"/usr/bin/bash: fork: Input/output error: ProcessError: worker failed: original cause\n"
+    );
+    assert!(fake.output.bytes().is_empty());
+    assert_eq!(
+        fake.diagnostic_reads.borrow()[0],
+        (if synchronous { 0 } else { 100 }, 4096)
+    );
+    assert_eq!(runtime.retained_count(), 0);
+    shutdown_session(&executor, &runtime, &fake, session);
+}
+
+#[test]
+fn child_start_diagnostic_survives_collection_and_shared_waits_without_wait_start() {
+    let (executor, fake, runtime) = setup();
+    let group = runtime.allocate_group();
+    fake.outcomes
+        .borrow_mut()
+        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
+    *fake.spawn_diagnostic.borrow_mut() = b"CompileError: invalid Wasm".to_vec();
+    let pid = runtime
+        .spawn(request(&runtime, "/startup-tool", group))
+        .unwrap();
+    let first = runtime.wait(pid);
+    let second = runtime.wait(pid);
+    executor.drive(64);
+    let expected = ProcessError::StartFailed(45, "CompileError: invalid Wasm".into());
+    assert_eq!(first.now_or_never(), Some(Err(expected.clone())));
+    assert_eq!(fake.spawn_error(pid as u32, &mut [0; 4096]), Err(12));
+    assert_eq!(second.now_or_never(), Some(Err(expected)));
+    assert_eq!(runtime.retained_count(), 0);
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
+#[test]
+fn spawn_diagnostic_copy_is_bounded_and_keeps_errno_if_query_fails() {
+    let (_, fake, runtime) = setup();
+    *fake.spawn_diagnostic.borrow_mut() = "é".repeat(2048).into_bytes();
+    assert_eq!(runtime.spawn_diagnostic(0), "é".repeat(2048));
+    fake.spawn_diagnostic.borrow_mut().push(b'x');
+    assert_eq!(runtime.spawn_diagnostic(0), "");
+    *fake.spawn_diagnostic.borrow_mut() = vec![b'a', 0xff];
+    assert_eq!(runtime.spawn_diagnostic(0), "a");
+    fake.diagnostic_error.set(Some(21));
+    fake.spawn_errors
+        .borrow_mut()
+        .insert("/startup-tool".into(), 29);
+    let group = runtime.allocate_group();
+    let error = runtime
+        .spawn(request(&runtime, "/startup-tool", group))
+        .unwrap_err();
+    assert_eq!(error, ProcessError::StartFailed(29, String::new()));
+    assert_eq!(error.to_string(), "Input/output error");
+    assert!(
+        fake.diagnostic_reads
+            .borrow()
+            .iter()
+            .all(|(_, capacity)| *capacity == 4096)
+    );
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+}
+
+#[test]
+fn pending_start_cannot_be_collected_before_its_diagnostic_is_copied() {
+    let (executor, fake, runtime) = setup();
+    let group = runtime.allocate_group();
+    fake.outcomes
+        .borrow_mut()
+        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
+    *fake.spawn_diagnostic.borrow_mut() = b"CompileError: late startup".to_vec();
+    let pid = runtime
+        .spawn(request(&runtime, "/startup-tool", group))
+        .unwrap();
+    executor.drive(64);
+    // Publish a terminal wait result while the startup observer still sees pending.
+    fake.children.borrow()[&(pid as u32)].startup.set(None);
+    let wait = executor.spawn(runtime.wait(pid));
+    executor.drive(64);
+    assert!(!fake.children.borrow()[&(pid as u32)].collected.get());
+    assert!(fake.diagnostic_reads.borrow().is_empty());
+    fake.children.borrow()[&(pid as u32)]
+        .startup
+        .set(Some(Err(45)));
+    assert_eq!(
+        finish(&executor, &runtime, wait),
+        Err(ProcessError::StartFailed(
+            45,
+            "CompileError: late startup".into()
+        ))
+    );
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
+#[test]
+fn shell_startup_message_keeps_the_4096_byte_diagnostic_bound() {
+    let (executor, fake, runtime) = setup();
+    fake.outcomes
+        .borrow_mut()
+        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
+    let diagnostic = "é".repeat(2048);
+    *fake.spawn_diagnostic.borrow_mut() = diagnostic.as_bytes().to_vec();
+    let (stderr, output) = io::capture(8192);
+    fake.fds.borrow_mut().insert(2, stderr);
+    let session = runtime_session(&executor, &runtime);
+    assert_eq!(
+        finish(&executor, &runtime, session.start("/startup-tool").unwrap()),
+        126
+    );
+    let prefix = "/usr/bin/bash: /startup-tool: Exec format error: ";
+    assert_eq!(output.bytes(), format!("{prefix}{diagnostic}\n").as_bytes());
+    assert_eq!(output.bytes().len(), prefix.len() + 4096 + 1);
+    assert_eq!(fake.diagnostic_reads.borrow().as_slice(), &[(100, 4096)]);
+    shutdown_session(&executor, &runtime, &fake, session);
 }
