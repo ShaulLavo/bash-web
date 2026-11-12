@@ -8,8 +8,14 @@ import { createPythonExpectContext } from "./python-expect";
 import { createPythonAdapter } from "./python-adapter";
 
 function control() {
-  const baseline: HostWorker = Object.freeze({ kind: "dedicated-worker" });
-  const child: HostWorker = Object.freeze({ kind: "dedicated-worker" });
+  const baseline: HostWorker = Object.freeze({
+    kind: "dedicated-worker",
+    url: "https://fixture.test/baseline.js",
+  });
+  const child: HostWorker = Object.freeze({
+    kind: "dedicated-worker",
+    url: "https://fixture.test/child.js",
+  });
   const snapshots: (readonly HostWorker[])[] = [[baseline], [baseline, child], [baseline], []];
   const events: string[] = [];
   let listener: HostRequestCallback | undefined;

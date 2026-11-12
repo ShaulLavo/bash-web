@@ -91,7 +91,7 @@ pub enum ProcessError {
     InvalidSignal,
     ProcessLimit,
     Runtime(i32),
-    StartFailed(i32),
+    StartFailed(i32, String),
 }
 impl std::fmt::Display for ProcessError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -102,18 +102,33 @@ impl std::fmt::Display for ProcessError {
             Self::InvalidParent(pid) => write!(f, "invalid process parent: {pid}"),
             Self::InvalidSignal => f.write_str("invalid signal"),
             Self::Runtime(errno) => write!(f, "runtime process error: errno {errno}"),
-            Self::StartFailed(errno) => match usize::try_from(*errno)
-                .ok()
-                .and_then(|index| WASI_ERRNO_MESSAGES.get(index))
-            {
-                Some(message) => f.write_str(message),
-                None => write!(f, "Unknown error {errno}"),
-            },
+            Self::StartFailed(errno, diagnostic) => write_start_failure(f, *errno, diagnostic),
             Self::ProcessLimit => f.write_str("unreaped process limit exceeded"),
         }
     }
 }
 impl std::error::Error for ProcessError {}
+fn write_start_failure(
+    f: &mut std::fmt::Formatter<'_>,
+    errno: i32,
+    diagnostic: &str,
+) -> std::fmt::Result {
+    write_start_errno(f, errno)?;
+    if !diagnostic.is_empty() {
+        write!(f, ": {diagnostic}")?;
+    }
+    Ok(())
+}
+fn write_start_errno(f: &mut std::fmt::Formatter<'_>, errno: i32) -> std::fmt::Result {
+    match usize::try_from(errno)
+        .ok()
+        .and_then(|index| WASI_ERRNO_MESSAGES.get(index))
+    {
+        Some(message) => f.write_str(message),
+        None => write!(f, "Unknown error {errno}"),
+    }
+}
+
 // WASI errno numbers differ from the native host's numbers. Keep guest diagnostics
 // identical in native boundary tests and the browser shell.
 const WASI_ERRNO_MESSAGES: [&str; 77] = [

@@ -331,11 +331,29 @@ for (const mode of ["foreground", "background"]) {
   });
 }
 
-for (const [name, code, diagnostic] of [
-  ["nosuch", 127, "/usr/bin/bash: nosuch: command not found"],
-  ["test-start-failure", 126, "/usr/bin/bash: test-start-failure: Exec format error"],
-  ["test-lazy-start-failure", 126, "/usr/bin/bash: test-lazy-start-failure: Exec format error"],
-] as const) {
+const startupFailures = [
+  ["nosuch", 127, "/usr/bin/bash: nosuch: command not found>", undefined],
+  [
+    "test-start-failure",
+    126,
+    "/usr/bin/bash: test-start-failure: Exec format error: Error: guest has no memory [code=ENOEXEC]",
+    undefined,
+  ],
+  [
+    "test-lazy-start-failure",
+    126,
+    "/usr/bin/bash: test-lazy-start-failure: Exec format error: Error: review loader failure [code=ENOEXEC]",
+    "Caused by: CompileError: review loader failure",
+  ],
+] as const;
+
+async function redirectedDiagnostic(page: Page, label: string, diagnostic: string, cause?: string) {
+  const rendered = () => page.evaluate(() => window.bashWeb?.readLines().join(""));
+  await expect.poll(rendered).toContain(`${label}:<${diagnostic}`);
+  if (cause) await expect.poll(rendered).toContain(cause);
+}
+
+for (const [name, code, diagnostic, cause] of startupFailures) {
   test(`failed startup delivers redirected diagnostic before pipe EOF, ${name}`, async ({
     page,
   }) => {
@@ -345,15 +363,15 @@ for (const [name, code, diagnostic] of [
       name +
         ' 2>&1 | test-guest cat >start-pipe; printf \'START_STATUS:%s:%s\\n\' "$?" "${PIPESTATUS[*]}"; printf \'PIPE_DIAGNOSTIC:<%s>\\n\' "$(cat start-pipe)"',
     );
-    // Require the complete redirected diagnostic: runtime details or a stack are extra bytes.
-    await output(page, `PIPE_DIAGNOSTIC:<${diagnostic}>`);
+    // Runtime details include browser-specific stacks; require the original cause.
+    await redirectedDiagnostic(page, "PIPE_DIAGNOSTIC", diagnostic, cause);
     await output(page, `START_STATUS:0:${code} 0`);
     await ready(page);
     await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
   });
 }
 
-for (const name of ["test-start-failure", "test-lazy-start-failure"]) {
+for (const [name, , diagnostic, cause] of startupFailures.slice(1)) {
   test(`asynchronous start failure honors redirected and explicitly closed stderr, ${name}`, async ({
     page,
   }) => {
@@ -363,7 +381,7 @@ for (const name of ["test-start-failure", "test-lazy-start-failure"]) {
       `${name} 2>start-error; echo FILE_STATUS:$?; printf 'FILE_DIAGNOSTIC:<%s>\\n' "$(cat start-error)"; ${name} 2>&-; echo CLOSED_STATUS:$?; test-guest emit '' 1 126; echo EXIT_STATUS:$?; test-guest emit '' 1 127; echo REAL127:$?`,
     );
     await output(page, "FILE_STATUS:126");
-    await output(page, `FILE_DIAGNOSTIC:</usr/bin/bash: ${name}: Exec format error>`);
+    await redirectedDiagnostic(page, "FILE_DIAGNOSTIC", diagnostic, cause);
     await output(page, "CLOSED_STATUS:126");
     await output(page, "EXIT_STATUS:126");
     await output(page, "REAL127:127");

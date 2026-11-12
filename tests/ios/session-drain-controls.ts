@@ -25,6 +25,12 @@ export class ControlledDrainHost implements HostCase {
   async workers(): Promise<never> {
     throw new Error("unexpected browser Worker observation");
   }
+  onWorker(): never {
+    throw new Error("unexpected browser Worker subscription");
+  }
+  async waitForWorkerClose(): Promise<never> {
+    throw new Error("unexpected browser Worker close wait");
+  }
   onRequest(): never {
     throw new Error("unexpected browser request observation");
   }

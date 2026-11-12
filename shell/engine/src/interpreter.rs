@@ -3862,9 +3862,13 @@ async fn dispatch_arguments(
     });
     let pid = match pid {
         Ok(pid) => pid,
+        Err(error @ ProcessError::StartFailed(..)) => {
+            let stderr = fds.borrow().get(2);
+            return external_wait_failure(error, command, stderr, parent_stderr, context).await;
+        }
         Err(ProcessError::Runtime(errno @ (6 | 29 | 48))) => {
             return external_wait_failure(
-                ProcessError::StartFailed(errno),
+                ProcessError::StartFailed(errno, String::new()),
                 command,
                 None,
                 parent_stderr,
@@ -3874,7 +3878,7 @@ async fn dispatch_arguments(
         }
         Err(ProcessError::ProcessLimit) => {
             return external_wait_failure(
-                ProcessError::StartFailed(6),
+                ProcessError::StartFailed(6, String::new()),
                 command,
                 None,
                 parent_stderr,
@@ -3893,7 +3897,7 @@ async fn dispatch_arguments(
     let wait = context.strand.wait(pid);
     let startup = context.cancel.run(context.core.host.wait_start(pid)).await;
     let failure = match startup {
-        Ok(Err(error @ ProcessError::StartFailed(_))) => {
+        Ok(Err(error @ ProcessError::StartFailed(..))) => {
             Some(external_wait_failure(error, command, stderr.take(), parent_stderr, context).await)
         }
         Ok(Err(ProcessError::Runtime(11))) | Ok(Ok(())) | Err(_) => None,
@@ -3907,7 +3911,7 @@ async fn dispatch_arguments(
         // Startup observation does not collect or await descriptor/FS cleanup.
         // Even a fork diagnostic that cancels this invocation must reap its child.
         match context.core.host.wait(pid).await {
-            Ok(_) | Err(ProcessError::StartFailed(_)) => return outcome,
+            Ok(_) | Err(ProcessError::StartFailed(..)) => return outcome,
             Err(_) => return Err(1),
         }
     }
@@ -3979,7 +3983,7 @@ async fn external_wait_failure(
     parent_stderr: WeakStderr,
     context: &Context,
 ) -> Result<Outcome, i32> {
-    let ProcessError::StartFailed(errno) = error else {
+    let ProcessError::StartFailed(errno, _) = error else {
         return Err(1);
     };
     let fork = matches!(errno, 6 | 29 | 48);

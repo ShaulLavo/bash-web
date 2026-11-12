@@ -241,8 +241,8 @@ async fn read_failure(
         Err(code) => return Outcome::status(code),
     };
     let message = match error {
-        io::IoError::BadDescriptor => ProcessError::StartFailed(8).to_string(),
-        io::IoError::Runtime(errno) => ProcessError::StartFailed(errno).to_string(),
+        io::IoError::BadDescriptor => ProcessError::StartFailed(8, String::new()).to_string(),
+        io::IoError::Runtime(errno) => ProcessError::StartFailed(errno, String::new()).to_string(),
         error => error.to_string(),
     };
     let diagnostic = format!("/usr/bin/bash: line {line}: 0: read error: {message}\n");

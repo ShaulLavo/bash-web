@@ -17,6 +17,8 @@ unsafe extern "C" {
     fn proc_access_cancel(request: u32) -> i32;
     #[link_name = "spawn"]
     fn proc_spawn(ptr: *const u8, length: usize) -> i32;
+    #[link_name = "spawn_error"]
+    fn proc_spawn_error(pid: u32, output: *mut u8, capacity: usize) -> i32;
     #[link_name = "job_of"]
     fn proc_job_of(pid: u32) -> i32;
     #[link_name = "start_status"]
@@ -133,6 +135,10 @@ impl Abi for WasiAbi {
     fn spawn(&self, request: &RuntimeSpawn) -> Result<u32, i32> {
         let json = serde_json::to_vec(request).map_err(|_| 28)?;
         result(unsafe { proc_spawn(json.as_ptr(), json.len()) })
+    }
+    fn spawn_error(&self, pid: u32, output: &mut [u8]) -> Result<usize, i32> {
+        result(unsafe { proc_spawn_error(pid, output.as_mut_ptr(), output.len()) })
+            .map(|count| count as usize)
     }
     fn job_of(&self, pid: u32) -> Result<u32, i32> {
         result(unsafe { proc_job_of(pid) })

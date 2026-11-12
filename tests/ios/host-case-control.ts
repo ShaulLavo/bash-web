@@ -5,6 +5,8 @@ import type { HostCase } from "waffle/testing/page-runner";
 export function hostCaseControl(overrides: Partial<HostCase> = {}): HostCase {
   return {
     workers: async () => assert.fail("unexpected browser Worker observation"),
+    onWorker: () => assert.fail("unexpected browser Worker subscription"),
+    waitForWorkerClose: async () => assert.fail("unexpected browser Worker close wait"),
     onRequest: () => assert.fail("unexpected browser request observation"),
     press: async () => assert.fail("unexpected key input"),
     signal: new AbortController().signal,

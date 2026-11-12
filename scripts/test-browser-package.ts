@@ -74,10 +74,14 @@ test("browser entry uses a placement-only Waffle peer and an exact development i
   assert.match(integrity, /^sha512-/);
   assert.ok(bunLock.includes(integrity));
   assert.equal(lockedWaffle.version, sourceWaffle.version);
-  assert.ok(strings(pkg.trustedDependencies).includes("waffle"));
+  assert.ok(!strings(pkg.trustedDependencies).includes("waffle"));
   assert.ok(bunLock.includes(pin));
   assert.ok(bunLock.includes('"trustedDependencies"'));
-  assert.equal(optionalRecord(pkg.allowScripts)?.[`waffle@${version}`], true);
+  assert.ok(
+    Object.keys(optionalRecord(pkg.allowScripts) ?? {}).every(
+      (name) => !name.startsWith("waffle@"),
+    ),
+  );
   const exports = record(pkg.exports);
   assert.equal(exports["."], "./src/index.ts");
   assert.equal(exports["./shell"], "./src/shell.ts");
