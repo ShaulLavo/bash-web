@@ -4339,6 +4339,37 @@ mod support_contract {
     }
 }
 
+fn startup_diagnostic_fixture(
+    diagnostic: &str,
+) -> (Executor, Rc<Fake>, Runtime, GroupId, ProcessId) {
+    let (executor, fake, runtime) = setup();
+    fake.outcomes
+        .borrow_mut()
+        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
+    *fake.spawn_diagnostic.borrow_mut() = diagnostic.as_bytes().to_vec();
+    let group = runtime.allocate_group();
+    let pid = runtime
+        .spawn(request(&runtime, "/startup-tool", group))
+        .unwrap();
+    (executor, fake, runtime, group, pid)
+}
+
+fn diagnostic_session(
+    executor: &Executor,
+    fake: &Fake,
+    runtime: &Runtime,
+) -> (Rc<Session>, Capture) {
+    let (stderr, output) = io::capture(8192);
+    fake.fds.borrow_mut().insert(2, stderr);
+    (runtime_session(executor, runtime), output)
+}
+
+fn assert_startup_reaped(executor: &Executor, runtime: &Runtime, group: GroupId) {
+    assert_eq!(runtime.retained_count(), 0);
+    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
+    assert_eq!(executor.drive(64).pending, 0);
+}
+
 #[test]
 fn spawn_diagnostics_reach_shell_stderr_for_sync_and_child_startup_errors() {
     for synchronous in [true, false] {
@@ -4358,9 +4389,7 @@ fn assert_shell_spawn_diagnostic(synchronous: bool) {
             .insert("/startup-tool".into(), WaitResult::StartFailed(29));
     }
     *fake.spawn_diagnostic.borrow_mut() = b"ProcessError: worker failed: original cause".to_vec();
-    let (stderr, output) = io::capture(8192);
-    fake.fds.borrow_mut().insert(2, stderr);
-    let session = runtime_session(&executor, &runtime);
+    let (session, output) = diagnostic_session(&executor, &fake, &runtime);
     assert_eq!(
         finish(
             &executor,
@@ -4384,25 +4413,15 @@ fn assert_shell_spawn_diagnostic(synchronous: bool) {
 
 #[test]
 fn child_start_diagnostic_survives_collection_and_shared_waits_without_wait_start() {
-    let (executor, fake, runtime) = setup();
-    let group = runtime.allocate_group();
-    fake.outcomes
-        .borrow_mut()
-        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
-    *fake.spawn_diagnostic.borrow_mut() = b"CompileError: invalid Wasm".to_vec();
-    let pid = runtime
-        .spawn(request(&runtime, "/startup-tool", group))
-        .unwrap();
-    let first = runtime.wait(pid);
-    let second = runtime.wait(pid);
+    let (executor, fake, runtime, group, pid) =
+        startup_diagnostic_fixture("CompileError: invalid Wasm");
+    let [first, second] = [runtime.wait(pid), runtime.wait(pid)];
     executor.drive(64);
     let expected = ProcessError::StartFailed(45, "CompileError: invalid Wasm".into());
     assert_eq!(first.now_or_never(), Some(Err(expected.clone())));
     assert_eq!(fake.spawn_error(pid as u32, &mut [0; 4096]), Err(12));
     assert_eq!(second.now_or_never(), Some(Err(expected)));
-    assert_eq!(runtime.retained_count(), 0);
-    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_startup_reaped(&executor, &runtime, group);
 }
 
 #[test]
@@ -4435,15 +4454,8 @@ fn spawn_diagnostic_copy_is_bounded_and_keeps_errno_if_query_fails() {
 
 #[test]
 fn pending_start_cannot_be_collected_before_its_diagnostic_is_copied() {
-    let (executor, fake, runtime) = setup();
-    let group = runtime.allocate_group();
-    fake.outcomes
-        .borrow_mut()
-        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
-    *fake.spawn_diagnostic.borrow_mut() = b"CompileError: late startup".to_vec();
-    let pid = runtime
-        .spawn(request(&runtime, "/startup-tool", group))
-        .unwrap();
+    let (executor, fake, runtime, group, pid) =
+        startup_diagnostic_fixture("CompileError: late startup");
     executor.drive(64);
     // Publish a terminal wait result while the startup observer still sees pending.
     fake.children.borrow()[&(pid as u32)].startup.set(None);
@@ -4473,9 +4485,7 @@ fn shell_startup_message_keeps_the_4096_byte_diagnostic_bound() {
         .insert("/startup-tool".into(), WaitResult::StartFailed(45));
     let diagnostic = "é".repeat(2048);
     *fake.spawn_diagnostic.borrow_mut() = diagnostic.as_bytes().to_vec();
-    let (stderr, output) = io::capture(8192);
-    fake.fds.borrow_mut().insert(2, stderr);
-    let session = runtime_session(&executor, &runtime);
+    let (session, output) = diagnostic_session(&executor, &fake, &runtime);
     assert_eq!(
         finish(&executor, &runtime, session.start("/startup-tool").unwrap()),
         126
@@ -4489,15 +4499,8 @@ fn shell_startup_message_keeps_the_4096_byte_diagnostic_bound() {
 
 #[test]
 fn pending_diagnostic_publication_yields_and_survives_shared_waits() {
-    let (executor, fake, runtime) = setup();
-    let group = runtime.allocate_group();
-    fake.outcomes
-        .borrow_mut()
-        .insert("/startup-tool".into(), WaitResult::StartFailed(45));
+    let (executor, fake, runtime, group, pid) = startup_diagnostic_fixture("");
     fake.diagnostic_error.set(Some(AGAIN));
-    let pid = runtime
-        .spawn(request(&runtime, "/startup-tool", group))
-        .unwrap();
     executor.drive(64);
     let start = executor.spawn(runtime.wait_start(pid));
     let first = executor.spawn(runtime.wait(pid));
@@ -4521,7 +4524,5 @@ fn pending_diagnostic_publication_yields_and_survives_shared_waits() {
     assert_eq!(finish(&executor, &runtime, first), Err(expected.clone()));
     assert_eq!(finish(&executor, &runtime, second), Err(expected));
     assert_eq!(fake.spawn_error(pid as u32, &mut [0; 4096]), Err(12));
-    assert_eq!(runtime.retained_count(), 0);
-    assert_eq!(runtime.wait_group(group).now_or_never(), Some(Ok(())));
-    assert_eq!(executor.drive(64).pending, 0);
+    assert_startup_reaped(&executor, &runtime, group);
 }

@@ -12,4 +12,4 @@ Errno still determines exit status and whether the error is reported as a fork o
 
 The diagnostic is bounded text, which can include nested causes and a stack. It is not a structured error API. This feature adds no retries and makes no browser-specific startup changes.
 
-Native runtime tests cover synchronous and child-startup messages, collection ordering, concurrent waits, query failures, and the UTF-8 byte bound. Existing errno, redirection, cancellation, and cleanup tests remain required.
+Native runtime tests cover synchronous and child-startup messages, collection ordering, concurrent waits, query failures, and the UTF-8 byte bound. A real Wasm-shell regression against the released Waffle archive checks that a failed module load preserves its nested cause on shell stderr. Existing errno, redirection, cancellation, and cleanup tests remain required.

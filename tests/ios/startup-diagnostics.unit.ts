@@ -23,6 +23,12 @@ class StartupControl implements HostCase {
   async workers(): Promise<never> {
     assert.fail("unexpected browser Worker observation");
   }
+  onWorker(): never {
+    throw new Error("unexpected browser Worker subscription");
+  }
+  async waitForWorkerClose(): Promise<never> {
+    throw new Error("unexpected browser Worker close wait");
+  }
   onRequest(): never {
     assert.fail("unexpected browser request observation");
   }
