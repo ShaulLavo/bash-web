@@ -39,6 +39,7 @@ import type { FloorEvidence, MainFloor } from "./shell-scoreboard-floor.ts";
 import { assertBinding, assertRecord, bytesDigest, digest, summarize } from "./shell-scoreboard.ts";
 import type { Score } from "./shell-scoreboard.ts";
 import { scoreboardFixture } from "./shell-scoreboard-test-fixture.ts";
+import { frozenScore } from "./shell-scoreboard-test-score.ts";
 import {
   foldQualification,
   prepareQualification,
@@ -822,6 +823,7 @@ function hostedClient(sourceSha: string, inputs: HostedInput[]) {
   async function request(path: string, type: "json" | "bytes" | "text" = "json"): Promise<unknown> {
     void type;
     requests.push(path);
+    if (path.includes("?event=workflow_dispatch&")) return { total_count: 0, workflow_runs: [] };
     if (path.startsWith(`/actions/workflows/${authority.workflowId}/runs?`))
       return {
         total_count: 1,
@@ -1307,18 +1309,7 @@ function qualificationFixture(repo: RepoContext, dispatch = false) {
     .slice(0, 2)
     .map((item) => item.id)
     .sort();
-  const score = (passes: string[]): Score => {
-    const cases = oracle.cases.map(({ bash: _bash, ...item }) => ({
-      ...item,
-      outcome:
-        item.excluded || item.kind !== "builtins-only"
-          ? "skip"
-          : passes.includes(item.id)
-            ? "pass"
-            : "fail",
-    }));
-    return { engine: "own-shell", identity: oracle.identity, cases, counts: summarize({ cases }) };
-  };
+  const score = (passes: string[]): Score => frozenScore(oracle, passes);
   const requiredFloor = { ...floor(input.mainSha, ids), identity: oracle.identity };
   const main = hostedArtifact({
     root,
@@ -1550,6 +1541,7 @@ function assertBaselineCommands(
   for (const file of [
     "scoreboard-ci.ts",
     "shell-scoreboard-main.ts",
+    "shell-scoreboard-main-dispatch.ts",
     "shell-scoreboard-floor.ts",
     "shell-scoreboard.ts",
     "shell-scoreboard-accepted-gains.ts",

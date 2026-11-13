@@ -21,6 +21,7 @@ import {
   verifyOracle,
 } from "./shell-scoreboard.ts";
 import type { Binding, Oracle, PullRequestBinding, RunBinding, Score } from "./shell-scoreboard.ts";
+import { collectMainDispatches } from "./shell-scoreboard-main-dispatch.ts";
 
 export const authority = Object.freeze({
   repository: "ShaulLavo/bash-web",
@@ -55,6 +56,20 @@ const contracts = {
     observe: "Fold main floor and qualification",
     upload: "Upload cumulative main floor",
     prefix: "own-shell-floor",
+  },
+  "main-raw": {
+    job: "main-qualification",
+    observe: "Seal exact main raw score",
+    upload: "Upload exact main raw score",
+    prefix: "own-shell-main-raw",
+    sourceExpression: "inputs.main_source",
+  },
+  "main-floor": {
+    job: "main-qualification",
+    observe: "Fold exact main floor",
+    upload: "Upload exact main floor",
+    prefix: "own-shell-main-floor",
+    sourceExpression: "inputs.main_source",
   },
 };
 export type ArtifactKind = keyof typeof contracts;
@@ -540,7 +555,9 @@ export function assertUploader({
   const definition: unknown = parse(workflow);
   assertRecord(definition);
   assertRecord(definition.jobs);
-  const expression = `${contract.prefix}-\${{ github.sha }}-\${{ github.run_id }}-\${{ github.run_attempt }}`;
+  const sourceExpression =
+    "sourceExpression" in contract ? contract.sourceExpression : "github.sha";
+  const expression = `${contract.prefix}-\${{ ${sourceExpression} }}-\${{ github.run_id }}-\${{ github.run_attempt }}`;
   const uploaders = Object.entries(definition.jobs).flatMap(([owner, value]) => {
     assertRecord(value);
     const steps = Array.isArray(value.steps) ? value.steps : [];
@@ -889,6 +906,7 @@ export function mainEvidence({
     if (listing.total_count > 100) throw new FloorPrerequisite("too-many-source-runs", sourceSha);
     const result: EvidenceSet = { floors: [], scores: [], evidence: [] };
     for (const run of listing.workflow_runs) await collectRun(run, sourceSha, result);
+    await collectMainDispatches({ root, oracle, client, sourceSha, result });
     cache.set(sourceSha, result);
     return result;
   }
@@ -1062,6 +1080,7 @@ export function mainEvidence({
 }
 
 function qualificationEvent(selected: Binding): string {
+  assert.notEqual(selected.kind, "main-dispatch", "exact-main dispatch requires its own admission");
   if (selected.kind === "pull-request") return "pull_request";
   if (selected.kind === "workflow-dispatch") return "workflow_dispatch";
   return "push";

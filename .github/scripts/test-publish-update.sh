@@ -29,6 +29,7 @@ cat > "$scratch/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$TEST_ROOT/gh-calls"
+if [[ "$1 $2" != 'pr merge' ]]; then [[ "$GH_TOKEN" == fixture ]]; fi
 case "$1 $2" in
   'api --method')
     head=$(git --git-dir="$TEST_ROOT/remote.git" rev-parse refs/heads/automation/test)
