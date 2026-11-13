@@ -70,22 +70,22 @@
   },
   "waffle": {
     "repository": "https://github.com/ShaulLavo/waffle",
-    "revision": "8255a0cc806ef8fdc4d82557fbfe4b6d42c53dc7",
+    "revision": "5d73da6469eb24d0a22a90ef4caea6c0eed69762",
     "package": "waffle",
-    "version": "0.0.123",
-    "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.123/waffle-0.0.123.tgz",
+    "version": "0.0.128",
+    "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.128/waffle-0.0.128.tgz",
     "license": "MIT",
     "descriptorAdapter": "Original local Rust logical-to-physical fd translation and WASI path_open flags/rights adapter, from docs/host-abi.md at the selected revision. No copied runtime implementation. Native MemoryFs uses its own same-node/new-description operation; unexported buffers retain their explicit boundary. See docs/descriptor-reopening.md and plan 004.",
     "permissionAdapter": "Original local Rust adapter from runtime_fs.path_permissions_get documentation at the selected revision. No copied upstream implementation. Preserve the four-word supported-mode/access contract; query metadata without opening payloads. Test-only storage conformance imports fs/vfs-internal.ts from the same pinned source module as SharedFilesystem; product composition stays default FAST and the frozen runner stays public memory.",
     "strategy": "Exact selected host-interface integer required by the JavaScript shell adapter and every installed family; wildcard peer controls placement only. The exact selected runtime archive remains the development dependency for browser builds and tests. One application-created runtime per page owns shared services. No runtime source tree is vendored. Waffle reports runtime_proc startup failures only through typed parent outcomes and full host diagnostics, without child-stdio bytes even before adapter entry. Host-root reporting stays unchanged. Waffle owns lowest-free preopen placement and the single wasi-libc scanner patch; every locally built WASI guest final-links the patched sysroot.",
-    "archiveSha256": "db2066b137190c9d876113062a42b7cb3a6d36b9abb28a632d5a477f37bc56b1",
+    "archiveSha256": "bfc26032e02a6609282714512b3c8f975513ce760f4f08992412f7c31786c6bd",
     "buildInputs": {
       "packagePath": "packages/waffle",
       "builderSha256": "85d6a1e6793390fe6c8c36762168f673cfe8fc7ecd5abc6daf27c05d82f7cf0e",
       "patchSha256": "856730a158d7fdaa08a787c572883a57baaf09a4d967b366c9d198a9c98de302"
     },
     "hostInterface": 2,
-    "archiveBytes": 3874622,
+    "archiveBytes": 3990290,
     "tag": "waffle-v0.0.122"
   },
   "wafflePrograms": {
@@ -634,8 +634,8 @@
     "upstreamPath": "libc-bottom-half/sources/preopens.c",
     "sdk": "wasi-sdk 34.0",
     "patchOwner": "waffle",
-    "patchPath": ".build/waffle-inputs/8255a0cc806ef8fdc4d82557fbfe4b6d42c53dc7/packages/waffle/patches/wasi-libc/preopen-scan.patch",
-    "builder": ".build/waffle-inputs/8255a0cc806ef8fdc4d82557fbfe4b6d42c53dc7/packages/waffle/scripts/build-wasi-libc.sh",
+    "patchPath": ".build/waffle-inputs/5d73da6469eb24d0a22a90ef4caea6c0eed69762/packages/waffle/patches/wasi-libc/preopen-scan.patch",
+    "builder": ".build/waffle-inputs/5d73da6469eb24d0a22a90ef4caea6c0eed69762/packages/waffle/scripts/build-wasi-libc.sh",
     "changes": "After prestat BADF, query fdstat: continue past an open non-preopen, stop at a genuinely absent fd, preserve fatal handling of other errors. Every local WASI guest uses the owned patched sysroot at final link; Rust self-contained libc is disabled.",
     "documentation": "docs/wasi-libc.md"
   },
