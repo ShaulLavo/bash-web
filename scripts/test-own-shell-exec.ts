@@ -157,7 +157,7 @@ for (const source of [false, true]) {
         assert.equal(Buffer.concat(state.stderr).toString(), "");
         assert.match(
           Buffer.concat(state.stdout).toString(),
-          automatic ? /READY:\/bin\/next:kept:abc/ : /READY:renamed:kept:abc/,
+          automatic ? /READY:\/bin\/next:kept:abc/ : /READY:renamed::abc/,
         );
       },
     );

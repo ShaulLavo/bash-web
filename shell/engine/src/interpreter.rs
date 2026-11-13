@@ -3922,10 +3922,10 @@ async fn external_command(command: ExternalCommand<'_>) -> Result<Outcome, i32> 
         let s = state.borrow();
         (s.environment(), s.cwd.clone())
     };
+    env.extend(assigned);
     if replacement.clear_environment() {
         env.clear();
     }
-    env.extend(assigned);
     let mut arguments =
         take_command_arguments(argv, last_storage, argument_offset, context).await?;
     let command = argv[argument_offset - 1].as_str();
@@ -4626,30 +4626,18 @@ mod scope_tests {
 
     fn replay_context() -> (SharedState, Descriptors, Context) {
         let (session, group) = isolated_session(Limits::default(), 4096);
-        let context = Context {
-            evaluation: crate::exec::Scope::new(
+        let context = Context::root(
+            session.core.clone(),
+            crate::exec::Source::root(""),
+            crate::exec::Scope::new(
                 session.core.limits.source_bytes,
                 session.core.eval_storage.clone(),
                 session.core.execution_storage.clone(),
             ),
-            core: session.core.clone(),
-            source: crate::exec::Source::root(""),
-            reader: crate::exec::ReaderLocation::default(),
-            lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
-            cancel: Cancel::new(),
-            strand: Strand::untracked(),
-            signal: Rc::new(Cell::new(None)),
+            Cancel::new(),
             group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
-            trace: xtrace::Trace::default(),
-            caller_descriptors: None,
-            tail_exec: false,
-        };
+            Strand::untracked(),
+        );
         (session.state(), session.core.descriptors.clone(), context)
     }
 

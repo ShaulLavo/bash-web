@@ -124,14 +124,16 @@ fn metadata_all_declarations_keep_syntax_even_when_functions_shadow_dispatch() {
 fn metadata_interpreter_handlers_keep_their_distinct_execution_phases() {
     let rig = Rig::new(Limits::default());
     assert_eq!(rig.run("exec() { args forbidden; }; exec"), 0);
-    assert!(
-        rig.calls.borrow().is_empty(),
-        "direct exec still precedes function lookup"
+    assert_eq!(
+        *rig.calls.borrow(),
+        [vec!["forbidden"]],
+        "a function can shadow exec"
     );
+    rig.calls.borrow_mut().clear();
     assert_eq!(
         rig.run("command exec"),
-        127,
-        "wrapped exec still follows the historical external route"
+        0,
+        "command exec reaches the builtin without invoking the function"
     );
     assert_eq!(
         rig.run("command -v exec"),

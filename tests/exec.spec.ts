@@ -13,9 +13,12 @@ for (const source of [false, true]) {
       const baseline = page.workers();
       const shell = source ? "/bin/source-sh" : "/programs/shell-engine.wasm";
       const inner = `printf 'BEFORE_EXEC\\n'\nwhile [[ ! -f /exec-go ]]; do :; done\n${explicit ? "exec " : ""}test-guest ticker 0 100 AFTER_EXEC`;
-      await page.locator("textarea").focus();
-      await page.keyboard.insertText(`${shell} -c ${quote(inner)}`);
-      await page.keyboard.press("Enter");
+      await page.evaluate(
+        (command) => {
+          void window.bashWeb!.submit(command);
+        },
+        `${shell} -c ${quote(inner)}`,
+      );
       await expect
         .poll(() => page.evaluate(() => window.bashWeb!.readLines().map((line) => line.trim())))
         .toContain("BEFORE_EXEC");

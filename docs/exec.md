@@ -6,7 +6,9 @@ descriptors and cancellation ownership. Its parent observes completion only
 when the final image exits.
 
 `exec` accepts `--`, `-a name`, `-c` and `-l`. Prefix assignments contribute to
-the effective environment and PATH lookup. Redirections persist when replacement
+PATH lookup and the effective environment. `-c` clears the entire replacement
+environment, including prefix assignments, after lookup. Invalid options return
+2 and leave the reader running. Redirections persist when replacement
 fails. A failed command lookup returns 127; other replacement failures return
 126. Noninteractive shells exit after failure, while interactive shells continue.
 `exec` without a command retains its existing persistent-redirection behavior.
@@ -23,3 +25,14 @@ The replacement receives a complete descriptor list and the original root
 preopen capability. A user descriptor at 3 takes priority; the root occupies
 the lowest available descriptor at least 3. Shell-pumped input cannot be
 transferred and prevents replacement.
+
+Command-bearing exec inside a synthetic pipeline stage, subshell, background
+task or command substitution returns 126. Those tasks share the shell image
+and cannot replace it independently. Functions and unredirected brace groups
+can use explicit exec in the calling shell.
+
+Rust tests cover options, lookup failures, persistent redirects and eligibility.
+The Node scoreboard discovers `scripts/test-own-shell-exec.ts`; the browser
+suite discovers `tests/exec.spec.ts`. Both exercise real Worker replacement
+with source bytes and prepared modules, including cancellation and final-only
+completion.

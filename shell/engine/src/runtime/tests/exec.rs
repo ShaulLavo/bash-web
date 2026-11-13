@@ -25,12 +25,9 @@ fn explicit_options_and_effective_environment_do_not_change_lookup() {
     let request = &requests[0];
     assert_eq!(request.executable, "/special/tool");
     assert_eq!(request.argv, ["-custom", "one"]);
-    assert_eq!(
-        request.env,
-        BTreeMap::from([
-            ("PATH".into(), "/special".into()),
-            ("X".into(), "new".into())
-        ])
+    assert!(
+        request.env.is_empty(),
+        "exec -c clears prefixes after PATH lookup"
     );
     assert_eq!(
         request
@@ -43,6 +40,20 @@ fn explicit_options_and_effective_environment_do_not_change_lookup() {
     let json = serde_json::to_value(request).unwrap();
     assert_eq!(json.as_object().unwrap().len(), 5);
     assert!(json.get("job").is_none());
+}
+
+#[test]
+fn explicit_exec_without_c_exports_effective_prefixes() {
+    let (status, fake) = run_exec("export KEEP=old; PATH=/special X=new exec tool", false, 58);
+    assert_eq!(status, 126);
+    let requests = fake.exec_requests.borrow();
+    assert_eq!(requests[0].executable, "/special/tool");
+    assert_eq!(requests[0].env.get("KEEP").map(String::as_str), Some("old"));
+    assert_eq!(
+        requests[0].env.get("PATH").map(String::as_str),
+        Some("/special")
+    );
+    assert_eq!(requests[0].env.get("X").map(String::as_str), Some("new"));
 }
 
 #[test]
@@ -216,6 +227,19 @@ fn exec_lookup_errors_and_wrappers_keep_shell_semantics() {
     let mut bytes = [0; 32];
     let count = input.read(&mut bytes).now_or_never().unwrap().unwrap();
     assert_eq!(&bytes[..count], b"after\n");
+}
+
+#[test]
+fn exec_usage_errors_return_two_and_continue_the_noninteractive_reader() {
+    for command in ["exec", "command exec", "builtin exec"] {
+        for options in ["-Z", "-a"] {
+            let (status, fake) =
+                run_exec(&format!("{command} {options}; echo AFTER:$?"), false, 58);
+            assert_eq!(status, 0, "{command} {options}");
+            assert_eq!(fake.output.bytes(), b"AFTER:2\n", "{command} {options}");
+            assert!(fake.exec_requests.borrow().is_empty());
+        }
+    }
 }
 
 #[test]

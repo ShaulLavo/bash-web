@@ -184,7 +184,9 @@ pub(super) async fn command(
     let (options, offset) = match options(argv) {
         Ok(options) => options,
         Err(error) => {
-            return abort_diagnostic(&fds, context, format!("exec: {error}").as_bytes(), 2).await;
+            let diagnostic =
+                abort_diagnostic(&fds, context, format!("exec: {error}").as_bytes(), 2).await;
+            return Outcome::status(diagnostic.code);
         }
     };
     if offset == argv.len() {
