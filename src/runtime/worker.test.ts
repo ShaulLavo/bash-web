@@ -77,7 +77,7 @@ test("the inherited shell descriptor snapshot excludes transferred preopens", ()
     { fd: 3, reference: 0, rightsBase: 0n, rightsInheriting: 0n, preopen: "/" },
     { fd: 7, reference: 1, rightsBase: 0n, rightsInheriting: 0n },
   ];
-  const namespaces = executor.namespaces!();
+  const namespaces = executor.namespaces!(context);
   const inherited = namespaces.shell_terminal!.inherited_fd;
   assert.equal(typeof inherited, "function");
   if (typeof inherited !== "function") throw new Error("Missing inherited_fd import");

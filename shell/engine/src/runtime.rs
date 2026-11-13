@@ -648,7 +648,7 @@ impl ProcessHost for Runtime {
             })
             .collect::<Result<Vec<_>, _>>()?;
         if let Some(parent) = self.0.abi.root_preopen() {
-            let child = (3..)
+            let child = (3..=u32::MAX)
                 .find(|child| !fds.iter().any(|binding| binding.child == *child))
                 .ok_or(ProcessError::ProcessLimit)?;
             fds.push(Binding { child, parent });

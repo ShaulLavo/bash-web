@@ -126,6 +126,11 @@ fn parser_and_lifecycle_eligibility_matrix() {
             "shopt -s expand_aliases\nalias final='tool; true'\nfinal",
             0,
         ),
+        (
+            "shopt -s expand_aliases\nalias final='tool | tool'\nfinal",
+            0,
+        ),
+        ("shopt -s expand_aliases\nalias final='tool\n)'\nfinal", 0),
         ("shopt -s expand_aliases\nalias final=tool\nfinal", 1),
     ] {
         let (_, fake) = run_exec(source, false, 58);
