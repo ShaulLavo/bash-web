@@ -233,12 +233,37 @@ fn exec_lookup_errors_and_wrappers_keep_shell_semantics() {
 fn exec_usage_errors_return_two_and_continue_the_noninteractive_reader() {
     for command in ["exec", "command exec", "builtin exec"] {
         for options in ["-Z", "-a"] {
-            let (status, fake) =
-                run_exec(&format!("{command} {options}; echo AFTER:$?"), false, 58);
-            assert_eq!(status, 0, "{command} {options}");
-            assert_eq!(fake.output.bytes(), b"AFTER:2\n", "{command} {options}");
-            assert!(fake.exec_requests.borrow().is_empty());
+            assert_usage_continues(command, options);
         }
+    }
+}
+
+fn assert_usage_continues(command: &str, options: &str) {
+    for interactive in [false, true] {
+        let (status, fake) = run_exec(
+            &format!("{command} {options}; echo AFTER:$?"),
+            interactive,
+            58,
+        );
+        assert_eq!(status, 0, "{command} {options} interactive={interactive}");
+        assert_eq!(fake.output.bytes(), b"AFTER:2\n", "{command} {options}");
+        assert!(fake.exec_requests.borrow().is_empty());
+    }
+}
+
+#[test]
+fn exec_usage_errors_follow_ordinary_errexit_and_conditional_rules() {
+    for command in ["exec", "command exec", "builtin exec"] {
+        let (status, fake) = run_exec(&format!("set -e; {command} -Z; echo BAD"), false, 58);
+        assert_eq!(status, 2);
+        assert!(fake.output.bytes().is_empty());
+        let (status, fake) = run_exec(
+            &format!("set -e; if {command} -Z; then echo BAD; else echo HANDLED:$?; fi"),
+            false,
+            58,
+        );
+        assert_eq!(status, 0);
+        assert_eq!(fake.output.bytes(), b"HANDLED:2\n");
     }
 }
 

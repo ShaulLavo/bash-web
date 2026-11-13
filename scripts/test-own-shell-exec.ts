@@ -16,7 +16,7 @@ const shellBytes = new Uint8Array(await readFile(`${directory}/shell-runtime.was
 const encoder = new TextEncoder();
 const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
 
-function trackWorkers(context: TestContext) {
+function trackWorkers(context: TestContext, retired?: (pid: number) => Promise<void>) {
   const Original = globalThis.Worker;
   const images: { pid: number; retired: boolean }[] = [];
   class ObservedWorker extends Original {
@@ -46,7 +46,9 @@ function trackWorkers(context: TestContext) {
       this.retire();
     }
     private retire() {
-      if (this.image) this.image.retired = true;
+      if (!this.image) return;
+      this.image.retired = true;
+      return retired?.(this.image.pid);
     }
   }
   Object.defineProperty(globalThis, "Worker", { value: ObservedWorker, configurable: true });
@@ -64,10 +66,14 @@ async function until(predicate: () => boolean) {
   }
 }
 
-async function fixture(context: TestContext, source: boolean) {
+async function fixture(
+  context: TestContext,
+  source: boolean,
+  retired?: (pid: number) => Promise<void>,
+) {
   const fixture = await waffleFixture(context);
   const runtime = fixture.runtime;
-  const images = trackWorkers(context);
+  const images = trackWorkers(context, retired);
   await prepareWaffleDirectories(runtime, ["/bin", "/tmp/spec"]);
   await runtime.filesystem.writeFile("/payload", encoder.encode("abc\n"));
   for (const path of ["/bin/sh", "/bin/next"])
@@ -220,3 +226,32 @@ test(
     assert.equal(state.launches[0]?.pid, state.launches[1]?.pid);
   },
 );
+
+for (const source of [false, true]) {
+  test(
+    `${source ? "source" : "prepared"} cancellation during image retirement prevents successor entry`,
+    { timeout: 20000 },
+    async (context) => {
+      const retiring = Promise.withResolvers<number>();
+      const release = Promise.withResolvers<void>();
+      context.after(() => release.resolve());
+      let held = false;
+      const state = await fixture(context, source, async (pid) => {
+        if (held) return;
+        held = true;
+        retiring.resolve(pid);
+        await release.promise;
+      });
+      const done = state.invoke(`/bin/sh -c ${quote("exec /bin/next -c 'echo BAD_ENTRY'")}`);
+      const pid = await retiring.promise;
+      assert.equal(state.launches[0]?.pid, pid);
+      assert.equal(state.launches.length, 1);
+      await state.service.kill(pid, 9);
+      release.resolve();
+      assert.equal(await done, 137);
+      assert.equal(state.launches.length, 1, "cancellation must win before successor admission");
+      assert.equal(state.exits.filter((child) => child === pid).length, 1);
+      assert.doesNotMatch(Buffer.concat(state.stdout).toString(), /BAD_ENTRY/);
+    },
+  );
+}
