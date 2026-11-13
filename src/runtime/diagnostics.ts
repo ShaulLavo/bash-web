@@ -102,9 +102,11 @@ export function observeGuest(
   pid: number,
   memory?: SharedArrayBuffer,
 ): () => void {
-  forRuntime(runtime).guests.set(pid, { memory });
+  const guests = forRuntime(runtime).guests;
+  const image = { memory };
+  guests.set(pid, image);
   return () => {
-    forRuntime(runtime).guests.delete(pid);
+    if (guests.get(pid) === image) guests.delete(pid);
   };
 }
 function sweepPipes(root: RootObservation): void {

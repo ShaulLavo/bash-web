@@ -4,7 +4,7 @@
 use crate::{
     executor::{Cancel, Executor, JoinHandle},
     io::{Endpoint, FdTable, FileMetadata, FileSystem, HostEndpoint, IoError, OpenOptions},
-    process::{GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
+    process::{ExecRequest, GroupId, ProcessError, ProcessHost, ProcessId, SpawnRequest},
 };
 use futures::{
     FutureExt,
@@ -64,6 +64,14 @@ pub struct RuntimeSpawn {
     pub job: i32,
     pub fds: Vec<Binding>,
 }
+#[derive(Clone, Debug, Serialize)]
+pub struct RuntimeExec {
+    pub executable: String,
+    pub argv: Vec<String>,
+    pub env: BTreeMap<String, String>,
+    pub cwd: String,
+    pub fds: Vec<Binding>,
+}
 /// The runtime_proc waits share one eight-byte little-endian terminal record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WaitResult {
@@ -87,6 +95,12 @@ impl WaitResult {
 /// Errnos are positive WASI errnos here; the WASM adapter decodes negative results.
 /// `wait_job` confirms descendant teardown and reaps runtime-owned tombstones.
 pub trait Abi: support::Abi {
+    fn root_preopen(&self) -> Option<u32> {
+        None
+    }
+    fn exec(&self, _request: &RuntimeExec) -> Result<std::convert::Infallible, i32> {
+        Err(58)
+    }
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32>;
     fn access_take(&self, request: u32) -> Result<(), i32>;
     fn access_cancel(&self, request: u32);
@@ -594,6 +608,62 @@ impl FileSystem for Runtime {
     }
 }
 impl ProcessHost for Runtime {
+    fn exec_ready(&self) -> bool {
+        self.0.children.borrow().is_empty()
+            && self
+                .0
+                .inputs
+                .borrow()
+                .iter()
+                .all(|input| input.join.is_finished())
+            && self.0.groups.borrow().values().all(|group| {
+                group.runtime_jobs.is_empty() && !group.cleanup_failed && !group.closing
+            })
+            && self
+                .0
+                .waits
+                .borrow()
+                .values()
+                .all(|wait| wait.upgrade().is_none())
+    }
+    fn exec(&self, request: &ExecRequest) -> Result<std::convert::Infallible, ProcessError> {
+        // A pump is an old-image task. Even its runtime-backed reader cannot outlive it.
+        if self
+            .0
+            .inputs
+            .borrow()
+            .iter()
+            .any(|input| !input.join.is_finished())
+        {
+            return Err(ProcessError::Runtime(58));
+        }
+        let mut fds = request
+            .fds
+            .iter()
+            .map(|(&child, endpoint)| {
+                endpoint
+                    .runtime_fd()
+                    .map(|parent| Binding { child, parent })
+                    .ok_or(ProcessError::Runtime(58))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if let Some(parent) = self.0.abi.root_preopen() {
+            let child = (3..)
+                .find(|child| !fds.iter().any(|binding| binding.child == *child))
+                .ok_or(ProcessError::ProcessLimit)?;
+            fds.push(Binding { child, parent });
+        }
+        let spec = RuntimeExec {
+            executable: request.executable.clone(),
+            argv: request.argv.clone(),
+            env: request.env.clone(),
+            cwd: request.cwd.clone(),
+            fds,
+        };
+        self.0.abi.exec(&spec).map_err(|errno| {
+            ProcessError::StartFailed(errno, self.spawn_diagnostic(0).unwrap_or_default())
+        })
+    }
     fn access(
         &self,
         path: String,

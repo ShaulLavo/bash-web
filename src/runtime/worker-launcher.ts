@@ -117,7 +117,9 @@ export function launchTerminalWorker<T extends RuntimeWorkerRequest>(
       filesystem: data.filesystem,
       revoke,
       quiesce,
-      stop,
+      // The broker owns physical Worker stop, including image retirement. Calling
+      // its public handle here would reenter process-final termination during exec.
+      stop: quiesce,
       // The waiting shell owns the errno diagnostic and its redirected fd2 lifetime.
       // Suppress only Waffle's generic startup message, not guest I/O or execution errors.
       startFailed() {},

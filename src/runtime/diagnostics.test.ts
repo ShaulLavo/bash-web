@@ -76,6 +76,18 @@ function completedChild(context: TestContext) {
   };
 }
 
+test("retiring an old image cannot erase successor memory observation at the same PID", (context) => {
+  const { runtime, child, retireGuest } = completedChild(context);
+  const memory = new SharedArrayBuffer(8);
+  Atomics.store(new BigInt64Array(memory), 0, 65536n);
+  const retireSuccessor = observeGuest(runtime, child, memory);
+  context.after(retireSuccessor);
+  retireGuest();
+  assert.equal(runtimeSnapshot(runtime).roots[0]!.guests[0]!.memoryBytes, 65536);
+  retireSuccessor();
+  assert.equal(runtimeSnapshot(runtime).roots[0]!.workers, 0);
+});
+
 test("snapshot ignores a process collected between enumeration and reading its state", (context) => {
   const { runtime, transport, observedTransport, client, child } = completedChild(context);
   assert.equal(runtimeSnapshot(runtime).roots[0]!.retainedSlots, 2);

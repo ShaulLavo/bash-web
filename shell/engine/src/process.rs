@@ -82,6 +82,14 @@ pub struct SpawnRequest {
     pub group: GroupId,
     pub parent: Option<ProcessId>,
 }
+/// A complete image request. Group and parent belong to the process, not its image.
+pub struct ExecRequest {
+    pub executable: String,
+    pub argv: Vec<String>,
+    pub env: BTreeMap<String, String>,
+    pub cwd: String,
+    pub fds: FdTable,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessError {
     UnknownCommand(String),
@@ -283,6 +291,14 @@ pub trait ProcessHost {
         cwd: String,
     ) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError>;
+    /// Success leaves this image without returning to the interpreter.
+    fn exec(&self, _request: &ExecRequest) -> Result<std::convert::Infallible, ProcessError> {
+        Err(ProcessError::Runtime(58))
+    }
+    /// Automatic replacement cannot leave shell-owned work behind.
+    fn exec_ready(&self) -> bool {
+        true
+    }
     /// Observe executable startup without collecting the child or awaiting teardown.
     /// StartFailed carries the exec/fork errno; Runtime(11) means cancellation
     /// prevented entry and the terminal wait still owns its actual outcome.

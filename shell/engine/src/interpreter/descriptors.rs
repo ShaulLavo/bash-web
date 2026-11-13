@@ -15,6 +15,19 @@ pub(super) struct CallerDescriptors {
 }
 
 impl Context {
+    pub(super) fn persist_wrapped_exec(&self, prepared: &FdTable) {
+        let Some(owner) = &self.caller_descriptors else {
+            return;
+        };
+        let Some(caller) = owner.caller.upgrade() else {
+            return;
+        };
+        let context = Self {
+            caller_descriptors: owner.parent.clone(),
+            ..self.clone()
+        };
+        context.persist_descriptors(&owner.temporary, owner.generated.get(), prepared, &caller);
+    }
     pub(super) fn with_caller_descriptors(
         &self,
         caller: Weak<RefCell<FdTable>>,

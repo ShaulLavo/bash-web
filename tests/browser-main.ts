@@ -6,6 +6,7 @@ import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
 import { genericProgramLauncher } from "../src/runtime/program-launcher";
 import { installShellCommands } from "../src/shell-commands";
 import { registerTestPrograms } from "./helpers/test-programs";
+import { registerExecSourceShell } from "./helpers/exec-source-shell";
 import { rgFiles } from "../node_modules/waffle-ripgrep/tests/helpers/rg-fixtures.ts";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 import programWorkerUrl from "../node_modules/waffle/browser/preview1-worker.ts?worker&url";
@@ -84,6 +85,7 @@ mountBrowser({
     // Base registers every everyday family lazily on the caller's one runtime.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
+      query.get("exec") === "source" ? registerExecSourceShell(runtime) : undefined,
       query.get("test") === "1" && query.get("rg") === "1" ? prepareRg(runtime) : undefined,
       installShellCommands(runtime),
       installBase(runtime, { launcher: genericProgramLauncher(programWorkerUrl) }),

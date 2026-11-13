@@ -17,6 +17,8 @@ unsafe extern "C" {
     fn proc_access_cancel(request: u32) -> i32;
     #[link_name = "spawn"]
     fn proc_spawn(ptr: *const u8, length: usize) -> i32;
+    #[link_name = "exec"]
+    fn proc_exec(ptr: *const u8, length: usize) -> i32;
     #[link_name = "spawn_error"]
     fn proc_spawn_error(pid: u32, output: *mut u8, capacity: usize) -> i32;
     #[link_name = "job_of"]
@@ -47,7 +49,28 @@ fn result(value: i32) -> Result<u32, i32> {
         Ok(value as u32)
     }
 }
-pub struct WasiAbi(support::WasiAbi);
+#[link(wasm_import_module = "wasi_snapshot_preview1")]
+unsafe extern "C" {
+    fn fd_prestat_get(fd: u32, stat: *mut u8) -> u16;
+    fn fd_prestat_dir_name(fd: u32, name: *mut u8, length: usize) -> u16;
+}
+
+fn root_preopen(inherited_count: usize) -> Option<u32> {
+    let last = 3u32.checked_add(u32::try_from(inherited_count).ok()?)?;
+    (3..=last).find(|&fd| {
+        let mut stat = [0; 8];
+        if unsafe { fd_prestat_get(fd, stat.as_mut_ptr()) } != 0 || stat[0] != 0 {
+            return false;
+        }
+        let length = u32::from_le_bytes(stat[4..8].try_into().unwrap());
+        let mut name = [0];
+        length == 1
+            && unsafe { fd_prestat_dir_name(fd, name.as_mut_ptr(), 1) } == 0
+            && name[0] == b'/'
+    })
+}
+
+pub struct WasiAbi(support::WasiAbi, Option<u32>, Vec<u32>);
 impl WasiAbi {
     pub fn new() -> Result<Self, i32> {
         let mut inherited = Vec::new();
@@ -58,7 +81,13 @@ impl WasiAbi {
             }
             inherited.push(fd as u32);
         }
-        support::WasiAbi::with_inherited_fds(inherited).map(Self)
+        let root = root_preopen(inherited.len());
+        let abi = support::WasiAbi::with_inherited_fds(inherited.clone())?;
+        inherited.retain(|&fd| {
+            let mut stat = [0; 8];
+            (unsafe { fd_prestat_get(fd, stat.as_mut_ptr()) }) != 0
+        });
+        Ok(Self(abi, root, inherited))
     }
     pub fn handle_interrupts(&self) -> Result<(), i32> {
         register_interrupt_handler(|signal, disposition| unsafe {
@@ -74,7 +103,7 @@ impl WasiAbi {
 }
 impl support::Abi for WasiAbi {
     fn inherited_fds(&self) -> Vec<u32> {
-        support::Abi::inherited_fds(&self.0)
+        self.2.clone()
     }
     fn pipe(&self) -> Result<(u32, u32), i32> {
         support::Abi::pipe(&self.0)
@@ -123,6 +152,15 @@ impl support::Abi for WasiAbi {
 }
 
 impl Abi for WasiAbi {
+    fn root_preopen(&self) -> Option<u32> {
+        self.1
+    }
+    fn exec(&self, request: &RuntimeExec) -> Result<std::convert::Infallible, i32> {
+        let json = serde_json::to_vec(request).map_err(|_| 28)?;
+        // The host unwinds success. A returning nonnegative result violates the ABI.
+        let value = unsafe { proc_exec(json.as_ptr(), json.len()) };
+        Err(if value < 0 { -value } else { 29 })
+    }
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
         result(unsafe { proc_access_start(path.as_ptr(), path.len(), cwd.as_ptr(), cwd.len(), 1) })
     }
