@@ -102,6 +102,7 @@ for (const engine of ["chromium", "firefox"] as const) {
               if (item.id === first.id)
                 return {
                   ...item,
+                  console: undefined,
                   async drive(host: Parameters<typeof installSessionDrainFixture>[0]) {
                     await installSessionDrainFixture(host);
                     throw new Error(primary);
@@ -110,6 +111,7 @@ for (const engine of ["chromium", "firefox"] as const) {
               if (item.id !== "D02") return item;
               return {
                 ...item,
+                console: undefined,
                 async drive(host: Parameters<typeof installSessionDrainFixture>[0]) {
                   assert.ok(item.drive);
                   const result = await item.drive(host);
