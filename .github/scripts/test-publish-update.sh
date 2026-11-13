@@ -35,6 +35,7 @@ case "$1 $2" in
     [[ $* == "api --method POST repos/ShaulLavo/fixture/statuses/$head -f context=shell -f state=pending -f description=Waiting for dispatched CI" ]]
     [[ ${FAIL_STATUS:-0} == 0 ]] ;;
   'pr merge')
+    [[ "$GH_TOKEN" == merge-fixture ]]
     head=$(git --git-dir="$TEST_ROOT/remote.git" rev-parse refs/heads/automation/test)
     [[ $* == "pr merge 123 --repo ShaulLavo/fixture --auto --squash --match-head-commit $head" ]] ;;
   'api repos/'*) git --git-dir="$TEST_ROOT/remote.git" rev-parse refs/heads/automation/test ;;
@@ -54,7 +55,13 @@ case "$1 $2" in
 esac
 MOCK
 chmod +x "$scratch/bin/gh"
-export PATH="$scratch/bin:$PATH" BRANCH=automation/test GH_TOKEN=fixture GITHUB_REPOSITORY=ShaulLavo/fixture TITLE='Update fixture pins' RUNNER_TEMP="$scratch" UPDATE_ARTIFACT="$scratch/artifact"
+export PATH="$scratch/bin:$PATH" BRANCH=automation/test GH_TOKEN=fixture DEPENDENCY_MERGE_TOKEN=merge-fixture GITHUB_REPOSITORY=ShaulLavo/fixture TITLE='Update fixture pins' RUNNER_TEMP="$scratch" UPDATE_ARTIFACT="$scratch/artifact"
+if env -u DEPENDENCY_MERGE_TOKEN bash .github/scripts/publish-update.sh > "$scratch/missing-token.log" 2>&1; then
+  echo 'Missing merge token was accepted.' >&2
+  exit 1
+fi
+grep -q 'Configure DEPENDENCY_MERGE_TOKEN' "$scratch/missing-token.log"
+test ! -e "$scratch/gh-calls"
 bash .github/scripts/publish-update.sh
 first=$(git --git-dir="$scratch/remote.git" rev-parse refs/heads/automation/test)
 git switch -q --detach "$base"

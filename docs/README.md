@@ -51,6 +51,7 @@ One page per feature, each stating exactly what is supported and what is left ou
 - [Bash compatibility](bash-compatibility.md): Read how the score is produced and held
 - [Shell fuzzing](shell-fuzzing.md): Run and record the differential fuzzers
 - [CI inputs and job ownership](ci.md): See what each CI job owns and caches
+- [Exact main qualification](main-score-qualification.md): Recover missing main observations and configure dependency merges
 - [Code quality gates](code-quality.md): Run lint, types, duplicate, and Rust quality checks
 - [Startup diagnostics on the page host](startup-diagnostics-host.md): Run the unchanged startup cases through the shared host
 - [Python acceptance on the page host](python-host.md): Run both complete original Python cases with real browser observations

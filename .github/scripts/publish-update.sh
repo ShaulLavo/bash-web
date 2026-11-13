@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -z "${DEPENDENCY_MERGE_TOKEN:-}" ]]; then
+  echo '::error::Configure DEPENDENCY_MERGE_TOKEN with repository Contents and Pull requests write permission. GITHUB_TOKEN cannot trigger the required main push workflow.'
+  exit 1
+fi
+
 # The write-token job executes only this script from the workflow's original main commit.
 bash .github/scripts/check-update-paths.sh "$UPDATE_ARTIFACT/update.patch"
 git apply --check "$UPDATE_ARTIFACT/update.patch"
@@ -46,4 +51,4 @@ if [[ -z "$run" ]] || jq -e '.status == "completed" and .conclusion != "success"
   gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
 fi
 
-gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$head"
+GH_TOKEN="$DEPENDENCY_MERGE_TOKEN" gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --auto --squash --match-head-commit "$head"
