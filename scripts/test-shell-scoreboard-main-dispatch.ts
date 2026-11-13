@@ -208,13 +208,31 @@ async function setup(scratch: string) {
   const score = (passes: string[]): Score => frozenScore(oracle, passes);
   const hosts: Hosted[] = [];
   const requests: string[] = [];
-  const state = { main: sourceSha, discoveryCount: 1 };
+  const state: {
+    main: string;
+    discoveryCount: number;
+    discoveryPages: { total_count: number; workflow_runs: HostRun[] }[] | undefined;
+    pushCount: number | undefined;
+    incompleteEvidence: "jobs" | "artifacts" | undefined;
+  } = {
+    main: sourceSha,
+    discoveryCount: 1,
+    discoveryPages: undefined,
+    pushCount: undefined,
+    incompleteEvidence: undefined,
+  };
   function request(path: string, type: "bytes"): Promise<Buffer>;
   function request(path: string, type: "text"): Promise<string>;
   function request(path: string, type?: "json"): Promise<unknown>;
   async function request(path: string, type = "json"): Promise<unknown> {
     requests.push(path);
     if (path === "/git/ref/heads/main") return { object: { sha: state.main } };
+    if (path.includes("?event=workflow_dispatch&") && state.discoveryPages) {
+      const page = Number(new URL(path, "https://fixture.invalid").searchParams.get("page"));
+      const listing = state.discoveryPages[page - 1];
+      assert.ok(listing, `unexpected discovery page ${page}`);
+      return listing;
+    }
     if (path === discovery)
       return {
         total_count: state.discoveryCount,
@@ -230,8 +248,15 @@ async function setup(scratch: string) {
       const selected = hosts.filter(
         (item) => item.run.event === "push" && path.includes(`head_sha=${item.run.head_sha}&`),
       );
-      return { total_count: selected.length, workflow_runs: selected.map((item) => item.run) };
+      return {
+        total_count: state.pushCount ?? selected.length,
+        workflow_runs: selected.map((item) => item.run),
+      };
     }
+    if (state.incompleteEvidence === "jobs" && path.endsWith("/jobs?per_page=100"))
+      return { total_count: 2, jobs: [] };
+    if (state.incompleteEvidence === "artifacts" && path.endsWith("/artifacts?per_page=100"))
+      return { total_count: 1, artifacts: [] };
     return hostResponse(hosts, path, type);
   }
   const client: GithubClient = { request };
@@ -633,6 +658,45 @@ test("discovery exhaustion and unavailable evidence are explicit prerequisites",
     value.host.bytes.clear();
     await assert.rejects(collect(value), /unexpected host request/);
   });
+});
+
+test("dispatch discovery rejects a count change that omits a surviving page-boundary run", async () => {
+  await fixture(async (value) => {
+    const runs = Array.from({ length: 201 }, (_, index) =>
+      hostRun(value.executorSha, 1000 + index, "workflow_dispatch"),
+    );
+    value.state.discoveryPages = [
+      { total_count: 201, workflow_runs: runs.slice(0, 100) },
+      { total_count: 200, workflow_runs: runs.slice(101) },
+    ];
+    await assert.rejects(collect(value), /prerequisite: unstable main dispatch discovery/);
+    value.state.discoveryPages = [
+      { total_count: 201, workflow_runs: runs.slice(0, 100) },
+      { total_count: 201, workflow_runs: runs.slice(100, 200) },
+      { total_count: 201, workflow_runs: runs.slice(200) },
+    ];
+    assert.equal((await collect(value)).scores.length, 0);
+  });
+});
+
+test("main push discovery rejects a missing row despite a nonzero reported count", async () => {
+  await fixture(async (value) => {
+    value.state.pushCount = 1;
+    await assert.rejects(
+      mainEvidence(value).collect(value.sourceSha),
+      /prerequisite: incomplete main push discovery/,
+    );
+  });
+});
+
+test("dispatch admission rejects incomplete job and artifact evidence", async () => {
+  const listings: ("jobs" | "artifacts")[] = ["jobs", "artifacts"];
+  for (const listing of listings) {
+    await fixture(async (value) => {
+      value.state.incompleteEvidence = listing;
+      await assert.rejects(collect(value), /scoreboard prerequisite: incomplete/);
+    });
+  }
 });
 
 test("the first ordinary main push carries requirements beyond later Waffle manifest changes", async () => {

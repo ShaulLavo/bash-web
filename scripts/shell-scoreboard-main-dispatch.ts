@@ -283,10 +283,17 @@ export async function collectMainDispatches({
   result,
 }: Context & { oracle: Oracle; sourceSha: string; result: EvidenceSet }): Promise<void> {
   const seen = new Set<number>();
+  let total: number | undefined;
   for (let page = 1; page <= 32; page++) {
     const listing = await requestWorkflowRuns(
       client,
       `/actions/workflows/${authority.workflowId}/runs?event=workflow_dispatch&per_page=100&page=${page}`,
+    );
+    total ??= listing.total_count;
+    assert.equal(
+      listing.total_count,
+      total,
+      "scoreboard prerequisite: unstable main dispatch discovery",
     );
     assert.ok(
       listing.total_count <= 3200,
@@ -294,7 +301,7 @@ export async function collectMainDispatches({
     );
     assert.equal(
       listing.workflow_runs.length,
-      Math.min(100, Math.max(0, listing.total_count - (page - 1) * 100)),
+      Math.min(100, Math.max(0, total - (page - 1) * 100)),
       "scoreboard prerequisite: incomplete main dispatch discovery",
     );
     for (const summary of listing.workflow_runs) {
@@ -315,7 +322,7 @@ export async function collectMainDispatches({
         attempts: summary.run_attempt,
       });
     }
-    if (listing.total_count <= page * 100) return;
+    if (seen.size === total) return;
   }
   throw new Error("scoreboard prerequisite: main dispatch discovery exhausted");
 }

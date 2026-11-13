@@ -349,6 +349,7 @@ export async function requestRun(client: GithubClient, path: string): Promise<Ho
 export async function requestJobs(client: GithubClient, path: string): Promise<JobListing> {
   const value = await client.request(path);
   assertJobListing(value);
+  assert.equal(value.jobs.length, value.total_count, "scoreboard prerequisite: incomplete jobs");
   return value;
 }
 export async function requestArtifacts(
@@ -357,6 +358,11 @@ export async function requestArtifacts(
 ): Promise<ArtifactListing> {
   const value = await client.request(path);
   assertArtifactListing(value);
+  assert.equal(
+    value.artifacts.length,
+    value.total_count,
+    "scoreboard prerequisite: incomplete artifacts",
+  );
   return value;
 }
 export async function requestWorkflowRuns(
@@ -904,6 +910,11 @@ export function mainEvidence({
       `/actions/workflows/${authority.workflowId}/runs?event=push&head_sha=${fullSha(sourceSha)}&per_page=100`,
     );
     if (listing.total_count > 100) throw new FloorPrerequisite("too-many-source-runs", sourceSha);
+    assert.equal(
+      listing.workflow_runs.length,
+      listing.total_count,
+      "scoreboard prerequisite: incomplete main push discovery",
+    );
     const result: EvidenceSet = { floors: [], scores: [], evidence: [] };
     for (const run of listing.workflow_runs) await collectRun(run, sourceSha, result);
     await collectMainDispatches({ root, oracle, client, sourceSha, result });
