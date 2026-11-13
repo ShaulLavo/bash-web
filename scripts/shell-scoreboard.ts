@@ -112,13 +112,26 @@ export interface DispatchBinding {
   sourceSha: string;
   beforeSha: string;
 }
-export type Binding = MainPushBinding | PullRequestBinding | DispatchBinding;
+export interface MainDispatchBinding {
+  kind: "main-dispatch";
+  sourceSha: string;
+  beforeSha: string;
+  executorSha: string;
+  executorRef: string;
+  controllerSha256: string;
+}
+export type Binding = MainPushBinding | PullRequestBinding | DispatchBinding | MainDispatchBinding;
 export interface RunBinding {
   runId: number;
   attempt: number;
 }
 export function assertBinding(value: unknown): asserts value is Binding {
   assertRecord(value);
+  if (value.kind === "main-dispatch") {
+    for (const key of ["sourceSha", "beforeSha", "executorSha", "executorRef", "controllerSha256"])
+      assert.equal(typeof value[key], "string", `missing main dispatch ${key}`);
+    return;
+  }
   if (value.kind === "main-push" || value.kind === "workflow-dispatch") {
     assert.equal(typeof value.sourceSha, "string", "missing main source SHA");
     assert.equal(typeof value.beforeSha, "string", "missing main predecessor SHA");

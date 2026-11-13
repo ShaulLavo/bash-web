@@ -110,6 +110,7 @@ function hostFixture() {
   function request(path: string, type: "text"): Promise<string>;
   function request(path: string, type?: "json"): Promise<unknown>;
   async function request(path: string, type: ResponseType = "json"): Promise<unknown> {
+    if (path.includes("?event=workflow_dispatch&")) return { total_count: 0, workflow_runs: [] };
     const key = `${type}:${path}`;
     const value = values.get(key);
     assert.ok(value !== undefined, `unexpected host request ${key}`);

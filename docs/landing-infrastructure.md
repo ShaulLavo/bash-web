@@ -8,7 +8,9 @@ Scoreboard test files are discovered from their existing filename families. Addi
 
 The score floor is the union of the preceding main floor and every admitted observation of the current source, including earlier attempts. A regression fails the gate without deleting old passes. A complete failed timeout is a scored failure, not an incomplete replay.
 
-Main sources have independent concurrency groups. Each run scores once and uploads a complete raw result. A separate blocking job admits the completed producer job and successful upload, then compares and publishes the accumulated floor. It does not wait for the whole workflow to finish. PR results never become main evidence.
+Main push sources have independent concurrency groups. Each run scores once and uploads a complete raw result. A separate blocking job admits the completed producer job and successful upload, then compares and publishes the accumulated floor. Push admission does not wait for the whole workflow to finish. PR results never become main evidence.
+
+[Exact main qualification](main-score-qualification.md) supplies genuine observations when main has no push run. An explicit dispatch binds an unchanged main checkout and a separately authenticated executor. It prepares against the actual predecessor, enforces all required passes before uploading its floor, and becomes evidence only after its entire dispatch workflow succeeds. Ordinary branch dispatches retain PR-like qualification authority.
 
 The resolver checks exact repository, workflow, main event, source, run, attempt, producer job, upload steps and artifact digest. It proves documentation-only source equivalence per intervening main edge, with a 32-edge limit. Missing or expired non-equivalent evidence is an explicit prerequisite. It never starts historical replays or falls back to a static score.
 

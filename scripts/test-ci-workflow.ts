@@ -155,6 +155,8 @@ test("the actual aggregate shell command rejects each non-success result in ever
     return spawnSync("bash", ["-euc", command], {
       env: {
         ...process.env,
+        MAIN_SOURCE: "",
+        MAIN_QUALIFICATION: status["main-qualification"],
         CHANGES: status.changes,
         CODE: code,
         PREPARE: status.prepare,
@@ -166,13 +168,16 @@ test("the actual aggregate shell command rejects each non-success result in ever
       },
     }).status;
   };
-  assert.equal(evaluate(needs.map(() => "success")), 0);
+  const successful = needs.map((key) => (key === "main-qualification" ? "skipped" : "success"));
+  assert.equal(evaluate(successful), 0);
   for (const failure of ["failure", "skipped", "cancelled"]) {
-    for (const position of needs.keys())
+    for (const position of needs.keys()) {
+      if (needs[position] === "main-qualification" && failure === "skipped") continue;
       assert.notEqual(
-        evaluate(needs.map((_, index) => (index === position ? failure : "success"))),
+        evaluate(successful.map((value, index) => (index === position ? failure : value))),
         0,
       );
+    }
   }
   const docs = needs.map((key) =>
     ["changes", "prepare", "layers", "quality"].includes(key) ? "success" : "skipped",
@@ -200,12 +205,14 @@ test("each moved current-main gate has one owner", () => {
     "own-shell-scoreboard": ["test:shell:scoreboard:prebuilt"],
     "own-shell-observation": ["compat:shell:prebuilt"],
   };
-  const ownership = Object.entries(workflowJobs).flatMap(([owner, job]) =>
-    Array.from(commands(job).matchAll(/npm run ([\w:-]+)/g), (match) => ({
-      owner,
-      command: match[1],
-    })),
-  );
+  const ownership = Object.entries(workflowJobs)
+    .filter(([owner]) => owner !== "main-qualification")
+    .flatMap(([owner, job]) =>
+      Array.from(commands(job).matchAll(/npm run ([\w:-]+)/g), (match) => ({
+        owner,
+        command: match[1],
+      })),
+    );
   for (const [owner, gates] of Object.entries(expected)) {
     for (const command of gates)
       assert.deepEqual(
@@ -415,9 +422,11 @@ function expanded(command: string, ancestors: readonly string[] = []): string {
 }
 
 test("shell notices have exactly one native producer and a Cargo-free browser consumer", () => {
-  const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
-    Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.ts/g), () => owner),
-  );
+  const owners = Object.entries(jobs())
+    .filter(([owner]) => owner !== "main-qualification")
+    .flatMap(([owner, job]) =>
+      Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.ts/g), () => owner),
+    );
   assert.deepEqual(owners, ["native"]);
   const browser = expanded(commands(jobs().browser));
   assert.equal(browser.match(/node scripts\/browser-notices\.ts/g)?.length, 1);
@@ -605,14 +614,78 @@ test("Git consumer coverage has one blocking owner and prepared family assets", 
 test("npm prepare is the only worker build and Git consumes the family backend", () => {
   const lifecycle = String(recipes().prepare);
   assert.equal(lifecycle, "npm run build:worker");
-  const owners = Object.entries(jobs()).flatMap(([owner, job]) =>
-    Array.from(expanded(commands(job)).matchAll(/node scripts\/build-worker\.ts/g), () => owner),
-  );
+  const owners = Object.entries(jobs())
+    .filter(([owner]) => owner !== "main-qualification")
+    .flatMap(([owner, job]) =>
+      Array.from(expanded(commands(job)).matchAll(/node scripts\/build-worker\.ts/g), () => owner),
+    );
   assert.deepEqual(owners, ["prepare"]);
   const driver = readFileSync(new URL("./test-git-browser.ts", import.meta.url), "utf8");
   assert.doesNotMatch(driver, /buildGit|patchGitSource/);
   assert.match(driver, /waffle-git\/dist\/git-command\.js/);
   assert.match(driver, /external: true/);
+});
+
+test("exact-main dispatch explicitly requires its sole producer and skips every ordinary check", () => {
+  const workflowJobs = jobs();
+  const aggregate = object(workflowJobs.shell);
+  const steps = aggregate.steps;
+  assert.ok(Array.isArray(steps));
+  const command = object(steps.map(object).find((step) => step.id === "verdict")).run;
+  assert.ok(typeof command === "string");
+  const expected = Object.fromEntries(
+    Object.keys(workflowJobs)
+      .filter((name) => name !== "shell")
+      .map((name) => [name, { result: name === "main-qualification" ? "success" : "skipped" }]),
+  );
+  const evaluate = (results: typeof expected) =>
+    spawnSync("bash", ["-euc", command], {
+      env: {
+        ...process.env,
+        MAIN_SOURCE: "a".repeat(40),
+        MAIN_QUALIFICATION: results["main-qualification"].result,
+        RESULTS: JSON.stringify(results),
+      },
+    }).status;
+  assert.equal(evaluate(expected), 0);
+  for (const name of Object.keys(expected)) {
+    for (const result of [
+      "failure",
+      "cancelled",
+      name === "main-qualification" ? "skipped" : "success",
+    ])
+      assert.notEqual(evaluate({ ...expected, [name]: { result } }), 0);
+  }
+  for (const [name, entry] of Object.entries(workflowJobs)) {
+    if (name === "shell" || name === "main-qualification") continue;
+    assert.match(String(object(entry).if), /inputs\.main_source == ''/);
+  }
+  const main = object(workflowJobs["main-qualification"]);
+  assert.equal(
+    main.if,
+    "${{ github.event_name == 'workflow_dispatch' && inputs.main_source != '' }}",
+  );
+  const run = commands(main);
+  assert.ok(run.indexOf("main-dispatch.ts fold") > run.indexOf("main-dispatch.ts seal"));
+  assert.ok(Array.isArray(main.steps));
+  const entries = main.steps.map(object);
+  const fold = entries.findIndex((step) => step.name === "Fold exact main floor");
+  const upload = entries.findIndex((step) => step.name === "Upload exact main floor");
+  assert.ok(fold >= 0 && fold < upload);
+  assert.equal(entries[upload].if, undefined);
+  assert.equal(entries[upload]["continue-on-error"], undefined);
+  const measured = entries.find(
+    (step) => step.uses === "actions/checkout@v4" && object(step.with).path === ".measured-main",
+  );
+  assert.ok(measured);
+  assert.equal(object(measured.with).ref, "${{ inputs.main_source }}");
+  assert.equal(object(measured.with)["persist-credentials"], false);
+  for (const name of ["Build unchanged main source", "Observe unchanged main source"]) {
+    const stage = entries.find((step) => step.name === name);
+    assert.ok(stage);
+    assert.equal(stage["working-directory"], ".measured-main");
+    assert.ok(!stage.env || !("GH_TOKEN" in object(stage.env)));
+  }
 });
 
 test("scoreboard and observation run independently using one shared node build", () => {
@@ -626,7 +699,7 @@ test("scoreboard and observation run independently using one shared node build",
   for (const job of [scoreboard, observation, publisher]) {
     assert.equal(
       job.if,
-      "${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}",
+      "${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}",
       "failed or skipped prerequisites must block publication through implicit success()",
     );
     assert.ok(!("continue-on-error" in job));
@@ -634,12 +707,14 @@ test("scoreboard and observation run independently using one shared node build",
     const checked = job.steps.map(object).filter((step) => typeof step.run === "string");
     assert.ok(checked.every((step) => !("if" in step) && !("continue-on-error" in step)));
   }
-  const buildOwners = Object.entries(workflowJobs).flatMap(([owner, job]) =>
-    Array.from(
-      expanded(commands(job)).matchAll(/node scripts\/build-node-harness\.ts/g),
-      () => owner,
-    ),
-  );
+  const buildOwners = Object.entries(workflowJobs)
+    .filter(([owner]) => owner !== "main-qualification")
+    .flatMap(([owner, job]) =>
+      Array.from(
+        expanded(commands(job)).matchAll(/node scripts\/build-node-harness\.ts/g),
+        () => owner,
+      ),
+    );
   assert.deepEqual(buildOwners, ["prepare"]);
   const prepare = commands(workflowJobs.prepare);
   assert.ok(prepare.indexOf("npm run build:worker") < prepare.indexOf("tar -czf"));

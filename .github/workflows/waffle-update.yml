@@ -74,6 +74,7 @@ jobs:
       - name: Refresh the standing update PR and dispatch CI
         env:
           GH_TOKEN: ${{ github.token }}
+          DEPENDENCY_MERGE_TOKEN: ${{ secrets.DEPENDENCY_MERGE_TOKEN }}
           BRANCH: automation/waffle-updates
           TITLE: Update Waffle and hotkeys pins
           UPDATE_ARTIFACT: ${{ runner.temp }}/dependency-update
