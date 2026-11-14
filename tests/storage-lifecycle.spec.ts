@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { STORAGE_READY_TIMEOUT_MS } from "../src/runtime/storage.ts";
 import { startupReady } from "./helpers/readiness.ts";
 import { opfsTest } from "./helpers/opfs-test.ts";
+import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
 async function waiting(page: Page) {
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("waiting");
@@ -108,7 +109,7 @@ for (const whenBusy of ["takeover", "wait"]) {
     await page.route(
       "**/fs-worker*.js",
       async (route) => {
-        const response = await route.fetch();
+        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
         await route.fulfill({
           response,
           body: `(${holdIndexedDBOpen.toString()})();\n${await response.text()}`,
@@ -205,7 +206,7 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
     await second.route(
       "**/fs-worker*.js",
       async (route) => {
-        const response = await route.fetch();
+        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
         await route.fulfill({
           response,
           body: `(${holdIndexedDBEpoch.toString()})();\n${await response.text()}`,

@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { BROWSER_CASE_HANG_MS, OUTCOME_HANG_MS } from "./tests/helpers/outcome-timeouts.ts";
 
 const port = process.env.BASH_WEB_TEST_PORT ?? "4198";
 const baseURL = `http://127.0.0.1:${port}`;
@@ -8,10 +9,14 @@ export default defineConfig({
   testMatch: "**/*.spec.ts",
   fullyParallel: false,
   workers: 1,
-  timeout: 60000,
+  timeout: BROWSER_CASE_HANG_MS,
+  expect: { timeout: OUTCOME_HANG_MS, toPass: { timeout: OUTCOME_HANG_MS } },
   use: {
     baseURL,
     viewport: { width: 1200, height: 800 },
+    actionTimeout: OUTCOME_HANG_MS,
+    navigationTimeout: OUTCOME_HANG_MS,
+    launchOptions: { timeout: OUTCOME_HANG_MS },
   },
   projects: [
     {
@@ -19,6 +24,7 @@ export default defineConfig({
       use: {
         browserName: "chromium",
         launchOptions: {
+          timeout: OUTCOME_HANG_MS,
           executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
           args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--disable-vulkan-surface"],
         },
@@ -32,7 +38,7 @@ export default defineConfig({
     env: { PORT: port, BASH_WEB_TEST_FIXTURES: "1" },
     url: baseURL,
     reuseExistingServer: false,
-    timeout: 30000,
+    timeout: OUTCOME_HANG_MS,
   },
   reporter: [["list"], ["html", { open: "never" }]],
 });

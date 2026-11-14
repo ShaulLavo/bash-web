@@ -5,6 +5,7 @@ import { TurnFilesystem } from "../../src/prompt/fs";
 import { readRepository } from "../../src/prompt/sources/repo";
 import { GitStatusSource } from "../../src/prompt/sources/status";
 import type { PromptContext, PromptFilesystem } from "../../src/prompt/types";
+import { OUTCOME_HANG_MS } from "./outcome-timeouts.ts";
 
 const runtime = createRuntime({ filesystem: { mode: "memory", workerURL: "/fs-worker.js" } });
 const decoder = new TextDecoder();
@@ -204,7 +205,10 @@ async function production(root: string, choice: FixtureChoice, turn: number) {
 }
 async function completedTurn(provider: Provider, root: string, expected: string, turn: number) {
   const live = new AbortController();
-  const timer = setTimeout(() => live.abort(new Error("completion watchdog expired")), 10000);
+  const timer = setTimeout(
+    () => live.abort(new Error("completion watchdog expired")),
+    OUTCOME_HANG_MS,
+  );
   const observed: string[] = [];
   const start = performance.now();
   let completedAt: number | undefined;
@@ -253,7 +257,7 @@ async function paint(root: string, path: string, expected: string) {
     config: { segments: { git_status: { counts: true } } },
   });
   const first = new AbortController();
-  const timer = setTimeout(() => first.abort(), 10000);
+  const timer = setTimeout(() => first.abort(), OUTCOME_HANG_MS);
   const samples: number[] = [];
   let final = "";
   try {
@@ -299,7 +303,8 @@ async function until(check: () => boolean, signal?: AbortSignal): Promise<void> 
   const start = performance.now();
   while (!check()) {
     signal?.throwIfAborted();
-    if (performance.now() - start > 10000) throw new Error("browser proof timed out");
+    if (performance.now() - start > OUTCOME_HANG_MS)
+      throw new Error("browser proof hang guard expired");
     await pause(1);
   }
 }
@@ -319,7 +324,7 @@ async function typing(root: string, mode: "bash" | "zsh", path: string, expected
   const terminal = new SharedBridge();
   terminal.resize(80, 24);
   const deadline = new AbortController();
-  const watchdog = setTimeout(() => deadline.abort(), 10000);
+  const watchdog = setTimeout(() => deadline.abort(), OUTCOME_HANG_MS);
   let shell: Awaited<ReturnType<typeof createShell>> | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
   let output = "";

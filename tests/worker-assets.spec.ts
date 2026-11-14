@@ -1,5 +1,6 @@
 import { test, expect } from "./helpers/browser-test";
 import { startupReady } from "./helpers/readiness.ts";
+import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
 test("production startup loads an emitted Waffle filesystem worker", async ({ page, request }) => {
   const filesystemResponses: { url: string; status: number; type: string }[] = [];
@@ -18,7 +19,7 @@ test("production startup loads an emitted Waffle filesystem worker", async ({ pa
   expect(filesystemResponses[0].type).toMatch(/javascript/);
   // The un-hashed library URLs survive Vite replacing dist as well.
   for (const worker of ["fs-worker", "shell-worker"]) {
-    const response = await request.get(`/${worker}.js`);
+    const response = await request.get(`/${worker}.js`, { timeout: OUTCOME_HANG_MS });
     expect(response.ok()).toBe(true);
     expect(response.headers()["content-type"]).toMatch(/javascript/);
     expect((await response.body()).byteLength).toBeGreaterThan(0);

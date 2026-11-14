@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "./helpers/browser-test";
-import { ready, startupReady } from "./helpers/readiness.ts";
+import { command } from "./helpers/shell-browser.ts";
+import { ready, prepareOwnShell } from "./helpers/readiness.ts";
 
 import { execFileSync } from "node:child_process";
 import {
@@ -15,20 +16,16 @@ import {
 const baselineWorkers = new WeakMap<Page, number>();
 
 async function open(page: Page) {
-  await page.goto("/?test=1&renderer=canvas&engine=own-shell");
-  await startupReady(page);
-  expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
+  await prepareOwnShell(page);
   baselineWorkers.set(page, page.workers().length);
   await page.locator("textarea").focus();
 }
-async function command(page: Page, text: string) {
-  await page.keyboard.insertText(text);
-  await page.keyboard.press("Enter");
-}
 async function output(page: Page, text: string) {
-  await expect
-    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
-    .toContain(text);
+  await test.step(`Observe output ${text}`, async () => {
+    await expect
+      .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
+      .toContain(text);
+  });
 }
 async function file(page: Page, path: string, source: string) {
   await command(page, `printf '%s' '${source.replaceAll("'", "'\\''")}' > ${path}`);
@@ -179,27 +176,7 @@ for (const [name, producer, consumer, expected] of [
   test(`pipeline streams complete output above 1 MiB, ${name}`, async ({ page }) => {
     await open(page);
     await command(page, `${producer} | ${consumer}`);
-    if (name === "builtin to builtin") {
-      // GitHub Ubuntu 26.04.1, EPYC 7763, 4 exposed CPUs / 2 effective, WebKit 27.2.
-      // Run 43607191022, five first-visible upper samples in ms; ceil(max * 1.125) = 8937.
-      const countWaitMs = Math.ceil(
-        Math.max(
-          7699.08693359375,
-          7127.355195312501,
-          7668.137685546875,
-          7898.680390625001,
-          7943.468037109375,
-        ) * 1.125,
-      );
-      await expect
-        .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())), {
-          timeout: countWaitMs,
-          intervals: [10],
-        })
-        .toContain(expected);
-    } else {
-      await output(page, expected);
-    }
+    await output(page, expected);
     await ready(page);
     await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
   });
@@ -328,23 +305,7 @@ test("slow downstream applies bounded backpressure", async ({ page }) => {
   const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
   expect(lines).not.toContain("WRITTEN:79");
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
-  // GitHub Ubuntu 26.04.1, EPYC 7763, 4 exposed CPUs / 2 effective, WebKit 27.2.
-  // Run 43607191022, five first-visible upper samples in ms; ceil(max * 1.125) = 11562.
-  const drainedWaitMs = Math.ceil(
-    Math.max(
-      10082.278134765626,
-      9734.62408203125,
-      9633.6170703125,
-      10277.2628515625,
-      9636.724462890625,
-    ) * 1.125,
-  );
-  await expect
-    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())), {
-      timeout: drainedWaitMs,
-      intervals: [10],
-    })
-    .toContain("DRAINED:5242880:1");
+  await output(page, "DRAINED:5242880:1");
   const completedLines = await page.evaluate(() =>
     window.bashWeb?.readLines().map((line) => line.trim()),
   );

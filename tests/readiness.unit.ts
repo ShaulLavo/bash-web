@@ -9,6 +9,7 @@ import {
   type ReadinessPoll,
 } from "./helpers/readiness-policy.ts";
 import { STORAGE_READY_TIMEOUT_MS } from "../src/runtime/storage.ts";
+import { OUTCOME_HANG_MS, BROWSER_CASE_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
 function clock(storageReadyAt: number, shellReadyAt: number) {
   let now = 0;
@@ -125,4 +126,25 @@ test("an intentionally unbounded enclosing test remains unbounded", async () => 
     storageBudget(0, (timeout) => timeouts.push(timeout), fixture.now),
   );
   assert.deepEqual(timeouts, []);
+});
+
+test("browser startup observes a slow successful outcome under independent hang guards", async () => {
+  const fixture = clock(8400, 70000);
+  await waitForStartup(fixture.read, fixture.wait, undefined, OUTCOME_HANG_MS);
+  assert.equal(fixture.now(), 70000);
+  assert.deepEqual(
+    fixture.polls.map(({ timeout }) => timeout),
+    [OUTCOME_HANG_MS, OUTCOME_HANG_MS],
+  );
+  // Navigation, storage, shell, command completion and retirement each fit in the case guard.
+  assert.ok(BROWSER_CASE_HANG_MS > 5 * OUTCOME_HANG_MS);
+});
+
+test("browser readiness still reports a genuinely hung shell with its last observation", async () => {
+  const fixture = clock(0, Infinity);
+  await assert.rejects(
+    waitForShellReady(fixture.read, fixture.wait, OUTCOME_HANG_MS),
+    /shell phase.*indexeddb-open-requested/,
+  );
+  assert.equal(fixture.now(), OUTCOME_HANG_MS);
 });

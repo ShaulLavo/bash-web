@@ -2,10 +2,21 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type BrowserContext } from "@playwright/test";
+import { OUTCOME_HANG_MS } from "./outcome-timeouts.ts";
 
 export const opfsTest = test.extend({
   context: async (
-    { context, browserName, playwright, baseURL, viewport, contextOptions, headless },
+    {
+      context,
+      browserName,
+      playwright,
+      baseURL,
+      viewport,
+      contextOptions,
+      headless,
+      actionTimeout,
+      navigationTimeout,
+    },
     use,
   ) => {
     // Pinned WebKit rejects native OPFS in a nonpersistent context.
@@ -17,11 +28,14 @@ export const opfsTest = test.extend({
     let persistent: BrowserContext | undefined;
     try {
       persistent = await playwright.webkit.launchPersistentContext(profile, {
+        timeout: OUTCOME_HANG_MS,
         ...contextOptions,
         baseURL,
         viewport,
         headless,
       });
+      persistent.setDefaultTimeout(actionTimeout);
+      persistent.setDefaultNavigationTimeout(navigationTimeout);
       await use(persistent);
     } finally {
       await persistent?.close();

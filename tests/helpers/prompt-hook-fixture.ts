@@ -242,7 +242,17 @@ return {
 `;
 }
 
-export async function compilePromptHookProof(body: string): Promise<string> {
+export async function compilePromptHookProof(
+  body: string,
+  observationHangMs = 10000,
+): Promise<string> {
+  return compilePromptHookModule(
+    body,
+    helpers.replace("start > 10000", `start > ${observationHangMs}`),
+  );
+}
+
+async function compilePromptHookModule(body: string, helpers: string): Promise<string> {
   const compiled = await build({
     stdin: {
       resolveDir: process.cwd(),

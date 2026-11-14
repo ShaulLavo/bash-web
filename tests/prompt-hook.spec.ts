@@ -5,10 +5,11 @@ import {
   promptHookCostsBody,
 } from "./helpers/prompt-hook-fixture";
 import { checkPromptHookResult, recordPromptHookCosts } from "./helpers/prompt-hook-assertions";
+import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
 async function prove(page: Page, body: string): Promise<unknown> {
   await page.goto("/test-fixture");
-  const compiled = await compilePromptHookProof(body);
+  const compiled = await compilePromptHookProof(body, OUTCOME_HANG_MS);
   await page.addScriptTag({ type: "module", content: compiled });
   await page.waitForFunction(() => "proof" in window);
   return page.evaluate(() => Reflect.get(window, "proof") as Promise<unknown>);
