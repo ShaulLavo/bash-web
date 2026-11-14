@@ -20,7 +20,7 @@
         "@webgpu/types": "0.1.74",
         "bash-web-public": "https://github.com/ShaulLavo/bash-web/releases/download/bash-web-v0.0.110/bash-web-0.0.110.tgz",
         "esbuild": "0.28.2",
-        "ghostty-public": "https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.33-ab50008/ghostty-webgpu.tgz",
+        "ghostty-public": "https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.34-feeb78fa9/ghostty-webgpu.tgz",
         "jscpd": "5.4.1",
         "knip": "6.41.0",
         "oxfmt": "0.70.0",
@@ -654,7 +654,7 @@
 
     "get-tsconfig": ["get-tsconfig@4.14.3", "", { "dependencies": { "resolve-pkg-maps": "^1.0.0" } }, "sha512-++QEw4DIY7WGoukz+/+A/8dGYPT9l9yIadnmSgZ8Rjr3YVSVDipQSO9CdnJo9ePqFqUUqh+wk9uIaoiAwsiPkA=="],
 
-    "ghostty-public": ["ghostty-webgpu@https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.33-ab50008/ghostty-webgpu.tgz", { "dependencies": { "@webgpu/types": "0.1.74" }, "peerDependencies": { "@fregat/hotkeys": "^0.0.3" }, "optionalPeers": ["@fregat/hotkeys"] }, "sha512-b0oRMOeqG9IkOD184yzwsMmr8zqc3BefOqagfQhQ4OE6KtWwSwSbE4ySPUnY8Hm8CR4UnkO2gRjR0NCjNo9DVQ=="],
+    "ghostty-public": ["ghostty-webgpu@https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.34-feeb78fa9/ghostty-webgpu.tgz", { "dependencies": { "@webgpu/types": "0.1.74" }, "peerDependencies": { "@fregat/hotkeys": "^0.0.3" }, "optionalPeers": ["@fregat/hotkeys"] }, "sha512-owt5vvhEVzxafQinN1qQiQjwQHn4+C6KHwpTSV4j3203FxLp+z+a8vBequm18pf+ZfTFhPDT0l2kAAiGbWDpKg=="],
 
     "gopd": ["gopd@1.2.0", "", {}, "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg=="],
 

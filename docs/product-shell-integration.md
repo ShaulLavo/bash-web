@@ -22,7 +22,7 @@ keep this fixture separate from the demo's protected Ghostty source pin.
 | Package                                    | Public release                                       |
 | ------------------------------------------ | ---------------------------------------------------- |
 | Singapore core 0.2.11 and textbuffer 0.2.9 | `singapore-47d5f77a721ef68572f8f729dac7342230f178cb` |
-| Ghostty 0.3.33                             | `v0.3.33-ab50008`                                    |
+| Ghostty 0.3.34                             | `v0.3.34-feeb78fa9`                                  |
 | bash-web adapter and workers 0.0.110       | `bash-web-v0.0.110`                                  |
 | Waffle 0.0.129                             | `waffle-v0.0.129`, host interface 2                  |
 
