@@ -43,6 +43,7 @@ JSON
   "waffle": {
     "hostInterface": 1,
     "version": "${runtime_version}",
+    "tag": "waffle-v0.0.99",
     "revision": "${runtime_direct_revision}",
     "specifier": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v${runtime_version}/waffle-${runtime_version}.tgz",
     "archiveSha256": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -243,6 +244,7 @@ run_pair_fixture() {
   write_fixture "$root" 0.0.105 0.0.13
   write_stubs "$root"
   RELEASE_RUNTIME="$runtime" RELEASE_PROGRAM=0.0.14 GIT_REF_MODE="$mode" run_updater "$root"
+  test "$(jq -r '.waffle.tag' "$root/sources.lock.json")" = "waffle-v${runtime}"
   assert_support_revision "$root" "$([[ "$mode" == annotated ]] && printf '%s' "$runtime_revision" || printf '%s' "$runtime_direct_revision")"
   test "$(jq -r '.wafflePrograms.revision' "$root/sources.lock.json")" = "$program_revision"
   jq -e '.wafflePrograms.runtime == (.waffle | {url: .specifier, bytes: .archiveBytes, sha256: .archiveSha256})' "$root/sources.lock.json" > /dev/null

@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.110",
+  "version": "0.0.111",
   "private": true,
   "description": "WASM-first bash-compatible shell",
   "files": [
