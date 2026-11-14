@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { STORAGE_READY_TIMEOUT_MS } from "../src/runtime/storage.ts";
 import { startupReady } from "./helpers/readiness.ts";
+import { opfsTest } from "./helpers/opfs-test.ts";
+import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
 async function waiting(page: Page) {
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("waiting");
@@ -12,76 +14,78 @@ async function waiting(page: Page) {
 }
 
 for (const storage of ["opfs", "indexeddb"]) {
-  test(`${storage} waits without a shell timeout, then opens when its owning tab closes`, async ({
-    context,
-    page,
-  }) => {
+  const storageTest = storage === "opfs" ? opfsTest : test;
+  storageTest(
+    `${storage} waits without a shell timeout, then opens when its owning tab closes`,
+    async ({ context, page }) => {
+      const query = new URLSearchParams({
+        test: "1",
+        renderer: "canvas",
+        storage,
+        workspace: `bash-web-storage-${randomUUID()}`,
+      });
+      // OPFS defaults to waiting; IndexedDB retains its default takeover behavior unless opted in.
+      if (storage === "indexeddb") query.set("whenBusy", "wait");
+      await page.goto(`/?${query}`);
+      await startupReady(page);
+      const second = await context.newPage();
+      try {
+        query.set("startupTimeout", "3000");
+        await second.goto(`/?${query}`);
+        await waiting(second);
+        await second.waitForTimeout(3300);
+        await waiting(second);
+        await page.close();
+        await startupReady(second);
+        await second.locator("textarea").focus();
+        await second.keyboard.insertText("printf 'storage-resumed\\n'");
+        await second.keyboard.press("Enter");
+        await expect
+          .poll(() => second.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
+          .toContain("storage-resumed");
+      } finally {
+        await second.close();
+      }
+    },
+  );
+}
+
+opfsTest(
+  "awaited disposal cancels queued storage before a replacement runtime is acquired",
+  async ({ context, page }) => {
     const query = new URLSearchParams({
       test: "1",
       renderer: "canvas",
-      storage,
-      workspace: `bash-web-storage-${randomUUID()}`,
+      storage: "opfs",
+      workspace: `bash-web-storage-dispose-${randomUUID()}`,
     });
-    // OPFS defaults to waiting; IndexedDB retains its default takeover behavior unless opted in.
-    if (storage === "indexeddb") query.set("whenBusy", "wait");
     await page.goto(`/?${query}`);
     await startupReady(page);
     const second = await context.newPage();
     try {
-      query.set("startupTimeout", "3000");
       await second.goto(`/?${query}`);
       await waiting(second);
-      await second.waitForTimeout(3300);
+      // This must finish while the other tab still owns the lock, without leaving a queued request.
+      await second.evaluate(() => window.bashWeb?.dispose());
+      expect(await second.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
+      const restarted = second.evaluate(() => window.bashWeb?.restart());
       await waiting(second);
       await page.close();
       await startupReady(second);
-      await second.locator("textarea").focus();
-      await second.keyboard.insertText("printf 'storage-resumed\\n'");
-      await second.keyboard.press("Enter");
-      await expect
-        .poll(() => second.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
-        .toContain("storage-resumed");
+      await restarted;
     } finally {
       await second.close();
     }
-  });
-}
-
-test("awaited disposal cancels queued storage before a replacement runtime is acquired", async ({
-  context,
-  page,
-}) => {
-  const query = new URLSearchParams({
-    test: "1",
-    renderer: "canvas",
-    storage: "opfs",
-    workspace: `bash-web-storage-dispose-${randomUUID()}`,
-  });
-  await page.goto(`/?${query}`);
-  await startupReady(page);
-  const second = await context.newPage();
-  try {
-    await second.goto(`/?${query}`);
-    await waiting(second);
-    // This must finish while the other tab still owns the lock, without leaving a queued request.
-    await second.evaluate(() => window.bashWeb?.dispose());
-    expect(await second.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
-    const restarted = second.evaluate(() => window.bashWeb?.restart());
-    await waiting(second);
-    await page.close();
-    await startupReady(second);
-    await restarted;
-  } finally {
-    await second.close();
-  }
-});
+  },
+);
 
 // Serialized into only the first real filesystem worker response. Keep the native
 // open/schema work, but withhold its success event so storage startup cannot finish.
 function holdIndexedDBOpen() {
-  const open = indexedDB.open.bind(indexedDB);
-  indexedDB.open = (name, version) => {
-    const request = open(name, version);
+  // WebKit can collect the indexedDB wrapper and its own-property hook.
+  const open = IDBFactory.prototype.open;
+  IDBFactory.prototype.open = function (name, version) {
+    const request = open.call(this, name, version);
     request.addEventListener(
       "success",
       (event) => {
@@ -105,7 +109,7 @@ for (const whenBusy of ["takeover", "wait"]) {
     await page.route(
       "**/fs-worker*.js",
       async (route) => {
-        const response = await route.fetch();
+        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
         await route.fulfill({
           response,
           body: `(${holdIndexedDBOpen.toString()})();\n${await response.text()}`,
@@ -202,7 +206,7 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
     await second.route(
       "**/fs-worker*.js",
       async (route) => {
-        const response = await route.fetch();
+        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
         await route.fulfill({
           response,
           body: `(${holdIndexedDBEpoch.toString()})();\n${await response.text()}`,

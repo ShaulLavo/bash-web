@@ -1,19 +1,13 @@
 import { test, expect, type Page } from "./helpers/browser-test";
-import { ready, startupReady } from "./helpers/readiness.ts";
+import { command } from "./helpers/shell-browser.ts";
+import { ready, startupReady, prepareOwnShell } from "./helpers/readiness.ts";
 import { pipelinePeak, type ProcessRoot } from "./helpers/pipeline-peak.ts";
-
-test.setTimeout(60000);
+import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
 async function open(page: Page) {
-  await page.goto("/?test=1&renderer=canvas&engine=own-shell");
-  await startupReady(page);
-  expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
+  await prepareOwnShell(page);
   await page.locator("textarea").focus();
   return page.workers().length;
-}
-async function command(page: Page, source: string) {
-  await page.keyboard.insertText(source);
-  await page.keyboard.press("Enter");
 }
 async function output(page: Page, expected: string, afterPrompt = false) {
   await expect
@@ -748,24 +742,13 @@ test("an accumulating consumer cannot make the shell or transport buffer its inp
   let peakPipes = 0;
   let peak = before.roots[0];
   await command(page, "seq 1 2000000 | test-guest delayed-count 500 ACCUMULATED");
-  const deadline = Date.now() + 45000;
-  while (Date.now() < deadline) {
-    const sample = await page.evaluate(() => ({
-      runtime: window.bashWeb!.runtimeSnapshot()!,
-      done: window
-        .bashWeb!.readLines()
-        .some((line) => line.trim() === "ACCUMULATED:14888896:2000001"),
-    }));
-    const root = sample.runtime.roots[0];
+  await sampleUntilOutput(page, "ACCUMULATED:14888896:2000001", (runtime) => {
+    const root = runtime.roots[0];
     peakShell = Math.max(peakShell, root.memoryBytes);
     peakPipes = Math.max(peakPipes, root.pipes);
     peak = pipelinePeak(peak, root);
-    expect(sample.runtime.terminal.outputQueued).toBeLessThanOrEqual(
-      sample.runtime.terminal.outputCapacity,
-    );
-    if (sample.done) break;
-    await page.waitForTimeout(20);
-  }
+    expect(runtime.terminal.outputQueued).toBeLessThanOrEqual(runtime.terminal.outputCapacity);
+  });
   await output(page, "ACCUMULATED:14888896:2000001");
   await ready(page);
   expect(peakShell - baseMemory).toBeLessThanOrEqual(8 * 1024 * 1024);
@@ -824,21 +807,36 @@ test("a slow terminal applies backpressure without growing the shell or output q
   let peakShell = before.roots[0].memoryBytes;
   const line = "x".repeat(8191) + "\\n";
   await command(page, `test-guest emit $'${line}' 512; echo SLOW_TERMINAL_DONE`);
-  const deadline = Date.now() + 45000;
-  while (Date.now() < deadline) {
-    const sample = await page.evaluate(() => ({
-      runtime: window.bashWeb!.runtimeSnapshot()!,
-      done: window.bashWeb!.readLines().some((line) => line.trim() === "SLOW_TERMINAL_DONE"),
-    }));
-    peakQueue = Math.max(peakQueue, sample.runtime.terminal.outputQueued);
-    peakShell = Math.max(peakShell, sample.runtime.roots[0].memoryBytes);
-    expect(sample.runtime.terminal.outputQueued).toBeLessThanOrEqual(262144);
-    if (sample.done) break;
-    await page.waitForTimeout(20);
-  }
+  await sampleUntilOutput(page, "SLOW_TERMINAL_DONE", (runtime) => {
+    peakQueue = Math.max(peakQueue, runtime.terminal.outputQueued);
+    peakShell = Math.max(peakShell, runtime.roots[0].memoryBytes);
+    expect(runtime.terminal.outputQueued).toBeLessThanOrEqual(262144);
+  });
   await output(page, "SLOW_TERMINAL_DONE");
   await ready(page);
   expect(peakQueue).toBeGreaterThan(0);
   expect(peakShell - before.roots[0].memoryBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
   await expect.poll(() => page.workers().length).toBe(baselineWorkers);
 });
+
+function outputSample(marker: string) {
+  return {
+    runtime: window.bashWeb!.runtimeSnapshot()!,
+    done: window.bashWeb!.readLines().some((line) => line.trim() === marker),
+  };
+}
+
+async function sampleUntilOutput(
+  page: Page,
+  marker: string,
+  inspect: (runtime: ReturnType<typeof outputSample>["runtime"]) => void,
+) {
+  const started = Date.now();
+  while (true) {
+    const sample = await page.evaluate(outputSample, marker);
+    inspect(sample.runtime);
+    if (sample.done) return;
+    if (Date.now() - started >= OUTCOME_HANG_MS) throw new Error(`Output hang guard: ${marker}`);
+    await page.waitForTimeout(20);
+  }
+}

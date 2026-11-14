@@ -13,14 +13,14 @@
       "devDependencies": {
         "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz",
         "@playwright/test": "1.64.0",
-        "@singapore-editor/core": "https://github.com/ShaulLavo/singapore/releases/download/singapore-f0402824ffedcbd5087844adde151e0592aab04e/singapore-editor-core-0.2.10.tgz",
-        "@singapore-editor/textbuffer": "https://github.com/ShaulLavo/singapore/releases/download/singapore-f0402824ffedcbd5087844adde151e0592aab04e/singapore-editor-textbuffer-0.2.9.tgz",
+        "@singapore-editor/core": "https://github.com/ShaulLavo/singapore/releases/download/singapore-47d5f77a721ef68572f8f729dac7342230f178cb/singapore-editor-core-0.2.11.tgz",
+        "@singapore-editor/textbuffer": "https://github.com/ShaulLavo/singapore/releases/download/singapore-47d5f77a721ef68572f8f729dac7342230f178cb/singapore-editor-textbuffer-0.2.9.tgz",
         "@types/bun": "1.4.4",
         "@types/node": "26.6.3",
         "@webgpu/types": "0.1.74",
         "bash-web-public": "https://github.com/ShaulLavo/bash-web/releases/download/bash-web-v0.0.110/bash-web-0.0.110.tgz",
         "esbuild": "0.28.2",
-        "ghostty-public": "https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.33-ab50008/ghostty-webgpu.tgz",
+        "ghostty-public": "https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.34-feeb78fa9/ghostty-webgpu.tgz",
         "jscpd": "5.4.1",
         "knip": "6.41.0",
         "oxfmt": "0.70.0",
@@ -40,7 +40,7 @@
     "esbuild",
   ],
   "overrides": {
-    "@singapore-editor/textbuffer": "https://github.com/ShaulLavo/singapore/releases/download/singapore-f0402824ffedcbd5087844adde151e0592aab04e/singapore-editor-textbuffer-0.2.9.tgz",
+    "@singapore-editor/textbuffer": "https://github.com/ShaulLavo/singapore/releases/download/singapore-47d5f77a721ef68572f8f729dac7342230f178cb/singapore-editor-textbuffer-0.2.9.tgz",
     "esbuild": "0.28.2",
   },
   "packages": {
@@ -496,9 +496,9 @@
 
     "@shikijs/vscode-textmate": ["@shikijs/vscode-textmate@10.1.0", "", {}, "sha512-cVBuhDQjBZaNMTwBquYfPydrUP+E3hE6oYGasx8h6ZrODIM7/r+gxLDXdd66oszbrggZHEntdE6j+5gYIVyMWQ=="],
 
-    "@singapore-editor/core": ["@singapore-editor/core@https://github.com/ShaulLavo/singapore/releases/download/singapore-f0402824ffedcbd5087844adde151e0592aab04e/singapore-editor-core-0.2.10.tgz", { "dependencies": { "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz", "@shikijs/engine-oniguruma": "4.4.3", "@singapore-editor/textbuffer": "0.2.9", "diff": "^9.0.0", "evlog": "^2.29.0", "shiki": "^4.4.3" } }, "sha512-a/jXEN2Yfr2qQOO4TZox8oco7vR9HcUmyURH/terZIuEFewGQ9TpK1mXo14cLPAKNRegSh3WfDUEv0tg39Y0hQ=="],
+    "@singapore-editor/core": ["@singapore-editor/core@https://github.com/ShaulLavo/singapore/releases/download/singapore-47d5f77a721ef68572f8f729dac7342230f178cb/singapore-editor-core-0.2.11.tgz", { "dependencies": { "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz", "@shikijs/engine-oniguruma": "4.4.3", "@singapore-editor/textbuffer": "0.2.9", "diff": "^9.0.0", "evlog": "^2.29.0", "shiki": "^4.4.3" } }, "sha512-jZcjKViH94UZ+NesQTXbazh/dVdU5HwJD2XKb6dATxc2/DWDWLHwv7yNKqTPQtbAuMU7XblK8x+HJW0mdw9OfA=="],
 
-    "@singapore-editor/textbuffer": ["@singapore-editor/textbuffer@https://github.com/ShaulLavo/singapore/releases/download/singapore-f0402824ffedcbd5087844adde151e0592aab04e/singapore-editor-textbuffer-0.2.9.tgz", {}, "sha512-Z6kp46tKmtjGrizpQbzL2/Ifhd+nkEssNc2VYgib6bJ9gmsVnd+TEDmPon64mN+/Y1x0eO7SBqnYJqedLL3FAQ=="],
+    "@singapore-editor/textbuffer": ["@singapore-editor/textbuffer@https://github.com/ShaulLavo/singapore/releases/download/singapore-47d5f77a721ef68572f8f729dac7342230f178cb/singapore-editor-textbuffer-0.2.9.tgz", {}, "sha512-Z6kp46tKmtjGrizpQbzL2/Ifhd+nkEssNc2VYgib6bJ9gmsVnd+TEDmPon64mN+/Y1x0eO7SBqnYJqedLL3FAQ=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
@@ -654,7 +654,7 @@
 
     "get-tsconfig": ["get-tsconfig@4.14.3", "", { "dependencies": { "resolve-pkg-maps": "^1.0.0" } }, "sha512-++QEw4DIY7WGoukz+/+A/8dGYPT9l9yIadnmSgZ8Rjr3YVSVDipQSO9CdnJo9ePqFqUUqh+wk9uIaoiAwsiPkA=="],
 
-    "ghostty-public": ["ghostty-webgpu@https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.33-ab50008/ghostty-webgpu.tgz", { "dependencies": { "@webgpu/types": "0.1.74" }, "peerDependencies": { "@fregat/hotkeys": "^0.0.3" }, "optionalPeers": ["@fregat/hotkeys"] }, "sha512-b0oRMOeqG9IkOD184yzwsMmr8zqc3BefOqagfQhQ4OE6KtWwSwSbE4ySPUnY8Hm8CR4UnkO2gRjR0NCjNo9DVQ=="],
+    "ghostty-public": ["ghostty-webgpu@https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.34-feeb78fa9/ghostty-webgpu.tgz", { "dependencies": { "@webgpu/types": "0.1.74" }, "peerDependencies": { "@fregat/hotkeys": "^0.0.3" }, "optionalPeers": ["@fregat/hotkeys"] }, "sha512-owt5vvhEVzxafQinN1qQiQjwQHn4+C6KHwpTSV4j3203FxLp+z+a8vBequm18pf+ZfTFhPDT0l2kAAiGbWDpKg=="],
 
     "gopd": ["gopd@1.2.0", "", {}, "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg=="],
 

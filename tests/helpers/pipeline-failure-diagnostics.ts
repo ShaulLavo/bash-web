@@ -1,3 +1,5 @@
+import { OUTCOME_HANG_MS } from "./outcome-timeouts.ts";
+
 export interface WorkerIdentity {
   id: number;
   name: string;
@@ -207,12 +209,12 @@ export async function waitForPipelineWorkerRetirement(
   baseline: PipelineWorkerRetirementBaseline,
   options: WaitForPipelineWorkerRetirementOptions = {},
 ): Promise<void> {
-  const timeoutMs = options.timeoutMs ?? 5_000;
+  const timeoutMs = options.timeoutMs ?? OUTCOME_HANG_MS;
   const pollIntervalMs = options.pollIntervalMs ?? 100;
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? ((milliseconds: number) => delay(milliseconds));
   const deadline = now() + timeoutMs;
-  const retirementGraceMs = options.retirementGraceMs ?? 3_000;
+  const retirementGraceMs = options.retirementGraceMs ?? 0;
   let retirementDeadline: number | undefined;
   let observation = await observe();
 

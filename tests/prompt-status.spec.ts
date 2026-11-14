@@ -5,17 +5,7 @@ import { checkPromptStatusReceipts } from "./helpers/prompt-status-receipts.ts";
 test("public API retains completed status and resumes a handled reader in Chromium", async ({
   page,
 }) => {
-  await page.route("**/prompt-status-fixture", (route) =>
-    route.fulfill({
-      contentType: "text/html",
-      headers: {
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cross-Origin-Embedder-Policy": "require-corp",
-      },
-      body: "<!doctype html><title>Prompt API</title>",
-    }),
-  );
-  await page.goto("/prompt-status-fixture");
+  await page.goto("/test-fixture");
   const compiled = await build({
     stdin: {
       resolveDir: process.cwd(),

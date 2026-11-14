@@ -23,6 +23,13 @@ const server = createServer(async (request, response) => {
   }
   try {
     const path = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
+    if (process.env.BASH_WEB_TEST_FIXTURES === "1" && path === "/test-fixture") {
+      response.setHeader("Content-Type", "text/html; charset=utf-8");
+      response.end(
+        request.method === "HEAD" ? undefined : "<!doctype html><title>Test fixture</title>",
+      );
+      return;
+    }
     const file = resolve(root, `.${path === "/" ? "/index.html" : path}`);
     if (!file.startsWith(root + sep) || !(await stat(file)).isFile()) {
       response.writeHead(404);

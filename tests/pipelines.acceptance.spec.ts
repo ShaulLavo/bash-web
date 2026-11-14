@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "./helpers/browser-test";
-import { ready, startupReady } from "./helpers/readiness.ts";
+import { command } from "./helpers/shell-browser.ts";
+import { ready, prepareOwnShell } from "./helpers/readiness.ts";
 
 import { execFileSync } from "node:child_process";
 import {
@@ -15,20 +16,16 @@ import {
 const baselineWorkers = new WeakMap<Page, number>();
 
 async function open(page: Page) {
-  await page.goto("/?test=1&renderer=canvas&engine=own-shell");
-  await startupReady(page);
-  expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
+  await prepareOwnShell(page);
   baselineWorkers.set(page, page.workers().length);
   await page.locator("textarea").focus();
 }
-async function command(page: Page, text: string) {
-  await page.keyboard.insertText(text);
-  await page.keyboard.press("Enter");
-}
 async function output(page: Page, text: string) {
-  await expect
-    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
-    .toContain(text);
+  await test.step(`Observe output ${text}`, async () => {
+    await expect
+      .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
+      .toContain(text);
+  });
 }
 async function file(page: Page, path: string, source: string) {
   await command(page, `printf '%s' '${source.replaceAll("'", "'\\''")}' > ${path}`);

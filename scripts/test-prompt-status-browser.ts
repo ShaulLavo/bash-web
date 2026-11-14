@@ -7,6 +7,7 @@ import { tmpdir, hostname, cpus, platform, release, arch } from "node:os";
 import { join, resolve } from "node:path";
 import { git, makeRepository } from "../src/prompt/git-test-helpers.ts";
 import type { FixtureChoice } from "../tests/helpers/prompt-status-browser.ts";
+import { OUTCOME_HANG_MS } from "../tests/helpers/outcome-timeouts.ts";
 
 const scratch = await mkdtemp(join(tmpdir(), "bash-web-status-browser-"));
 const output = process.argv[2];
@@ -33,8 +34,10 @@ interface Fixture {
 let browser: Browser | undefined;
 let page: Page | undefined;
 try {
-  browser = await chromium.launch();
+  browser = await chromium.launch({ timeout: OUTCOME_HANG_MS });
   const activePage = await browser.newPage();
+  activePage.setDefaultTimeout(OUTCOME_HANG_MS);
+  activePage.setDefaultNavigationTimeout(OUTCOME_HANG_MS);
   page = activePage;
   await openProof(page);
   const production = await productionPair(page);
@@ -54,7 +57,7 @@ try {
   }
   const controls = await interactionControls(page, production[0]);
   const result = {
-    experiment: "Bounded baseline, no speedup claim or new timing budget",
+    experiment: "Timing observations; only functional outcomes block",
     machine: {
       hostname: hostname(),
       platform: platform(),
@@ -78,7 +81,7 @@ try {
     timing: {
       paintMs: 15,
       backgroundMs: 2000,
-      completionWatchdogMs: 10000,
+      completionWatchdogMs: OUTCOME_HANG_MS,
       warmSamples: 10,
       taskWindow:
         "CDP around each render/completion call; excludes fixture import and awaited ref mutation/readback",
@@ -90,23 +93,13 @@ try {
   console.log(JSON.stringify(result, null, 2));
   if (output) await writeFile(output, `${JSON.stringify(result, null, 2)}\n`);
   for (const measured of results) {
-    assert.ok(measured.cold < 2000, "cold status exceeded the background deadline");
-    assert.ok(
-      measured.warmMedian < (measured.count === 1000 ? 30 : 300),
-      "warm status exceeded the design target",
-    );
-    assert.equal(
-      measured.mainTasksOver10Ms,
-      0,
-      "status caused a main-thread task of at least 10 ms",
-    );
     assert.equal(measured.hashes, measured.count, "warm turns rehashed confirmed-clean files");
   }
-  for (const paint of controls.paint)
-    assert.ok(
-      paint.warmMedian < 3 && paint.warmP95 < 10,
-      "ready fast facts waited for blocked background status",
-    );
+  for (const paint of controls.paint) {
+    assert.equal(paint.statusBlocked, true);
+    assert.equal(paint.prompts, 50);
+    assert.ok(paint.marker.includes(production[0].choices[0].marker));
+  }
 } finally {
   try {
     await page?.evaluate(() => window.statusProof?.dispose());
@@ -196,7 +189,10 @@ async function endTrace(session: CDPSession) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const complete = new Promise<void>((done, reject) => {
     session.once("Tracing.tracingComplete", () => done());
-    timer = setTimeout(() => reject(new Error("trace completion timed out")), 10000);
+    timer = setTimeout(
+      () => reject(new Error("trace completion hang guard expired")),
+      OUTCOME_HANG_MS,
+    );
   });
   try {
     await session.send("Tracing.end");

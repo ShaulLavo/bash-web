@@ -2,12 +2,41 @@ import { test, expect, type Page } from "./helpers/browser-test";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
 test.beforeEach(async ({ page }) => {
-  await page.setViewportSize({ width: 420, height: 220 });
+  const viewport = { width: 420, height: 220 };
+  await page.setViewportSize(viewport);
   await page.goto("/?test=1&renderer=canvas");
   await startupReady(page);
+  // Shell readiness can precede the terminal's asynchronous initial fit.
+  await expect.poll(() => page.evaluate(initialGeometryReady, viewport)).toBe(true);
   await page.locator("textarea").focus();
   await expect.poll(() => text(page)).toEqual(["$"]);
 });
+
+async function initialGeometryReady(viewport: Parameters<Page["setViewportSize"]>[0]) {
+  await document.fonts.ready;
+  const terminal = window.bashWeb?.terminal;
+  const canvas = terminal?.canvas;
+  const element = terminal?.element;
+  const frame = terminal?.submittedFrame;
+  if (!terminal || !canvas || !element || !frame || terminal.hasPendingFrame) return false;
+  const geometry = terminal.geometry();
+  const grid = terminal.appearance.grid;
+  return (
+    document.fonts.status === "loaded" &&
+    innerWidth === viewport.width &&
+    innerHeight === viewport.height &&
+    canvas.clientWidth > 0 &&
+    canvas.clientHeight > 0 &&
+    canvas.clientWidth <= element.clientWidth &&
+    canvas.clientHeight <= element.clientHeight &&
+    canvas.width / frame.font.pixelRatio <= element.clientWidth &&
+    canvas.height / frame.font.pixelRatio <= element.clientHeight &&
+    frame.grid.columns === geometry.columns &&
+    frame.grid.rows === geometry.rows &&
+    grid.columns === geometry.columns &&
+    grid.rows === geometry.rows
+  );
+}
 
 /** Every row, history included, without trailing blank rows. */
 async function text(page: Page) {
@@ -38,8 +67,13 @@ test("Enter and Ctrl+C on a wrapped command's first row keep its rows intact", a
   await ready(page);
   const first = `$ echo ${tail.slice(0, columns - 7)}`;
   await expect.poll(() => text(page)).toEqual([first, "x".repeat(7), tail, "$"]);
+  // Ctrl+C drops unread input. Observe the draft and Home before cancelling.
   await page.keyboard.insertText("echo abc");
+  await expect.poll(() => text(page)).toEqual([first, "x".repeat(7), tail, "$ echo abc"]);
   await page.keyboard.press("Home");
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb!.terminal!.geometry().cursor.x))
+    .toBe(2);
   await page.keyboard.press("Control+c");
   await expect.poll(() => text(page)).toEqual([first, "x".repeat(7), tail, "$ echo abc^C", "$"]);
 });

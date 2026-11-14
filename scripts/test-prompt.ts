@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BROWSER_CASE_HANG_MS } from "../tests/helpers/outcome-timeouts.ts";
 
 const scratch = await mkdtemp(join(tmpdir(), "bash-web-prompt-tests-"));
 try {
@@ -20,9 +21,13 @@ try {
     logLevel: "silent",
   });
   const paths = entries.map((entry) => join(scratch, entry.replace(/\.ts$/, ".mjs")));
-  const child = spawn(process.execPath, ["--test", "--test-timeout=15000"].concat(paths), {
-    stdio: "inherit",
-  });
+  const child = spawn(
+    process.execPath,
+    ["--test", `--test-timeout=${BROWSER_CASE_HANG_MS}`].concat(paths),
+    {
+      stdio: "inherit",
+    },
+  );
   await new Promise<void>((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", (code) =>

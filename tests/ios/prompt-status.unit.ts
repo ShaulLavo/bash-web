@@ -112,9 +112,9 @@ test("collector checks the full actual body result and teardown", () => {
   );
 });
 
-test("the original setup/body clock and separate diagnostic teardown clock remain bounded", async () => {
+test("native setup/body and teardown clocks remain independent of browser hang caps", async () => {
   const original = await readFile("playwright.config.ts", "utf8");
-  assert.match(original, /timeout: 60000,/);
+  assert.match(original, /timeout: BROWSER_CASE_HANG_MS,/);
   assert.deepEqual(promptStatusAdapter.budgets(1), {
     hello: 20_000,
     heartbeat: 10_000,
