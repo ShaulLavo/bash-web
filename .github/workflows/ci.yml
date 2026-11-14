@@ -1,4 +1,5 @@
 name: Shell
+run-name: ${{ inputs.main_source && format('Qualify main {0}', inputs.main_source) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 on:
   push:
     branches:
@@ -6,6 +7,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+    inputs:
+      main_source:
+        description: Full SHA of current main to qualify without changing its source
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -13,8 +19,92 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  main-qualification:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.main_source != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      CARGO_TARGET_DIR: .build/shell
+      WASI_LIBC_JOBS: "2"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: main-qualification-npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci --ignore-scripts
+      - name: Validate requested commit
+        env:
+          MAIN_SOURCE: ${{ inputs.main_source }}
+        run: '[[ "$MAIN_SOURCE" =~ ^[a-f0-9]{40}$ ]]'
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.main_source }}
+          path: .measured-main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind exact main source
+        run: node scripts/shell-scoreboard-main-dispatch.ts prepare "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .measured-main/shell -> ../.build/shell
+          cache-all-crates: true
+          cache-workspace-crates: true
+          cache-directories: .measured-main/.build/wasi-libc
+      - uses: ./.github/actions/wasi-sdk
+      - name: Build unchanged main source
+        working-directory: .measured-main
+        run: |
+          npm ci --ignore-scripts
+          npm run build:worker
+          npm run build:node-harness
+          npm run build:shell
+      - name: Observe unchanged main source
+        working-directory: .measured-main
+        run: npm run compat:shell:prebuilt
+        env:
+          BASH_COMPAT_JOBS: "4"
+          BASH_COMPAT_SKIP_BUILD: "1"
+          BASH_COMPAT_RECORD: "0"
+          BASH_COMPAT_RAW: "1"
+          BASH_COMPAT_OUT: ${{ runner.temp }}/main-score/score.json
+          BASH_COMPAT_SCRATCH: ${{ runner.temp }}
+      - name: Seal exact main raw score
+        run: node scripts/shell-scoreboard-main-dispatch.ts seal "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
+      - name: Upload exact main raw score
+        uses: actions/upload-artifact@v4
+        with:
+          name: own-shell-main-raw-${{ inputs.main_source }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/main-score/raw.json
+          retention-days: 90
+          if-no-files-found: error
+      - name: Fold exact main floor
+        run: node scripts/shell-scoreboard-main-dispatch.ts fold "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Upload exact main floor
+        uses: actions/upload-artifact@v4
+        with:
+          name: own-shell-main-floor-${{ inputs.main_source }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/main-score/floor.json
+          retention-days: 90
+          if-no-files-found: error
   changes:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -38,7 +128,7 @@ jobs:
               - '!LICENSE'
 
   prepare:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -71,7 +161,7 @@ jobs:
           compression-level: 0
           retention-days: 1
   layers:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -96,7 +186,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   quality:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -114,7 +204,7 @@ jobs:
       - run: npm run typecheck:guest-build
       - run: npm run typecheck:ci
   native:
-    if: ${{ needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: [prepare, changes]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -185,7 +275,7 @@ jobs:
           retention-days: 3
   # Downstream jobs need only native's builds, so its tests run beside them.
   native-checks:
-    if: ${{ needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: [prepare, changes]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -231,7 +321,7 @@ jobs:
           cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
           npm run test:terminal:display
   wasi:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -252,7 +342,7 @@ jobs:
           ulimit -c 0
           npm run test:shell:wasi -- --prebuilt .build/ci-native
   fuzz:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -288,7 +378,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
   own-shell-scoreboard:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -335,7 +425,7 @@ jobs:
         env:
           SCOREBOARD_TEST_SHARD: ${{ matrix.shard }}/3
   own-shell-observation:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     permissions:
       contents: read
       actions: read
@@ -392,7 +482,7 @@ jobs:
             ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
   own-shell-compatibility:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     outputs:
       raw-artifact-id: ${{ steps.raw-upload.outputs.artifact-id }}
     permissions:
@@ -429,7 +519,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   score-floor:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - own-shell-compatibility
@@ -475,7 +565,7 @@ jobs:
         run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
   # Playwright runs one worker per runner, so the suite is sharded across runners.
   browser:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -543,6 +633,7 @@ jobs:
           retention-days: 3
   shell:
     needs:
+      - main-qualification
       - changes
       - prepare
       - layers
@@ -570,6 +661,8 @@ jobs:
       - name: Require every check
         id: verdict
         env:
+          MAIN_SOURCE: ${{ inputs.main_source }}
+          MAIN_QUALIFICATION: ${{ needs.main-qualification.result }}
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
           PREPARE: ${{ needs.prepare.result }}
@@ -577,17 +670,23 @@ jobs:
           QUALITY: ${{ needs.quality.result }}
           RESULTS: ${{ toJSON(needs) }}
         run: |
+          if [[ -n "$MAIN_SOURCE" ]]; then
+            [[ "$MAIN_QUALIFICATION" == success ]]
+            echo "$RESULTS" | jq -e 'del(."main-qualification") | all(.[]; .result == "skipped")'
+            exit 0
+          fi
+          [[ "$MAIN_QUALIFICATION" == skipped ]]
           [[ $CHANGES == success && $PREPARE == success && $LAYERS == success && $QUALITY == success ]]
           case "$CODE" in
             true) expected=success ;;
             false) expected=skipped ;;
             *) exit 1 ;;
           esac
-          echo "$RESULTS" | jq -e --arg expected "$expected" 'del(.changes, .prepare, .layers, .quality) | all(.[]; .result == $expected)'
+          echo "$RESULTS" | jq -e --arg expected "$expected" 'del(."main-qualification", .changes, .prepare, .layers, .quality) | all(.[]; .result == $expected)'
 
       # Dispatch job checks do not satisfy PR requirements. Commit statuses do.
       - name: Report the real CI verdict on the tested commit
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/waffle-updates' }}
+        if: ${{ always() && inputs.main_source == '' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/waffle-updates' }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
