@@ -33,6 +33,19 @@ for (const code of [2, 130, 143]) {
   });
 }
 
+test(
+  "self targets honor root ignores and reject unsupported caught actions",
+  { timeout: 60000 },
+  async (context) => {
+    const f = await fixture(context);
+    const child = await f.spawn(
+      `trap '' INT; kill -INT $$; printf 'ignored:%s\\n' $?; trap 'printf forbidden' INT; kill -INT $$; printf 'caught:%s\\n' $?; trap '' TERM; (trap - TERM; kill -TERM $$; printf 'root:%s\\n' $?); [ "$BASHPID" = "$$" ] && printf pid-matches`,
+    );
+    assert.deepEqual(await child.exit, { kind: "exited", code: 0, status: 0 });
+    assert.equal(f.parent.output.join(""), "ignored:0\ncaught:2\nroot:0\npid-matches");
+  },
+);
+
 for (const [name, code] of [
   ["INT", 2],
   ["TERM", 15],

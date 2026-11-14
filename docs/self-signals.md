@@ -3,6 +3,9 @@
 The runtime-backed shell expands `$$` and `${$}` to its Waffle process ID.
 Subshells and command substitutions retain that identity, as GNU Bash does.
 The same expansion works inside a selected parameter operand, such as `${value:-$$}`.
+`BASHPID` reports the current Waffle guest PID. Assigning it does not replace the
+active PID hook; unsetting it removes that hook. Engine subshells are tasks in
+the same guest, so they do not get GNU Bash's distinct forked `BASHPID` values.
 An engine-only embedding supplies this identity through `ProcessHost::shell_pid`.
 Without a supplied identity, the expansion is empty.
 
@@ -20,7 +23,11 @@ Other numeric kill operands remain synthetic async handles, including `$!`.
 The allocator excludes the shell's PID so a handle cannot alias a self-signal.
 `%job` operands retain job-group signaling. Arbitrary OS or runtime PID operands,
 process-group operands, multiple targets, and signal-trap execution are outside
-this support. Trap registration does not change runtime signal dispositions.
+this support. Self-targets consult the root shell's trap registration, even from
+an isolated child. An ignored signal returns success without delivery. A caught
+signal returns unsupported status 2 without executing the registered action.
+SIGKILL always retains its default action. External signal disposition changes
+from trap registration remain unsupported.
 
 Native runtime controls check expansion, snapshot inheritance, signal dispatch,
 and distinct async handles. `scripts/test-own-shell-self-signal.ts` runs the real

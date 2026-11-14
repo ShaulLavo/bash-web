@@ -198,6 +198,7 @@ pub struct State {
     last_async: Option<String>,
     /// Unsetting EPOCHREALTIME permanently removes its dynamic-variable hook.
     epoch_realtime: bool,
+    bashpid_special: bool,
     /// Unsetting FUNCNAME permanently removes its call-stack projection.
     funcname_special: bool,
     pub(crate) star_separator: StarSeparator,
@@ -263,6 +264,7 @@ impl Default for State {
             monitor: false,
             last_async: None,
             epoch_realtime: true,
+            bashpid_special: true,
             funcname_special: true,
             star_separator: StarSeparator::Live,
             ifs_members: None,
@@ -517,6 +519,7 @@ impl State {
             monitor: state.monitor,
             last_async,
             epoch_realtime: state.epoch_realtime,
+            bashpid_special: state.bashpid_special,
             funcname_special: state.funcname_special,
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
@@ -554,6 +557,15 @@ impl State {
         self.epoch_realtime = true;
     }
     pub(crate) fn dynamic_parameter(&self, name: &str) -> bool {
+        if self.bashpid_special
+            && self.shell_pid.is_some()
+            && matches!(
+                self.resolve_scalar_target(name),
+                ScalarResolution::Target("BASHPID")
+            )
+        {
+            return true;
+        }
         self.epoch_realtime
             && !self.epoch_realtime_shadowed()
             && matches!(
@@ -588,6 +600,12 @@ impl State {
     }
     pub(crate) fn parameter(&self, name: &str) -> Cow<'_, str> {
         if self.dynamic_parameter(name) {
+            if matches!(
+                self.resolve_scalar_target(name),
+                ScalarResolution::Target("BASHPID")
+            ) {
+                return Cow::Owned(self.shell_pid.expect("active PID hook").to_string());
+            }
             use std::{
                 fmt::Write,
                 time::{SystemTime, UNIX_EPOCH},
@@ -1513,6 +1531,9 @@ impl State {
         }
         if name == "FUNCNAME" {
             self.funcname_special = false;
+        }
+        if name == "BASHPID" {
+            self.bashpid_special = false;
         }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();
