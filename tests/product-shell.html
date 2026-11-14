@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Product shell integration fixture</title>
+    <style>
+      body {
+        margin: 20px;
+        font-family: monospace;
+      }
+      #editor {
+        position: relative;
+        width: 800px;
+        height: 180px;
+        border: 1px solid;
+      }
+      #terminal {
+        width: 800px;
+        height: 260px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Release integration fixture</h1>
+    <div id="editor"></div>
+    <button id="save">Save script</button>
+    <div id="terminal"></div>
+    <button id="dispose-views">Dispose views</button>
+    <button id="dispose-runtime">Dispose runtime</button>
+    <output id="status">starting</output>
+    <script type="module" src="./helpers/product-shell-page.ts"></script>
+  </body>
+</html>

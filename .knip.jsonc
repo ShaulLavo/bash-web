@@ -18,6 +18,7 @@
     "scripts/test-prompt-hook-ios.ts",
     "scripts/test-prompt-status-ios.ts",
     "tests/helpers/git-consumer.ts",
+    "tests/helpers/product-shell-page.ts",
     "tests/helpers/native-return-worker.ts",
     "tests/types/prompt-consumer/consumer.ts",
     "scripts/bash-compat-worker.ts",
@@ -40,8 +41,9 @@
     "src/session.ts": ["exports", "types"],
   },
   // Ghostty is a pinned source alias outside our graph. It consumes the hotkeys tarball.
+  // Singapore core consumes the exact public textbuffer archive through its override.
   // The duplicate-check driver spawns the pinned jscpd executable by path.
-  "ignoreDependencies": ["ghostty-webgpu", "@fregat/hotkeys", "jscpd"],
+  "ignoreDependencies": ["ghostty-webgpu", "@singapore-editor/textbuffer", "jscpd"],
   // WASI qualification and CPython's native build require these system tools.
   "ignoreBinaries": ["wasmtime"],
 }
