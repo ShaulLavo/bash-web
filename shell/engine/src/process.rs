@@ -270,6 +270,14 @@ macro_rules! forward_process_waits {
 pub use forward_process_waits;
 
 pub trait ProcessHost {
+    /// The embedding's shell process, distinct from synthetic async job handles.
+    fn shell_pid(&self) -> Option<ProcessId> {
+        None
+    }
+    /// Publish a real signal to this shell process, preserving the host outcome tag.
+    fn signal_self(&self, _signal: i32) -> Result<(), ProcessError> {
+        Err(ProcessError::Runtime(58))
+    }
     /// Allocate a group ID synchronously, without running command work. IDs are
     /// unique for the lifetime of this host, including through shared handles and
     /// after groups are reaped. Independent clients sharing a host must use this

@@ -5,6 +5,7 @@ export { ProcessABI } from "waffle/proc/abi";
 export { PipeController } from "waffle/proc/pipes";
 export { ExecutableRegistry } from "waffle/proc/registry";
 export { ProcessSupervisor } from "waffle/proc/supervisor";
+export { createSignalParent } from "./own-shell-signal-parent.ts";
 export {
   createWorkerProcessTransport,
   workerProcessSlots,

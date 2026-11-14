@@ -3,6 +3,8 @@ use super::*;
 use crate::io::DescriptorKind;
 #[link(wasm_import_module = "runtime_proc")]
 unsafe extern "C" {
+    #[link_name = "getpid"]
+    fn proc_getpid() -> u32;
     #[link_name = "access_start"]
     fn proc_access_start(
         path_ptr: *const u8,
@@ -125,6 +127,12 @@ impl support::Abi for WasiAbi {
 }
 
 impl Abi for WasiAbi {
+    fn shell_pid(&self) -> Option<u32> {
+        Some(unsafe { proc_getpid() })
+    }
+    fn signal_self(&self, signal: i32) -> Result<(), i32> {
+        result(unsafe { proc_signal(signal, 3) }).map(|_| ())
+    }
     fn root_preopen(&self) -> Option<u32> {
         Some(self.0.root_preopen())
     }

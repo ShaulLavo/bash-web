@@ -152,6 +152,7 @@ pub struct StoredFunction {
 #[derive(Debug)]
 pub struct State {
     pub shell_name: String,
+    pub(crate) shell_pid: Option<u64>,
     variables: BTreeMap<String, Binding>,
     exported: BTreeSet<String>,
     readonly: BTreeSet<String>,
@@ -197,6 +198,7 @@ pub struct State {
     last_async: Option<String>,
     /// Unsetting EPOCHREALTIME permanently removes its dynamic-variable hook.
     epoch_realtime: bool,
+    bashpid_special: bool,
     /// Unsetting FUNCNAME permanently removes its call-stack projection.
     funcname_special: bool,
     pub(crate) star_separator: StarSeparator,
@@ -219,6 +221,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             shell_name: "bash".into(),
+            shell_pid: None,
             variables: BTreeMap::from([
                 ("IFS".into(), " \t\n".into()),
                 ("OPTIND".into(), "1".into()),
@@ -261,6 +264,7 @@ impl Default for State {
             monitor: false,
             last_async: None,
             epoch_realtime: true,
+            bashpid_special: true,
             funcname_special: true,
             star_separator: StarSeparator::Live,
             ifs_members: None,
@@ -478,6 +482,7 @@ impl State {
         let state = source.borrow();
         Ok(Self {
             shell_name,
+            shell_pid: state.shell_pid,
             variables,
             exported,
             readonly,
@@ -514,6 +519,7 @@ impl State {
             monitor: state.monitor,
             last_async,
             epoch_realtime: state.epoch_realtime,
+            bashpid_special: state.bashpid_special,
             funcname_special: state.funcname_special,
             star_separator: state.star_separator,
             ifs_members: state.ifs_members,
@@ -551,6 +557,15 @@ impl State {
         self.epoch_realtime = true;
     }
     pub(crate) fn dynamic_parameter(&self, name: &str) -> bool {
+        if self.bashpid_special
+            && self.shell_pid.is_some()
+            && matches!(
+                self.resolve_scalar_target(name),
+                ScalarResolution::Target("BASHPID")
+            )
+        {
+            return true;
+        }
         self.epoch_realtime
             && !self.epoch_realtime_shadowed()
             && matches!(
@@ -585,6 +600,12 @@ impl State {
     }
     pub(crate) fn parameter(&self, name: &str) -> Cow<'_, str> {
         if self.dynamic_parameter(name) {
+            if matches!(
+                self.resolve_scalar_target(name),
+                ScalarResolution::Target("BASHPID")
+            ) {
+                return Cow::Owned(self.shell_pid.expect("active PID hook").to_string());
+            }
             use std::{
                 fmt::Write,
                 time::{SystemTime, UNIX_EPOCH},
@@ -601,6 +622,11 @@ impl State {
         }
         match name {
             "0" => Cow::Borrowed(&self.shell_name),
+            "$" => Cow::Owned(
+                self.shell_pid
+                    .map(|pid| pid.to_string())
+                    .unwrap_or_default(),
+            ),
             "?" => Cow::Owned(self.status.to_string()),
             "-" => Cow::Owned(self.option_letters()),
             "PWD" => Cow::Borrowed(&self.cwd),
@@ -1505,6 +1531,9 @@ impl State {
         }
         if name == "FUNCNAME" {
             self.funcname_special = false;
+        }
+        if name == "BASHPID" {
+            self.bashpid_special = false;
         }
         let was_dynamic =
             name == "EPOCHREALTIME" && self.epoch_realtime && !self.epoch_realtime_shadowed();

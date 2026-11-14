@@ -263,6 +263,14 @@ pub(crate) async fn run(
                     return Err(error.status());
                 }
             };
+            let signal = match action {
+                SignalAction::Exists => None,
+                SignalAction::Terminate(signal) => Some(signal),
+            };
+            if let Some(result) = context.signal_shell(selector, signal) {
+                result?;
+                return Ok(Outcome::status(0));
+            }
             let selector = JobSelector::parse(selector)?;
             match action {
                 SignalAction::Exists => context.check_job(selector)?,

@@ -132,8 +132,10 @@ mod guest {
             WasiAbi::new()
                 .unwrap_or_else(|errno| report(format!("missing root preopen (errno {errno})"))),
         );
-        abi.handle_interrupts()
-            .unwrap_or_else(|errno| report(format!("signal setup errno {errno}")));
+        if matches!(startup, Startup::Interactive(_)) {
+            abi.handle_interrupts()
+                .unwrap_or_else(|errno| report(format!("signal setup errno {errno}")));
+        }
         let prompt_host = matches!(
             startup,
             Startup::Interactive(Interactive {

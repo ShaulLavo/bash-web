@@ -27,8 +27,11 @@ A reset or handler assignment in the substitution clears this provenance, so a
 later explicit ignore is printed. Root explicit ignores remain visible. An
 ordinary child clears implicit-ignore provenance; nested process substitutions
 retain it. A parent with its ordinary-child reset still deferred allows its
-first explicit ignore to be printed. These rules affect registration only, not
-signal delivery. Errtrace and functrace are not supported.
+first explicit ignore to be printed. These rules affect registration. Self-targeted
+`kill` also consults the root's ignored bindings and rejects caught actions with
+unsupported status 2, as described in [Shell PID and self-signals](self-signals.md).
+Other external signal delivery is not connected to registration. Errtrace and
+functrace are not supported.
 
 No event runs a stored action. EXIT, ERR, DEBUG, RETURN and signal execution are
 not implemented. Registering them records and prints the binding only; a shell

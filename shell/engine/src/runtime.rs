@@ -95,6 +95,12 @@ impl WaitResult {
 /// Errnos are positive WASI errnos here; the WASM adapter decodes negative results.
 /// `wait_job` confirms descendant teardown and reaps runtime-owned tombstones.
 pub trait Abi: support::Abi {
+    fn shell_pid(&self) -> Option<u32> {
+        None
+    }
+    fn signal_self(&self, _signal: i32) -> Result<(), i32> {
+        Err(58)
+    }
     fn root_preopen(&self) -> Option<u32> {
         None
     }
@@ -608,6 +614,15 @@ impl FileSystem for Runtime {
     }
 }
 impl ProcessHost for Runtime {
+    fn shell_pid(&self) -> Option<ProcessId> {
+        self.0.abi.shell_pid().map(ProcessId::from)
+    }
+    fn signal_self(&self, signal: i32) -> Result<(), ProcessError> {
+        self.0
+            .abi
+            .signal_self(signal)
+            .map_err(ProcessError::Runtime)
+    }
     fn exec_ready(&self) -> bool {
         self.0.children.borrow().is_empty()
             && self
