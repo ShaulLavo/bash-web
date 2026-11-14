@@ -308,7 +308,17 @@ test("slow downstream applies bounded backpressure", async ({ page }) => {
   const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
   expect(lines).not.toContain("WRITTEN:79");
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
-  await output(page, "DRAINED:5242880:1");
+  // Quiet Boat small Ubuntu, 2 vCPUs, Playwright 1.64.0/WebKit 27.2, not exact GitHub hardware.
+  // Five real first-visible upper samples, ms; ceil(max * 1.125) = 5182 ms.
+  const drainedWaitMs = Math.ceil(
+    Math.max(4206.177861, 4409.847852, 4606.04220703125, 4336.849092, 4515.267617) * 1.125,
+  );
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())), {
+      timeout: drainedWaitMs,
+      intervals: [10],
+    })
+    .toContain("DRAINED:5242880:1");
   const completedLines = await page.evaluate(() =>
     window.bashWeb?.readLines().map((line) => line.trim()),
   );
