@@ -5,6 +5,7 @@
   "description": "WASM-first bash-compatible shell",
   "files": [
     "dist",
+    "!dist/product-shell",
     "shell",
     "scripts",
     "patches",
