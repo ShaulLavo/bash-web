@@ -308,6 +308,17 @@ async function until(check: () => boolean, signal?: AbortSignal): Promise<void> 
     await pause(1);
   }
 }
+function draftCaretReady(output: string): boolean {
+  const draft = "echo abcd";
+  const at = output.lastIndexOf(draft);
+  if (at === -1) return false;
+  const moves = output.slice(at + draft.length).split("\r\x1b[");
+  if (moves.length !== 3 || moves[0] !== "") return false;
+  return (
+    moves.slice(1).every((move) => /^\d+C$/u.test(move)) &&
+    Number.parseInt(moves[1], 10) === Number.parseInt(moves[2], 10) + 1
+  );
+}
 async function typing(root: string, mode: "bash" | "zsh", path: string, expected: string) {
   const tracked = `${root}/d-000/f-00000`;
   const original = await runtime.filesystem.readFile(tracked);
@@ -350,8 +361,7 @@ async function typing(root: string, mode: "bash" | "zsh", path: string, expected
     await send(terminal, "echo abcd\x1b[D\x1b[D");
     await until(() => {
       pump();
-      const caret = /echo abcd\r\x1b\[(\d+)C\r\x1b\[(\d+)C$/.exec(output);
-      return caret !== null && Number(caret[2]) === Number(caret[1]) - 1;
+      return draftCaretReady(output);
     }, deadline.signal);
     if (output.includes(expected)) throw new Error("status completed before gate release");
     blocked.release();
