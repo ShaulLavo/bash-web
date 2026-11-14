@@ -26,6 +26,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [Process image replacement](exec.md): Explicit exec and eligible final external commands
 - [Native process lifecycle](native-process-lifecycle.md): Canonical observations, late startup, native return, and separate cleanup obligations
 - [Browser integration](browser-runtime.md): Asset contract, storage, `PATH` lookup, test scope, source provenance
+- [Editor and terminal release integration](product-shell-integration.md): Public package input, saved scripts, focus, and borrowed-runtime disposal
 - [Async shell core](shell-engine.md): Execution contract, bounds, supported syntax
 - [Shell workspace](shell-workspace.md): Parser crate, runtime ABI for interactive and [named-file](script-files.md) execution, the CLI; [WASI utility processes](wasi-process.md) for child execution
 - [Engine ownership notes](reference/engine-ownership.md): Which module owns execution types, bindings, parsing entry points

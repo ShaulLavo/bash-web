@@ -112,6 +112,33 @@ test("shipped shell source contains no vendored runtime or Bun program implement
   assert.equal(optionalRecord(pkg.peerDependencies)?.["@bun-wasm/runtime"], undefined);
 });
 
+test("package excludes generated product integration assets after browser qualification", async (context) => {
+  const scratchRoot = resolve(root, ".build");
+  await mkdir(scratchRoot, { recursive: true });
+  const scratch = await mkdtemp(resolve(scratchRoot, "integration-package-"));
+  context.after(() => rm(scratch, { recursive: true, force: true }));
+  await mkdir(resolve(scratch, "dist/product-shell/assets"), { recursive: true });
+  await writeFile(resolve(scratch, "package.json"), JSON.stringify(pkg));
+  await writeFile(resolve(scratch, "dist/shell-worker.js"), "export {};\n");
+  await writeFile(resolve(scratch, "dist/product-shell/product-shell.html"), "<!doctype html>");
+  await writeFile(resolve(scratch, "dist/product-shell/assets/editor.js"), "export {};\n");
+  const run = promisify(execFile);
+  const { stdout } = await run("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+    cwd: scratch,
+    timeout: 30000,
+  });
+  const packed: unknown = JSON.parse(stdout);
+  assert.ok(Array.isArray(packed));
+  const files = record(packed[0]).files;
+  assert.ok(Array.isArray(files));
+  const paths = files.map((file: unknown) => text(record(file).path));
+  assert.ok(paths.includes("dist/shell-worker.js"));
+  assert.deepEqual(
+    paths.filter((path) => path.startsWith("dist/product-shell/")),
+    [],
+  );
+});
+
 test("worker preparation bundles the public Waffle FS worker and finish-build restores its assets", async (context) => {
   // This isolated packaging fixture owns only its scratch directory and child commands.
   // The existing dependency install is borrowed by a symlink, never copied or removed.

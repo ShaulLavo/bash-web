@@ -5,6 +5,7 @@
   "description": "WASM-first bash-compatible shell",
   "files": [
     "dist",
+    "!dist/product-shell",
     "shell",
     "scripts",
     "patches",
@@ -61,7 +62,7 @@
     "fuzz:shell-path:ci": "node scripts/fuzz-shell-path.ts --replay scripts/fixtures/shell-path-seed-1.json --replay scripts/fixtures/shell-path-seed-42.json",
     "sources:browser": "node scripts/sources.ts",
     "build:shell:browser": "node scripts/build-shell-browser.ts",
-    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run build:browser:assets",
+    "build:browser": "npm run sources:browser && npm run build:worker && npm run build:shell:browser && npm run build:test-guest && npm run build:browser:assets && npm run build:test:product-shell",
     "typecheck:browser": "tsc --noEmit -p tsconfig.browser.json",
     "test:browser": "playwright test",
     "test:session": "node --test scripts/test-session.ts",
@@ -110,7 +111,7 @@
     "compat:shell:prebuilt": "BASH_COMPAT_MODE=frozen BASH_COMPAT_ENGINES=own-shell node scripts/bash-compat.ts",
     "notices:browser:ci": "node scripts/ci-artifacts.ts notices .build/ci-native && node scripts/browser-notices.ts",
     "bundle:browser:assets": "vite build && node scripts/finish-build.ts",
-    "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets",
+    "build:browser:assets:ci": "npm run notices:browser:ci && npm run bundle:browser:assets && npm run build:test:product-shell",
     "test:file-substitution": "npm run build:node-harness && node --test scripts/test-own-shell-file-substitution.ts",
     "test:select": "npm run build:node-harness && node --test scripts/test-own-shell-select.ts",
     "test:shell:completion:pending": "npm run build:node-harness && BASH_COMPLETION_PENDING=1 node --test scripts/test-own-shell-completion.ts",
@@ -121,7 +122,9 @@
     "test:prompt": "node scripts/test-prompt.ts",
     "test:prompt:browser": "bun scripts/test-prompt-status-browser.ts",
     "test:ios:adapters": "bun test ./tests/ios/*.unit.ts",
-    "test:startup:local": "bun scripts/test-startup-diagnostics-local.ts"
+    "test:startup:local": "bun scripts/test-startup-diagnostics-local.ts",
+    "build:test:product-shell": "node scripts/build-product-shell-test.ts",
+    "test:browser:integration": "npm run build:test:product-shell && playwright test tests/product-shell.spec.ts"
   },
   "dependencies": {
     "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.22/waffle-python-0.0.22.tgz",
@@ -132,10 +135,14 @@
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz",
     "@playwright/test": "1.64.0",
+    "@singapore-editor/core": "https://github.com/ShaulLavo/singapore/releases/download/singapore-f0402824ffedcbd5087844adde151e0592aab04e/singapore-editor-core-0.2.10.tgz",
+    "@singapore-editor/textbuffer": "https://github.com/ShaulLavo/singapore/releases/download/singapore-f0402824ffedcbd5087844adde151e0592aab04e/singapore-editor-textbuffer-0.2.9.tgz",
     "@types/bun": "1.4.4",
     "@types/node": "26.6.3",
     "@webgpu/types": "0.1.74",
+    "bash-web-public": "https://github.com/ShaulLavo/bash-web/releases/download/bash-web-v0.0.110/bash-web-0.0.110.tgz",
     "esbuild": "0.28.2",
+    "ghostty-public": "https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.33-ab50008/ghostty-webgpu.tgz",
     "jscpd": "5.4.1",
     "knip": "6.41.0",
     "oxfmt": "0.70.0",
@@ -150,6 +157,7 @@
     "waffle": "*"
   },
   "overrides": {
+    "@singapore-editor/textbuffer": "$@singapore-editor/textbuffer",
     "esbuild": "0.28.2"
   },
   "engines": {
