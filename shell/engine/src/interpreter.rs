@@ -275,6 +275,7 @@ struct Residual {
 struct Core {
     executor: Executor,
     host: Rc<dyn ProcessHost>,
+    shell_pid: Option<crate::process::ProcessId>,
     fs: Rc<dyn FileSystem>,
     limits: Limits,
     eval_storage: crate::exec::StorageBudget,
@@ -723,6 +724,19 @@ impl Context {
             .map(|_| ())
             .ok_or(1)
     }
+    pub(crate) fn signal_shell(
+        &self,
+        operand: &str,
+        signal: Option<i32>,
+    ) -> Option<Result<(), i32>> {
+        let pid = operand.parse().ok()?;
+        if self.core.shell_pid != Some(pid) {
+            return None;
+        }
+        Some(signal.map_or(Ok(()), |signal| {
+            self.core.host.signal_self(signal).map_err(|_| 1)
+        }))
+    }
     pub(crate) fn kill_job(&self, selector: JobSelector, signal: i32) -> Result<(), i32> {
         let jobs = self.core.jobs.borrow();
         let job = jobs
@@ -797,12 +811,15 @@ impl Session {
     ) -> Self {
         let memory = crate::exec::StorageBudget::new(limits.execution_bytes);
         let state = State::with_memory(memory.clone()).shared();
+        let shell_pid = host.shell_pid();
+        state.borrow_mut().shell_pid = shell_pid;
         let invocation_name_storage =
             RefCell::new(memory.admit(0).expect("empty reservation fits"));
         Self {
             core: Rc::new(Core {
                 executor,
                 host,
+                shell_pid,
                 fs,
                 eval_storage: crate::exec::StorageBudget::new(limits.expansion_bytes),
                 execution_storage: memory,
@@ -1227,7 +1244,10 @@ impl Core {
         Err(2)
     }
     fn allocate_id(&self) -> u64 {
-        let id = self.next.get();
+        let mut id = self.next.get();
+        if self.shell_pid == Some(id) {
+            id = id.checked_add(1).expect("job ID overflow");
+        }
         self.next.set(id.checked_add(1).expect("job ID overflow"));
         id
     }

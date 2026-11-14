@@ -38,7 +38,7 @@ fn basic_name(name: &str) -> bool {
     scalar_name(name)
         || name == "?"
         || name == "#"
-        || matches!(name, "!" | "-" | "@" | "*")
+        || matches!(name, "!" | "-" | "@" | "*" | "$")
         || name.bytes().all(|c| c.is_ascii_digit()) && !name.is_empty()
 }
 
@@ -291,7 +291,7 @@ impl<'a> Scanner<'a> {
             }
             Some('{') => self.braced(work, cancel).await?,
             Some(c) if c.is_ascii_alphabetic() || c == '_' => self.identifier(work, cancel).await?,
-            Some(c) if c.is_ascii_digit() || matches!(c, '?' | '#' | '-') => {
+            Some(c) if c.is_ascii_digit() || matches!(c, '?' | '#' | '-' | '$') => {
                 self.take();
             }
             Some('(') => {
@@ -322,7 +322,7 @@ impl<'a> Scanner<'a> {
             Some('\'' | '"') if self.context == Context::Prompt => {
                 return Ok(self.text("$", true));
             }
-            Some('\'' | '"' | '@' | '*' | '$') => return Err(2.into()),
+            Some('\'' | '"' | '@' | '*') => return Err(2.into()),
             _ => return Ok(self.text("$", self.protected())),
         }
         let token = self.token(start, joined, work, cancel).await?;

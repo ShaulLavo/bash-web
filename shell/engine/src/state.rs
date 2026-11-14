@@ -152,6 +152,7 @@ pub struct StoredFunction {
 #[derive(Debug)]
 pub struct State {
     pub shell_name: String,
+    pub(crate) shell_pid: Option<u64>,
     variables: BTreeMap<String, Binding>,
     exported: BTreeSet<String>,
     readonly: BTreeSet<String>,
@@ -219,6 +220,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             shell_name: "bash".into(),
+            shell_pid: None,
             variables: BTreeMap::from([
                 ("IFS".into(), " \t\n".into()),
                 ("OPTIND".into(), "1".into()),
@@ -478,6 +480,7 @@ impl State {
         let state = source.borrow();
         Ok(Self {
             shell_name,
+            shell_pid: state.shell_pid,
             variables,
             exported,
             readonly,
@@ -601,6 +604,11 @@ impl State {
         }
         match name {
             "0" => Cow::Borrowed(&self.shell_name),
+            "$" => Cow::Owned(
+                self.shell_pid
+                    .map(|pid| pid.to_string())
+                    .unwrap_or_default(),
+            ),
             "?" => Cow::Owned(self.status.to_string()),
             "-" => Cow::Owned(self.option_letters()),
             "PWD" => Cow::Borrowed(&self.cwd),

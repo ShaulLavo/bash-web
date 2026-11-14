@@ -382,6 +382,13 @@ impl support::Abi for Fake {
 }
 
 impl Abi for Fake {
+    fn shell_pid(&self) -> Option<u32> {
+        Some(1)
+    }
+    fn signal_self(&self, signal: i32) -> Result<(), i32> {
+        self.signals.borrow_mut().push((false, 1, signal));
+        Ok(())
+    }
     fn root_preopen(&self) -> Option<u32> {
         self.root_preopen.get()
     }
@@ -763,6 +770,29 @@ fn shutdown_session(executor: &Executor, runtime: &Runtime, fake: &Fake, session
 }
 fn wait_status(executor: &Executor, runtime: &Runtime, pid: u64) -> Result<i32, ProcessError> {
     finish(executor, runtime, executor.spawn(runtime.wait(pid))).map(ChildExit::status)
+}
+
+#[test]
+fn shell_pid_expansion_and_signal_targets_do_not_alias_async_jobs() {
+    let (executor, fake, runtime) = setup();
+    let session = runtime_session(&executor, &runtime);
+    let source = r#"set -u; printf '%s:%s:%s:%s\n' $$ "${$}" "${missing:-$$}" "$(printf '%s' $$)"; sleep & pid=$!; [[ $pid != $$ ]] || exit 99; kill -0 $$; kill -TERM "$pid"; wait "$pid"; printf 'job:%s\n' $?; kill -TERM $$; kill -INT "${$}""#;
+    assert_eq!(
+        finish(&executor, &runtime, session.start(source).unwrap()),
+        0
+    );
+    assert_eq!(fake.output.bytes(), b"1:1:1:1\njob:143\n");
+    let signals = fake.signals.borrow();
+    assert!(signals.contains(&(false, 1, 15)));
+    assert!(signals.contains(&(false, 1, 2)));
+    assert!(!signals.contains(&(false, 1, 0)));
+    assert!(
+        signals
+            .iter()
+            .any(|&(group, _, signal)| group && signal == 15)
+    );
+    drop(signals);
+    shutdown_session(&executor, &runtime, &fake, session);
 }
 fn wait_status_now(runtime: &Runtime, pid: u64) -> Option<Result<i32, ProcessError>> {
     runtime

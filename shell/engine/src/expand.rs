@@ -856,7 +856,7 @@ impl Expansion<'_> {
         // input must also fit alongside the enclosing trim's snapshot.
         if state.borrow().dynamic_parameter(name) {
             self.work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)
-        } else if matches!(name, "?" | "#") {
+        } else if matches!(name, "?" | "#" | "$") {
             // parameter() formats these special values into an owned string.
             self.work.admit_storage(20)
         } else {
@@ -1278,7 +1278,7 @@ impl Expansion<'_> {
         let value = {
             let state = state.borrow();
             let dynamic = state.dynamic_parameter(name);
-            let formatted = matches!(name, "?" | "#") || dynamic;
+            let formatted = matches!(name, "?" | "#" | "$") || dynamic;
             if dynamic {
                 self.work.admit_storage(State::DYNAMIC_PARAMETER_BYTES)?;
             } else if self.pattern_snapshots && formatted {
@@ -1453,7 +1453,7 @@ impl Expansion<'_> {
             let s = state.borrow();
             if operand::scalar_name(name) {
                 s.scalar_is_set(name)
-            } else if matches!(name, "?" | "#") {
+            } else if matches!(name, "?" | "#" | "$") {
                 true
             } else {
                 name.parse::<usize>()
