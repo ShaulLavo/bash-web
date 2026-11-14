@@ -25,10 +25,11 @@ export default defineConfig({
       },
     },
     { name: "firefox", use: { browserName: "firefox" } },
+    { name: "webkit", use: { browserName: "webkit" } },
   ],
   webServer: {
     command: "npm run serve",
-    env: { PORT: port },
+    env: { PORT: port, BASH_WEB_TEST_FIXTURES: "1" },
     url: baseURL,
     reuseExistingServer: false,
     timeout: 30000,
