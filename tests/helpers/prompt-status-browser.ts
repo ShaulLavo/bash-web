@@ -348,9 +348,10 @@ async function typing(root: string, mode: "bash" | "zsh", path: string, expected
     const receipt = await shell.waitForPrompt({ signal: deadline.signal });
     await until(() => blocked.admitted, deadline.signal);
     await send(terminal, "echo abcd\x1b[D\x1b[D");
-    await pause(15);
-    pump();
-    if (!output.includes("echo abcd")) throw new Error("typing did not reach blocked draft");
+    await until(() => {
+      pump();
+      return output.includes("echo abcd");
+    }, deadline.signal);
     if (output.includes(expected)) throw new Error("status completed before gate release");
     blocked.release();
     await until(() => {

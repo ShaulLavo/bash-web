@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmod, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
+import { OUTCOME_HANG_MS } from "../../tests/helpers/outcome-timeouts.ts";
 import { TurnFilesystem } from "./fs";
 import {
   context,
@@ -308,7 +309,7 @@ async function renderedStatus(path: string): Promise<string> {
     return await Promise.race([
       changed,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("No object status update")), 5_000);
+        timer = setTimeout(() => reject(new Error("No object status update")), OUTCOME_HANG_MS);
       }),
     ]);
   } finally {
