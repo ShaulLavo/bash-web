@@ -21,9 +21,13 @@ try {
     logLevel: "silent",
   });
   const paths = entries.map((entry) => join(scratch, entry.replace(/\.ts$/, ".mjs")));
-  const child = spawn(process.execPath, ["--test", `--test-timeout=${BROWSER_CASE_HANG_MS}`].concat(paths), {
-    stdio: "inherit",
-  });
+  const child = spawn(
+    process.execPath,
+    ["--test", `--test-timeout=${BROWSER_CASE_HANG_MS}`].concat(paths),
+    {
+      stdio: "inherit",
+    },
+  );
   await new Promise<void>((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", (code) =>
