@@ -350,7 +350,8 @@ async function typing(root: string, mode: "bash" | "zsh", path: string, expected
     await send(terminal, "echo abcd\x1b[D\x1b[D");
     await until(() => {
       pump();
-      return output.includes("echo abcd");
+      const caret = /echo abcd\r\x1b\[(\d+)C\r\x1b\[(\d+)C$/.exec(output);
+      return caret !== null && Number(caret[2]) === Number(caret[1]) - 1;
     }, deadline.signal);
     if (output.includes(expected)) throw new Error("status completed before gate release");
     blocked.release();
@@ -369,6 +370,7 @@ async function typing(root: string, mode: "bash" | "zsh", path: string, expected
       mode,
       path,
       heldReadObserved: blocked.admitted,
+      draftAndBothCaretMovesObserved: true,
       marker: expected,
       typedBufferAndCaretKept: true,
       statusAppearedWithoutKey: true,
