@@ -26,19 +26,9 @@ test.beforeAll(async () => {
   ({ fixture } = await prepareSessionDrainFixture());
 });
 
-test.beforeEach(async ({ page, context }) => {
+test.beforeEach(async ({ page }) => {
   page.on("pageerror", (error) => console.error(error.message));
-  await context.route("**/drain-fixture", (route) =>
-    route.fulfill({
-      contentType: "text/html",
-      headers: {
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cross-Origin-Embedder-Policy": "require-corp",
-      },
-      body: "<!doctype html>",
-    }),
-  );
-  await page.goto("/drain-fixture");
+  await page.goto("/test-fixture");
   await page.addScriptTag({ type: "module", content: fixture });
   await page.waitForFunction(() => window.sessionDrain?.acknowledgements === 1);
 });
