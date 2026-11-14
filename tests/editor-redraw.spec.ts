@@ -38,8 +38,13 @@ test("Enter and Ctrl+C on a wrapped command's first row keep its rows intact", a
   await ready(page);
   const first = `$ echo ${tail.slice(0, columns - 7)}`;
   await expect.poll(() => text(page)).toEqual([first, "x".repeat(7), tail, "$"]);
+  // Ctrl+C drops unread input. Observe the draft and Home before cancelling.
   await page.keyboard.insertText("echo abc");
+  await expect.poll(() => text(page)).toEqual([first, "x".repeat(7), tail, "$ echo abc"]);
   await page.keyboard.press("Home");
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb!.terminal!.geometry().cursor.x))
+    .toBe(2);
   await page.keyboard.press("Control+c");
   await expect.poll(() => text(page)).toEqual([first, "x".repeat(7), tail, "$ echo abc^C", "$"]);
 });
