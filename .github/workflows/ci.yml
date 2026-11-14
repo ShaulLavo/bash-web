@@ -1,5 +1,5 @@
 name: Shell
-run-name: ${{ inputs.pipeline_measurement && format('Measure hosted pipelines {0}', github.ref_name) || inputs.main_source && format('Qualify main {0}', inputs.main_source) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
+run-name: ${{ inputs.main_source && format('Qualify main {0}', inputs.main_source) || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 on:
   push:
     branches:
@@ -8,11 +8,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
-      pipeline_measurement:
-        description: Temporary diagnostic only, five WebKit samples each for DRAINED and COUNT
-        type: boolean
-        default: false
-        required: false
       main_source:
         description: Full SHA of current main to qualify without changing its source
         type: string
@@ -24,66 +19,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  pipeline-measurement:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.pipeline_measurement && inputs.main_source == '' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: fdf57864daf92d32d7416131561e1177beca2c33
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          path: .diagnostic
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.12.1
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.4
-      - uses: actions/download-artifact@v8
-        with:
-          github-token: ${{ github.token }}
-          run-id: 43600965576
-          name: native-fdf57864daf92d32d7416131561e1177beca2c33
-          digest-mismatch: error
-          path: .build/ci-native
-      - uses: actions/download-artifact@v8
-        with:
-          github-token: ${{ github.token }}
-          run-id: 43600965576
-          name: javascript-fdf57864daf92d32d7416131561e1177beca2c33
-          digest-mismatch: error
-          path: ${{ runner.temp }}/javascript
-      - name: Use Ubuntu HTTPS archives for browser dependencies
-        run: |
-          sudo sed -i '\|^http://azure\.archive\.ubuntu\.com/ubuntu/|d' /etc/apt/apt-mirrors.txt
-          test -s /etc/apt/apt-mirrors.txt
-      - name: Measure exactly ten WebKit pipeline samples
-        run: node .diagnostic/.measurement/hosted-run.ts
-        env:
-          DIAGNOSTIC_HEAD: ${{ github.sha }}
-          TMPDIR: ${{ runner.temp }}
-      - name: Verify diagnostic teardown
-        if: always()
-        run: node .diagnostic/.measurement/hosted-run.ts cleanup
-      - name: Retain raw diagnostic evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline-hosted-${{ github.sha }}-${{ github.run_id }}
-          path: measurement-output/
-          retention-days: 7
-          if-no-files-found: error
   main-qualification:
-    if: ${{ !inputs.pipeline_measurement && github.event_name == 'workflow_dispatch' && inputs.main_source != '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.main_source != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -167,7 +104,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   changes:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -191,7 +128,7 @@ jobs:
               - '!LICENSE'
 
   prepare:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -224,7 +161,7 @@ jobs:
           compression-level: 0
           retention-days: 1
   layers:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -249,7 +186,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   quality:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -267,7 +204,7 @@ jobs:
       - run: npm run typecheck:guest-build
       - run: npm run typecheck:ci
   native:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: [prepare, changes]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -338,7 +275,7 @@ jobs:
           retention-days: 3
   # Downstream jobs need only native's builds, so its tests run beside them.
   native-checks:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: [prepare, changes]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -384,7 +321,7 @@ jobs:
           cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
           npm run test:terminal:display
   wasi:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -405,7 +342,7 @@ jobs:
           ulimit -c 0
           npm run test:shell:wasi -- --prebuilt .build/ci-native
   fuzz:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -441,7 +378,7 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
   own-shell-scoreboard:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -488,7 +425,7 @@ jobs:
         env:
           SCOREBOARD_TEST_SHARD: ${{ matrix.shard }}/3
   own-shell-observation:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     permissions:
       contents: read
       actions: read
@@ -545,7 +482,7 @@ jobs:
             ${{ runner.temp }}/own-shell-diagnostics/
           if-no-files-found: ignore
   own-shell-compatibility:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     outputs:
       raw-artifact-id: ${{ steps.raw-upload.outputs.artifact-id }}
     permissions:
@@ -582,7 +519,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
   score-floor:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - own-shell-compatibility
@@ -628,7 +565,7 @@ jobs:
         run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
   # Playwright runs one worker per runner, so the suite is sharded across runners.
   browser:
-    if: ${{ !inputs.pipeline_measurement && inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
       - native
@@ -710,7 +647,7 @@ jobs:
       - own-shell-compatibility
       - score-floor
       - browser
-    if: ${{ always() && !inputs.pipeline_measurement }}
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

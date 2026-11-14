@@ -179,7 +179,27 @@ for (const [name, producer, consumer, expected] of [
   test(`pipeline streams complete output above 1 MiB, ${name}`, async ({ page }) => {
     await open(page);
     await command(page, `${producer} | ${consumer}`);
-    await output(page, expected);
+    if (name === "builtin to builtin") {
+      // GitHub Ubuntu 26.04.1, EPYC 7763, 4 exposed CPUs / 2 effective, WebKit 27.2.
+      // Run 43607191022, five first-visible upper samples in ms; ceil(max * 1.125) = 8937.
+      const countWaitMs = Math.ceil(
+        Math.max(
+          7699.08693359375,
+          7127.355195312501,
+          7668.137685546875,
+          7898.680390625001,
+          7943.468037109375,
+        ) * 1.125,
+      );
+      await expect
+        .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())), {
+          timeout: countWaitMs,
+          intervals: [10],
+        })
+        .toContain(expected);
+    } else {
+      await output(page, expected);
+    }
     await ready(page);
     await expect.poll(() => page.workers().length).toBe(baselineWorkers.get(page));
   });
@@ -308,10 +328,16 @@ test("slow downstream applies bounded backpressure", async ({ page }) => {
   const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
   expect(lines).not.toContain("WRITTEN:79");
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("running");
-  // Quiet Boat small Ubuntu, 2 vCPUs, Playwright 1.64.0/WebKit 27.2, not exact GitHub hardware.
-  // Five real first-visible upper samples, ms; ceil(max * 1.125) = 5182 ms.
+  // GitHub Ubuntu 26.04.1, EPYC 7763, 4 exposed CPUs / 2 effective, WebKit 27.2.
+  // Run 43607191022, five first-visible upper samples in ms; ceil(max * 1.125) = 11562.
   const drainedWaitMs = Math.ceil(
-    Math.max(4206.177861, 4409.847852, 4606.04220703125, 4336.849092, 4515.267617) * 1.125,
+    Math.max(
+      10082.278134765626,
+      9734.62408203125,
+      9633.6170703125,
+      10277.2628515625,
+      9636.724462890625,
+    ) * 1.125,
   );
   await expect
     .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())), {
