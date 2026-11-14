@@ -70,3 +70,18 @@ test("child memory telemetry never overwrites its parent's terminal metrics or p
   assert.equal(Atomics.load(terminal.state, control.phase), 2);
   context.wasi.descriptors.dispose();
 });
+
+test("the inherited shell descriptor snapshot excludes transferred preopens", () => {
+  const { request, executor, context } = fixture();
+  request.runtimeProcess!.bindings = [
+    { fd: 3, reference: 0, rightsBase: 0n, rightsInheriting: 0n, preopen: "/" },
+    { fd: 7, reference: 1, rightsBase: 0n, rightsInheriting: 0n },
+  ];
+  const namespaces = executor.namespaces!(context);
+  const inherited = namespaces.shell_terminal!.inherited_fd;
+  assert.equal(typeof inherited, "function");
+  if (typeof inherited !== "function") throw new Error("Missing inherited_fd import");
+  assert.equal(inherited(0), 7);
+  assert.equal(inherited(1), -1);
+  context.wasi.descriptors.dispose();
+});

@@ -181,6 +181,7 @@ impl Rig {
             trace: super::super::xtrace::Trace::default(),
             compound_child: false,
             caller_descriptors: None,
+            tail_exec: false,
             core,
         }
     }

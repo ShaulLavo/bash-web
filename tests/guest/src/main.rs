@@ -28,14 +28,16 @@ extern "C" {
     fn proc_interrupted() -> i32;
     #[link_name = "signal"]
     fn proc_signal(signal: u32, mode: u32) -> i32;
-    #[link_name = "spawn"]
-    fn proc_spawn(data: *const u8, length: usize) -> i32;
-    #[link_name = "wait"]
-    fn proc_wait(pid: u32, output: *mut u8) -> i32;
     #[link_name = "wait_job"]
     fn proc_wait_job(job: u32, flags: u32, output: *mut u8) -> i32;
     #[link_name = "job_of"]
     fn proc_job_of(pid: u32) -> i32;
+    #[link_name = "spawn"]
+    fn proc_spawn(data: *const u8, length: usize) -> i32;
+    #[link_name = "exec"]
+    fn proc_exec(data: *const u8, length: usize) -> i32;
+    #[link_name = "wait"]
+    fn proc_wait(pid: u32, output: *mut u8) -> i32;
     #[link_name = "kill"]
     fn proc_kill(pid: u32, signal: u32) -> i32;
 }
@@ -309,6 +311,11 @@ fn spawn_wait(request: &str, kill: Option<(u64, u32)>) -> Result<i32> {
 
 fn run(args: &[String]) -> Result<i32> {
     match arg(args, 0)? {
+        "exec-json" => {
+            let request = arg(args, 1)?;
+            checked(unsafe { proc_exec(request.as_ptr(), request.len()) })?;
+            return Err("exec success returned to the old image".into());
+        }
         "emit" => {
             let text = arg(args, 1)?;
             for _ in 0..optional_number(args, 2, 1)? {

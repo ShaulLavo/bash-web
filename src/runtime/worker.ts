@@ -91,7 +91,9 @@ function createShellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellW
         request.terminal,
         request.terminal
           ? [0, 1, 2]
-          : request.runtimeProcess?.bindings.map((binding) => binding.fd),
+          : request.runtimeProcess?.bindings
+              .filter((binding) => binding.preopen === undefined)
+              .map((binding) => binding.fd),
       );
       return {
         bash_web_executable: executableQuery.namespace,

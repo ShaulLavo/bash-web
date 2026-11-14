@@ -35,6 +35,9 @@ struct Fake {
     next_pid: Cell<u32>,
     children: RefCell<BTreeMap<u32, FakeChild>>,
     requests: RefCell<Vec<RuntimeSpawn>>,
+    exec_requests: RefCell<Vec<RuntimeExec>>,
+    exec_errno: Cell<i32>,
+    root_preopen: Cell<Option<u32>>,
     closed: RefCell<Vec<u32>>,
     polls: RefCell<Vec<(i32, Vec<Subscription>)>>,
     reads: RefCell<Vec<(u32, usize)>>,
@@ -87,6 +90,9 @@ impl Fake {
             next_pid: Cell::new(100),
             children: RefCell::new(BTreeMap::new()),
             requests: RefCell::new(Vec::new()),
+            exec_requests: RefCell::new(Vec::new()),
+            exec_errno: Cell::new(58),
+            root_preopen: Cell::new(None),
             closed: RefCell::new(Vec::new()),
             polls: RefCell::new(Vec::new()),
             reads: RefCell::new(Vec::new()),
@@ -376,6 +382,13 @@ impl support::Abi for Fake {
 }
 
 impl Abi for Fake {
+    fn root_preopen(&self) -> Option<u32> {
+        self.root_preopen.get()
+    }
+    fn exec(&self, request: &RuntimeExec) -> Result<std::convert::Infallible, i32> {
+        self.exec_requests.borrow_mut().push(request.clone());
+        Err(self.exec_errno.get())
+    }
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
         if let Some(errno) = self.access_start_error.get() {
             return Err(errno);
@@ -4109,6 +4122,7 @@ fn runtime_permissions_keep_supported_denial_separate_from_unknown_bits() {
     assert_eq!(metadata.owned_by_effective_uid, None);
 }
 
+mod exec;
 mod inherited;
 mod read_exact;
 

@@ -33,6 +33,7 @@ mod indexed;
 mod interrupts;
 use interrupts::{Interrupts, Strand};
 mod reader;
+mod replacement;
 mod select;
 mod source;
 mod timing;
@@ -306,6 +307,7 @@ pub(crate) struct Context {
     ignore_errexit: bool,
     trace: xtrace::Trace,
     caller_descriptors: Option<Rc<CallerDescriptors>>,
+    tail_exec: bool,
 }
 pub(crate) struct RenderedFunction {
     pub(crate) text: String,
@@ -339,6 +341,7 @@ impl Context {
             ignore_errexit: false,
             trace: xtrace::Trace::default(),
             caller_descriptors: None,
+            tail_exec: false,
             evaluation,
         }
     }
@@ -459,6 +462,7 @@ impl Context {
         Self {
             loop_depth: 0,
             caller_descriptors: None,
+            tail_exec: false,
             scope: Scope::new(self.core.allocate_id()),
             evaluation: self.evaluation.new_task(),
             ..self.clone()
@@ -2345,7 +2349,16 @@ async fn list_command(
         result = if operator == ListOperator::Background {
             background(command, &state, &fds, &context).await
         } else {
-            execute(command, state.clone(), fds.clone(), context.clone()).await
+            execute(
+                command,
+                state.clone(),
+                fds.clone(),
+                Context {
+                    tail_exec: false,
+                    ..context.clone()
+                },
+            )
+            .await
         };
         if result.flow != Flow::Normal || context.cancel.is_cancelled() {
             return result;
@@ -2508,6 +2521,7 @@ async fn launch_background(
         ignore_errexit: context.ignore_errexit,
         trace: context.trace,
         caller_descriptors: None,
+        tail_exec: false,
     };
     let fds = Rc::new(RefCell::new(fds.borrow().clone()));
     let parent_scope = context.scope.clone();
@@ -3005,6 +3019,7 @@ async fn simple_command(
     if prepared.as_ref().unwrap().argv.first().is_some_and(|name| {
         commands::enabled_handler(name, state.borrow().disabled_builtins)
             == Some(commands::Handler::Exec)
+            && !state.borrow().functions().contains_key(name)
     }) {
         return exec_prepared_command(&mut prepared, &state, original_fds, &context, parent_stderr)
             .await;
@@ -3061,25 +3076,22 @@ fn exec_prepared_command(
 }
 
 async fn exec_prepared_command_body(
-    prepared: PreparedCommand,
+    mut prepared: PreparedCommand,
     state: SharedState,
     original_fds: Descriptors,
     context: Context,
     stderr: WeakStderr,
 ) -> Outcome {
-    let result = match prepared.execution {
-        Err(error) => expansion_failure(error, &original_fds, &context).await,
-        Ok(execution) if prepared.argv.len() == 1 => {
-            context.persist_descriptors(
-                &execution.redirected,
-                prepared.generated_fds,
-                &execution.fds.unwrap().borrow(),
-                &original_fds,
-            );
-            Outcome::status(0)
-        }
-        Ok(_) => Outcome::status(2),
-    };
+    let result = replacement::explicit(
+        &mut prepared.argv,
+        prepared.execution,
+        prepared.generated_fds,
+        &state,
+        &original_fds,
+        &context,
+        stderr.clone(),
+    )
+    .await;
     drop(original_fds);
     finish_last_argument(prepared.argv, result, &state, &context, &stderr).await
 }
@@ -3708,6 +3720,21 @@ async fn dispatch_arguments(
         return Ok(outcome);
     }
     let handler = commands::enabled_handler(name, state.borrow().disabled_builtins);
+    if handler == Some(commands::Handler::Exec) {
+        context.persist_wrapped_exec(&fds.borrow());
+        let mut arguments =
+            take_command_arguments(argv, last_storage, argument_offset - 1, context).await?;
+        return Ok(replacement::command(
+            &mut arguments,
+            assigned,
+            fds,
+            line,
+            state,
+            context,
+            parent_stderr,
+        )
+        .await);
+    }
     if handler == Some(commands::Handler::Let) {
         if !assigned.is_empty() {
             return Err(2);
@@ -3790,6 +3817,55 @@ async fn dispatch_arguments(
         builtin_wrapper::missing(name, line, &fds, context).await?;
         return Ok(Outcome::status(1));
     }
+    external_command(ExternalCommand {
+        argv,
+        last_storage,
+        argument_offset,
+        assigned,
+        default_path,
+        line,
+        fds,
+        state,
+        context,
+        parent_stderr,
+        replacement: if context.tail_exec {
+            replacement::Mode::Tail
+        } else {
+            replacement::Mode::Spawn
+        },
+    })
+    .await
+}
+
+struct ExternalCommand<'a> {
+    argv: &'a mut Vec<String>,
+    last_storage: &'a mut Option<crate::exec::StorageAllocation>,
+    argument_offset: usize,
+    assigned: Vec<(String, String)>,
+    default_path: bool,
+    line: Option<usize>,
+    fds: Descriptors,
+    state: &'a SharedState,
+    context: &'a Context,
+    parent_stderr: WeakStderr,
+    replacement: replacement::Mode,
+}
+
+async fn external_command(command: ExternalCommand<'_>) -> Result<Outcome, i32> {
+    let ExternalCommand {
+        argv,
+        last_storage,
+        argument_offset,
+        assigned,
+        default_path,
+        line,
+        fds,
+        state,
+        context,
+        parent_stderr,
+        replacement,
+    } = command;
+    let name = &argv[argument_offset - 1];
     // A pipe named by an open descriptor exists but cannot be executed.
     if name.starts_with("/dev/fd/")
         && crate::io::descriptor_number(name).is_some_and(|fd| fds.borrow().get(fd).is_some())
@@ -3847,16 +3923,34 @@ async fn dispatch_arguments(
         (s.environment(), s.cwd.clone())
     };
     env.extend(assigned);
+    if replacement.clear_environment() {
+        env.clear();
+    }
     let mut arguments =
         take_command_arguments(argv, last_storage, argument_offset, context).await?;
     let command = argv[argument_offset - 1].as_str();
     arguments.insert(0, command.to_owned());
-    let pid = context.core.host.spawn(SpawnRequest {
+    let mut request = crate::process::ExecRequest {
         executable,
         argv: arguments,
         env,
         cwd,
         fds: fds.borrow().clone(),
+    };
+    replacement.configure(&mut request);
+    if replacement.should_attempt(state, context) {
+        match context.core.host.exec(&request) {
+            Ok(never) => match never {},
+            Err(error) if replacement.falls_back(&error) => {}
+            Err(error) => return replacement::failure(error, command, &fds, context).await,
+        }
+    }
+    let pid = context.core.host.spawn(SpawnRequest {
+        executable: request.executable,
+        argv: request.argv,
+        env: request.env,
+        cwd: request.cwd,
+        fds: request.fds,
         group: context.group,
         parent: None,
     });
@@ -4532,29 +4626,18 @@ mod scope_tests {
 
     fn replay_context() -> (SharedState, Descriptors, Context) {
         let (session, group) = isolated_session(Limits::default(), 4096);
-        let context = Context {
-            evaluation: crate::exec::Scope::new(
+        let context = Context::root(
+            session.core.clone(),
+            crate::exec::Source::root(""),
+            crate::exec::Scope::new(
                 session.core.limits.source_bytes,
                 session.core.eval_storage.clone(),
                 session.core.execution_storage.clone(),
             ),
-            core: session.core.clone(),
-            source: crate::exec::Source::root(""),
-            reader: crate::exec::ReaderLocation::default(),
-            lifetime: (Cancel::new(), Rc::new(Cell::new(None))),
-            cancel: Cancel::new(),
-            strand: Strand::untracked(),
-            signal: Rc::new(Cell::new(None)),
+            Cancel::new(),
             group,
-            invocation_group: group,
-            scope: Scope::new(0),
-            parameter_error_status: 127,
-            compound_child: false,
-            loop_depth: 0,
-            ignore_errexit: false,
-            trace: xtrace::Trace::default(),
-            caller_descriptors: None,
-        };
+            Strand::untracked(),
+        );
         (session.state(), session.core.descriptors.clone(), context)
     }
 

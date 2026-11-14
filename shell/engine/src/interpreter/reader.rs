@@ -137,7 +137,21 @@ pub(super) async fn run(
             continue;
         }
         previous_line = end_line;
-        result = execute(command, state.clone(), fds.clone(), context.clone()).await;
+        let tail_exec = !nested
+            && reader.commands.len() == 0
+            && reader.failure.is_none()
+            && reader.next_position.is_none()
+            && super::replacement::eligible(&command);
+        result = execute(
+            command,
+            state.clone(),
+            fds.clone(),
+            Context {
+                tail_exec,
+                ..context.clone()
+            },
+        )
+        .await;
         if result.flow == Flow::SpawnFailed {
             return result;
         }

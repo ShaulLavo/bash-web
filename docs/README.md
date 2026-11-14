@@ -23,6 +23,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [API reference](reference/api.md): `createShell`, `Shell`, `SharedBridge`, shell registration, and `waffle-base` composition
 - [Browser sessions](session.md): Typed terminal sessions, input queues, submission, prompt receipts, and disposal
 - [Process startup errors](spawn-errors.md): Original Waffle failure causes with bounded diagnostics
+- [Process image replacement](exec.md): Explicit exec and eligible final external commands
 - [Native process lifecycle](native-process-lifecycle.md): Canonical observations, late startup, native return, and separate cleanup obligations
 - [Browser integration](browser-runtime.md): Asset contract, storage, `PATH` lookup, test scope, source provenance
 - [Async shell core](shell-engine.md): Execution contract, bounds, supported syntax

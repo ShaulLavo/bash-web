@@ -17,6 +17,8 @@ unsafe extern "C" {
     fn proc_access_cancel(request: u32) -> i32;
     #[link_name = "spawn"]
     fn proc_spawn(ptr: *const u8, length: usize) -> i32;
+    #[link_name = "exec"]
+    fn proc_exec(ptr: *const u8, length: usize) -> i32;
     #[link_name = "spawn_error"]
     fn proc_spawn_error(pid: u32, output: *mut u8, capacity: usize) -> i32;
     #[link_name = "job_of"]
@@ -123,6 +125,15 @@ impl support::Abi for WasiAbi {
 }
 
 impl Abi for WasiAbi {
+    fn root_preopen(&self) -> Option<u32> {
+        Some(self.0.root_preopen())
+    }
+    fn exec(&self, request: &RuntimeExec) -> Result<std::convert::Infallible, i32> {
+        let json = serde_json::to_vec(request).map_err(|_| 28)?;
+        // The host unwinds success. A returning nonnegative result violates the ABI.
+        let value = unsafe { proc_exec(json.as_ptr(), json.len()) };
+        Err(if value < 0 { -value } else { 29 })
+    }
     fn access_start(&self, path: &str, cwd: &str) -> Result<u32, i32> {
         result(unsafe { proc_access_start(path.as_ptr(), path.len(), cwd.as_ptr(), cwd.len(), 1) })
     }
