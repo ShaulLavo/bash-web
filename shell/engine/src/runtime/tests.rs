@@ -776,7 +776,7 @@ fn wait_status(executor: &Executor, runtime: &Runtime, pid: u64) -> Result<i32, 
 fn shell_pid_expansion_and_signal_targets_do_not_alias_async_jobs() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
-    let source = r#"set -u; printf '%s:%s:%s:%s\n' $$ "${$}" "${missing:-$$}" "$(printf '%s' $$)"; sleep & pid=$!; [[ $pid != $$ ]] || exit 99; kill -0 $$; kill -TERM "$pid"; wait "$pid"; printf 'job:%s\n' $?; kill -TERM $$; kill -INT "${$}""#;
+    let source = r#"set -u; sleep & pid=$!; [[ $pid != $$ ]] || exit 99; printf '%s:%s:%s:%s\n' $$ "${$}" "${missing:-$$}" "$(printf '%s' $$)"; kill -0 $$; kill -TERM "$pid"; wait "$pid"; printf 'job:%s\n' $?; kill -TERM $$; kill -INT "${$}""#;
     assert_eq!(
         finish(&executor, &runtime, session.start(source).unwrap()),
         0
