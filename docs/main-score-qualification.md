@@ -8,6 +8,8 @@ The binding records both commits and the executor ref. Admission requires the ex
 
 Preparation resolves the predecessor. Folding preserves its passes, every earlier admitted observation of this source and the fresh observation. A successful producer and upload alone do not admit a dispatch result: the entire dispatch workflow must complete successfully. Repository, workflow, branch, source, predecessor, run, attempt, producer, upload logs and archive digests remain mandatory.
 
+Admission considers every successful dispatch record for the matching source. Each executor's controller closure must match the consuming controller, including the root version blobs in `package.json` and `package-lock.json`. A newer branch dispatch does not supersede an earlier successful record.
+
 This protocol does not allow arbitrary branch dispatches, PR scores, source substitutions, static baselines or skipped main edges. It cannot qualify a source with an unresolved predecessor.
 
 ## Run after source review
@@ -21,7 +23,9 @@ gh workflow run ci.yml --repo ShaulLavo/bash-web --ref REVIEWED_BRANCH -f main_s
 
 Confirm that the resulting run's immutable executor SHA matches the reviewed controller. Admission records that SHA separately from the measured main SHA and requires the whole workflow, including its aggregate, to finish successfully. It scans at most 3,200 dispatch runs and 32 attempts per run. An exhausted, incomplete or unstable listing is an explicit prerequisite failure.
 
-Later admission accepts the captured source's first-parent main ancestry. Main may advance after preparation. The first genuine push floor carries the accumulated requirements forward as ordinary main evidence; later package or lockfile changes consume that floor without revalidating the historical executor closure. Compact raw and floor artifacts retain the existing 90-day lifetime.
+Later admission accepts the captured source's first-parent main ancestry. Main may advance after preparation. A genuine ordinary main push with the admitted controller unchanged can carry all accumulated requirements into its normal cumulative floor. Once that floor is admitted, later consumers can inherit it without re-admitting the historical executor closure, including after package or lockfile changes. Compact raw and floor artifacts retain the existing 90-day lifetime.
+
+If main advances only through documentation changes that leave scoring inputs unchanged, wait for its cumulative floor to be published and admitted. Then retry failed jobs on the existing reviewed release head without rebasing it. The retry can capture the new main floor while retaining the reviewed head and successful jobs. All source, run, attempt, artifact and loss checks still apply.
 
 ## Dependency merge token
 
