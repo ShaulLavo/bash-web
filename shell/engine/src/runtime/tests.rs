@@ -1396,39 +1396,19 @@ fn typed_exec_failure_uses_redirected_stderr_while_weak_endpoint_is_live() {
 
 #[test]
 fn synchronous_fork_failure_uses_parent_stderr_and_not_command_redirection() {
-    for errno in [6, 29, 48] {
-        let (executor, fake, runtime) = setup();
-        fake.spawn_errors
-            .borrow_mut()
-            .insert("/startup-tool".into(), errno);
-        let (session, error_output) = diagnostic_session(&executor, &fake, &runtime);
-        assert_eq!(
-            finish(
-                &executor,
-                &runtime,
-                session
-                    .start("/startup-tool 2>/failure; echo continued",)
-                    .unwrap()
-            ),
-            254
-        );
-        assert_eq!(
-            error_output.bytes(),
-            format!(
-                "/usr/bin/bash: fork: {}\n",
-                ProcessError::StartFailed(errno, String::new())
-            )
-            .as_bytes()
-        );
-        assert!(fake.fs.read_file("/failure").unwrap().is_empty());
-        assert!(fake.output.bytes().is_empty());
-        assert!(fake.requests.borrow().is_empty());
-        shutdown_session(&executor, &runtime, &fake, session);
-    }
+    assert_fork_failure_redirection("/startup-tool 2>/failure; echo continued", None, "/failure");
 }
 
 #[test]
 fn fork_failure_preserves_enclosing_parent_shell_stderr() {
+    assert_fork_failure_redirection(
+        "{ /startup-tool 2>/child; echo hidden; } 2>/parent; echo continued",
+        Some("/parent"),
+        "/child",
+    );
+}
+
+fn assert_fork_failure_redirection(source: &str, parent: Option<&str>, child: &str) {
     for (errno, message) in [
         (6, "Resource temporarily unavailable"),
         (29, "Input/output error"),
@@ -1440,22 +1420,22 @@ fn fork_failure_preserves_enclosing_parent_shell_stderr() {
             .insert("/startup-tool".into(), errno);
         let (session, error_output) = diagnostic_session(&executor, &fake, &runtime);
         assert_eq!(
-            finish(
-                &executor,
-                &runtime,
-                session
-                    .start("{ /startup-tool 2>/child; echo hidden; } 2>/parent; echo continued",)
-                    .unwrap()
-            ),
+            finish(&executor, &runtime, session.start(source).unwrap()),
             254
         );
+        let diagnostic = if let Some(path) = parent {
+            assert!(error_output.bytes().is_empty());
+            fake.fs.read_file(path).unwrap()
+        } else {
+            error_output.bytes()
+        };
         assert_eq!(
-            fake.fs.read_file("/parent").unwrap(),
+            diagnostic,
             format!("/usr/bin/bash: fork: {message}\n").as_bytes()
         );
-        assert!(fake.fs.read_file("/child").unwrap().is_empty());
-        assert!(error_output.bytes().is_empty());
+        assert!(fake.fs.read_file(child).unwrap().is_empty());
         assert!(fake.output.bytes().is_empty());
+        assert!(fake.requests.borrow().is_empty());
         shutdown_session(&executor, &runtime, &fake, session);
     }
 }
