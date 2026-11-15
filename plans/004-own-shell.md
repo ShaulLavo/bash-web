@@ -3879,3 +3879,23 @@ order inside the admitted two-pass printer when repairing it. Do not change
 format validation, streaming or cancellation to hide the missing warning.
 The exact oracle and production streams are recorded in
 `/work/reports/wave-20261022/shell/printf-invalid-format-main75-r1-evidence/star-diagnostic-boundary.json`.
+
+## Firefox pipeline retirement, bounded non-reproduction
+
+Status: Approved, unresolved observation. No standalone documentation PR or issue.
+
+Main run 43625153708, browser shard 2, job 132542545988, source dad2088a8a79146336bfecff6e3cea625a47232d hit the unchanged 120,000 ms retirement cap at 120,003 ms in `tests/pipelines.acceptance.spec.ts`, `pipeline Ctrl+C stops every stage and its children`. Filesystem worker 1, root shell worker 2 and worker 6 remained listed. Worker 6 was PID 5, `test-guest yes tick`, with a recorded termination request. The runtime had logically collected all children and pipes. The retained hosted evidence cannot establish worker 6 physical death or stale browser bookkeeping.
+
+Two local exact-case attempts on that source, using qualified native artifact 14126226322 and JavaScript artifact 14126080637, passed the pipeline retirement and status checks without widening or weakening them. The final original-test run passed, and captured actual native return, Firefox close/protocol identity and root-only runtime state. The earlier positive control proved that a recorded request alone must not make a still-executing worker pass. No root cause or fix was established. PR257's separately approved review and passing browser shards do not diagnose this earlier failure.
+
+Reproduction, if this observation recurs during ordinary release verification: restore the exact qualified artifacts, assemble browser assets without rebuilding guests, then run only:
+
+```sh
+BASH_WEB_MEASURE=1 PLAYWRIGHT_BROWSERS_PATH=/work/cache/ms-playwright \
+node node_modules/@playwright/test/cli.js test tests/pipelines.acceptance.spec.ts \
+--project firefox --grep 'pipeline Ctrl\+C stops every stage and its children$' --retries=0
+```
+
+Use the PC heavy runner and task-owned teardown. Retain logical state, actual native-call return, browser worker identity/close events and independent execution evidence before page teardown if it fails. Preserve the original failure and the 120,000 ms hang cap. Do not drop listed workers or equate logical collection with physical retirement. No additional diagnostic rounds are commissioned by this entry. Parent owns normal release gates.
+
+Evidence: `/work/reports/goals/product-shell-20261114/bash-web/post-main-browser2/`, final attempt under `second-final/`. All original evidence and inherited browser assets were preserved. No source, pin or protected fixture change was made.

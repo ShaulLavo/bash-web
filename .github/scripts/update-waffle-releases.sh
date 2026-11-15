@@ -60,10 +60,11 @@ update_runtime() {
 
   sed -i "s|$(jq -r '.waffle.specifier' sources.lock.json)|${specifier}|g" package.json
   tmp=$(mktemp)
-  jq --arg version "$version" --arg revision "$revision" \
+  jq --arg version "$version" --arg tag "$tag" --arg revision "$revision" \
     --arg specifier "$specifier" --arg archive_sha "$archive_sha" --arg builder_sha "$builder_sha" \
     --arg patch_sha "$patch_sha" --argjson archive_bytes "$archive_bytes" \
     '.waffle.version = $version
+     | .waffle.tag = $tag
      | .waffle.revision = $revision
      | .waffle.specifier = $specifier
      | .waffle.archiveSha256 = $archive_sha
