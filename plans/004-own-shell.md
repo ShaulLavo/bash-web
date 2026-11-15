@@ -3899,3 +3899,9 @@ node node_modules/@playwright/test/cli.js test tests/pipelines.acceptance.spec.t
 Use the PC heavy runner and task-owned teardown. Retain logical state, actual native-call return, browser worker identity/close events and independent execution evidence before page teardown if it fails. Preserve the original failure and the 120,000 ms hang cap. Do not drop listed workers or equate logical collection with physical retirement. No additional diagnostic rounds are commissioned by this entry. Parent owns normal release gates.
 
 Evidence: `/work/reports/goals/product-shell-20261114/bash-web/post-main-browser2/`, final attempt under `second-final/`. All original evidence and inherited browser assets were preserved. No source, pin or protected fixture change was made.
+
+## Chromium pipeline collected incarnation, bounded non-reproduction
+
+Status: Approved, unresolved observation. Main run 43631332021, job 132561950651, source `efae42fa3caf353082e0d1631cb3756076517bb4` with Waffle 0.0.129 failed the pipeline case before Ctrl+C. Both marker guests appeared, but their `yes` and `cat` successors did not launch. The root reported `ProcessError: process incarnation was collected`. The original evidence does not identify the operation or establish whether a process or job outcome cell was involved.
+
+Two valid local diagnostics did not reproduce the failure. They stopped after observing successor launch or failure, without sending Ctrl+C, and were not complete acceptance runs. No ownership or fix was proved. Preserve the original evidence, assertions and caps; no additional diagnostics are commissioned. Evidence: `/work/reports/goals/product-shell-20261114/bash-web/post-main-257-browser1/RESULT.md`.
