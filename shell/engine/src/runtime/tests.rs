@@ -1401,9 +1401,7 @@ fn synchronous_fork_failure_uses_parent_stderr_and_not_command_redirection() {
         fake.spawn_errors
             .borrow_mut()
             .insert("/startup-tool".into(), errno);
-        let (stderr, error_output) = io::capture(4096);
-        fake.fds.borrow_mut().insert(2, stderr);
-        let session = runtime_session(&executor, &runtime);
+        let (session, error_output) = diagnostic_session(&executor, &fake, &runtime);
         assert_eq!(
             finish(
                 &executor,
@@ -1440,9 +1438,7 @@ fn fork_failure_preserves_enclosing_parent_shell_stderr() {
         fake.spawn_errors
             .borrow_mut()
             .insert("/startup-tool".into(), errno);
-        let (stderr, error_output) = io::capture(4096);
-        fake.fds.borrow_mut().insert(2, stderr);
-        let session = runtime_session(&executor, &runtime);
+        let (session, error_output) = diagnostic_session(&executor, &fake, &runtime);
         assert_eq!(
             finish(
                 &executor,
