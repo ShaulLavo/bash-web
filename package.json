@@ -150,7 +150,7 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.131/waffle-0.0.131.tgz",
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.132/waffle-0.0.132.tgz",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
