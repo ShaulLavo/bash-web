@@ -1176,38 +1176,59 @@ fn cancelled_pending_start_preserves_terminal_signal_without_diagnostic() {
 }
 
 #[test]
-fn typed_and_synchronous_fork_failures_abort_the_whole_reader() {
-    for synchronous in [false, true] {
-        for errno in [6, 29, 48] {
-            for command in [
-                "/startup-tool; echo continued",
-                "/startup-tool | true; echo continued",
-                "true | /startup-tool; echo continued",
-                "/startup-tool | true | true; echo continued",
-                "{ /startup-tool | true; }; echo continued",
-                "/startup-tool | sleep; echo continued",
-                "/startup-tool | while true; do :; done; echo continued",
-                "set -o lastpipe; /startup-tool | true; echo continued",
-            ] {
-                let (executor, fake, runtime) = setup();
-                if synchronous {
-                    fake.spawn_errors
-                        .borrow_mut()
-                        .insert("/startup-tool".into(), errno);
-                } else {
-                    fake.outcomes
-                        .borrow_mut()
-                        .insert("/startup-tool".into(), WaitResult::StartFailed(errno));
-                }
-                let session = runtime_session(&executor, &runtime);
-                assert_eq!(
-                    finish(&executor, &runtime, session.start(command).unwrap()),
-                    254,
-                    "sync={synchronous} errno={errno} {command}"
-                );
-                assert!(fake.output.bytes().is_empty(), "{command}");
-                shutdown_session(&executor, &runtime, &fake, session);
-            }
+fn typed_start_failure_resource_errors_use_command_status() {
+    for errno in [6, 29, 48] {
+        for (command, status, output) in [
+            ("/startup-tool 2>/failure", 126, b"".as_slice()),
+            (
+                "/startup-tool 2>/failure; echo continued:$?",
+                0,
+                b"continued:126\n".as_slice(),
+            ),
+        ] {
+            let (executor, fake, runtime) = setup();
+            fake.outcomes
+                .borrow_mut()
+                .insert("/startup-tool".into(), WaitResult::StartFailed(errno));
+            let session = runtime_session(&executor, &runtime);
+            assert_eq!(
+                finish(&executor, &runtime, session.start(command).unwrap()),
+                status,
+                "{errno} {command}"
+            );
+            assert_eq!(fake.output.bytes(), output);
+            let diagnostic = String::from_utf8(fake.fs.read_file("/failure").unwrap()).unwrap();
+            assert!(diagnostic.starts_with("/usr/bin/bash: /startup-tool: "));
+            shutdown_session(&executor, &runtime, &fake, session);
+        }
+    }
+}
+
+#[test]
+fn synchronous_fork_failures_abort_the_whole_reader() {
+    for errno in [6, 29, 48] {
+        for command in [
+            "/startup-tool; echo continued",
+            "/startup-tool | true; echo continued",
+            "true | /startup-tool; echo continued",
+            "/startup-tool | true | true; echo continued",
+            "{ /startup-tool | true; }; echo continued",
+            "/startup-tool | sleep; echo continued",
+            "/startup-tool | while true; do :; done; echo continued",
+            "set -o lastpipe; /startup-tool | true; echo continued",
+        ] {
+            let (executor, fake, runtime) = setup();
+            fake.spawn_errors
+                .borrow_mut()
+                .insert("/startup-tool".into(), errno);
+            let session = runtime_session(&executor, &runtime);
+            assert_eq!(
+                finish(&executor, &runtime, session.start(command).unwrap()),
+                254,
+                "errno={errno} {command}"
+            );
+            assert!(fake.output.bytes().is_empty(), "{command}");
+            shutdown_session(&executor, &runtime, &fake, session);
         }
     }
 }
@@ -1258,9 +1279,9 @@ fn typed_start_failure_first_group_consumer_releases_cleanup_reservation() {
 #[test]
 fn typed_start_failure_keeps_redirected_stderr_until_diagnostic() {
     for (errno, status, message) in [
-        (48, 254, "fork: Cannot allocate memory"),
-        (6, 254, "fork: Resource temporarily unavailable"),
-        (29, 254, "fork: Input/output error"),
+        (48, 126, "/startup-tool: Cannot allocate memory"),
+        (6, 126, "/startup-tool: Resource temporarily unavailable"),
+        (29, 126, "/startup-tool: Input/output error"),
         (44, 127, "/startup-tool: No such file or directory"),
         (2, 126, "/startup-tool: Permission denied"),
         (45, 126, "/startup-tool: Exec format error"),
@@ -1283,24 +1304,15 @@ fn typed_start_failure_keeps_redirected_stderr_until_diagnostic() {
                 .start("/startup-tool 2>/failure; echo continued:$?")
                 .unwrap(),
         );
-        assert_eq!(code, if status == 254 { 254 } else { 0 }, "errno {errno}");
+        assert_eq!(code, 0, "errno {errno}");
         let diagnostic = format!("/usr/bin/bash: {message}\n");
-        if status == 254 {
-            assert_eq!(error_output.bytes(), diagnostic.as_bytes(), "errno {errno}");
-            assert!(fake.fs.read_file("/failure").unwrap().is_empty());
-        } else {
-            assert!(error_output.bytes().is_empty(), "errno {errno}");
-            assert_eq!(
-                fake.fs.read_file("/failure").unwrap(),
-                diagnostic.as_bytes(),
-                "errno {errno}"
-            );
-        }
-        let expected = if status == 254 {
-            String::new()
-        } else {
-            format!("continued:{status}\n")
-        };
+        assert!(error_output.bytes().is_empty(), "errno {errno}");
+        assert_eq!(
+            fake.fs.read_file("/failure").unwrap(),
+            diagnostic.as_bytes(),
+            "errno {errno}"
+        );
+        let expected = format!("continued:{status}\n");
         assert_eq!(fake.output.bytes(), expected.as_bytes(), "errno {errno}");
         assert_eq!(runtime.retained_count(), 0);
         assert_eq!(fake.reaped_jobs.borrow().len(), 1);
@@ -1314,7 +1326,14 @@ fn typed_start_failure_keeps_redirected_stderr_until_diagnostic() {
 
 #[test]
 fn start_failure_pipeline_delivers_diagnostic_before_eof() {
-    for (errno, code) in [(44, 127), (2, 126), (45, 126)] {
+    for (errno, code) in [
+        (44, 127),
+        (2, 126),
+        (45, 126),
+        (6, 126),
+        (29, 126),
+        (48, 126),
+    ] {
         let (executor, fake, runtime) = setup();
         fake.outcomes
             .borrow_mut()
@@ -1377,72 +1396,46 @@ fn typed_exec_failure_uses_redirected_stderr_while_weak_endpoint_is_live() {
 
 #[test]
 fn synchronous_fork_failure_uses_parent_stderr_and_not_command_redirection() {
-    for errno in [6, 29, 48] {
-        let (executor, fake, runtime) = setup();
-        fake.spawn_errors
-            .borrow_mut()
-            .insert("/startup-tool".into(), errno);
-        let (stderr, error_output) = io::capture(4096);
-        fake.fds.borrow_mut().insert(2, stderr);
-        let session = runtime_session(&executor, &runtime);
-        assert_eq!(
-            finish(
-                &executor,
-                &runtime,
-                session
-                    .start("/startup-tool 2>/failure; echo continued",)
-                    .unwrap()
-            ),
-            254
-        );
-        assert_eq!(
-            error_output.bytes(),
-            format!(
-                "/usr/bin/bash: fork: {}\n",
-                ProcessError::StartFailed(errno, String::new())
-            )
-            .as_bytes()
-        );
-        assert!(fake.fs.read_file("/failure").unwrap().is_empty());
-        assert!(fake.output.bytes().is_empty());
-        assert!(fake.requests.borrow().is_empty());
-        shutdown_session(&executor, &runtime, &fake, session);
-    }
+    assert_fork_failure_redirection("/startup-tool 2>/failure; echo continued", None, "/failure");
 }
 
 #[test]
 fn fork_failure_preserves_enclosing_parent_shell_stderr() {
-    for synchronous in [false, true] {
+    assert_fork_failure_redirection(
+        "{ /startup-tool 2>/child; echo hidden; } 2>/parent; echo continued",
+        Some("/parent"),
+        "/child",
+    );
+}
+
+fn assert_fork_failure_redirection(source: &str, parent: Option<&str>, child: &str) {
+    for (errno, message) in [
+        (6, "Resource temporarily unavailable"),
+        (29, "Input/output error"),
+        (48, "Cannot allocate memory"),
+    ] {
         let (executor, fake, runtime) = setup();
-        if synchronous {
-            fake.spawn_errors
-                .borrow_mut()
-                .insert("/startup-tool".into(), 48);
-        } else {
-            fake.outcomes
-                .borrow_mut()
-                .insert("/startup-tool".into(), WaitResult::StartFailed(48));
-        }
-        let (stderr, error_output) = io::capture(4096);
-        fake.fds.borrow_mut().insert(2, stderr);
-        let session = runtime_session(&executor, &runtime);
+        fake.spawn_errors
+            .borrow_mut()
+            .insert("/startup-tool".into(), errno);
+        let (session, error_output) = diagnostic_session(&executor, &fake, &runtime);
         assert_eq!(
-            finish(
-                &executor,
-                &runtime,
-                session
-                    .start("{ /startup-tool 2>/child; echo hidden; } 2>/parent; echo continued",)
-                    .unwrap()
-            ),
+            finish(&executor, &runtime, session.start(source).unwrap()),
             254
         );
+        let diagnostic = if let Some(path) = parent {
+            assert!(error_output.bytes().is_empty());
+            fake.fs.read_file(path).unwrap()
+        } else {
+            error_output.bytes()
+        };
         assert_eq!(
-            fake.fs.read_file("/parent").unwrap(),
-            b"/usr/bin/bash: fork: Cannot allocate memory\n"
+            diagnostic,
+            format!("/usr/bin/bash: fork: {message}\n").as_bytes()
         );
-        assert!(fake.fs.read_file("/child").unwrap().is_empty());
-        assert!(error_output.bytes().is_empty());
+        assert!(fake.fs.read_file(child).unwrap().is_empty());
         assert!(fake.output.bytes().is_empty());
+        assert!(fake.requests.borrow().is_empty());
         shutdown_session(&executor, &runtime, &fake, session);
     }
 }
@@ -3685,9 +3678,9 @@ fn review_followup_pipeline_preserves_host_interrupt_probe() {
 fn review_followup_subshell_failure_does_not_close_enclosing_group() {
     for sibling in ["true", "sleep", "while true; do :; done"] {
         let (executor, fake, runtime) = setup();
-        fake.outcomes
+        fake.spawn_errors
             .borrow_mut()
-            .insert("/startup-tool".into(), WaitResult::StartFailed(48));
+            .insert("/startup-tool".into(), 48);
         let session = runtime_session(&executor, &runtime);
         let command = format!("( /startup-tool | {sibling} ); /ok; echo status:$?");
         let code = finish(&executor, &runtime, session.start(&command).unwrap());
@@ -3756,7 +3749,7 @@ fn review_followup_closed_stderr_does_not_use_core_fallback() {
         let code = finish(&executor, &runtime, session.start(source).unwrap());
         let diagnostic = error_output.bytes();
         shutdown_session(&executor, &runtime, &fake, session);
-        assert_eq!(code, if errno == 44 { 127 } else { 254 });
+        assert_eq!(code, if errno == 44 { 127 } else { 126 });
         assert!(
             diagnostic.is_empty(),
             "fallback reopened explicitly closed stderr: {source}"
@@ -3772,9 +3765,9 @@ fn fork_failure_subshell_status_is_254_but_outer_reader_continues() {
         "( while /startup-tool; do :; done ); echo sub:$?; /ok; echo status:$?",
     ] {
         let (executor, fake, runtime) = setup();
-        fake.outcomes
+        fake.spawn_errors
             .borrow_mut()
-            .insert("/startup-tool".into(), WaitResult::StartFailed(48));
+            .insert("/startup-tool".into(), 48);
         let session = runtime_session(&executor, &runtime);
         assert_eq!(
             finish(&executor, &runtime, session.start(source).unwrap()),
@@ -3836,18 +3829,19 @@ fn successful_subshell_substitution_keeps_invocation_interrupt_owner() {
 fn aborted_subshell_leaves_descendants_to_enclosing_invocation_cleanup() {
     for interrupt in [false, true] {
         let (executor, fake, runtime) = setup();
-        fake.outcomes
+        fake.spawn_errors
             .borrow_mut()
-            .insert("/startup-tool".into(), WaitResult::StartFailed(48));
+            .insert("/startup-tool".into(), 48);
         let session = runtime_session(&executor, &runtime);
         let foreground = session
             .start("( inherit-sleep | /startup-tool ); echo sub:$?; /ok; parse-gate")
             .unwrap();
-        drive_until_spawn(&executor, &runtime, &fake, 4);
+        drive_until_spawn(&executor, &runtime, &fake, 3);
         for _ in 0..64 {
             executor.drive(64);
             runtime.poll(0).unwrap();
         }
+        assert_eq!(fake.requests.borrow().len(), 3);
         assert_eq!(fake.output.bytes(), b"sub:254\n");
         // Known Bash difference: existing reader cancellation signals the direct
         // child with SIGINT; Bash would leave it running. Descendants stay alive
@@ -4451,19 +4445,29 @@ fn assert_shell_spawn_diagnostic(synchronous: bool) {
     }
     *fake.spawn_diagnostic.borrow_mut() = b"ProcessError: worker failed: original cause".to_vec();
     let (session, output) = diagnostic_session(&executor, &fake, &runtime);
+    let expected: (i32, &[u8], &[u8]) = if synchronous {
+        (
+            254,
+            b"/usr/bin/bash: fork: Input/output error: ProcessError: worker failed: original cause\n",
+            b"",
+        )
+    } else {
+        (
+            0,
+            b"/usr/bin/bash: /startup-tool: Input/output error: ProcessError: worker failed: original cause\n",
+            b"continued\n",
+        )
+    };
     assert_eq!(
         finish(
             &executor,
             &runtime,
             session.start("/startup-tool; echo continued").unwrap()
         ),
-        254
+        expected.0
     );
-    assert_eq!(
-        output.bytes(),
-        b"/usr/bin/bash: fork: Input/output error: ProcessError: worker failed: original cause\n"
-    );
-    assert!(fake.output.bytes().is_empty());
+    assert_eq!(output.bytes(), expected.1);
+    assert_eq!(fake.output.bytes(), expected.2);
     assert_eq!(
         fake.diagnostic_reads.borrow()[0],
         (if synchronous { 0 } else { 100 }, 4096)

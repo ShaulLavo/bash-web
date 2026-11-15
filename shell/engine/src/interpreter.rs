@@ -3990,11 +3990,20 @@ async fn external_command(command: ExternalCommand<'_>) -> Result<Outcome, i32> 
         Ok(pid) => pid,
         Err(error @ ProcessError::StartFailed(..)) => {
             let stderr = fds.borrow().get(2);
-            return external_wait_failure(error, command, stderr, parent_stderr, context).await;
+            return external_start_failure(
+                error,
+                StartupPhase::Spawn,
+                command,
+                stderr,
+                parent_stderr,
+                context,
+            )
+            .await;
         }
         Err(ProcessError::Runtime(errno @ (6 | 29 | 48))) => {
-            return external_wait_failure(
+            return external_start_failure(
                 ProcessError::StartFailed(errno, String::new()),
+                StartupPhase::Spawn,
                 command,
                 None,
                 parent_stderr,
@@ -4003,8 +4012,9 @@ async fn external_command(command: ExternalCommand<'_>) -> Result<Outcome, i32> 
             .await;
         }
         Err(ProcessError::ProcessLimit) => {
-            return external_wait_failure(
+            return external_start_failure(
                 ProcessError::StartFailed(6, String::new()),
+                StartupPhase::Spawn,
                 command,
                 None,
                 parent_stderr,
@@ -4023,9 +4033,17 @@ async fn external_command(command: ExternalCommand<'_>) -> Result<Outcome, i32> 
     let wait = context.strand.wait(pid);
     let startup = context.cancel.run(context.core.host.wait_start(pid)).await;
     let failure = match startup {
-        Ok(Err(error @ ProcessError::StartFailed(..))) => {
-            Some(external_wait_failure(error, command, stderr.take(), parent_stderr, context).await)
-        }
+        Ok(Err(error @ ProcessError::StartFailed(..))) => Some(
+            external_start_failure(
+                error,
+                StartupPhase::Admitted,
+                command,
+                stderr.take(),
+                parent_stderr,
+                context,
+            )
+            .await,
+        ),
         Ok(Err(ProcessError::Runtime(11))) | Ok(Ok(())) | Err(_) => None,
         Ok(Err(_)) => {
             let _ = context.core.host.kill(pid, context.stop_signal());
@@ -4102,8 +4120,14 @@ async fn take_command_arguments(
     Ok(args)
 }
 
-async fn external_wait_failure(
+enum StartupPhase {
+    Spawn,
+    Admitted,
+}
+
+async fn external_start_failure(
     error: ProcessError,
+    phase: StartupPhase,
     command: &str,
     stderr: Option<io::Endpoint>,
     parent_stderr: WeakStderr,
@@ -4112,7 +4136,7 @@ async fn external_wait_failure(
     let ProcessError::StartFailed(errno, _) = error else {
         return Err(1);
     };
-    let fork = matches!(errno, 6 | 29 | 48);
+    let fork = matches!(phase, StartupPhase::Spawn) && matches!(errno, 6 | 29 | 48);
     let operation = if fork { "fork" } else { command };
     // Fork errors use the caller's stderr, before command redirections. Only
     // that borrowed parent may need the shell fallback; closed stderr stays closed.

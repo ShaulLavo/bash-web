@@ -308,7 +308,7 @@ pub trait ProcessHost {
         true
     }
     /// Observe executable startup without collecting the child or awaiting teardown.
-    /// StartFailed carries the exec/fork errno; Runtime(11) means cancellation
+    /// StartFailed carries the admitted child's startup errno; Runtime(11) means cancellation
     /// prevented entry and the terminal wait still owns its actual outcome.
     fn wait_start(&self, pid: ProcessId) -> LocalBoxFuture<'static, Result<(), ProcessError>>;
     fn wait(&self, pid: ProcessId) -> ChildWait;
