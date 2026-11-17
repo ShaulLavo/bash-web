@@ -1,4 +1,19 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+function hostInterface(path: string) {
+  return JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8")).waffleHostInterface;
+}
+
+// A published adapter bundles Waffle code for the interface it was released on, so
+// it cannot start on a runtime with another interface. After a Waffle interface bump
+// this case waits for the next bash-web release and its pin in docs/product-shell-integration.md.
+const publicInterface = hostInterface("../node_modules/bash-web-public/package.json");
+const selectedInterface = hostInterface("../node_modules/waffle/package.json");
+test.skip(
+  publicInterface !== selectedInterface,
+  `public bash-web declares host interface ${publicInterface}; selected Waffle is ${selectedInterface}`,
+);
 
 test("public editor saves exact text, terminal runs it, and the page retains its runtime", async ({
   page,

@@ -32,6 +32,10 @@ pair the pinned public adapter with the current workspace guest. Change the test
 dependency URLs and regenerate both lockfiles when qualifying a newer public
 tuple. Do not change `sources.lock.json` for this test.
 
+A published adapter bundles the Waffle code of its own host interface. When the
+selected Waffle moves to a new interface, the case skips until a bash-web release
+on that interface exists and `bash-web-public` is pinned to it.
+
 After the normal browser build, run `npm run test:browser:integration`. The same
 case runs in every configured Playwright project. It uses the textarea editor
 input route and Ghostty's Canvas renderer. WebKit is desktop engine coverage.
