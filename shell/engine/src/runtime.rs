@@ -101,6 +101,9 @@ pub trait Abi: support::Abi {
     fn signal_self(&self, _signal: i32) -> Result<(), i32> {
         Err(58)
     }
+    /// Unwinds the guest once the runtime has selected a fatal outcome for this
+    /// process. Never consumes a handled signal.
+    fn check_stop(&self) {}
     fn root_preopen(&self) -> Option<u32> {
         None
     }
@@ -694,6 +697,9 @@ impl ProcessHost for Runtime {
     }
     fn interrupted(&self) -> bool {
         self.take_interrupt()
+    }
+    fn check_stop(&self) {
+        self.0.abi.check_stop();
     }
     fn spawn(&self, request: SpawnRequest) -> Result<ProcessId, ProcessError> {
         self.reap_finished_jobs();

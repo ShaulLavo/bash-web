@@ -25,6 +25,7 @@ Start at the [README](../README.md) for what bash-web is. This page maps the res
 - [Process startup errors](spawn-errors.md): Original Waffle failure causes with bounded diagnostics
 - [Process image replacement](exec.md): Explicit exec and eligible final external commands
 - [Shell PID and self-signals](self-signals.md): Runtime PID expansion and tagged self-termination
+- [Stopping a busy shell](stopping.md): How loops and background jobs stop when `Worker.terminate()` does not
 - [Native process lifecycle](native-process-lifecycle.md): Canonical observations, late startup, native return, and separate cleanup obligations
 - [Browser integration](browser-runtime.md): Asset contract, storage, `PATH` lookup, test scope, source provenance
 - [Editor and terminal release integration](product-shell-integration.md): Public package input, saved scripts, focus, and borrowed-runtime disposal

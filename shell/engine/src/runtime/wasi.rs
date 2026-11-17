@@ -133,6 +133,12 @@ impl Abi for WasiAbi {
     fn signal_self(&self, signal: i32) -> Result<(), i32> {
         result(unsafe { proc_signal(signal, 3) }).map(|_| ())
     }
+    fn check_stop(&self) {
+        // Mode 4 is Waffle's nonconsuming stop probe: the host unwinds this call
+        // when the process is stopped. Worker.terminate() alone does not stop a
+        // busy guest on iOS Safari.
+        unsafe { proc_signal(0, 4) };
+    }
     fn root_preopen(&self) -> Option<u32> {
         Some(self.0.root_preopen())
     }
