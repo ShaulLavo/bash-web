@@ -127,10 +127,10 @@
     "test:browser:integration": "npm run build:test:product-shell && playwright test tests/product-shell.spec.ts"
   },
   "dependencies": {
-    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.22/waffle-python-0.0.22.tgz",
-    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.22/waffle-base-0.0.22.tgz",
-    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.22/waffle-git-0.0.22.tgz",
-    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.22/waffle-ripgrep-0.0.22.tgz"
+    "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-python-0.0.23.tgz",
+    "waffle-base": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-base-0.0.23.tgz",
+    "waffle-git": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-git-0.0.23.tgz",
+    "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-ripgrep-0.0.23.tgz"
   },
   "devDependencies": {
     "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz",
@@ -150,7 +150,7 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.138/waffle-0.0.138.tgz",
+    "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.140/waffle-0.0.140.tgz",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
@@ -169,5 +169,5 @@
   "trustedDependencies": [
     "esbuild"
   ],
-  "waffleHostInterface": 2
+  "waffleHostInterface": 3
 }
