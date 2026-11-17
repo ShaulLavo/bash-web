@@ -291,6 +291,9 @@ pub trait ProcessHost {
     fn interrupted(&self) -> bool {
         false
     }
+    /// Nonconsuming stop checkpoint for work no foreground probe covers, such as
+    /// background jobs. A WASI host unwinds the guest here once it is stopped.
+    fn check_stop(&self) {}
     /// Check whether `path` is executable from `cwd` without spawning it. The
     /// returned future owns any host request and cancellation must retire it.
     fn access(

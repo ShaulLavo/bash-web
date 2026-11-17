@@ -1995,6 +1995,27 @@ fn loop_arithmetic<'a>(
     )
 }
 
+/// Host probes run every 16th cancellation check; this asks the host once per
+/// `STOP_PROBE_SKIP` of those (4096 checks, Waffle's own interrupt interval).
+/// Asking on every probe made a tight background loop about 22% slower.
+const STOP_PROBE_SKIP: u32 = 256;
+
+/// Cancellation probe for work without a foreground interrupt probe. It never
+/// cancels by itself: a stopped WASI process unwinds inside `check_stop`.
+fn stop_probe(host: Rc<dyn ProcessHost>) -> Rc<dyn Fn() -> bool> {
+    let skipped = Cell::new(0u32);
+    Rc::new(move || {
+        let next = skipped.get() + 1;
+        if next < STOP_PROBE_SKIP {
+            skipped.set(next);
+            return false;
+        }
+        skipped.set(0);
+        host.check_stop();
+        false
+    })
+}
+
 async fn loop_checkpoint(budget: &mut Budget, context: &Context) -> Result<(), Outcome> {
     budget
         .checkpoint(&context.cancel)
@@ -2533,7 +2554,9 @@ async fn launch_background(
         Err(code) => return Outcome::status(code),
     };
     let group = context.core.host.allocate_background_group();
-    let cancel = Cancel::new();
+    // Background work has no foreground interrupt probe; it still has to stop
+    // when the runtime stops this process.
+    let cancel = Cancel::with_probe(stop_probe(context.core.host.clone()));
     let signal = Rc::new(Cell::new(None));
     let child_context = Context {
         core: context.core.clone(),
@@ -5130,6 +5153,7 @@ mod residual_review_tests {
         signals: RefCell<Vec<GroupId>>,
         abandoned: RefCell<Vec<GroupId>>,
         interrupt: Cell<bool>,
+        stop_checks: Cell<usize>,
         fail_detach: Cell<bool>,
         cleanup_error: Cell<bool>,
         release: Cancel,
@@ -5145,6 +5169,9 @@ mod residual_review_tests {
         }
         fn interrupted(&self) -> bool {
             self.interrupt.replace(false)
+        }
+        fn check_stop(&self) {
+            self.stop_checks.set(self.stop_checks.get() + 1);
         }
         fn access(
             &self,
@@ -5219,6 +5246,7 @@ mod residual_review_tests {
                 signals: RefCell::new(Vec::new()),
                 abandoned: RefCell::new(Vec::new()),
                 interrupt: Cell::new(false),
+                stop_checks: Cell::new(0),
                 fail_detach: Cell::new(false),
                 cleanup_error: Cell::new(false),
                 release: Cancel::new(),
@@ -5478,6 +5506,27 @@ mod residual_review_tests {
             "a residual monitor must only observe explicit lifetime cancellation"
         );
         drop(context);
+        rig.shutdown();
+    }
+    #[test]
+    fn background_loop_checks_for_a_stop_without_consuming_an_interrupt() {
+        let rig = Harness::new();
+        assert_eq!(rig.run("while :; do :; done &"), 0);
+        rig.host.interrupt.set(true);
+        for _ in 0..2000 {
+            if rig.host.stop_checks.get() >= 2 {
+                break;
+            }
+            rig.executor.drive(64);
+        }
+        assert!(
+            rig.host.stop_checks.get() >= 2,
+            "a busy background loop must keep asking the host whether it was stopped"
+        );
+        assert!(
+            rig.host.interrupt.replace(false),
+            "the background stop check must leave handled interrupts to the foreground"
+        );
         rig.shutdown();
     }
     #[test]
