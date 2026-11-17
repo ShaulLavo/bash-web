@@ -85,6 +85,7 @@ export function runInteractive({ args, terminal, next, onWait }: InteractiveRun)
       descriptors: wasi.descriptors,
       fs,
       pid,
+      processIdentity: signals.processIdentity,
       service: supervisor,
       signals,
       wait(milliseconds) {

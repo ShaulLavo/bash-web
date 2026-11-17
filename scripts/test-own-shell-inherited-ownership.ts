@@ -99,6 +99,7 @@ function runPaused(options: {
       descriptors: wasi.descriptors,
       fs,
       pid,
+      processIdentity: signals.processIdentity,
       service: supervisor,
       signals,
       wait() {

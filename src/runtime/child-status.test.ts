@@ -58,6 +58,7 @@ for (const { name, outcome, kind, value } of outcomes)
       // The wait imports never touch the filesystem.
       fs: {} as FileSystem,
       pid: service.pid,
+      processIdentity: service.processIdentity,
       service,
       signals: service.signals,
       wake: service.wake,

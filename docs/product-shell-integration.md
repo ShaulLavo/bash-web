@@ -23,14 +23,18 @@ keep this fixture separate from the demo's protected Ghostty source pin.
 | ------------------------------------------ | ---------------------------------------------------- |
 | Singapore core 0.2.11 and textbuffer 0.2.9 | `singapore-47d5f77a721ef68572f8f729dac7342230f178cb` |
 | Ghostty 0.3.34                             | `v0.3.34-feeb78fa9`                                  |
-| bash-web adapter and workers 0.0.111        | `bash-web-v0.0.111`                                  |
-| Waffle 0.0.131                             | `waffle-v0.0.131`, host interface 2                  |
+| bash-web adapter and workers 0.0.113       | `bash-web-v0.0.113`                                  |
+| Waffle 0.0.140                             | `waffle-v0.0.140`, host interface 3                  |
 
 The guest is the ordinary workspace build, not a Wasm asset in the bash-web
-archive. The 0.0.111 release came from workspace source `e362a475`. Later runs
+archive. The 0.0.113 release came from workspace source `7c458c22`. Later runs
 pair the pinned public adapter with the current workspace guest. Change the test
 dependency URLs and regenerate both lockfiles when qualifying a newer public
 tuple. Do not change `sources.lock.json` for this test.
+
+A published adapter bundles the Waffle code of its own host interface. When the
+selected Waffle moves to a new interface, the case skips until a bash-web release
+on that interface exists and `bash-web-public` is pinned to it.
 
 After the normal browser build, run `npm run test:browser:integration`. The same
 case runs in every configured Playwright project. It uses the textarea editor
