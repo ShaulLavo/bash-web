@@ -102,10 +102,10 @@ async function selectedPython(signal: AbortSignal) {
   );
   if (!value || typeof value !== "object" || !("name" in value) || !("version" in value))
     throw new Error("Missing selected Python package identity");
-  if (value.name !== "@waffle/python" || value.version !== "0.0.22")
-    throw new Error("Expected selected installed @waffle/python 0.0.22");
-  if (!("waffleHostInterface" in value) || value.waffleHostInterface !== 2)
-    throw new Error("Expected Python host interface 2");
+  if (value.name !== "@waffle/python" || value.version !== "0.0.23")
+    throw new Error("Expected selected installed @waffle/python 0.0.23");
+  if (!("waffleHostInterface" in value) || value.waffleHostInterface !== 3)
+    throw new Error("Expected Python host interface 3");
   return { root: await realpath(resolve(root, "assets")), version: value.version };
 }
 
