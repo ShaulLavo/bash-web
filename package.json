@@ -140,7 +140,7 @@
     "@types/bun": "1.4.4",
     "@types/node": "26.6.3",
     "@webgpu/types": "0.1.74",
-    "bash-web-public": "https://github.com/ShaulLavo/bash-web/releases/download/bash-web-v0.0.111/bash-web-0.0.111.tgz",
+    "bash-web-public": "https://github.com/ShaulLavo/bash-web/releases/download/bash-web-v0.0.113/bash-web-0.0.113.tgz",
     "esbuild": "0.28.2",
     "ghostty-public": "https://github.com/ShaulLavo/ghostty-webgpu/releases/download/v0.3.34-feeb78fa9/ghostty-webgpu.tgz",
     "jscpd": "5.4.1",
