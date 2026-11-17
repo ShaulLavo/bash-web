@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { api, shell, waffleFixture, prepareWaffleDirectories } from "./own-shell-waffle-fixture.ts";
+
+/** Exit comes from the shared outcome; stdout can still be in flight to the caller. */
+async function outputIncluding(output: readonly string[], expected: string) {
+  const hangCap = Date.now() + 10_000;
+  while (!output.join("").includes(expected) && Date.now() < hangCap) await delay(5);
+  return output.join("");
+}
 
 async function fixture(context: TestContext) {
   const { runtime } = await waffleFixture(context);
@@ -60,7 +68,7 @@ for (const [name, code] of [
       const source = `/bin/bash -c 'printf child-ready >/ready; while :; do :; done' & while [[ ! -f /ready ]]; do :; done; printf 'self:%s\\n' $$; kill -${name} $$; printf forbidden`;
       const child = await f.spawn(source);
       assert.deepEqual(await child.exit, { kind: "signaled", code, status: 128 + code });
-      const output = f.parent.output.join("");
+      const output = await outputIncluding(f.parent.output, `self:${child.pid}\n`);
       assert.ok(output.includes(`self:${child.pid}\n`), output);
       assert.ok(!output.includes("forbidden"), output);
       assert.ok(f.supervisor.table.get(sibling.pid), "sibling survives self signal");
