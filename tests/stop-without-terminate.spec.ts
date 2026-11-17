@@ -5,6 +5,11 @@ import { ready, prepareOwnShell } from "./helpers/readiness.ts";
 // iOS Safari's Worker.terminate() does not stop a worker running Wasm. These tests turn
 // terminate() into a no-op, so a killed guest stops only by polling Waffle's stop check.
 // A worker whose thread runs a Playwright evaluation is not running guest code.
+
+// Hang caps only: a stopped guest goes idle within seconds. Serial mode skips the remaining
+// cases after the first stuck one, so one hang costs one case instead of the whole shard.
+const STOP_HANG_MS = 30_000;
+test.describe.configure({ mode: "serial", timeout: 90_000 });
 interface StopRecord {
   readonly id: number;
   readonly messages: string[];
@@ -43,34 +48,53 @@ async function lines(page: Page) {
   return page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()) ?? []);
 }
 async function output(page: Page, expected: string) {
-  await expect.poll(() => lines(page)).toContain(expected);
+  await expect.poll(() => lines(page), { timeout: STOP_HANG_MS }).toContain(expected);
 }
 const records = (page: Page) => page.evaluate(() => window.stopRecords);
 
+/** URLs of the page's workers that Playwright saw close: their threads have ended. */
+const closedWorkers = new WeakMap<Page, Set<string>>();
+function closed(page: Page, suffix: string) {
+  for (const url of closedWorkers.get(page) ?? []) if (url.endsWith(suffix)) return true;
+  return false;
+}
+
 async function open(page: Page) {
+  const urls = new Set<string>();
+  closedWorkers.set(page, urls);
+  page.on("worker", (worker) => worker.on("close", () => urls.add(worker.url())));
   await page.addInitScript(installInertTerminate);
   await prepareOwnShell(page);
   await page.locator("textarea").focus();
 }
 
-/** True when the worker's thread is free to run a task within a second. */
-async function idle(page: Page, id: number) {
-  const worker = page.workers().find((each) => each.url().endsWith(`#stop-record=${id}`));
-  if (!worker) return false;
+/**
+ * True when no guest code runs on the worker's thread: the thread answers a task within a
+ * second, or it is closed after its guest posted `exit`. Firefox closes a worker the runtime
+ * let go of; the `exit` message shows the guest unwound by itself before that, so a close
+ * that interrupted a busy guest does not count. A worker that never appeared proves nothing.
+ */
+async function idle(page: Page, row: StopRecord) {
+  const suffix = `#stop-record=${row.id}`;
+  const worker = page.workers().find((each) => each.url().endsWith(suffix));
+  if (!worker) return closed(page, suffix) && row.messages.includes("exit");
   const answered = worker.evaluate(() => true).catch(() => false);
   const late = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1000));
   return Promise.race([answered, late]);
 }
 
+const stopTargets = async (page: Page, from: number) =>
+  (await records(page)).slice(from).filter((row) => row.terminated > 0);
+
 /** Every worker the runtime tried to terminate must stop on its own, then stay silent. */
 async function expectStopped(page: Page, from = 0) {
-  const stopped = (await records(page)).slice(from).filter((row) => row.terminated > 0);
-  expect(stopped.length).toBeGreaterThan(0);
+  expect((await stopTargets(page, from)).length).toBeGreaterThan(0);
   const busy = async () => {
-    const answers = await Promise.all(stopped.map((row) => idle(page, row.id)));
-    return stopped.filter((_, index) => !answers[index]).map((row) => row.id);
+    const rows = await stopTargets(page, from);
+    const answers = await Promise.all(rows.map((row) => idle(page, row)));
+    return rows.filter((_, index) => !answers[index]).map((row) => row.id);
   };
-  await expect.poll(busy).toEqual([]);
+  await expect.poll(busy, { timeout: STOP_HANG_MS }).toEqual([]);
   const count = async () => (await records(page)).map((row) => row.messages.length);
   const settled = await count();
   await page.waitForTimeout(250);

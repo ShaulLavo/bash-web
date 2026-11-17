@@ -32,8 +32,10 @@ them on signals (see [trap registration](trap-registration.md)).
 no-op. It then kills child shells busy in loops, substitutions, pipelines,
 builtins and `read`, and disposes interactive shells busy in foreground and
 background loops. Each stopped worker must become free to run a task (proof
-that no guest code is on its thread) and then send no further messages. It
-runs on Chromium and WebKit.
+that no guest code is on its thread), or be closed by the browser (Firefox
+closes an idle worker the runtime let go of), and then send no further
+messages. It runs on Chromium, Firefox and WebKit. A case that stays stuck
+fails within its 30 second hang cap, and the cases after it are skipped.
 
 The background check costs one host call per 4096 checks. A check on every
 16th call made a tight background loop about 22% slower; at 4096 the
