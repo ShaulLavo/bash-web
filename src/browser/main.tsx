@@ -56,6 +56,29 @@ declare global {
 
 const query = new URLSearchParams(location.search);
 const encoder = new TextEncoder();
+const cursorControls = [
+  { code: "ArrowUp", label: "Previous command", text: "↑" },
+  { code: "ArrowDown", label: "Next command", text: "↓" },
+  { code: "ArrowLeft", label: "Move cursor left", text: "←" },
+  { code: "ArrowRight", label: "Move cursor right", text: "→" },
+];
+
+function preserveInputFocus(event: Event) {
+  // Cancel the compatibility mousedown, not pointerdown, so iOS still delivers click.
+  event.preventDefault();
+}
+
+function followViewport(node: Element, signal: AbortSignal) {
+  const viewport = window.visualViewport;
+  if (!(node instanceof HTMLElement) || !viewport) return;
+  const resize = () => {
+    if (viewport.scale !== 1) return;
+    node.style.setProperty("--workbench-height", `${viewport.height}px`);
+    node.toggleAttribute("data-compact", viewport.height <= 540);
+  };
+  viewport.addEventListener("resize", resize, { signal });
+  resize();
+}
 
 function errorText(cause: unknown): string {
   if (cause instanceof VfsError) return `${cause.code}: ${cause.message}`;
@@ -153,6 +176,9 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     let hasOutput = false;
     let readyMarked = false;
     let promptShown = false;
+    let clipboardNotice: string | undefined;
+    let pasting = false;
+    let clipboardNoticeTimer: ReturnType<typeof setTimeout> | undefined;
 
     const render = () => {
       if (!handle.signal.aborted) void handle.update();
@@ -161,6 +187,9 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     function stop() {
       diagnostics.stop();
       generation++;
+      clearTimeout(clipboardNoticeTimer);
+      clipboardNotice = undefined;
+      pasting = false;
       subscriptions.forEach((subscription) => subscription.dispose());
       subscriptions = [];
       outputTimings = [];
@@ -403,6 +432,56 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       terminal?.focus();
     }
 
+    function inputTerminal() {
+      if (busy || !session || state === "failed" || state === "exited") return;
+      return terminal;
+    }
+
+    function moveCursor(code: string) {
+      const current = inputTerminal();
+      if (!current) return;
+      current.focus();
+      current.key({ action: "press", code, composing: false, text: "" });
+    }
+
+    function showClipboardNotice(message: string | undefined) {
+      clearTimeout(clipboardNoticeTimer);
+      clipboardNotice = message;
+      if (message) clipboardNoticeTimer = setTimeout(() => showClipboardNotice(undefined), 5000);
+      render();
+    }
+
+    async function pasteClipboard() {
+      const current = inputTerminal();
+      if (!current || pasting) return;
+      current.focus();
+      if (!navigator.clipboard?.readText) {
+        showClipboardNotice(
+          "Clipboard access is unavailable. Use your keyboard or system Paste menu.",
+        );
+        return;
+      }
+      const expectedGeneration = generation;
+      pasting = true;
+      showClipboardNotice(undefined);
+      try {
+        const text = await navigator.clipboard.readText();
+        if (expectedGeneration !== generation || current !== inputTerminal()) return;
+        if (text) current.paste(text);
+        else showClipboardNotice("The clipboard is empty.");
+      } catch {
+        if (expectedGeneration === generation && current === inputTerminal())
+          showClipboardNotice(
+            "Could not read the clipboard. Allow access or use the system Paste menu.",
+          );
+      } finally {
+        if (expectedGeneration === generation) {
+          pasting = false;
+          render();
+        }
+      }
+    }
+
     function readLines() {
       if (!terminal) return [];
       let result: string[] = [];
@@ -473,7 +552,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     );
 
     return () => (
-      <main class="workbench">
+      <main class="workbench" mix={ref(followViewport)}>
         <header class="topbar">
           <a
             class="brand"
@@ -501,7 +580,10 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
                 type="button"
                 class="quiet-button"
                 disabled={busy || !session}
-                mix={on("click", interrupt)}
+                mix={[
+                  on<HTMLButtonElement>("mousedown", preserveInputFocus),
+                  on("click", interrupt),
+                ]}
               >
                 Interrupt <kbd>^C</kbd>
               </button>
@@ -554,6 +636,37 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
                   : "Starting shell…"}
               </div>
             )}
+          </div>
+          <div class="terminal-controls" role="group" aria-label="Terminal input controls">
+            <button
+              type="button"
+              class="terminal-control paste-control"
+              disabled={!inputTerminal() || pasting}
+              mix={[
+                on<HTMLButtonElement>("mousedown", preserveInputFocus),
+                on("click", pasteClipboard),
+              ]}
+            >
+              Paste
+            </button>
+            {cursorControls.map(({ code, label, text }) => (
+              <button
+                type="button"
+                class="terminal-control"
+                aria-label={label}
+                title={label}
+                disabled={!inputTerminal()}
+                mix={[
+                  on<HTMLButtonElement>("mousedown", preserveInputFocus),
+                  on("click", () => moveCursor(code)),
+                ]}
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+          <div class="clipboard-notice" role="status" aria-label="Clipboard notice">
+            {clipboardNotice}
           </div>
           <footer class="terminal-status" aria-label="Session status">
             <span class={`state-indicator ${state === "failed" ? "state-failed" : ""}`}>
