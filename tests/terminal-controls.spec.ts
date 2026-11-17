@@ -202,6 +202,28 @@ test.describe("touch terminal controls", () => {
     await expect.poll(() => page.evaluate(() => window.bashWeb!.snapshot().rows)).toBe(before.rows);
   });
 
+  test("a viewport shorter than the chrome keeps a fitted terminal and scrolls", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 420, height: 220 });
+    await open(page);
+    await expect
+      .poll(() => page.evaluate(() => window.bashWeb!.snapshot().rows))
+      .toBeGreaterThanOrEqual(3);
+    const fit = await page.evaluate(() => {
+      const terminal = window.bashWeb!.terminal!;
+      return {
+        canvas: terminal.canvas!.clientHeight,
+        element: terminal.element!.clientHeight,
+        scrollable: document.documentElement.scrollHeight > innerHeight,
+      };
+    });
+    expect(fit.canvas).toBeGreaterThan(0);
+    expect(fit.canvas).toBeLessThanOrEqual(fit.element);
+    expect(fit.scrollable).toBe(true);
+    await expect(page.getByRole("button", { name: "Paste", exact: true })).toBeAttached();
+  });
+
   test("controls fit narrow and landscape viewports and resize the existing terminal", async ({
     page,
   }) => {

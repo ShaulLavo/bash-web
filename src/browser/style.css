@@ -54,7 +54,8 @@ a {
 
 .workbench {
   max-width: 1440px;
-  height: var(--workbench-height, 100dvh);
+  /* A minimum, so a viewport too short for the terminal floor scrolls instead of hiding it. */
+  min-height: var(--workbench-height, 100dvh);
   margin: 0 auto;
   padding: 0 32px 24px;
   display: flex;
@@ -153,7 +154,8 @@ kbd {
 
 .terminal-container {
   flex: 1;
-  min-height: 0;
+  /* About three rows inside the terminal's 16px padding. */
+  min-height: 96px;
   position: relative;
 }
 .terminal-host {
@@ -406,17 +408,19 @@ code {
   }
 }
 
-@media (max-height: 540px) {
-  .topbar {
-    height: 44px;
-  }
-  .below-terminal {
-    display: none;
-  }
+/* followViewport sets data-compact from the visual viewport, so software keyboard space counts. */
+.workbench[data-compact] {
+  padding-bottom: 0;
 }
-
 .workbench[data-compact] .topbar {
   height: 44px;
+}
+.workbench[data-compact] .shell-toolbar {
+  min-height: 44px;
+  padding-block: 4px;
+}
+.workbench[data-compact] .terminal-controls {
+  padding-block: 4px;
 }
 .workbench[data-compact] .below-terminal {
   display: none;
