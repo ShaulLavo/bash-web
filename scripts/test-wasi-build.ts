@@ -9,7 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { delimiter, dirname, resolve } from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 import {
@@ -28,6 +28,18 @@ mkdir -p "$1/lib/wasm32-wasip1"
 printf 'fixture archive' > "$1/lib/wasm32-wasip1/libc.a"
 `;
 
+const libcTools = ["cmake", "ninja", "curl", "tar", "patch", "sha256sum", "setsid", "timeout"];
+
+/** A PATH directory holding no-op stand-ins for `tools`; the fixture builder runs none of them. */
+function stubTools(directory: string, tools: readonly string[]) {
+  mkdirSync(directory, { recursive: true });
+  for (const tool of tools) {
+    writeFileSync(resolve(directory, tool), "#!/bin/sh\nexit 0\n");
+    chmodSync(resolve(directory, tool), 0o755);
+  }
+  return directory;
+}
+
 function fixture(run: (root: string, env: NodeJS.ProcessEnv) => void) {
   const parent = resolve(import.meta.dirname, "../.build");
   mkdirSync(parent, { recursive: true });
@@ -39,7 +51,9 @@ function fixture(run: (root: string, env: NodeJS.ProcessEnv) => void) {
     };
     put("sdk/VERSION", "34.0\nwasi-libc: 2e6fb9d8ee0c\n");
     waffleBuildFixture(root, builder, "fixture scanner patch");
-    run(root, { ...process.env, WASI_SDK_PATH: resolve(root, "sdk") });
+    const tools = stubTools(resolve(root, "tools"), libcTools);
+    const path = `${tools}${delimiter}${process.env.PATH ?? ""}`;
+    run(root, { ...process.env, PATH: path, WASI_SDK_PATH: resolve(root, "sdk") });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -90,6 +104,36 @@ test("changing the pinned scanner recipe builds a fresh output instead of accept
     assert.notEqual(original.sysroot, changed.sysroot);
     wasiBuildEnvironment(root, ".build/guest", env);
     assert.equal(readFileSync(resolve(root, "builds"), "utf8"), "build\nbuild\n");
+  });
+});
+
+for (const missing of ["cmake", "ninja", "flock"])
+  test(`a missing ${missing} is named before the libc build starts`, () => {
+    fixture((root, env) => {
+      const present = libcTools.concat("flock").filter((tool) => tool !== missing);
+      env.PATH = stubTools(resolve(root, `without-${missing}`), present);
+      assert.throws(
+        () => wasiBuildEnvironment(root, ".build/guest", env),
+        new RegExp(`needs ${missing} on PATH.*docs/development\\.md#prerequisites`),
+      );
+      assert.throws(() => readFileSync(resolve(root, "builds")), { code: "ENOENT" });
+    });
+  });
+
+test("a cached patched libc needs only flock, not the libc build tools", () => {
+  fixture((root, env) => {
+    wasiBuildEnvironment(root, ".build/guest", env);
+    // A flock that skips its lock file and runs the command, alone on PATH.
+    const flockOnly = resolve(root, "flock-only");
+    mkdirSync(flockOnly);
+    writeFileSync(resolve(flockOnly, "flock"), '#!/bin/sh\nshift\nexec "$@"\n');
+    chmodSync(resolve(flockOnly, "flock"), 0o755);
+    const cached = { ...env, PATH: flockOnly };
+    assert.equal(
+      wasiBuildEnvironment(root, ".build/guest", cached).CARGO_TARGET_DIR,
+      resolve(root, ".build/guest"),
+    );
+    assert.equal(readFileSync(resolve(root, "builds"), "utf8"), "build\n");
   });
 });
 
