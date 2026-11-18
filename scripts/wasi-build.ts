@@ -1,6 +1,7 @@
 // All Rust WASI guests use the scanner owned by the pinned Waffle dependency.
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { accessSync, constants, existsSync } from "node:fs";
+import { delimiter, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   wasiBuildConfiguration as waffleBuildConfiguration,
@@ -31,11 +32,51 @@ export function wasiSysrootCommand(root = repositoryRoot): [string, string[]] {
   return [process.execPath, [helper, "--prepare", root]];
 }
 
+// Waffle's patched-libc builder exits 1 without a message when one of these is missing.
+const libcBuildTools: readonly string[] = [
+  "cmake",
+  "ninja",
+  "curl",
+  "tar",
+  "patch",
+  "sha256sum",
+  "setsid",
+  "timeout",
+];
+
+function onPath(tool: string, env: Environment): boolean {
+  for (const directory of (env.PATH ?? "").split(delimiter)) {
+    if (!directory) continue;
+    try {
+      accessSync(resolve(directory, tool), constants.X_OK);
+      return true;
+    } catch {
+      // Not in this directory.
+    }
+  }
+  return false;
+}
+
+/** Names missing build tools before the first patched-libc build, instead of a bare exit 1. */
+function assertWasiBuildTools(root: string, env: Environment = process.env) {
+  const { directory } = wasiBuildConfiguration(root, env);
+  const cached = existsSync(resolve(directory, "recipe.sha256"));
+  const tools = ["flock"].concat(cached ? [] : libcBuildTools);
+  const missing = tools.filter((tool) => !onPath(tool, env));
+  if (missing.length === 0) return;
+  throw new Error(
+    `The WASI shell build needs ${missing.join(", ")} on PATH. Install ${missing.length === 1 ? "it" : "them"} ` +
+      "(CMake 3.26+ and Ninja come from your package manager or cmake.org and ninja-build.org); " +
+      "see the WASI prerequisites in docs/development.md#prerequisites.",
+  );
+}
+
 export function wasiBuildEnvironment(
   root = repositoryRoot,
   targetDirectory = resolve(root, ".build/shell"),
   env: Environment = process.env,
 ): Environment {
+  assertWasiBuildTools(root, env);
   return waffleBuildEnvironment(shellBuildRecipe(root, env), targetDirectory);
 }
 
