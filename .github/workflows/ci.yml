@@ -416,6 +416,7 @@ jobs:
           components: rustfmt, clippy
       - name: Install isolated Bash runner tools
         run: |
+          bash .github/scripts/use-main-ubuntu-archive.sh
           sudo apt-get update
           sudo apt-get install -y bubblewrap python3
           # The disposable Ubuntu runner must permit bubblewrap's user namespace.
@@ -589,11 +590,8 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-firefox-webkit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - name: Use Ubuntu HTTPS archives for browser dependencies
-        run: |
-          sudo sed -i '\|^http://azure\.archive\.ubuntu\.com/ubuntu/|d' /etc/apt/apt-mirrors.txt
-          test -s /etc/apt/apt-mirrors.txt
-          cat /etc/apt/apt-mirrors.txt
+      - name: Use the main Ubuntu archive for browser dependencies
+        run: bash .github/scripts/use-main-ubuntu-archive.sh
       - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:git:browser
         if: matrix.shard == 1
