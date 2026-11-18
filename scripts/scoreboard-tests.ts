@@ -10,7 +10,7 @@ const families = [
   /^test-bash-compat.*\.(?:mjs|ts)$/,
   /^test-compat-selection\.(?:mjs|ts)$/,
 ];
-function isScoreboardEntrypoint(name: string): boolean {
+export function isScoreboardEntrypoint(name: string): boolean {
   if (/-browser\.(?:mjs|ts)$/.test(name)) return false;
   return families.some((family) => family.test(name));
 }
