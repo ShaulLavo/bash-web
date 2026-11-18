@@ -1,12 +1,11 @@
 import { build } from "esbuild";
-import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { test } from "./helpers/browser-test";
 import { checkPromptStatusReceipts } from "./helpers/prompt-status-receipts.ts";
 
 test("public API retains completed status and resumes a handled reader in Chromium", async ({
   page,
 }) => {
-  await navigateTestPage(page, "/test-fixture");
+  await page.goto("/test-fixture");
   const compiled = await build({
     stdin: {
       resolveDir: process.cwd(),

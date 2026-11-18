@@ -87,9 +87,19 @@ test("the matcher accepts only the exact document, ignoring the fragment", () =>
 test("browser specs navigate through the shared helper", () => {
   // The runtime unit runner bundles this file, so locate the specs from the repository root.
   const specs = join(process.cwd(), "tests");
+  // The iOS harness runs these originals byte for byte (hash-pinned in tests/ios/*.unit.ts).
+  const pinned = new Set([
+    "python.spec.ts",
+    "session-drain.spec.ts",
+    "startup-diagnostics.spec.ts",
+    "prompt-hook.spec.ts",
+    "prompt-status.spec.ts",
+  ]);
   const direct = readdirSync(specs).filter(
     (name) =>
-      name.endsWith(".spec.ts") && /\.goto\s*\(/.test(readFileSync(join(specs, name), "utf8")),
+      name.endsWith(".spec.ts") &&
+      !pinned.has(name) &&
+      /\.goto\s*\(/.test(readFileSync(join(specs, name), "utf8")),
   );
   assert.deepEqual(direct, []);
 });

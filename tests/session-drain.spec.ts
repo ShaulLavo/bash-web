@@ -1,5 +1,4 @@
 import { test, expect } from "./helpers/browser-test";
-import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { prepareSessionDrainFixture } from "./helpers/session-drain-fixture";
 
 let fixture = "";
@@ -29,7 +28,7 @@ test.beforeAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (error) => console.error(error.message));
-  await navigateTestPage(page, "/test-fixture");
+  await page.goto("/test-fixture");
   await page.addScriptTag({ type: "module", content: fixture });
   await page.waitForFunction(() => window.sessionDrain?.acknowledgements === 1);
 });

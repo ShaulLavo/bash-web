@@ -1,5 +1,4 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { createHash } from "node:crypto";
 import { test, expect, type Page, type Worker as BrowserWorker } from "@playwright/test";
 import { pythonArgv0, pythonCases, pythonVersion } from "./helpers/python-cases.ts";
@@ -55,7 +54,7 @@ test("real CPython on Waffle loads once, runs scripts, disposes and leaves its b
     const path = new URL(request.url()).pathname;
     if (path === "/fs-worker.js" || path === "/shell-worker.js") workerScripts.push(path);
   });
-  await navigateTestPage(page, "/python-tests.html");
+  await page.goto("/python-tests.html");
   await page.waitForFunction(() => Boolean(window.pythonAcceptance));
   try {
     const installed = await page.evaluate(() => window.pythonAcceptance.open());
@@ -203,7 +202,7 @@ test("disposing Python before first use fetches no payload and stops no caller r
   page.on("request", (request) => {
     if (isPythonAsset(request.url())) requests.push(request.url());
   });
-  await navigateTestPage(page, "/python-tests.html");
+  await page.goto("/python-tests.html");
   await page.waitForFunction(() => Boolean(window.pythonAcceptance));
   try {
     await page.evaluate(() => window.pythonAcceptance.open());
