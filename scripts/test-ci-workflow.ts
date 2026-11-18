@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import test from "node:test";
@@ -463,36 +463,60 @@ test("compatibility reuses the shared node build while standalone commands still
   );
 });
 
-test("browser apt uses the runner's existing HTTPS fallbacks instead of the slow Azure archive", () => {
+const mainArchive = ".github/scripts/use-main-ubuntu-archive.sh";
+
+test("apt installs switch to the main Ubuntu archive first", () => {
   const browser = object(jobs().browser);
   assert.equal(browser["timeout-minutes"], 20);
-  assert.ok(Array.isArray(browser.steps));
-  const step = browser.steps.find(
-    (candidate: unknown) =>
-      object(candidate).name === "Use Ubuntu HTTPS archives for browser dependencies",
-  );
-  assert.ok(step, "configure apt transport before installing browser dependencies");
-  const command = commands({ steps: [step] });
   const install = commands(browser);
   assert.match(install, /npx playwright install --with-deps chromium firefox/);
-  assert.ok(install.indexOf(command) < install.indexOf("npx playwright install"));
-  assert.ok(command.includes("/etc/apt/apt-mirrors.txt"));
-  const directory = mkdtempSync(join(tmpdir(), "browser-apt-"));
+  const rewrite = install.indexOf(`bash ${mainArchive}`);
+  assert.ok(rewrite >= 0 && rewrite < install.indexOf("npx playwright install"));
+  for (const job of Object.values(jobs())) {
+    const run = commands(object(job));
+    if (!run.includes("apt-get update")) continue;
+    const rewriteAt = run.indexOf(`bash ${mainArchive}`);
+    assert.ok(rewriteAt >= 0 && rewriteAt < run.indexOf("apt-get update"), run);
+  }
+});
+
+test("the main-archive rewrite moves regional mirrors and keeps security and ports", () => {
+  const root = mkdtempSync(join(tmpdir(), "browser-apt-"));
   try {
-    const mirrors = join(directory, "apt-mirrors.txt");
-    const fallbacks =
-      "https://archive.ubuntu.com/ubuntu/\tpriority:2\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n";
-    writeFileSync(mirrors, "http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n" + fallbacks);
-    const run = command.replaceAll("sudo ", "").replaceAll("/etc/apt/apt-mirrors.txt", mirrors);
-    const result = spawnSync("bash", ["-euc", run], { encoding: "utf8" });
+    const apt = join(root, "etc/apt");
+    mkdirSync(join(apt, "sources.list.d"), { recursive: true });
+    const security = "https://security.ubuntu.com/ubuntu/\tpriority:3\n";
+    writeFileSync(
+      join(apt, "apt-mirrors.txt"),
+      "http://us-east-2.ec2.archive.ubuntu.com/ubuntu/\tpriority:1\n" +
+        "http://azure.archive.ubuntu.com/ubuntu/\tpriority:2\n" +
+        security,
+    );
+    writeFileSync(
+      join(apt, "sources.list.d/ubuntu.sources"),
+      "URIs: http://azure.archive.ubuntu.com/ubuntu/\nURIs: http://security.ubuntu.com/ubuntu/\n" +
+        "URIs: http://ports.ubuntu.com/ubuntu-ports/\n",
+    );
+    const script = resolve(import.meta.dirname, "..", mainArchive);
+    const result = spawnSync("bash", [script, root], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(readFileSync(mirrors, "utf8"), fallbacks);
-    assert.equal(spawnSync("bash", ["-euc", run]).status, 0);
-    assert.equal(readFileSync(mirrors, "utf8"), fallbacks);
-    writeFileSync(mirrors, "http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n");
-    assert.notEqual(spawnSync("bash", ["-euc", run]).status, 0);
+    assert.equal(result.stdout, "apt archive host: https://archive.ubuntu.com/ubuntu\n");
+    assert.equal(
+      readFileSync(join(apt, "apt-mirrors.txt"), "utf8"),
+      "https://archive.ubuntu.com/ubuntu/\tpriority:1\n" +
+        "https://archive.ubuntu.com/ubuntu/\tpriority:2\n" +
+        security,
+    );
+    assert.equal(
+      readFileSync(join(apt, "sources.list.d/ubuntu.sources"), "utf8"),
+      "URIs: https://archive.ubuntu.com/ubuntu/\nURIs: http://security.ubuntu.com/ubuntu/\n" +
+        "URIs: http://ports.ubuntu.com/ubuntu-ports/\n",
+    );
+    // Idempotent: a second run changes nothing.
+    assert.equal(spawnSync("bash", [script, root]).status, 0);
+    assert.match(readFileSync(join(apt, "apt-mirrors.txt"), "utf8"), /^https:\/\/archive\./);
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
