@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { navigateTestPage } from "./navigate-test-page.ts";
 import {
   waitForStartup,
   waitForShellReady,
@@ -35,7 +36,7 @@ export async function startupReady(page: Page) {
 }
 
 export async function prepareOwnShell(page: Page) {
-  await page.goto("/?test=1&renderer=canvas&engine=own-shell");
+  await navigateTestPage(page, "/?test=1&renderer=canvas&engine=own-shell");
   await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
 }

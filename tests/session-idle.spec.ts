@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { startupReady } from "./helpers/readiness";
 
 declare global {
@@ -19,7 +20,7 @@ test("the real shell stays idle and resumes ordered output after silence", async
       schedule,
     );
   });
-  await page.goto("/?test=1&renderer=canvas&engine=own-shell");
+  await navigateTestPage(page, "/?test=1&renderer=canvas&engine=own-shell");
   await startupReady(page);
   await page.waitForTimeout(100);
   const before = await page.evaluate(() => window.idlePumpTimers);

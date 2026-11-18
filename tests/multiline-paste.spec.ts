@@ -1,8 +1,9 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   await page.locator("textarea").focus();
   await expect.poll(() => lines(page)).toEqual(["$"]);

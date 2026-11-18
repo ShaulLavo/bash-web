@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady, storageReady } from "./helpers/readiness";
 
 test("startup diagnostics expose a stalled shell fetch before session assignment", async ({
@@ -18,7 +19,7 @@ test("startup diagnostics expose a stalled shell fetch before session assignment
     await route.continue();
   });
   try {
-    await page.goto("/?test=1&renderer=canvas");
+    await navigateTestPage(page, "/?test=1&renderer=canvas");
     await requested;
     const snapshot = await page.evaluate(() => window.bashWeb!.snapshot());
     expect(snapshot.state).toBe("starting");
@@ -37,7 +38,7 @@ test("startup diagnostics expose a stalled shell fetch before session assignment
 });
 
 test("the runtime lease forwards the real filesystem startup milestones", async ({ page }) => {
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   const snapshot = await page.evaluate(() => window.bashWeb!.snapshot().startup);
   const expected = [
@@ -63,7 +64,7 @@ test("the runtime lease forwards the real filesystem startup milestones", async 
 test("restart resets startup timestamps without retaining a previous generation", async ({
   page,
 }) => {
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   const previous = await page.evaluate(() => window.bashWeb!.snapshot().startup);
   const restarted = page.evaluate(() => window.bashWeb!.restart());
@@ -89,7 +90,7 @@ test("storage readiness has its own operation while caller registration is still
     await route.continue();
   });
   try {
-    await page.goto("/?test=1&renderer=canvas");
+    await navigateTestPage(page, "/?test=1&renderer=canvas");
     await storageReady(page);
     const snapshot = await page.evaluate(() => window.bashWeb!.snapshot().startup);
     expect(snapshot.stages["storage-wait-resolved"]).toBeGreaterThanOrEqual(

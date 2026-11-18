@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { startupReady } from "./helpers/readiness.ts";
 import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
@@ -12,7 +13,7 @@ test("production startup loads an emitted Waffle filesystem worker", async ({ pa
       type: response.headers()["content-type"] ?? "",
     });
   });
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   expect(filesystemResponses).toHaveLength(1);
   expect(filesystemResponses[0].status).toBe(200);
@@ -35,7 +36,7 @@ test("a browser exposing WebGPU without an adapter opens a working Canvas termin
       value: { requestAdapter: async () => null },
     });
   });
-  await page.goto("/?test=1");
+  await navigateTestPage(page, "/?test=1");
   await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().renderer)).toBe("canvas2d");
   await page.locator("textarea").focus();

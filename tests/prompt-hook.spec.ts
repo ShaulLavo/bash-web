@@ -1,4 +1,5 @@
 import { test, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import {
   compilePromptHookProof,
   promptHookBody,
@@ -8,7 +9,7 @@ import { checkPromptHookResult, recordPromptHookCosts } from "./helpers/prompt-h
 import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
 
 async function prove(page: Page, body: string): Promise<unknown> {
-  await page.goto("/test-fixture");
+  await navigateTestPage(page, "/test-fixture");
   const compiled = await compilePromptHookProof(body, OUTCOME_HANG_MS);
   await page.addScriptTag({ type: "module", content: compiled });
   await page.waitForFunction(() => "proof" in window);

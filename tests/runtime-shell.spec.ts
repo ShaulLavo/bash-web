@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { command } from "./helpers/shell-browser.ts";
 import { ready, startupReady, prepareOwnShell } from "./helpers/readiness.ts";
 import { pipelinePeak, type ProcessRoot } from "./helpers/pipeline-peak.ts";
@@ -31,7 +32,7 @@ async function file(page: Page, path: string, source: string) {
 }
 
 test("own shell is the default engine", async ({ page }) => {
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
 });

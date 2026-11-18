@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
 async function command(page: Page, source: string) {
@@ -37,7 +38,7 @@ for (const { path, input, previous } of cases) {
   test(`prompt cancellation publishes 130 after ${previous}, ${input} input, ${path}`, async ({
     page,
   }, info) => {
-    await page.goto("/?test=1&renderer=canvas&engine=own-shell");
+    await navigateTestPage(page, "/?test=1&renderer=canvas&engine=own-shell");
     await startupReady(page);
     await page.locator("textarea").focus();
     const baseline = await resources(page);

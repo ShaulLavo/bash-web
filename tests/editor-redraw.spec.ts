@@ -1,10 +1,11 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
 test.beforeEach(async ({ page }) => {
   const viewport = { width: 420, height: 220 };
   await page.setViewportSize(viewport);
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   // Shell readiness can precede the terminal's asynchronous initial fit.
   await expect.poll(() => page.evaluate(initialGeometryReady, viewport)).toBe(true);

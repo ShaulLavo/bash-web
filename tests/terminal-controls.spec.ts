@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
 declare global {
@@ -17,7 +18,7 @@ const arrows = [
 ];
 
 async function open(page: Page) {
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   await page.locator("textarea").focus();
 }
