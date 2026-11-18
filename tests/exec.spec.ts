@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady } from "./helpers/readiness";
 
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -8,7 +9,7 @@ for (const source of [false, true]) {
     test(`${source ? "source" : "prepared"} shell ${explicit ? "exec" : "final command"} replaces its Worker and keeps terminal completion pending`, async ({
       page,
     }) => {
-      await page.goto(`/?test=1&renderer=canvas&rg=1${source ? "&exec=source" : ""}`);
+      await navigateTestPage(page, `/?test=1&renderer=canvas&rg=1${source ? "&exec=source" : ""}`);
       await startupReady(page);
       const baseline = page.workers();
       const shell = source ? "/bin/source-sh" : "/programs/shell-engine.wasm";

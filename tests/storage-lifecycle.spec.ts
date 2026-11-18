@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { expect, test, type Page } from "@playwright/test";
 import { STORAGE_READY_TIMEOUT_MS } from "../src/runtime/storage.ts";
 import { startupReady } from "./helpers/readiness.ts";
@@ -26,12 +27,12 @@ for (const storage of ["opfs", "indexeddb"]) {
       });
       // OPFS defaults to waiting; IndexedDB retains its default takeover behavior unless opted in.
       if (storage === "indexeddb") query.set("whenBusy", "wait");
-      await page.goto(`/?${query}`);
+      await navigateTestPage(page, `/?${query}`);
       await startupReady(page);
       const second = await context.newPage();
       try {
         query.set("startupTimeout", "3000");
-        await second.goto(`/?${query}`);
+        await navigateTestPage(second, `/?${query}`);
         await waiting(second);
         await second.waitForTimeout(3300);
         await waiting(second);
@@ -59,11 +60,11 @@ opfsTest(
       storage: "opfs",
       workspace: `bash-web-storage-dispose-${randomUUID()}`,
     });
-    await page.goto(`/?${query}`);
+    await navigateTestPage(page, `/?${query}`);
     await startupReady(page);
     const second = await context.newPage();
     try {
-      await second.goto(`/?${query}`);
+      await navigateTestPage(second, `/?${query}`);
       await waiting(second);
       // This must finish while the other tab still owns the lock, without leaving a queued request.
       await second.evaluate(() => window.bashWeb?.dispose());
@@ -126,7 +127,7 @@ for (const whenBusy of ["takeover", "wait"]) {
     });
     // The takeover case deliberately exercises the unmodified IndexedDB default.
     if (whenBusy === "wait") query.set("whenBusy", "wait");
-    await page.goto(`/?${query}`);
+    await navigateTestPage(page, `/?${query}`);
     await expect.poll(() => heldOpens).toBe(1);
     expect(await page.evaluate(() => window.bashWeb?.snapshot().storage?.status)).toBe("opening");
     expect(await page.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
@@ -157,7 +158,7 @@ for (const whenBusy of ["takeover", "wait"]) {
 }
 
 test("OPFS takeover is rejected without changing the default storage policy", async ({ page }) => {
-  await page.goto("/?test=1&renderer=canvas&storage=opfs&whenBusy=takeover");
+  await navigateTestPage(page, "/?test=1&renderer=canvas&storage=opfs&whenBusy=takeover");
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("failed");
   await expect(page.getByRole("alert")).toContainText(
     'OPFS storage only supports whenBusy: "wait"',
@@ -195,7 +196,7 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
     whenBusy: "wait",
     workspace: `bash-web-storage-recovery-${randomUUID()}`,
   });
-  await page.goto(`/?${query}`);
+  await navigateTestPage(page, `/?${query}`);
   await startupReady(page);
   const second = await context.newPage();
   try {
@@ -215,7 +216,7 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
       { times: 1 },
     );
     await second.clock.install();
-    await second.goto(`/?${query}`);
+    await navigateTestPage(second, `/?${query}`);
     await waiting(second);
     expect(
       await second.evaluate(
@@ -273,7 +274,7 @@ async function foreignWorkspace(page: Page, name: string) {
       body: "<!doctype html><title>Storage fixture</title>",
     }),
   );
-  await page.goto("/storage-seed");
+  await navigateTestPage(page, "/storage-seed");
   await preservedWorkspace(page, name, "seed");
 }
 
@@ -319,7 +320,7 @@ test("foreign IndexedDB shows INVALID_VFS_FORMAT and Restart never wipes owner d
   const name = `bash-web-foreign-${randomUUID()}`;
   await foreignWorkspace(page, name);
   const query = new URLSearchParams({ test: "1", renderer: "canvas", workspace: name });
-  await page.goto(`/?${query}`);
+  await navigateTestPage(page, `/?${query}`);
   await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
   expect(await page.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
   expect(await preservedWorkspace(page, name)).toEqual({
@@ -344,7 +345,7 @@ test("SAFE fails with its typed unsupported error without falling back to FAST",
     storage: "safe",
     workspace: name,
   });
-  await page.goto(`/?${query}`);
+  await navigateTestPage(page, `/?${query}`);
   await expect(page.getByRole("alert")).toContainText("UNSUPPORTED_VFS");
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("failed");
   expect(await page.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();

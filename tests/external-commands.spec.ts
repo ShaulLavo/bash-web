@@ -1,10 +1,11 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady } from "./helpers/readiness.ts";
 
 const baselineWorkers = new WeakMap<Page, number>();
 
 async function open(page: Page) {
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   baselineWorkers.set(page, page.workers().length);
   await page.locator("textarea").focus();

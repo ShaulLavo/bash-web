@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { startupReady } from "./helpers/readiness.ts";
 
 async function outputLines(page: Page): Promise<string[]> {
@@ -22,7 +23,7 @@ async function submissionError(page: Page, command: string): Promise<string> {
 }
 
 async function openSession(page: Page, mode: string): Promise<void> {
-  await page.goto(`/?test=1&renderer=canvas&lineEditor=${mode}`);
+  await navigateTestPage(page, `/?test=1&renderer=canvas&lineEditor=${mode}`);
   await startupReady(page);
   await page.locator("textarea").focus();
 }

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { readFileSync } from "node:fs";
 
 function hostInterface(path: string) {
@@ -20,7 +21,7 @@ test("public editor saves exact text, terminal runs it, and the page retains its
 }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/product-shell/product-shell.html");
+  await navigateTestPage(page, "/product-shell/product-shell.html");
   await expect(page.locator("#status")).toHaveText("ready");
   const snapshot = () => page.evaluate(() => window.productShell.snapshot());
   const editor = page.locator("#editor textarea");

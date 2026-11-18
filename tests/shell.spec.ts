@@ -1,8 +1,9 @@
 import { test, expect, type Page } from "./helpers/browser-test";
+import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { ready, startupReady, storageReady } from "./helpers/readiness.ts";
 
 async function open(page: Page) {
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await startupReady(page);
   await page.locator("textarea").focus();
 }
@@ -249,7 +250,7 @@ test("IME composition commits exactly once through Ghostty input", async ({ page
 
 test("missing WASM gives an actionable startup error and Restart recovers", async ({ page }) => {
   await page.route("**/programs/shell-engine.wasm", (route) => route.fulfill({ status: 404 }));
-  await page.goto("/?test=1&renderer=canvas");
+  await navigateTestPage(page, "/?test=1&renderer=canvas");
   await storageReady(page);
   await expect.poll(() => page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("failed");
   await expect(page.getByRole("alert")).toContainText(/shell|WASM|fetch/i);
