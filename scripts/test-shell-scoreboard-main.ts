@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import test from "node:test";
 import {
   admitQualificationRaw,
@@ -23,6 +23,9 @@ import {
   mainEvidence,
   oracleAt,
   resolveFloor,
+  scoreEquivalenceInputs,
+  scoreInput,
+  scoreJobSlice,
   scoringInputs,
   sourceEquivalent,
   assertRawScore,
@@ -420,6 +423,213 @@ test("complete input equivalence excludes only reviewed regular docs, never adap
     assert.notDeepEqual(scoringInputs(root, base), scoringInputs(root, changed));
   });
 });
+
+/** A small ci.yml with the four score jobs, what they need, and an unrelated browser job. */
+function scoreWorkflow(edit: { scoreboard?: string; native?: string; browser?: string } = {}) {
+  return [
+    "name: CI",
+    "jobs:",
+    "  prepare:",
+    "    runs-on: ubuntu-latest",
+    "    steps: [{ run: node scripts/ci-inputs.ts }]",
+    "  native:",
+    "    needs: prepare",
+    `    steps: [{ uses: ./.github/actions/wasi-sdk }, { run: "${edit.native ?? "cargo build"}" }]`,
+    "  own-shell-scoreboard:",
+    "    needs: [prepare, native]",
+    "    steps:",
+    "      - run: bash .github/scripts/use-main-ubuntu-archive.sh",
+    `      - run: "${edit.scoreboard ?? "node scripts/scoreboard-tests.ts"}"`,
+    "  own-shell-observation:",
+    "    needs: [prepare, native]",
+    "    steps: [{ run: npm run compat:shell:prebuilt }]",
+    "  own-shell-compatibility:",
+    "    needs: [own-shell-scoreboard, own-shell-observation]",
+    "    steps: [{ run: node scripts/scoreboard-ci.ts compare }]",
+    "  score-floor:",
+    "    needs: own-shell-compatibility",
+    "    steps: [{ run: node scripts/scoreboard-ci.ts floor }]",
+    "  browser:",
+    "    needs: [prepare, native]",
+    `    steps: [{ run: bash .github/scripts/browser-only.sh }, { run: "${edit.browser ?? "npx playwright test"}" }]`,
+    "",
+  ].join("\n");
+}
+
+test("score equivalence ignores browser specs, unrelated tests and non-score CI", async () => {
+  await withRepo(({ root, put, commit }) => {
+    put(".github/workflows/ci.yml", scoreWorkflow());
+    for (const path of [
+      ".github/scripts/use-main-ubuntu-archive.sh",
+      ".github/scripts/browser-only.sh",
+      ".github/actions/wasi-sdk/action.yml",
+      "shell/engine/src/lib.rs",
+      "scripts/bash-compat.ts",
+      "scripts/test-own-shell-echo.ts",
+      "scripts/test-ci-workflow.ts",
+      "tests/shell.spec.ts",
+      "tests/navigate-test-page.unit.ts",
+      "tests/helpers/readiness.ts",
+      "tests/browser-main.ts",
+      "src/runtime/storage.test.ts",
+      "tests/python.spec.ts",
+    ])
+      put(path, "a");
+    let previous = commit();
+    const unchanged = (change: () => void) => {
+      change();
+      const next = commit();
+      assert.equal(sourceEquivalent(root, previous, next), true);
+      previous = next;
+    };
+    unchanged(() => put("tests/shell.spec.ts", "b"));
+    unchanged(() => put("tests/navigate-test-page.unit.ts", "b"));
+    unchanged(() => put("tests/helpers/readiness.ts", "b"));
+    unchanged(() => put("tests/browser-main.ts", "b"));
+    unchanged(() => put("src/runtime/storage.test.ts", "b"));
+    unchanged(() => put("scripts/test-ci-workflow.ts", "b"));
+    unchanged(() => put(".github/scripts/browser-only.sh", "b"));
+    unchanged(() => put(".github/workflows/ci.yml", scoreWorkflow({ browser: "npx playwright" })));
+    // Reformatting the workflow without changing what the score jobs do keeps the score.
+    unchanged(() =>
+      put(".github/workflows/ci.yml", `# comment\n${scoreWorkflow({ browser: "npx playwright" })}`),
+    );
+  });
+});
+
+test("score equivalence still breaks on shell, scorer, score tests and score-job CI", async () => {
+  await withRepo(({ root, put, commit }) => {
+    put(".github/workflows/ci.yml", scoreWorkflow());
+    for (const path of [
+      ".github/scripts/use-main-ubuntu-archive.sh",
+      ".github/actions/wasi-sdk/action.yml",
+      "shell/engine/src/lib.rs",
+      "scripts/bash-compat.ts",
+      "scripts/test-own-shell-echo.ts",
+      "tests/python.spec.ts",
+      "tests/helpers/python-cases.ts",
+      "tests/guest/src/main.rs",
+      "src/runtime/storage.ts",
+      "package-lock.json",
+    ])
+      put(path, "a");
+    const base = commit();
+    const changes: [string, () => void][] = [
+      ["shell source", () => put("shell/engine/src/lib.rs", "b")],
+      ["scorer", () => put("scripts/bash-compat.ts", "b")],
+      ["score-family test", () => put("scripts/test-own-shell-echo.ts", "b")],
+      ["lock file", () => put("package-lock.json", "b")],
+      ["test the score code runs", () => put("tests/python.spec.ts", "b")],
+      ["helper the score code imports", () => put("tests/helpers/python-cases.ts", "b")],
+      ["test guest program", () => put("tests/guest/src/main.rs", "b")],
+      ["adapter source", () => put("src/runtime/storage.ts", "b")],
+      ["toolchain action", () => put(".github/actions/wasi-sdk/action.yml", "b")],
+      ["script a score job runs", () => put(".github/scripts/use-main-ubuntu-archive.sh", "b")],
+      [
+        "score-job step",
+        () => put(".github/workflows/ci.yml", scoreWorkflow({ scoreboard: "node x.ts" })),
+      ],
+      [
+        "job a score job needs",
+        () => put(".github/workflows/ci.yml", scoreWorkflow({ native: "cargo build -j1" })),
+      ],
+      [
+        "top-level env",
+        () => put(".github/workflows/ci.yml", `env:\n  BASH_COMPAT_JOBS: 1\n${scoreWorkflow()}`),
+      ],
+      [
+        "top-level defaults.run",
+        () =>
+          put(".github/workflows/ci.yml", `defaults:\n  run:\n    shell: sh\n${scoreWorkflow()}`),
+      ],
+    ];
+    for (const [name, change] of changes) {
+      git(root, ["checkout", "-q", "--detach", base]);
+      change();
+      assert.equal(sourceEquivalent(root, base, commit()), false, name);
+    }
+  });
+});
+
+test("the score job slice follows needs and fails on a missing score job", () => {
+  const slice = JSON.parse(scoreJobSlice(scoreWorkflow())) as { name: string; jobs: object };
+  assert.equal(slice.name, "CI");
+  assert.deepEqual(Object.keys(slice.jobs), [
+    "native",
+    "own-shell-compatibility",
+    "own-shell-observation",
+    "own-shell-scoreboard",
+    "prepare",
+    "score-floor",
+  ]);
+  assert.throws(() => scoreJobSlice("jobs:\n  browser:\n    steps: []\n"));
+});
+
+/** Expands `npm run <script>` in score-job commands through package.json, recursively. */
+function scoreCommands(slice: string, scripts: Record<string, string>): string {
+  const seen = new Set<string>();
+  const pending = Array.from(slice.matchAll(/npm run ([\w:.-]+)/g), (match) => match[1]!);
+  let text = slice;
+  for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+    if (seen.has(name) || !scripts[name]) continue;
+    seen.add(name);
+    text += `\n${scripts[name]}`;
+    for (const match of scripts[name].matchAll(/npm run ([\w:.-]+)/g)) pending.push(match[1]!);
+  }
+  return text;
+}
+
+test("no score input or score-job command names a file the score rule ignores", () => {
+  const root = resolve(import.meta.dirname, "..");
+  const head = git(root, ["rev-parse", "HEAD"]);
+  const workflow = readFileSync(resolve(root, authority.workflowPath), "utf8");
+  const slice = scoreJobSlice(workflow);
+  const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  const paths = scoringInputs(root, head).map((record) => record.slice(record.indexOf("\t") + 1));
+  // The workflow itself is replaced by the score-job slice, not ignored.
+  const ignored = paths.filter(
+    (path) => path !== authority.workflowPath && !scoreInput(path, slice),
+  );
+  assert.ok(ignored.some((path) => path.startsWith("tests/") && path.endsWith(".spec.ts")));
+  const kept = new Set(
+    scoreEquivalenceInputs(root, head).map((record) => record.slice(record.indexOf("\t") + 1)),
+  );
+  // Scope: TypeScript under scripts/, src/ and tests/, plus the score jobs' commands.
+  // These files name ignored files on purpose: as fixtures, and to classify them.
+  const classifiers = new Set([
+    "scripts/test-shell-scoreboard-main.ts",
+    "scripts/shell-scoreboard-main.ts",
+  ]);
+  const referenced = new Map<string, string>();
+  for (const path of kept) {
+    if (classifiers.has(path) || !/^(?:scripts|src|tests)\/.+\.ts$/.test(path)) continue;
+    for (const target of fileReferences(path, readFileSync(resolve(root, path), "utf8")))
+      referenced.set(target, path);
+  }
+  const commands = scoreCommands(slice, packageJson.scripts);
+  for (const match of commands.matchAll(/(?:scripts|src|tests|\.github)\/[\w./-]+/g))
+    referenced.set(match[0], "a score job command");
+  for (const path of ignored)
+    assert.equal(
+      referenced.get(path),
+      undefined,
+      `${path} is ignored but ${referenced.get(path)} uses it`,
+    );
+});
+
+/** Repository paths a TypeScript file refers to: relative imports and URLs, and repo paths. */
+function fileReferences(path: string, source: string): string[] {
+  const directory = path.slice(0, path.lastIndexOf("/"));
+  const literals = source.matchAll(/["'`]((?:\.{1,2}\/|(?:scripts|src|tests)\/)[^"'`\s$]+)["'`]/g);
+  return Array.from(literals, (match) => {
+    const target = match[1]!;
+    if (!target.startsWith(".")) return [target];
+    const resolved = relative(resolve("/"), resolve("/", directory, target));
+    return [resolved, `${resolved}.ts`];
+  }).flat();
+}
 function pullRequestProvenance(headSha: string, baseSha: string) {
   return {
     event: {
@@ -1546,6 +1756,7 @@ function assertBaselineCommands(
     "shell-scoreboard.ts",
     "shell-scoreboard-accepted-gains.ts",
     "shell-scoreboard-terminal-recovery.ts",
+    "scoreboard-tests.ts",
   ])
     put(`scripts/${file}`, readFileSync(new URL(file, import.meta.url)));
   symlinkSync(resolve(import.meta.dirname, "../node_modules"), resolve(root, "node_modules"));

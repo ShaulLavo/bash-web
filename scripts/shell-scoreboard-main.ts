@@ -22,6 +22,7 @@ import {
 } from "./shell-scoreboard.ts";
 import type { Binding, Oracle, PullRequestBinding, RunBinding, Score } from "./shell-scoreboard.ts";
 import { collectMainDispatches } from "./shell-scoreboard-main-dispatch.ts";
+import { isScoreboardEntrypoint } from "./scoreboard-tests.ts";
 
 export const authority = Object.freeze({
   repository: "ShaulLavo/bash-web",
@@ -465,9 +466,86 @@ export function scoringInputs(root: string, sourceSha: string): string[] {
     return !record.startsWith("100644 blob ") || !documentation(path);
   });
 }
+/** CI jobs that build the shell and measure the score; their `needs` are followed too. */
+const scoreJobs: readonly string[] = [
+  "own-shell-scoreboard",
+  "own-shell-observation",
+  "own-shell-compatibility",
+  "score-floor",
+];
+/**
+ * Test files that score code uses, so a change to them can change the score. The guard in
+ * scripts/test-shell-scoreboard-main.ts fails when score code uses a test file missing here.
+ */
+const scoreTestFiles: ReadonlySet<string> = new Set([
+  "tests/python.spec.ts",
+  "tests/helpers/python-cases.ts",
+  "tests/helpers/signal-status-guest.ts",
+  "tests/helpers/waffle-build-inputs.ts",
+  "tests/helpers/wasm-binary.ts",
+]);
+/** Build scripts for browser test pages only; the guard fails if a score job runs one. */
+const browserOnlyScripts: ReadonlySet<string> = new Set(["scripts/build-product-shell-test.ts"]);
+const recordPath = (record: string) => record.slice(record.indexOf("\t") + 1);
+
+/** The whole workflow with only non-score jobs removed (score jobs and their needs), as JSON. */
+export function scoreJobSlice(workflow: string): string {
+  const parsed: unknown = parse(workflow);
+  assertRecord(parsed);
+  const jobs = parsed.jobs;
+  assertRecord(jobs);
+  const selected = new Map<string, unknown>();
+  const queue = scoreJobs.slice();
+  for (let name = queue.pop(); name !== undefined; name = queue.pop()) {
+    if (selected.has(name)) continue;
+    const job = jobs[name];
+    assertRecord(job);
+    selected.set(name, job);
+    queue.push(...([] as unknown[]).concat(job.needs ?? []).map(String));
+  }
+  // Keep every top-level key (env, defaults, permissions and so on): they reach the score jobs too.
+  const scoreJobsOnly = Object.fromEntries(
+    Array.from(selected).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return JSON.stringify({ ...parsed, jobs: scoreJobsOnly });
+}
+
+/** False for files no score job builds, runs or reads. Anything not named here stays an input. */
+export function scoreInput(path: string, slice: string): boolean {
+  // Anything a score job names directly is part of what it runs.
+  if (scoreTestFiles.has(path) || slice.includes(path)) return true;
+  // tests/ holds browser specs, their page and helpers, runtime unit tests and the iOS harness,
+  // which run in browser, quality and device jobs. Score code uses only the test guest programs
+  // and the files listed in scoreTestFiles.
+  if (path.startsWith("tests/")) return path.startsWith("tests/guest/");
+  // Runtime and terminal unit tests (scripts/test-runtime-terminal.ts), not the harness.
+  if (/^src\/.+\.test\.ts$/.test(path)) return false;
+  if (browserOnlyScripts.has(path)) return false;
+  // Only the scoreboard families run in the score jobs (scripts/scoreboard-tests.ts).
+  const script = /^scripts\/(test-[^/]+\.(?:mjs|ts))$/.exec(path)?.[1];
+  if (script !== undefined) return isScoreboardEntrypoint(script);
+  // Composite actions set up toolchains; other CI files count only when a score job names them.
+  if (path.startsWith(".github/actions/")) return true;
+  return !path.startsWith(".github/");
+}
+
+/**
+ * Inputs whose change can change the score: `scoringInputs` without files no score job uses,
+ * with the workflow narrowed to the score jobs' definitions.
+ */
+export function scoreEquivalenceInputs(root: string, sourceSha: string): string[] {
+  const records = scoringInputs(root, sourceSha);
+  const workflow = records.find((record) => recordPath(record) === authority.workflowPath);
+  if (workflow === undefined) return records;
+  const oid = workflow.split(" ")[2]!.split("\t")[0]!;
+  const slice = scoreJobSlice(git(root, ["cat-file", "blob", oid]));
+  return records
+    .filter((record) => scoreInput(recordPath(record), slice))
+    .concat(`score-jobs ${digest(slice)}\t${authority.workflowPath}#score-jobs`);
+}
 function inputEquivalence(root: string, left: string, right: string) {
-  const beforeInputsSha256 = digest(scoringInputs(root, left));
-  const sourceInputsSha256 = digest(scoringInputs(root, right));
+  const beforeInputsSha256 = digest(scoreEquivalenceInputs(root, left));
+  const sourceInputsSha256 = digest(scoreEquivalenceInputs(root, right));
   return {
     equivalent: beforeInputsSha256 === sourceInputsSha256,
     beforeInputsSha256,
