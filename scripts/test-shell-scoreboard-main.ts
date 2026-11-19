@@ -533,6 +533,15 @@ test("score equivalence still breaks on shell, scorer, score tests and score-job
         "job a score job needs",
         () => put(".github/workflows/ci.yml", scoreWorkflow({ native: "cargo build -j1" })),
       ],
+      [
+        "top-level env",
+        () => put(".github/workflows/ci.yml", `env:\n  BASH_COMPAT_JOBS: 1\n${scoreWorkflow()}`),
+      ],
+      [
+        "top-level defaults.run",
+        () =>
+          put(".github/workflows/ci.yml", `defaults:\n  run:\n    shell: sh\n${scoreWorkflow()}`),
+      ],
     ];
     for (const [name, change] of changes) {
       git(root, ["checkout", "-q", "--detach", base]);
@@ -543,18 +552,16 @@ test("score equivalence still breaks on shell, scorer, score tests and score-job
 });
 
 test("the score job slice follows needs and fails on a missing score job", () => {
-  const slice = JSON.parse(scoreJobSlice(scoreWorkflow())) as [string, unknown][];
-  assert.deepEqual(
-    slice.map(([name]) => name),
-    [
-      "native",
-      "own-shell-compatibility",
-      "own-shell-observation",
-      "own-shell-scoreboard",
-      "prepare",
-      "score-floor",
-    ],
-  );
+  const slice = JSON.parse(scoreJobSlice(scoreWorkflow())) as { name: string; jobs: object };
+  assert.equal(slice.name, "CI");
+  assert.deepEqual(Object.keys(slice.jobs), [
+    "native",
+    "own-shell-compatibility",
+    "own-shell-observation",
+    "own-shell-scoreboard",
+    "prepare",
+    "score-floor",
+  ]);
   assert.throws(() => scoreJobSlice("jobs:\n  browser:\n    steps: []\n"));
 });
 
@@ -589,6 +596,7 @@ test("no score input or score-job command names a file the score rule ignores", 
   const kept = new Set(
     scoreEquivalenceInputs(root, head).map((record) => record.slice(record.indexOf("\t") + 1)),
   );
+  // Scope: TypeScript under scripts/, src/ and tests/, plus the score jobs' commands.
   // These files name ignored files on purpose: as fixtures, and to classify them.
   const classifiers = new Set([
     "scripts/test-shell-scoreboard-main.ts",

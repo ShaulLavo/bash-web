@@ -488,7 +488,7 @@ const scoreTestFiles: ReadonlySet<string> = new Set([
 const browserOnlyScripts: ReadonlySet<string> = new Set(["scripts/build-product-shell-test.ts"]);
 const recordPath = (record: string) => record.slice(record.indexOf("\t") + 1);
 
-/** The score jobs and everything they need, as canonical JSON. */
+/** The whole workflow with only non-score jobs removed (score jobs and their needs), as JSON. */
 export function scoreJobSlice(workflow: string): string {
   const parsed: unknown = parse(workflow);
   assertRecord(parsed);
@@ -503,7 +503,11 @@ export function scoreJobSlice(workflow: string): string {
     selected.set(name, job);
     queue.push(...([] as unknown[]).concat(job.needs ?? []).map(String));
   }
-  return JSON.stringify(Array.from(selected).sort(([a], [b]) => a.localeCompare(b)));
+  // Keep every top-level key (env, defaults, permissions and so on): they reach the score jobs too.
+  const scoreJobsOnly = Object.fromEntries(
+    Array.from(selected).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return JSON.stringify({ ...parsed, jobs: scoreJobsOnly });
 }
 
 /** False for files no score job builds, runs or reads. Anything not named here stays an input. */
