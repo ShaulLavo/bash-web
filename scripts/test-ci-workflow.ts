@@ -49,7 +49,7 @@ test("native and WASI producers always execute instead of restoring successful r
     /id: (binaries|checked)|wasi-checked-|key: native-|steps\.(binaries|checked)/,
   );
   assert.match(text, /npm run test:shell:wasi -- --prebuilt \.build\/ci-native/);
-  assert.match(text, /-p shell-engine -p shell-compat-fixtures -j2/);
+  assert.match(text, /-p shell-engine -p shell-compat-fixtures\b/);
   assert.match(text, /node scripts\/ci-artifacts\.ts pack \.build\/ci-native/);
   const action = readFileSync(
     new URL("../.github/actions/native/action.yml", import.meta.url),
@@ -741,10 +741,12 @@ test("scoreboard and observation run independently using one shared node build",
     );
   assert.deepEqual(buildOwners, ["prepare"]);
   const prepare = commands(workflowJobs.prepare);
-  assert.ok(prepare.indexOf("npm run build:worker") < prepare.indexOf("tar -czf"));
-  assert.match(prepare, /tar -czf .* dist\/shell-worker\.js dist\/fs-worker\.js/);
-  assert.ok(prepare.indexOf("npm run build:node-harness") < prepare.indexOf("tar -czf"));
-  assert.match(prepare, /tar -czf .* \.build\/node /);
+  assert.ok(prepare.indexOf("npm run build:worker") < prepare.indexOf("tar -I 'zstd -T0 -1' -cf"));
+  assert.match(prepare, /tar -I 'zstd -T0 -1' -cf .* dist\/shell-worker\.js dist\/fs-worker\.js/);
+  assert.ok(
+    prepare.indexOf("npm run build:node-harness") < prepare.indexOf("tar -I 'zstd -T0 -1' -cf"),
+  );
+  assert.match(prepare, /tar -I 'zstd -T0 -1' -cf .* \.build\/node /);
   assert.equal(
     expanded(commands(scoreboard)).match(/node scripts\/scoreboard-tests\.ts/g)?.length,
     1,

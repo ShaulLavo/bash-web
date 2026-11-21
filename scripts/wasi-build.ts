@@ -100,6 +100,10 @@ const workspaceGuests: readonly string[] = [
   "printenv-py",
 ];
 
+export function cargoJobArguments(env: Environment = process.env): string[] {
+  return env.CARGO_BUILD_JOBS ? [] : ["-j2"];
+}
+
 export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
   const target = shellTargetDirectory(repositoryRoot);
   execFileSync(
@@ -112,8 +116,7 @@ export function buildWasiShell(args: readonly string[] = ["--workspace"]) {
       wasiTarget,
       "--manifest-path",
       "shell/Cargo.toml",
-      "-j2",
-    ].concat(args),
+    ].concat(cargoJobArguments(), args),
     {
       cwd: repositoryRoot,
       env: wasiBuildEnvironment(repositoryRoot, target),

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { wasiBuildEnvironment } from "./wasi-build.ts";
+import { cargoJobArguments, wasiBuildEnvironment } from "./wasi-build.ts";
 import { verifyWasiGuest } from "./verify-wasi-guests.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -17,8 +17,7 @@ execFileSync(
     "--manifest-path",
     "tests/guest/Cargo.toml",
     "--bins",
-    "-j2",
-  ],
+  ].concat(cargoJobArguments()),
   {
     cwd: root,
     // Keep the Wasm name section for the final scanner-code proof, while still

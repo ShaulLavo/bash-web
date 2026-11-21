@@ -8,7 +8,7 @@ export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
   fullyParallel: false,
-  workers: 1,
+  workers: 3,
   timeout: BROWSER_CASE_HANG_MS,
   expect: { timeout: OUTCOME_HANG_MS, toPass: { timeout: OUTCOME_HANG_MS } },
   use: {

@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { wasiBuildEnvironment } from "./wasi-build.ts";
+import { cargoJobArguments, wasiBuildEnvironment } from "./wasi-build.ts";
 
 export const wasiTestTargets = [
   { package: "shell-parser", names: ["shell_parser", "api", "conditional", "command_print"] },
@@ -68,8 +68,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         "wasm32-wasip1",
         "--no-run",
         "--message-format=json",
-        "-j2",
-      ].concat(wasiTestArguments(target)),
+      ].concat(cargoJobArguments(), wasiTestArguments(target)),
       {
         cwd: root,
         env,

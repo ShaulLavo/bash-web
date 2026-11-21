@@ -36,7 +36,11 @@ export function runScoreboardTests(directory: string) {
     shard === undefined || /^[1-9]\d*\/[1-9]\d*$/.test(shard),
     "invalid SCOREBOARD_TEST_SHARD",
   );
-  const flags = ["--test", "--test-concurrency=2"].concat(shard ? [`--test-shard=${shard}`] : []);
+  const concurrency = process.env.SCOREBOARD_TEST_CONCURRENCY ?? "2";
+  assert.ok(/^[1-9]\d*$/.test(concurrency), "invalid SCOREBOARD_TEST_CONCURRENCY");
+  const flags = ["--test", `--test-concurrency=${concurrency}`].concat(
+    shard ? [`--test-shard=${shard}`] : [],
+  );
   return spawnSync(process.execPath, flags.concat(discoverScoreboardTests(directory)), {
     stdio: "inherit",
     env: environment,
