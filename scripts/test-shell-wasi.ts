@@ -1,6 +1,6 @@
 // The browser process service is deliberately not substituted by this harness.
 import assert from "node:assert/strict";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { resolve } from "node:path";
@@ -21,7 +21,11 @@ assert.ok(
   "Use --prebuilt <artifact directory> or no arguments",
 );
 
-async function runPrebuiltBinary(prebuiltDir: string, binary: string): Promise<string> {
+async function runPrebuiltBinary(
+  prebuiltDir: string,
+  binary: string,
+  active: Set<ChildProcess>,
+): Promise<string> {
   return new Promise((done, fail) => {
     const child = spawn(
       "wasmtime",
@@ -34,11 +38,16 @@ async function runPrebuiltBinary(prebuiltDir: string, binary: string): Promise<s
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
+    active.add(child);
     const chunks: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => chunks.push(chunk));
-    child.once("error", fail);
+    child.once("error", (error) => {
+      active.delete(child);
+      fail(error);
+    });
     child.once("close", (code, signal) => {
+      active.delete(child);
       const text = Buffer.concat(chunks).toString("utf8");
       if (code === 0 && !signal) done(text);
       else fail(new Error(`WASI test ${binary} failed (${signal ?? code}):\n${text}`));
@@ -48,18 +57,34 @@ async function runPrebuiltBinary(prebuiltDir: string, binary: string): Promise<s
 
 async function runPrebuiltTests(prebuiltDir: string): Promise<void> {
   const concurrency = Math.max(1, Math.min(4, availableParallelism()));
-  const outputs = new Array<string>(wasiTestFiles.length);
+  const outputs = new Array<string | undefined>(wasiTestFiles.length);
+  const active = new Set<ChildProcess>();
+  let firstError: unknown;
+  let aborted = false;
   let next = 0;
+  const abort = (error: unknown) => {
+    if (aborted) return;
+    aborted = true;
+    firstError = error;
+    for (const child of active) child.kill("SIGTERM");
+  };
   const worker = async () => {
-    while (next < wasiTestFiles.length) {
+    while (!aborted && next < wasiTestFiles.length) {
       const index = next++;
-      outputs[index] = await runPrebuiltBinary(prebuiltDir, wasiTestFiles[index]);
+      try {
+        outputs[index] = await runPrebuiltBinary(prebuiltDir, wasiTestFiles[index], active);
+      } catch (error) {
+        abort(error);
+      }
     }
   };
-  await Promise.all(
+  await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, wasiTestFiles.length) }, () => worker()),
   );
-  for (const text of outputs) process.stdout.write(text);
+  for (const text of outputs) {
+    if (text !== undefined) process.stdout.write(text);
+  }
+  if (firstError !== undefined) throw firstError;
 }
 
 if (prebuilt) {

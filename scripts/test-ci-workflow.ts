@@ -157,10 +157,8 @@ test("the actual aggregate shell command rejects each non-success result in ever
         ...process.env,
         MAIN_SOURCE: "",
         MAIN_QUALIFICATION: status["main-qualification"],
-        CHANGES: status.changes,
         CODE: code,
         PREPARE: status.prepare,
-        LAYERS: status.layers,
         QUALITY: status.quality,
         RESULTS: JSON.stringify(
           Object.fromEntries(needs.map((key) => [key, { result: status[key] }])),
@@ -179,9 +177,7 @@ test("the actual aggregate shell command rejects each non-success result in ever
       );
     }
   }
-  const docs = needs.map((key) =>
-    ["changes", "prepare", "layers", "quality"].includes(key) ? "success" : "skipped",
-  );
+  const docs = needs.map((key) => (["prepare", "quality"].includes(key) ? "success" : "skipped"));
   assert.equal(evaluate(docs, "false"), 0);
   assert.notEqual(evaluate(docs, "true"), 0);
   assert.notEqual(evaluate(docs, ""), 0);
@@ -191,11 +187,18 @@ test("each moved current-main gate has one owner", () => {
   const workflowJobs = jobs();
   const expected: Record<string, readonly string[]> = {
     prepare: ["sources:browser", "build:worker", "build:node-harness"],
-    layers: ["test:check-layers", "check:layers", "typecheck:layers"],
-    quality: ["quality:js", "test:ci", "test:guest-build", "typecheck:guest-build", "typecheck:ci"],
-    "native-checks": ["check:rust"],
+    quality: [
+      "test:check-layers",
+      "check:layers",
+      "typecheck:layers",
+      "quality:js",
+      "test:ci",
+      "test:guest-build",
+      "typecheck:guest-build",
+      "typecheck:ci",
+    ],
     native: ["build:shell", "build:test-guest", "prepare:wasi-tests", "check:capabilities"],
-    wasi: ["test:shell:wasi"],
+    wasi: ["check:rust", "test:shell:wasi", "test:terminal:display"],
     browser: [
       "build:browser:assets:ci",
       "test:git:browser",
@@ -221,7 +224,7 @@ test("each moved current-main gate has one owner", () => {
         command,
       );
   }
-  const fuzz = commands(workflowJobs.fuzz);
+  const fuzz = commands(workflowJobs.wasi);
   for (const family of [
     "braces",
     "words",
@@ -371,7 +374,10 @@ test("compatibility keeps frozen identity, diagnostics, echo and target baseline
   const run = commands(compat);
   assert.equal(env.BASH_COMPAT_BASE_REF, undefined);
   assert.match(run, /node scripts\/scoreboard-ci\.ts baseline BASH_COMPAT_BASE_REF/);
-  assert.match(commands(jobs().layers), /node scripts\/scoreboard-ci\.ts baseline LAYERS_BASE_REF/);
+  assert.match(
+    commands(jobs().quality),
+    /node scripts\/scoreboard-ci\.ts baseline LAYERS_BASE_REF/,
+  );
   assert.doesNotMatch(
     readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
     /github\.event\.pull_request\.base\.sha/,
@@ -599,7 +605,7 @@ test("read tokens stay out of the replay environment and layer graphs are artifa
       assert.equal(step.name, "Bind qualification and resolve PR main floor");
     }
   }
-  const layer = object(jobs().layers);
+  const layer = object(jobs().quality);
   assert.doesNotMatch(commands(layer), /--record/);
   assert.ok(Array.isArray(layer.steps));
   const check = layer.steps
@@ -787,7 +793,7 @@ test("scoreboard and observation run independently using one shared node build",
 
 test("layer and split compatibility producers select immutable baselines after JavaScript restore", () => {
   for (const { id, variable, consumer } of [
-    { id: "layers", variable: "LAYERS_BASE_REF", consumer: "npm run test:check-layers" },
+    { id: "quality", variable: "LAYERS_BASE_REF", consumer: "npm run test:check-layers" },
     {
       id: "own-shell-scoreboard",
       variable: "BASH_COMPAT_BASE_REF",

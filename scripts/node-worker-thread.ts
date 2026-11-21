@@ -1,5 +1,5 @@
 import { parentPort, workerData, MessagePort } from "node:worker_threads";
-import { installNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
+import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 
 interface WorkerBootstrapData {
   entry: string;
@@ -33,6 +33,24 @@ function filterTransfers(transfer: readonly unknown[]): (ArrayBuffer | MessagePo
     (value): value is ArrayBuffer | MessagePort =>
       value instanceof ArrayBuffer || value instanceof MessagePort,
   );
+}
+
+function serializeError(seq: number, error: unknown) {
+  if (error instanceof Error) {
+    return {
+      type: "__error",
+      seq,
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return {
+    type: "__error",
+    seq,
+    name: "Error",
+    message: String(error),
+  };
 }
 
 installNodeWorkers();
@@ -70,7 +88,7 @@ if (!data.pooled) {
 } else {
   let activePort: MessagePort | null = null;
   let activeSeq = 0;
-  let activeCleanup: (() => void) | null = null;
+  let activeDetach: (() => Promise<boolean>) | null = null;
   let events = new EventTarget();
   Object.defineProperties(globalThis, {
     __bashWebPooledWorker: { value: true, configurable: true },
@@ -93,7 +111,7 @@ if (!data.pooled) {
       value: (
         type: string,
         listener: EventListenerOrEventListenerObject | null,
-        options?: boolean | EventListenerOptions,
+        options?: boolean | AddEventListenerOptions,
       ) => events.removeEventListener(type, listener, options),
       configurable: true,
     },
@@ -106,17 +124,22 @@ if (!data.pooled) {
   let loadedReady = false;
   const pendingControls: ControlMessage[] = [];
 
-  function detach(seq: number) {
+  async function detach(seq: number, notifyHost: boolean): Promise<void> {
     if (activeSeq !== seq || !activePort) return;
     const port = activePort;
-    const cleanup = activeCleanup;
-    activePort = null;
-    activeCleanup = null;
-    events = new EventTarget();
+    const runDetach = activeDetach;
+    activeDetach = null;
     port.removeAllListeners();
-    if (cleanup) cleanup();
+    const clean = runDetach ? await runDetach() : true;
+    if (activeSeq === seq) {
+      activePort = null;
+      events = new EventTarget();
+    }
     port.close();
-    void stopNodeWorkers();
+    await stopNodeWorkers();
+    if (notifyHost && clean && activeSeq === seq && liveNodeWorkers() === 0) {
+      control.postMessage({ type: "__settled", seq });
+    }
   }
 
   function attachFilesystem(
@@ -125,74 +148,119 @@ if (!data.pooled) {
     install: NonNullable<typeof installSession>,
   ) {
     let detached = false;
+    let disposedClean: boolean | null = null;
+    let disposeWaiter: ((clean: boolean) => void) | null = null;
     const scope = {
       onmessage: null as ((event: MessageEvent) => void) | null,
       postMessage(message: unknown, transfer: readonly unknown[] = []) {
         const record = message as { type?: unknown; error?: unknown } | null;
-        if (detached) {
-          if (record?.type === "filesystem-disposed" && typeof record.error !== "string") {
-            control.postMessage({ type: "__settled", seq });
-          }
-          return;
+        if (record?.type === "filesystem-disposed") {
+          const clean = typeof record.error !== "string";
+          disposedClean = clean;
+          const notify = disposeWaiter;
+          disposeWaiter = null;
+          notify?.(clean);
+          if (detached) return;
         }
-        if (activeSeq !== seq) return;
+        if (detached || activeSeq !== seq) return;
         port.postMessage(message, filterTransfers(transfer));
-        if (record?.type === "filesystem-disposed" && typeof record.error !== "string") {
-          control.postMessage({ type: "__settled", seq });
-        }
       },
     };
     install(scope);
-    activeCleanup = () => {
+    activeDetach = () => {
       detached = true;
-      scope.onmessage?.(new MessageEvent("message", { data: { dispose: true } }));
+      if (disposedClean !== null) return Promise.resolve(disposedClean);
+      return new Promise<boolean>((resolve) => {
+        disposeWaiter = resolve;
+        try {
+          scope.onmessage?.(new MessageEvent("message", { data: { dispose: true } }));
+        } catch (error) {
+          disposeWaiter = null;
+          control.postMessage(serializeError(seq, error));
+          resolve(false);
+        }
+      });
     };
     port.on("message", (payload) => {
-      if (activeSeq !== seq) return;
-      scope.onmessage?.(new MessageEvent("message", { data: payload }));
+      if (detached || activeSeq !== seq) return;
+      try {
+        scope.onmessage?.(new MessageEvent("message", { data: payload }));
+      } catch (error) {
+        control.postMessage(serializeError(seq, error));
+      }
     });
   }
 
   function attachStandard(seq: number, port: MessagePort) {
+    let inFlight = 0;
+    let errored = false;
+    let detaching = false;
+    let idleWaiter: (() => void) | null = null;
+    const finishOne = () => {
+      inFlight -= 1;
+      if (inFlight === 0 && idleWaiter) {
+        const notify = idleWaiter;
+        idleWaiter = null;
+        notify();
+      }
+    };
+    const failLease = (error: unknown) => {
+      errored = true;
+      if (activeSeq === seq) {
+        control.postMessage(serializeError(seq, error));
+      }
+    };
+    activeDetach = async () => {
+      detaching = true;
+      if (inFlight > 0) {
+        await new Promise<void>((resolve) => {
+          idleWaiter = resolve;
+        });
+      }
+      return !errored;
+    };
     port.on("message", (payload) => {
-      if (activeSeq !== seq) return;
+      if (detaching || activeSeq !== seq) return;
+      inFlight += 1;
       const event = new MessageEvent("message", { data: payload });
       const listener: unknown = Reflect.get(globalThis, "onmessage");
       let outcome: unknown;
-      if (typeof listener === "function") outcome = listener.call(globalThis, event);
-      events.dispatchEvent(event);
-      Promise.resolve(outcome).then(
-        () => {
-          if (activeSeq === seq) control.postMessage({ type: "__settled", seq });
-        },
-        () => {
-          // Unsettled rejection forces the host to terminate this thread.
-        },
-      );
+      try {
+        if (typeof listener === "function") outcome = listener.call(globalThis, event);
+        events.dispatchEvent(event);
+      } catch (error) {
+        failLease(error);
+        finishOne();
+        return;
+      }
+      Promise.resolve(outcome).catch(failLease).finally(finishOne);
     });
   }
 
-  function handleControl(message: ControlMessage) {
-    if (message.type === "__detach") {
-      detach(message.seq);
-      return;
-    }
-    if (activePort) detach(activeSeq);
-    activeSeq = message.seq;
-    activePort = message.port;
-    events = new EventTarget();
-    if (installSession) attachFilesystem(message.seq, message.port, installSession);
-    else attachStandard(message.seq, message.port);
+  let controlChain: Promise<void> = Promise.resolve();
+
+  function enqueueControl(message: ControlMessage) {
+    controlChain = controlChain.then(async () => {
+      if (message.type === "__detach") {
+        await detach(message.seq, true);
+        return;
+      }
+      if (activePort) await detach(activeSeq, false);
+      activeSeq = message.seq;
+      activePort = message.port;
+      events = new EventTarget();
+      if (installSession) attachFilesystem(message.seq, message.port, installSession);
+      else attachStandard(message.seq, message.port);
+    });
   }
 
   control.on("message", (message: ControlMessage) => {
-    if (loadedReady) handleControl(message);
+    if (loadedReady) enqueueControl(message);
     else pendingControls.push(message);
   });
   loadedReady = true;
-  for (const message of pendingControls) handleControl(message);
+  for (const message of pendingControls) enqueueControl(message);
   control.on("close", () => {
-    if (activePort) detach(activeSeq);
-    void stopNodeWorkers();
+    void detach(activeSeq, false).finally(() => stopNodeWorkers());
   });
 }

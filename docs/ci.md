@@ -4,21 +4,18 @@
 run. A newer PR head supersedes its older run. Main concurrency groups include
 the immutable source SHA and do not cancel another main source.
 
-| Job                       | Work it owns                                                                                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prepare`                 | One locked npm install, terminal-source fetch, worker build and Node harness build packed as a Zstandard archive                                                                            |
-| `layers`                  | Scanner tests, immutable layer baseline and scanner types                                                                                                                                   |
-| `quality`                 | Package, JS format/lint/types, unused code, duplicates, failure probes, complete guest-build tests/types and CI helper tests/types                                                          |
-| `native`                  | Both CLIs, core/utility/fixture guests, ten compiled WASI tests, shell notices and capability proof built in parallel across isolated Cargo target directories                              |
-| `native-checks`           | Parser provenance, shell/guest Rust fmt, host/WASI all-target Clippy, machete, native workspace tests and terminal display tests                                                            |
-| `wasi`                    | All ten WASI test executables run in parallel, smoke/stdio/helper controls, scanner proof, core Brotli ceiling and runtime/utility size reports                                             |
-| `fuzz`                    | Every existing generator test and frozen native differential replay, including echo, run across parallel lanes                                                                              |
-| `own-shell-scoreboard`    | Complete scoreboard and isolation test suite in one runner using the shared Node harness                                                                                                    |
-| `own-shell-observation`   | Diagnostic observer tests, real-Waffle echo and the unchanged wrapped frozen replay using the pooled Node worker harness                                                                    |
-| `own-shell-compatibility` | Sealed raw score publication after both `own-shell-scoreboard` and `own-shell-observation` succeed                                                                                          |
-| `score-floor`             | Completed-producer admission, cumulative main floor and gained/lost IDs; no build or replay                                                                                                 |
-| `browser`                 | Frontend assets, terminal/iOS/Python controls and the complete Chromium/Firefox/WebKit suite across two shards using the checked-in Playwright worker count                                 |
-| `shell`                   | Always-running aggregate; any failed, skipped or cancelled dependency fails                                                                                                                 |
+| Job                       | Work it owns                                                                                                                                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepare`                 | Change filtering, one locked npm install, terminal-source fetch, worker build and Node harness build packed as a Zstandard archive                                                                                     |
+| `quality`                 | Scanner tests, immutable layer baseline, scanner types, package, JS format/lint/types, unused code, duplicates, failure probes, complete guest-build tests/types and CI helper tests/types                             |
+| `native`                  | Both CLIs, core/utility/fixture guests, ten compiled WASI tests, shell notices and capability proof built in parallel across isolated Cargo target directories                                                         |
+| `wasi`                    | All ten WASI test executables run in parallel, smoke/stdio/helper/size controls, every fuzz generator test and native differential replay across parallel lanes, parser/fmt/Clippy/machete, native tests and display   |
+| `own-shell-scoreboard`    | Complete scoreboard and isolation test suite in one runner using the shared Node harness                                                                                                                               |
+| `own-shell-observation`   | Diagnostic observer tests, real-Waffle echo and the unchanged wrapped frozen replay using the pooled Node worker harness                                                                                               |
+| `own-shell-compatibility` | Sealed raw score publication after both `own-shell-scoreboard` and `own-shell-observation` succeed                                                                                                                     |
+| `score-floor`             | Completed-producer admission, cumulative main floor and gained/lost IDs; no build or replay                                                                                                                            |
+| `browser`                 | Frontend assets, terminal/iOS/Python controls and the complete Chromium/Firefox/WebKit suite across two shards using the checked-in Playwright worker count                                                            |
+| `shell`                   | Always-running aggregate; any failed, skipped or cancelled dependency fails                                                                                                                                            |
 
 The path-filtered `printf-darwin` workflow remains a separate blocking macOS
 gate. Linux results do not replace it. Its quoting selection and locale setup
