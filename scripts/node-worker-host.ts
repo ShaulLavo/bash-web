@@ -318,8 +318,8 @@ class NodeWorker extends EventTarget {
   private async finishPooled(pooled: PooledThread): Promise<number> {
     this.hostPort?.removeAllListeners();
     this.hostPort?.close();
-    const completedAll = this.sentMessages > 0 && this.cleanCompletions === this.sentMessages;
-    const eligible = !this.errored && !pooled.dead && (this.isFilesystemWorker || completedAll);
+    const completedSingle = this.sentMessages === 1 && this.cleanCompletions === 1;
+    const eligible = !this.errored && !pooled.dead && (this.isFilesystemWorker || completedSingle);
     if (eligible) {
       pooled.thread.postMessage({ type: "__detach", seq: this.seq });
       if ((await this.waitForSettle(pooled)) && releasePooledThread(pooled)) {

@@ -19,11 +19,6 @@ interface DetachControl {
 
 type ControlMessage = AttachControl | DetachControl;
 
-interface MessageListenerEntry {
-  readonly listener: EventListenerOrEventListenerObject;
-  readonly once: boolean;
-}
-
 type InstallSession = (scope: {
   onmessage: ((event: MessageEvent) => void) | null;
   postMessage(data: unknown, transfer?: readonly unknown[]): void;
@@ -58,18 +53,30 @@ function serializeError(seq: number, error: unknown) {
   };
 }
 
-function removeListener(
-  list: MessageListenerEntry[],
-  listener: EventListenerOrEventListenerObject,
-): void {
-  const index = list.findIndex((entry) => entry.listener === listener);
-  if (index >= 0) list.splice(index, 1);
+function isDirtyCompletionMessage(message: unknown): boolean {
+  if (!message || typeof message !== "object") return false;
+  const record = message as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
+  if (record.type === "error") return true;
+  if (record.type === "exit") {
+    return (
+      record.error !== undefined ||
+      (Array.isArray(record.cleanupErrors) && record.cleanupErrors.length > 0)
+    );
+  }
+  return record.type === "filesystem-disposed" && typeof record.error === "string";
 }
 
-function invokeListener(
-  listener: EventListenerOrEventListenerObject,
-  event: MessageEvent,
-): unknown {
+function isCleanExitMessage(message: unknown): boolean {
+  if (!message || typeof message !== "object") return false;
+  const record = message as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
+  return (
+    record.type === "exit" &&
+    record.error === undefined &&
+    (!Array.isArray(record.cleanupErrors) || record.cleanupErrors.length === 0)
+  );
+}
+
+function invokeListener(listener: EventListenerOrEventListenerObject, event: Event): unknown {
   if (typeof listener === "function") return listener.call(globalThis, event);
   return listener.handleEvent(event);
 }
@@ -110,16 +117,33 @@ if (!data.pooled) {
   let activePort: MessagePort | null = null;
   let activeSeq = 0;
   let activeDetach: (() => Promise<boolean>) | null = null;
+  let activeOnPost: ((message: unknown) => void) | null = null;
+  let activeTrackInvoke: ((invoke: () => unknown) => void) | null = null;
   let loadedReady = false;
-  const importMessageListeners: MessageListenerEntry[] = [];
-  let leaseMessageListeners: MessageListenerEntry[] = [];
-  let otherEvents = new EventTarget();
+  const importEvents = new EventTarget();
+  let leaseEvents = new EventTarget();
+  const wrappedListeners = new WeakMap<EventListenerOrEventListenerObject, EventListener>();
+
+  function wrapMessageListener(listener: EventListenerOrEventListenerObject): EventListener {
+    const existing = wrappedListeners.get(listener);
+    if (existing) return existing;
+    const wrapped: EventListener = (event) => {
+      if (activeTrackInvoke) {
+        activeTrackInvoke(() => invokeListener(listener, event));
+        return;
+      }
+      invokeListener(listener, event);
+    };
+    wrappedListeners.set(listener, wrapped);
+    return wrapped;
+  }
 
   Object.defineProperties(globalThis, {
     __bashWebPooledWorker: { value: true, configurable: true },
     self: { value: globalThis, configurable: true },
     postMessage: {
       value: (message: unknown, transfer: readonly Transferable[] = []) => {
+        activeOnPost?.(message);
         activePort?.postMessage(message, filterTransfers(transfer));
       },
       configurable: true,
@@ -131,15 +155,9 @@ if (!data.pooled) {
         options?: boolean | AddEventListenerOptions,
       ) => {
         if (!listener) return;
-        if (type !== "message") {
-          otherEvents.addEventListener(type, listener, options);
-          return;
-        }
-        const target = loadedReady ? leaseMessageListeners : importMessageListeners;
-        if (target.some((entry) => entry.listener === listener)) return;
-        const once =
-          typeof options === "object" && options !== null ? Boolean(options.once) : false;
-        target.push({ listener, once });
+        const target = loadedReady ? leaseEvents : importEvents;
+        const handler = type === "message" ? wrapMessageListener(listener) : listener;
+        target.addEventListener(type, handler, options);
       },
       configurable: true,
     },
@@ -150,12 +168,10 @@ if (!data.pooled) {
         options?: boolean | EventListenerOptions,
       ) => {
         if (!listener) return;
-        if (type !== "message") {
-          otherEvents.removeEventListener(type, listener, options);
-          return;
-        }
-        removeListener(leaseMessageListeners, listener);
-        removeListener(importMessageListeners, listener);
+        const handler =
+          type === "message" ? (wrappedListeners.get(listener) ?? listener) : listener;
+        leaseEvents.removeEventListener(type, handler, options);
+        importEvents.removeEventListener(type, handler, options);
       },
       configurable: true,
     },
@@ -176,8 +192,9 @@ if (!data.pooled) {
     const clean = runDetach ? await runDetach() : true;
     if (activeSeq === seq) {
       activePort = null;
-      leaseMessageListeners = [];
-      otherEvents = new EventTarget();
+      activeOnPost = null;
+      activeTrackInvoke = null;
+      leaseEvents = new EventTarget();
     }
     port.close();
     await stopNodeWorkers();
@@ -237,6 +254,9 @@ if (!data.pooled) {
 
   function attachStandard(seq: number, port: MessagePort) {
     let inFlight = 0;
+    let receivedMessages = 0;
+    let cleanExits = 0;
+    let dirtyCompletion = false;
     let errored = false;
     let detaching = false;
     let idleWaiter: (() => void) | null = null;
@@ -266,6 +286,11 @@ if (!data.pooled) {
       }
       Promise.resolve(outcome).catch(failLease).finally(finishOne);
     };
+    activeTrackInvoke = runTracked;
+    activeOnPost = (message: unknown) => {
+      if (isDirtyCompletionMessage(message)) dirtyCompletion = true;
+      else if (isCleanExitMessage(message)) cleanExits += 1;
+    };
     activeDetach = async () => {
       detaching = true;
       if (inFlight > 0) {
@@ -273,23 +298,18 @@ if (!data.pooled) {
           idleWaiter = resolve;
         });
       }
-      return !errored;
+      return !errored && !dirtyCompletion && receivedMessages === 1 && cleanExits === 1;
     };
     port.on("message", (payload) => {
       if (detaching || activeSeq !== seq) return;
+      receivedMessages += 1;
       const event = new MessageEvent("message", { data: payload });
       const onmessage: unknown = Reflect.get(globalThis, "onmessage");
       if (typeof onmessage === "function") {
         runTracked(() => onmessage.call(globalThis, event));
       }
-      const snapshot = importMessageListeners.concat(leaseMessageListeners);
-      for (const entry of snapshot) {
-        if (entry.once) {
-          removeListener(importMessageListeners, entry.listener);
-          removeListener(leaseMessageListeners, entry.listener);
-        }
-        runTracked(() => invokeListener(entry.listener, event));
-      }
+      importEvents.dispatchEvent(event);
+      leaseEvents.dispatchEvent(event);
     });
   }
 
@@ -304,8 +324,9 @@ if (!data.pooled) {
       if (activePort) await detach(activeSeq, false);
       activeSeq = message.seq;
       activePort = message.port;
-      leaseMessageListeners = [];
-      otherEvents = new EventTarget();
+      activeOnPost = null;
+      activeTrackInvoke = null;
+      leaseEvents = new EventTarget();
       if (installSession) attachFilesystem(message.seq, message.port, installSession);
       else attachStandard(message.seq, message.port);
     });
