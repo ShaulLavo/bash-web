@@ -1,5 +1,11 @@
 import { parentPort, workerData, MessagePort } from "node:worker_threads";
-import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
+import {
+  installNodeWorkers,
+  isCleanCompletionMessage,
+  isDirtyCompletionMessage,
+  liveNodeWorkers,
+  stopNodeWorkers,
+} from "./node-worker-host.ts";
 
 interface WorkerBootstrapData {
   entry: string;
@@ -53,29 +59,6 @@ function serializeError(seq: number, error: unknown) {
   };
 }
 
-function isDirtyCompletionMessage(message: unknown): boolean {
-  if (!message || typeof message !== "object") return false;
-  const record = message as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
-  if (record.type === "error") return true;
-  if (record.type === "exit") {
-    return (
-      record.error !== undefined ||
-      (Array.isArray(record.cleanupErrors) && record.cleanupErrors.length > 0)
-    );
-  }
-  return record.type === "filesystem-disposed" && typeof record.error === "string";
-}
-
-function isCleanExitMessage(message: unknown): boolean {
-  if (!message || typeof message !== "object") return false;
-  const record = message as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
-  return (
-    record.type === "exit" &&
-    record.error === undefined &&
-    (!Array.isArray(record.cleanupErrors) || record.cleanupErrors.length === 0)
-  );
-}
-
 function invokeListener(listener: EventListenerOrEventListenerObject, event: Event): unknown {
   if (typeof listener === "function") return listener.call(globalThis, event);
   return listener.handleEvent(event);
@@ -120,7 +103,11 @@ if (!data.pooled) {
   let activeOnPost: ((message: unknown) => void) | null = null;
   let activeTrackInvoke: ((invoke: () => unknown) => void) | null = null;
   let loadedReady = false;
-  const importEvents = new EventTarget();
+  const importListeners: {
+    readonly type: string;
+    readonly listener: EventListenerOrEventListenerObject;
+    readonly options?: boolean | AddEventListenerOptions;
+  }[] = [];
   let leaseEvents = new EventTarget();
   const wrappedListeners = new WeakMap<EventListenerOrEventListenerObject, EventListener>();
 
@@ -136,6 +123,16 @@ if (!data.pooled) {
     };
     wrappedListeners.set(listener, wrapped);
     return wrapped;
+  }
+
+  function freshLeaseEvents(): EventTarget {
+    const target = new EventTarget();
+    for (const entry of importListeners) {
+      const handler =
+        entry.type === "message" ? wrapMessageListener(entry.listener) : entry.listener;
+      target.addEventListener(entry.type, handler, entry.options);
+    }
+    return target;
   }
 
   Object.defineProperties(globalThis, {
@@ -155,9 +152,12 @@ if (!data.pooled) {
         options?: boolean | AddEventListenerOptions,
       ) => {
         if (!listener) return;
-        const target = loadedReady ? leaseEvents : importEvents;
         const handler = type === "message" ? wrapMessageListener(listener) : listener;
-        target.addEventListener(type, handler, options);
+        if (!loadedReady) {
+          importListeners.push({ type, listener, options });
+          return;
+        }
+        leaseEvents.addEventListener(type, handler, options);
       },
       configurable: true,
     },
@@ -168,10 +168,16 @@ if (!data.pooled) {
         options?: boolean | EventListenerOptions,
       ) => {
         if (!listener) return;
+        if (!loadedReady) {
+          const index = importListeners.findIndex(
+            (entry) => entry.type === type && entry.listener === listener,
+          );
+          if (index >= 0) importListeners.splice(index, 1);
+          return;
+        }
         const handler =
           type === "message" ? (wrappedListeners.get(listener) ?? listener) : listener;
         leaseEvents.removeEventListener(type, handler, options);
-        importEvents.removeEventListener(type, handler, options);
       },
       configurable: true,
     },
@@ -289,7 +295,7 @@ if (!data.pooled) {
     activeTrackInvoke = runTracked;
     activeOnPost = (message: unknown) => {
       if (isDirtyCompletionMessage(message)) dirtyCompletion = true;
-      else if (isCleanExitMessage(message)) cleanExits += 1;
+      else if (isCleanCompletionMessage(message)) cleanExits += 1;
     };
     activeDetach = async () => {
       detaching = true;
@@ -308,7 +314,6 @@ if (!data.pooled) {
       if (typeof onmessage === "function") {
         runTracked(() => onmessage.call(globalThis, event));
       }
-      importEvents.dispatchEvent(event);
       leaseEvents.dispatchEvent(event);
     });
   }
@@ -326,7 +331,7 @@ if (!data.pooled) {
       activePort = message.port;
       activeOnPost = null;
       activeTrackInvoke = null;
-      leaseEvents = new EventTarget();
+      leaseEvents = freshLeaseEvents();
       if (installSession) attachFilesystem(message.seq, message.port, installSession);
       else attachStandard(message.seq, message.port);
     });

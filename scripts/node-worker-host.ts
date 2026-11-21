@@ -137,7 +137,7 @@ function filterTransfers(transfer: readonly unknown[]): (ArrayBuffer | MessagePo
   );
 }
 
-function isDirtyCompletionMessage(data: unknown): boolean {
+export function isDirtyCompletionMessage(data: unknown): boolean {
   if (!data || typeof data !== "object") return false;
   const record = data as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
   if (record.type === "error") return true;
@@ -150,7 +150,7 @@ function isDirtyCompletionMessage(data: unknown): boolean {
   return record.type === "filesystem-disposed" && typeof record.error === "string";
 }
 
-function isCleanCompletionMessage(data: unknown): boolean {
+export function isCleanCompletionMessage(data: unknown): boolean {
   if (!data || typeof data !== "object") return false;
   const record = data as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
   if (record.type === "exit") {
