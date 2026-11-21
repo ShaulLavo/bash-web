@@ -1,4 +1,4 @@
-import { installFilesystemWorker, MemoryBackend } from "waffle/fs";
+import { installFilesystemWorker, MemoryBackend, VfsError } from "waffle/fs";
 
 interface FilesystemScope {
   onmessage: ((event: MessageEvent) => void) | null;
@@ -7,7 +7,20 @@ interface FilesystemScope {
 
 function installSession(scope: FilesystemScope): void {
   installFilesystemWorker(scope as Parameters<typeof installFilesystemWorker>[0], (options) => {
-    const config = options as { startupRoot?: unknown; connect?: unknown };
+    const config = options as {
+      mode?: string;
+      implementation?: string;
+      startupRoot?: unknown;
+      connect?: unknown;
+    };
+    const requested = config.implementation ?? config.mode ?? "memory";
+    if (requested !== "memory") {
+      throw new VfsError(
+        "UNSUPPORTED_VFS_CAPABILITY",
+        requested,
+        `Node test harness filesystem worker supports only memory mode (requested ${requested})`,
+      );
+    }
     return new MemoryBackend(
       undefined,
       undefined,

@@ -150,16 +150,17 @@ export function isDirtyCompletionMessage(data: unknown): boolean {
   return record.type === "filesystem-disposed" && typeof record.error === "string";
 }
 
-export function isCleanCompletionMessage(data: unknown): boolean {
+export function isCleanCompletionMessage(data: unknown, kind: "standard" | "filesystem"): boolean {
   if (!data || typeof data !== "object") return false;
   const record = data as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
-  if (record.type === "exit") {
-    return (
-      record.error === undefined &&
-      (!Array.isArray(record.cleanupErrors) || record.cleanupErrors.length === 0)
-    );
+  if (kind === "filesystem") {
+    return record.type === "filesystem-disposed" && typeof record.error !== "string";
   }
-  return record.type === "filesystem-disposed" && typeof record.error !== "string";
+  return (
+    record.type === "exit" &&
+    record.error === undefined &&
+    (!Array.isArray(record.cleanupErrors) || record.cleanupErrors.length === 0)
+  );
 }
 
 class WorkerFailure extends Event {
@@ -246,7 +247,9 @@ class NodeWorker extends EventTarget {
     hostPort.on("message", (data) => {
       if (isDirtyCompletionMessage(data)) {
         this.errored = true;
-      } else if (isCleanCompletionMessage(data)) {
+      } else if (
+        isCleanCompletionMessage(data, this.isFilesystemWorker ? "filesystem" : "standard")
+      ) {
         this.cleanCompletions += 1;
       }
       this.emitMessage(data);

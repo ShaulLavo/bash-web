@@ -25,6 +25,19 @@ interface DetachControl {
 
 type ControlMessage = AttachControl | DetachControl;
 
+interface NormalizedOptions {
+  readonly capture: boolean;
+  readonly once: boolean;
+  readonly passive: boolean;
+  readonly signal?: AbortSignal;
+}
+
+interface ListenerSpec {
+  readonly type: string;
+  readonly listener: EventListenerOrEventListenerObject;
+  readonly options: NormalizedOptions;
+}
+
 type InstallSession = (scope: {
   onmessage: ((event: MessageEvent) => void) | null;
   postMessage(data: unknown, transfer?: readonly unknown[]): void;
@@ -57,6 +70,22 @@ function serializeError(seq: number, error: unknown) {
     name: "Error",
     message: String(error),
   };
+}
+
+function normalizeOptions(options?: boolean | AddEventListenerOptions): NormalizedOptions {
+  if (typeof options === "boolean") {
+    return { capture: options, once: false, passive: false };
+  }
+  return {
+    capture: Boolean(options?.capture),
+    once: Boolean(options?.once),
+    passive: Boolean(options?.passive),
+    signal: options?.signal,
+  };
+}
+
+function captureFlag(options?: boolean | EventListenerOptions): boolean {
+  return typeof options === "boolean" ? options : Boolean(options?.capture);
 }
 
 function invokeListener(listener: EventListenerOrEventListenerObject, event: Event): unknown {
@@ -103,11 +132,9 @@ if (!data.pooled) {
   let activeOnPost: ((message: unknown) => void) | null = null;
   let activeTrackInvoke: ((invoke: () => unknown) => void) | null = null;
   let loadedReady = false;
-  const importListeners: {
-    readonly type: string;
-    readonly listener: EventListenerOrEventListenerObject;
-    readonly options?: boolean | AddEventListenerOptions;
-  }[] = [];
+  let dispatching = false;
+  const importListeners: ListenerSpec[] = [];
+  const deferredAdds: ListenerSpec[] = [];
   let leaseEvents = new EventTarget();
   const wrappedListeners = new WeakMap<EventListenerOrEventListenerObject, EventListener>();
 
@@ -125,14 +152,27 @@ if (!data.pooled) {
     return wrapped;
   }
 
+  function registerSpec(target: EventTarget, spec: ListenerSpec): void {
+    const handler = spec.type === "message" ? wrapMessageListener(spec.listener) : spec.listener;
+    target.addEventListener(spec.type, handler, spec.options);
+  }
+
   function freshLeaseEvents(): EventTarget {
     const target = new EventTarget();
-    for (const entry of importListeners) {
-      const handler =
-        entry.type === "message" ? wrapMessageListener(entry.listener) : entry.listener;
-      target.addEventListener(entry.type, handler, entry.options);
-    }
+    for (const spec of importListeners) registerSpec(target, spec);
     return target;
+  }
+
+  function findSpec(
+    list: ListenerSpec[],
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    capture: boolean,
+  ): number {
+    return list.findIndex(
+      (entry) =>
+        entry.type === type && entry.listener === listener && entry.options.capture === capture,
+    );
   }
 
   Object.defineProperties(globalThis, {
@@ -152,12 +192,22 @@ if (!data.pooled) {
         options?: boolean | AddEventListenerOptions,
       ) => {
         if (!listener) return;
-        const handler = type === "message" ? wrapMessageListener(listener) : listener;
+        const normalized = normalizeOptions(options);
+        if (normalized.signal?.aborted) return;
+        const spec: ListenerSpec = { type, listener, options: normalized };
         if (!loadedReady) {
-          importListeners.push({ type, listener, options });
+          if (findSpec(importListeners, type, listener, normalized.capture) < 0) {
+            importListeners.push(spec);
+          }
           return;
         }
-        leaseEvents.addEventListener(type, handler, options);
+        if (dispatching) {
+          if (findSpec(deferredAdds, type, listener, normalized.capture) < 0) {
+            deferredAdds.push(spec);
+          }
+          return;
+        }
+        registerSpec(leaseEvents, spec);
       },
       configurable: true,
     },
@@ -168,16 +218,17 @@ if (!data.pooled) {
         options?: boolean | EventListenerOptions,
       ) => {
         if (!listener) return;
+        const capture = captureFlag(options);
         if (!loadedReady) {
-          const index = importListeners.findIndex(
-            (entry) => entry.type === type && entry.listener === listener,
-          );
+          const index = findSpec(importListeners, type, listener, capture);
           if (index >= 0) importListeners.splice(index, 1);
           return;
         }
+        const deferredIndex = findSpec(deferredAdds, type, listener, capture);
+        if (deferredIndex >= 0) deferredAdds.splice(deferredIndex, 1);
         const handler =
           type === "message" ? (wrappedListeners.get(listener) ?? listener) : listener;
-        leaseEvents.removeEventListener(type, handler, options);
+        leaseEvents.removeEventListener(type, handler, capture);
       },
       configurable: true,
     },
@@ -200,6 +251,7 @@ if (!data.pooled) {
       activePort = null;
       activeOnPost = null;
       activeTrackInvoke = null;
+      deferredAdds.length = 0;
       leaseEvents = new EventTarget();
     }
     port.close();
@@ -295,7 +347,7 @@ if (!data.pooled) {
     activeTrackInvoke = runTracked;
     activeOnPost = (message: unknown) => {
       if (isDirtyCompletionMessage(message)) dirtyCompletion = true;
-      else if (isCleanCompletionMessage(message)) cleanExits += 1;
+      else if (isCleanCompletionMessage(message, "standard")) cleanExits += 1;
     };
     activeDetach = async () => {
       detaching = true;
@@ -311,10 +363,17 @@ if (!data.pooled) {
       receivedMessages += 1;
       const event = new MessageEvent("message", { data: payload });
       const onmessage: unknown = Reflect.get(globalThis, "onmessage");
-      if (typeof onmessage === "function") {
-        runTracked(() => onmessage.call(globalThis, event));
+      dispatching = true;
+      try {
+        if (typeof onmessage === "function") {
+          runTracked(() => onmessage.call(globalThis, event));
+        }
+        leaseEvents.dispatchEvent(event);
+      } finally {
+        dispatching = false;
+        const added = deferredAdds.splice(0, deferredAdds.length);
+        for (const spec of added) registerSpec(leaseEvents, spec);
       }
-      leaseEvents.dispatchEvent(event);
     });
   }
 
@@ -331,6 +390,7 @@ if (!data.pooled) {
       activePort = message.port;
       activeOnPost = null;
       activeTrackInvoke = null;
+      deferredAdds.length = 0;
       leaseEvents = freshLeaseEvents();
       if (installSession) attachFilesystem(message.seq, message.port, installSession);
       else attachStandard(message.seq, message.port);
