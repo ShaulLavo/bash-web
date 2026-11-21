@@ -28,20 +28,31 @@ function filesystem(files: Record<string, string>, delayMs = 0): PromptFilesyste
           kind: "dir",
           ino: 1,
           mtime: 1,
+          ctime: 1,
           children: new Map(
             Array.from(directories.get(path) ?? [], (name) => [
               name,
-              { kind: "file", ino: 1, mtime: 1 },
+              { kind: "file", ino: 1, mtime: 1, ctime: 1 },
             ]),
           ),
         };
-      if (files[path] !== undefined) return { kind: "file", ino: 1, mtime: 1 };
+      if (files[path] !== undefined) return { kind: "file", ino: 1, mtime: 1, ctime: 1 };
       return undefined;
     },
     async readFile(path) {
       await wait();
       return files[path] === undefined ? undefined : encoder.encode(files[path]);
     },
+  };
+}
+
+function packageDirectory(): Awaited<ReturnType<PromptFilesystem["lookup"]>> {
+  return {
+    kind: "dir",
+    ino: 1,
+    mtime: 1,
+    ctime: 1,
+    children: new Map([["package.json", { kind: "file", ino: 2, mtime: 1, ctime: 1 }]]),
   };
 }
 
@@ -109,10 +120,11 @@ test("merges a file edit on the next prompt", async () => {
   const base = filesystem({});
   const prompt = createPrompt({
     filesystem: {
-      lookup: async (path) =>
-        path.endsWith("prompt.json")
-          ? { kind: "file", ino: 1, mtime: version.includes('"#"') ? 2 : 1 }
-          : base.lookup(path),
+      lookup: async (path) => {
+        if (!path.endsWith("prompt.json")) return base.lookup(path);
+        const mtime = version.includes('"#"') ? 2 : 1;
+        return { kind: "file", ino: 1, mtime, ctime: mtime };
+      },
       readFile: async (path) =>
         path.endsWith("prompt.json") ? encoder.encode(version) : base.readFile(path),
     },
@@ -283,12 +295,7 @@ for (const reason of ["abort", "deadline"] as const) {
     await prompt.render(context(), recorder.live);
     if (reason === "abort") recorder.controller.abort();
     else await new Promise((resolve) => setTimeout(resolve, 10));
-    listing.resolve({
-      kind: "dir",
-      ino: 1,
-      mtime: 1,
-      children: new Map([["package.json", { kind: "file", ino: 2, mtime: 1 }]]),
-    });
+    listing.resolve(packageDirectory());
     await tick();
     assert.equal(manifestReads, 0);
     assert.deepEqual(recorder.updates, []);
@@ -412,7 +419,7 @@ test("a file override recursively preserves host fields and invalid edits retain
   const messages: string[] = [];
   const fs: PromptFilesystem = {
     lookup: async (path) =>
-      path.endsWith("prompt.json") ? { kind: "file", ino: 1, mtime } : undefined,
+      path.endsWith("prompt.json") ? { kind: "file", ino: 1, mtime, ctime: mtime } : undefined,
     readFile: async () => encoder.encode(file),
   };
   const prompt = createPrompt({
@@ -441,7 +448,7 @@ test("file edits negotiate new env dependencies without discarding other shells'
   const prompt = createPrompt({
     file: true,
     filesystem: {
-      lookup: async () => ({ kind: "file", ino: 1, mtime }),
+      lookup: async () => ({ kind: "file", ino: 1, mtime, ctime: mtime }),
       readFile: async () =>
         encoder.encode(
           JSON.stringify({
@@ -628,7 +635,7 @@ test("invalid JSON retains the valid file configuration and reports once", async
   const prompt = createPrompt({
     file: true,
     filesystem: {
-      lookup: async () => ({ kind: "file", ino: 1, mtime }),
+      lookup: async () => ({ kind: "file", ino: 1, mtime, ctime: mtime }),
       readFile: async () => encoder.encode(file),
     },
     logger: (message) => messages.push(message),
@@ -716,12 +723,7 @@ test("a manifest finishing after the deadline is discarded", async () => {
   const prompt = createPrompt({
     config: { paintMs: 0, backgroundMs: 8 },
     filesystem: {
-      lookup: async () => ({
-        kind: "dir",
-        ino: 1,
-        mtime: 1,
-        children: new Map([["package.json", { kind: "file", ino: 2, mtime: 1 }]]),
-      }),
+      lookup: async () => packageDirectory(),
       readFile() {
         admitted = true;
         return manifest.promise;
@@ -741,7 +743,7 @@ test("shared-provider config caches are scoped by path, not inode alone", async 
   const prompt = createPrompt({
     file: true,
     filesystem: {
-      lookup: async () => ({ kind: "file", ino: 1, mtime: 1 }),
+      lookup: async () => ({ kind: "file", ino: 1, mtime: 1, ctime: 1 }),
       readFile: async (path) =>
         encoder.encode(
           JSON.stringify({
