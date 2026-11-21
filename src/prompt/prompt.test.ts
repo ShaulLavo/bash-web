@@ -46,6 +46,16 @@ function filesystem(files: Record<string, string>, delayMs = 0): PromptFilesyste
   };
 }
 
+function packageDirectory(): Awaited<ReturnType<PromptFilesystem["lookup"]>> {
+  return {
+    kind: "dir",
+    ino: 1,
+    mtime: 1,
+    ctime: 1,
+    children: new Map([["package.json", { kind: "file", ino: 2, mtime: 1, ctime: 1 }]]),
+  };
+}
+
 function context(overrides: Partial<PromptContext> = {}): PromptContext {
   return {
     turn: 1,
@@ -285,13 +295,7 @@ for (const reason of ["abort", "deadline"] as const) {
     await prompt.render(context(), recorder.live);
     if (reason === "abort") recorder.controller.abort();
     else await new Promise((resolve) => setTimeout(resolve, 10));
-    listing.resolve({
-      kind: "dir",
-      ino: 1,
-      mtime: 1,
-      ctime: 1,
-      children: new Map([["package.json", { kind: "file", ino: 2, mtime: 1, ctime: 1 }]]),
-    });
+    listing.resolve(packageDirectory());
     await tick();
     assert.equal(manifestReads, 0);
     assert.deepEqual(recorder.updates, []);
@@ -719,13 +723,7 @@ test("a manifest finishing after the deadline is discarded", async () => {
   const prompt = createPrompt({
     config: { paintMs: 0, backgroundMs: 8 },
     filesystem: {
-      lookup: async () => ({
-        kind: "dir",
-        ino: 1,
-        mtime: 1,
-        ctime: 1,
-        children: new Map([["package.json", { kind: "file", ino: 2, mtime: 1, ctime: 1 }]]),
-      }),
+      lookup: async () => packageDirectory(),
       readFile() {
         admitted = true;
         return manifest.promise;
