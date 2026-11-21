@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { MessageChannel, MessagePort, Worker as Thread } from "node:worker_threads";
 
-const MAX_IDLE_PER_ENTRY = 2;
+const MAX_IDLE_PER_ENTRY = 1;
 const SETTLE_WAIT_MS = 100;
 
 function resolveBootstrap(): URL {
@@ -140,7 +140,13 @@ function filterTransfers(transfer: readonly unknown[]): (ArrayBuffer | MessagePo
 export function isDirtyCompletionMessage(data: unknown): boolean {
   if (!data || typeof data !== "object") return false;
   const record = data as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
-  if (record.type === "error") return true;
+  if (
+    record.type === "error" ||
+    record.type === "filesystem-error" ||
+    record.type === "filesystem-ownership-lost"
+  ) {
+    return true;
+  }
   if (record.type === "exit") {
     return (
       record.error !== undefined ||

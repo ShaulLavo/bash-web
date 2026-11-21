@@ -68,14 +68,16 @@ async function runPrebuiltTests(prebuiltDir: string): Promise<void> {
     firstError = error;
     for (const child of active) child.kill("SIGTERM");
   };
+  const runIndex = async (index: number) => {
+    try {
+      outputs[index] = await runPrebuiltBinary(prebuiltDir, wasiTestFiles[index], active);
+    } catch (error) {
+      abort(error);
+    }
+  };
   const worker = async () => {
     while (!aborted && next < wasiTestFiles.length) {
-      const index = next++;
-      try {
-        outputs[index] = await runPrebuiltBinary(prebuiltDir, wasiTestFiles[index], active);
-      } catch (error) {
-        abort(error);
-      }
+      await runIndex(next++);
     }
   };
   await Promise.allSettled(

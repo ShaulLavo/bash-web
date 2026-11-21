@@ -88,6 +88,25 @@ function captureFlag(options?: boolean | EventListenerOptions): boolean {
   return typeof options === "boolean" ? options : Boolean(options?.capture);
 }
 
+function pruneAborted(list: ListenerSpec[]): void {
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    if (list[index].options.signal?.aborted) list.splice(index, 1);
+  }
+}
+
+function findSpec(
+  list: ListenerSpec[],
+  type: string,
+  listener: EventListenerOrEventListenerObject,
+  capture: boolean,
+): number {
+  pruneAborted(list);
+  return list.findIndex(
+    (entry) =>
+      entry.type === type && entry.listener === listener && entry.options.capture === capture,
+  );
+}
+
 function invokeListener(listener: EventListenerOrEventListenerObject, event: Event): unknown {
   if (typeof listener === "function") return listener.call(globalThis, event);
   return listener.handleEvent(event);
@@ -134,14 +153,28 @@ if (!data.pooled) {
   let loadedReady = false;
   let dispatching = false;
   const importListeners: ListenerSpec[] = [];
+  const activeLeaseListeners: ListenerSpec[] = [];
   const deferredAdds: ListenerSpec[] = [];
   let leaseEvents = new EventTarget();
   const wrappedListeners = new WeakMap<EventListenerOrEventListenerObject, EventListener>();
+
+  function removeActiveSpec(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    capture: boolean,
+  ): void {
+    const index = findSpec(activeLeaseListeners, type, listener, capture);
+    if (index >= 0) activeLeaseListeners.splice(index, 1);
+  }
 
   function wrapMessageListener(listener: EventListenerOrEventListenerObject): EventListener {
     const existing = wrappedListeners.get(listener);
     if (existing) return existing;
     const wrapped: EventListener = (event) => {
+      const activeIndex = activeLeaseListeners.findIndex(
+        (entry) => entry.type === event.type && entry.listener === listener && entry.options.once,
+      );
+      if (activeIndex >= 0) activeLeaseListeners.splice(activeIndex, 1);
       if (activeTrackInvoke) {
         activeTrackInvoke(() => invokeListener(listener, event));
         return;
@@ -153,26 +186,19 @@ if (!data.pooled) {
   }
 
   function registerSpec(target: EventTarget, spec: ListenerSpec): void {
+    if (spec.options.signal?.aborted) return;
+    if (findSpec(activeLeaseListeners, spec.type, spec.listener, spec.options.capture) >= 0) return;
+    activeLeaseListeners.push(spec);
     const handler = spec.type === "message" ? wrapMessageListener(spec.listener) : spec.listener;
     target.addEventListener(spec.type, handler, spec.options);
   }
 
   function freshLeaseEvents(): EventTarget {
+    activeLeaseListeners.length = 0;
     const target = new EventTarget();
+    pruneAborted(importListeners);
     for (const spec of importListeners) registerSpec(target, spec);
     return target;
-  }
-
-  function findSpec(
-    list: ListenerSpec[],
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    capture: boolean,
-  ): number {
-    return list.findIndex(
-      (entry) =>
-        entry.type === type && entry.listener === listener && entry.options.capture === capture,
-    );
   }
 
   Object.defineProperties(globalThis, {
@@ -202,7 +228,8 @@ if (!data.pooled) {
           return;
         }
         if (dispatching) {
-          if (findSpec(deferredAdds, type, listener, normalized.capture) < 0) {
+          const isActive = findSpec(activeLeaseListeners, type, listener, normalized.capture) >= 0;
+          if (!isActive && findSpec(deferredAdds, type, listener, normalized.capture) < 0) {
             deferredAdds.push(spec);
           }
           return;
@@ -226,6 +253,7 @@ if (!data.pooled) {
         }
         const deferredIndex = findSpec(deferredAdds, type, listener, capture);
         if (deferredIndex >= 0) deferredAdds.splice(deferredIndex, 1);
+        removeActiveSpec(type, listener, capture);
         const handler =
           type === "message" ? (wrappedListeners.get(listener) ?? listener) : listener;
         leaseEvents.removeEventListener(type, handler, capture);
@@ -252,6 +280,7 @@ if (!data.pooled) {
       activeOnPost = null;
       activeTrackInvoke = null;
       deferredAdds.length = 0;
+      activeLeaseListeners.length = 0;
       leaseEvents = new EventTarget();
     }
     port.close();
@@ -267,14 +296,16 @@ if (!data.pooled) {
     install: NonNullable<typeof installSession>,
   ) {
     let detached = false;
+    let fsFailed = false;
     let disposedClean: boolean | null = null;
     let disposeWaiter: ((clean: boolean) => void) | null = null;
     const scope = {
       onmessage: null as ((event: MessageEvent) => void) | null,
       postMessage(message: unknown, transfer: readonly unknown[] = []) {
+        if (isDirtyCompletionMessage(message)) fsFailed = true;
         const record = message as { type?: unknown; error?: unknown } | null;
         if (record?.type === "filesystem-disposed") {
-          const clean = typeof record.error !== "string";
+          const clean = !fsFailed && typeof record.error !== "string";
           disposedClean = clean;
           const notify = disposeWaiter;
           disposeWaiter = null;
@@ -285,26 +316,30 @@ if (!data.pooled) {
         port.postMessage(message, filterTransfers(transfer));
       },
     };
+    const triggerDispose = (resolve: (clean: boolean) => void) => {
+      disposeWaiter = resolve;
+      try {
+        scope.onmessage?.(new MessageEvent("message", { data: { dispose: true } }));
+      } catch (error) {
+        fsFailed = true;
+        disposeWaiter = null;
+        control.postMessage(serializeError(seq, error));
+        resolve(false);
+      }
+    };
     install(scope);
     activeDetach = () => {
       detached = true;
+      if (fsFailed) return Promise.resolve(false);
       if (disposedClean !== null) return Promise.resolve(disposedClean);
-      return new Promise<boolean>((resolve) => {
-        disposeWaiter = resolve;
-        try {
-          scope.onmessage?.(new MessageEvent("message", { data: { dispose: true } }));
-        } catch (error) {
-          disposeWaiter = null;
-          control.postMessage(serializeError(seq, error));
-          resolve(false);
-        }
-      });
+      return new Promise<boolean>(triggerDispose);
     };
     port.on("message", (payload) => {
       if (detached || activeSeq !== seq) return;
       try {
         scope.onmessage?.(new MessageEvent("message", { data: payload }));
       } catch (error) {
+        fsFailed = true;
         control.postMessage(serializeError(seq, error));
       }
     });
