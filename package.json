@@ -1,8 +1,12 @@
 {
   "name": "bash-web",
   "version": "0.0.113",
-  "private": true,
   "description": "WASM-first bash-compatible shell",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ShaulLavo/bash-web.git"
+  },
   "files": [
     "dist",
     "!dist/product-shell",
@@ -23,6 +27,11 @@
     "./shell": "./src/shell.ts",
     "./prompt": "./src/prompt/index.ts",
     "./session": "./src/session.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "format:check": "oxfmt --check scripts shell src tests package.json vite.config.ts playwright.config.ts tsconfig*.json .oxlintrc.json .knip.jsonc quality docs/code-quality.md '!scripts/fixtures/**/*.json'",
@@ -124,7 +133,8 @@
     "test:ios:adapters": "bun test ./tests/ios/*.unit.ts",
     "test:startup:local": "bun scripts/test-startup-diagnostics-local.ts",
     "build:test:product-shell": "node scripts/build-product-shell-test.ts",
-    "test:browser:integration": "npm run build:test:product-shell && playwright test tests/product-shell.spec.ts"
+    "test:browser:integration": "npm run build:test:product-shell && playwright test tests/product-shell.spec.ts",
+    "changeset": "changeset"
   },
   "dependencies": {
     "@waffle/python": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-python-0.0.23.tgz",
@@ -133,6 +143,7 @@
     "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-ripgrep-0.0.23.tgz"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@fregat/hotkeys": "https://github.com/ShaulLavo/hotkeys/releases/download/hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd/fregat-hotkeys-3de9d21e2299d2b94ed2d8b012c25bf9358dcfbd.tgz",
     "@playwright/test": "1.64.0",
     "@singapore-editor/core": "https://github.com/ShaulLavo/singapore/releases/download/singapore-47d5f77a721ef68572f8f729dac7342230f178cb/singapore-editor-core-0.2.11.tgz",
