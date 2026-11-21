@@ -19,6 +19,11 @@ interface DetachControl {
 
 type ControlMessage = AttachControl | DetachControl;
 
+interface MessageListenerEntry {
+  readonly listener: EventListenerOrEventListenerObject;
+  readonly once: boolean;
+}
+
 type InstallSession = (scope: {
   onmessage: ((event: MessageEvent) => void) | null;
   postMessage(data: unknown, transfer?: readonly unknown[]): void;
@@ -51,6 +56,22 @@ function serializeError(seq: number, error: unknown) {
     name: "Error",
     message: String(error),
   };
+}
+
+function removeListener(
+  list: MessageListenerEntry[],
+  listener: EventListenerOrEventListenerObject,
+): void {
+  const index = list.findIndex((entry) => entry.listener === listener);
+  if (index >= 0) list.splice(index, 1);
+}
+
+function invokeListener(
+  listener: EventListenerOrEventListenerObject,
+  event: MessageEvent,
+): unknown {
+  if (typeof listener === "function") return listener.call(globalThis, event);
+  return listener.handleEvent(event);
 }
 
 installNodeWorkers();
@@ -89,7 +110,11 @@ if (!data.pooled) {
   let activePort: MessagePort | null = null;
   let activeSeq = 0;
   let activeDetach: (() => Promise<boolean>) | null = null;
-  let events = new EventTarget();
+  let loadedReady = false;
+  const importMessageListeners: MessageListenerEntry[] = [];
+  let leaseMessageListeners: MessageListenerEntry[] = [];
+  let otherEvents = new EventTarget();
+
   Object.defineProperties(globalThis, {
     __bashWebPooledWorker: { value: true, configurable: true },
     self: { value: globalThis, configurable: true },
@@ -104,15 +129,34 @@ if (!data.pooled) {
         type: string,
         listener: EventListenerOrEventListenerObject | null,
         options?: boolean | AddEventListenerOptions,
-      ) => events.addEventListener(type, listener, options),
+      ) => {
+        if (!listener) return;
+        if (type !== "message") {
+          otherEvents.addEventListener(type, listener, options);
+          return;
+        }
+        const target = loadedReady ? leaseMessageListeners : importMessageListeners;
+        if (target.some((entry) => entry.listener === listener)) return;
+        const once =
+          typeof options === "object" && options !== null ? Boolean(options.once) : false;
+        target.push({ listener, once });
+      },
       configurable: true,
     },
     removeEventListener: {
       value: (
         type: string,
         listener: EventListenerOrEventListenerObject | null,
-        options?: boolean | AddEventListenerOptions,
-      ) => events.removeEventListener(type, listener, options),
+        options?: boolean | EventListenerOptions,
+      ) => {
+        if (!listener) return;
+        if (type !== "message") {
+          otherEvents.removeEventListener(type, listener, options);
+          return;
+        }
+        removeListener(leaseMessageListeners, listener);
+        removeListener(importMessageListeners, listener);
+      },
       configurable: true,
     },
   });
@@ -121,7 +165,6 @@ if (!data.pooled) {
   const candidate: unknown = Reflect.get(globalThis, "__bashWebInstallSession");
   const installSession =
     typeof candidate === "function" ? (candidate as InstallSession) : undefined;
-  let loadedReady = false;
   const pendingControls: ControlMessage[] = [];
 
   async function detach(seq: number, notifyHost: boolean): Promise<void> {
@@ -133,7 +176,8 @@ if (!data.pooled) {
     const clean = runDetach ? await runDetach() : true;
     if (activeSeq === seq) {
       activePort = null;
-      events = new EventTarget();
+      leaseMessageListeners = [];
+      otherEvents = new EventTarget();
     }
     port.close();
     await stopNodeWorkers();
@@ -210,6 +254,18 @@ if (!data.pooled) {
         control.postMessage(serializeError(seq, error));
       }
     };
+    const runTracked = (invoke: () => unknown) => {
+      inFlight += 1;
+      let outcome: unknown;
+      try {
+        outcome = invoke();
+      } catch (error) {
+        failLease(error);
+        finishOne();
+        return;
+      }
+      Promise.resolve(outcome).catch(failLease).finally(finishOne);
+    };
     activeDetach = async () => {
       detaching = true;
       if (inFlight > 0) {
@@ -221,19 +277,19 @@ if (!data.pooled) {
     };
     port.on("message", (payload) => {
       if (detaching || activeSeq !== seq) return;
-      inFlight += 1;
       const event = new MessageEvent("message", { data: payload });
-      const listener: unknown = Reflect.get(globalThis, "onmessage");
-      let outcome: unknown;
-      try {
-        if (typeof listener === "function") outcome = listener.call(globalThis, event);
-        events.dispatchEvent(event);
-      } catch (error) {
-        failLease(error);
-        finishOne();
-        return;
+      const onmessage: unknown = Reflect.get(globalThis, "onmessage");
+      if (typeof onmessage === "function") {
+        runTracked(() => onmessage.call(globalThis, event));
       }
-      Promise.resolve(outcome).catch(failLease).finally(finishOne);
+      const snapshot = importMessageListeners.concat(leaseMessageListeners);
+      for (const entry of snapshot) {
+        if (entry.once) {
+          removeListener(importMessageListeners, entry.listener);
+          removeListener(leaseMessageListeners, entry.listener);
+        }
+        runTracked(() => invokeListener(entry.listener, event));
+      }
     });
   }
 
@@ -248,7 +304,8 @@ if (!data.pooled) {
       if (activePort) await detach(activeSeq, false);
       activeSeq = message.seq;
       activePort = message.port;
-      events = new EventTarget();
+      leaseMessageListeners = [];
+      otherEvents = new EventTarget();
       if (installSession) attachFilesystem(message.seq, message.port, installSession);
       else attachStandard(message.seq, message.port);
     });

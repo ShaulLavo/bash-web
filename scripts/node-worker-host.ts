@@ -137,6 +137,19 @@ function filterTransfers(transfer: readonly unknown[]): (ArrayBuffer | MessagePo
   );
 }
 
+function isDirtyCompletionMessage(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const record = data as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
+  if (record.type === "error") return true;
+  if (record.type === "exit") {
+    return (
+      record.error !== undefined ||
+      (Array.isArray(record.cleanupErrors) && record.cleanupErrors.length > 0)
+    );
+  }
+  return record.type === "filesystem-disposed" && typeof record.error === "string";
+}
+
 function isCleanCompletionMessage(data: unknown): boolean {
   if (!data || typeof data !== "object") return false;
   const record = data as { type?: unknown; error?: unknown; cleanupErrors?: unknown };
@@ -170,7 +183,8 @@ class NodeWorker extends EventTarget {
   private readonly isFilesystemWorker: boolean;
   private readonly seq = ++nextSeq;
   private settled = false;
-  private sawCleanCompletion = false;
+  private sentMessages = 0;
+  private cleanCompletions = 0;
   private errored = false;
   private settleWaiter: ((ok: boolean) => void) | null = null;
   private termination?: Promise<number>;
@@ -230,7 +244,11 @@ class NodeWorker extends EventTarget {
       if (!this.termination) live.delete(this);
     };
     hostPort.on("message", (data) => {
-      if (isCleanCompletionMessage(data)) this.sawCleanCompletion = true;
+      if (isDirtyCompletionMessage(data)) {
+        this.errored = true;
+      } else if (isCleanCompletionMessage(data)) {
+        this.cleanCompletions += 1;
+      }
       this.emitMessage(data);
     });
     hostPort.on("messageerror", (data) => {
@@ -272,7 +290,7 @@ class NodeWorker extends EventTarget {
   }
 
   postMessage(message: unknown, transfer: readonly unknown[] = []) {
-    this.sawCleanCompletion = false;
+    this.sentMessages += 1;
     this.settled = false;
     if (this.hostPort) {
       this.hostPort.postMessage(message, filterTransfers(transfer));
@@ -300,8 +318,8 @@ class NodeWorker extends EventTarget {
   private async finishPooled(pooled: PooledThread): Promise<number> {
     this.hostPort?.removeAllListeners();
     this.hostPort?.close();
-    const eligible =
-      !this.errored && !pooled.dead && (this.isFilesystemWorker || this.sawCleanCompletion);
+    const completedAll = this.sentMessages > 0 && this.cleanCompletions === this.sentMessages;
+    const eligible = !this.errored && !pooled.dead && (this.isFilesystemWorker || completedAll);
     if (eligible) {
       pooled.thread.postMessage({ type: "__detach", seq: this.seq });
       if ((await this.waitForSettle(pooled)) && releasePooledThread(pooled)) {
