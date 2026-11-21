@@ -42,8 +42,9 @@ async function fileEntry(
   directory: boolean,
   symlink: boolean,
 ): Promise<Entry> {
-  const metadata = detailed || symlink ? await lstat(path) : { ino: 1, mtimeMs: 1 };
-  const stat = { ino: Number(metadata.ino), mtime: Number(metadata.mtimeMs) };
+  const { ino, mtimeMs, ctimeMs } =
+    detailed || symlink ? await lstat(path) : { ino: 1, mtimeMs: 1, ctimeMs: 1 };
+  const stat = { ino, mtime: mtimeMs, ctime: ctimeMs };
   if (symlink) return { ...stat, kind: "symlink", target: await readlink(path) };
   if (directory) return { ...stat, kind: "dir", children: new Map() };
   return { ...stat, kind: "file" };

@@ -475,7 +475,7 @@ function refFiles(contents: string, loose = false, work?: RefParsingBudget): Tur
   return new TurnFilesystem(
     {
       lookup: async (candidate) =>
-        candidate === path ? { kind: "file", ino: 1, mtime: 1 } : undefined,
+        candidate === path ? { kind: "file", ino: 1, mtime: 1, ctime: 1 } : undefined,
       readFile: async (candidate) => {
         assert.equal(candidate, path);
         if (work) work.readCompleted = true;
