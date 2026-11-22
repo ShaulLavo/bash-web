@@ -189,10 +189,6 @@ mod guest {
                 wake.set(Wake::Interrupt);
                 editor_cancel.borrow().cancel();
             }
-            if prompt_host && runtime.take_window_change() && wake.get() == Wake::None {
-                wake.set(Wake::Prompt);
-                editor_cancel.borrow().cancel();
-            }
             let turn = executor.drive(64);
             if session.take_delegated_interrupt() {
                 set_phase(-1, 0);
@@ -200,11 +196,19 @@ mod guest {
             if root.is_finished() {
                 break;
             }
+            // A checkpoint inside drive can consume SIGWINCH. Let the cancelled
+            // reader run again before the reactor blocks.
+            let prompt_wake =
+                prompt_host && runtime.take_window_change() && wake.get() == Wake::None;
+            if prompt_wake {
+                wake.set(Wake::Prompt);
+                editor_cancel.borrow().cancel();
+            }
             // A zero-time reactor scan between busy turns prevents a yielding
             // builtin from starving ready process/pipe events. Idle poll is the
             // ONLY blocking operation; interruption is also checked in budgets.
             runtime
-                .poll(reactor_timeout(turn.runnable, &executor))
+                .poll(reactor_timeout(turn.runnable || prompt_wake, &executor))
                 .unwrap_or_else(|errno| report_runtime(&session, format!("poll errno {errno}")));
         }
         let status = root.now_or_never().unwrap();
