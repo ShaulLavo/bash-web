@@ -415,8 +415,6 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: npm run test:shell:scoreboard:prebuilt
-        env:
-          SCOREBOARD_TEST_CONCURRENCY: "4"
   own-shell-observation:
     if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     permissions:
@@ -592,9 +590,9 @@ jobs:
       - run: npm run test:runtime:terminal
         if: matrix.shard == 1
       - run: npm run test:ios:adapters
-        if: matrix.shard == 1
+        if: matrix.shard == 2
       - name: Run complete Python page-host controls
-        if: matrix.shard == 1
+        if: matrix.shard == 2
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
@@ -605,7 +603,7 @@ jobs:
           if ! wait "$p2"; then status=1; fi
           exit "$status"
       - name: Retain complete Python host results and measurements
-        if: always() && matrix.shard == 1
+        if: always() && matrix.shard == 2
         uses: actions/upload-artifact@v4
         with:
           name: python-host-${{ github.sha }}
