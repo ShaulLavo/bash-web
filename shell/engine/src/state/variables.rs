@@ -156,11 +156,12 @@ impl Index<&str> for Variables {
 
 impl FromIterator<(String, Binding)> for Variables {
     fn from_iter<I: IntoIterator<Item = (String, Binding)>>(items: I) -> Self {
-        let mut variables = Self::default();
-        for (name, value) in items {
-            variables.insert(name, value);
-        }
-        variables
+        items
+            .into_iter()
+            .fold(Self::default(), |mut variables, (name, value)| {
+                variables.insert(name, value);
+                variables
+            })
     }
 }
 

@@ -182,6 +182,12 @@ fn rejected_isolated_state_copies_keep_the_last_async_identity_and_caller_state(
     }
 }
 
+fn assert_recovered_caller(rig: &Rig, saved: String, source: &str) {
+    assert_eq!(rig.ex.drive(64).pending, 0, "{source}");
+    assert_eq!(rig.run(r#"args "$!" recovered"#), 0);
+    assert_eq!(*rig.calls.borrow(), [vec![saved, "recovered".to_owned()]]);
+}
+
 #[test]
 fn cancelling_isolated_state_admission_launches_no_child_and_restores_the_caller() {
     for source in [
@@ -206,10 +212,8 @@ fn cancelling_isolated_state_admission_launches_no_child_and_restores_the_caller
         assert_eq!(rig.finish(job), 130, "{source}");
         assert!(rig.calls.borrow().is_empty(), "{source}");
         assert_eq!(rig.host.retained_count(), 0, "{source}");
-        assert_eq!(rig.ex.drive(64).pending, 0, "{source}");
         state.borrow_mut().cwd = cwd;
-        assert_eq!(rig.run(r#"args "$!" recovered"#), 0);
-        assert_eq!(*rig.calls.borrow(), [vec![saved, "recovered".to_owned()]]);
+        assert_recovered_caller(&rig, saved, source);
     }
 }
 

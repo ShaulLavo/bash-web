@@ -3754,21 +3754,24 @@ mod tests {
         assert!(child.functions.is_empty());
     }
 
+    fn budgeted_state(limit: usize) -> (crate::exec::StorageBudget, SharedState) {
+        let memory = crate::exec::StorageBudget::new(limit);
+        let state = State::with_memory(memory.clone()).shared();
+        (memory, state)
+    }
+
     #[test]
     fn snapshot_reserves_a_function_unwind_copy_before_sharing() {
-        use crate::exec::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::RESOURCE_STATUS;
 
         let limit = 64 * 1024;
-        let memory = StorageBudget::new(limit);
-        let state = State::with_memory(memory.clone()).shared();
-        state
-            .borrow_mut()
-            .assign_parameter("payload".into(), "x".repeat(32 * 1024))
-            .unwrap();
-        state
-            .borrow_mut()
-            .assign_parameter("x".into(), "outer".into())
-            .unwrap();
+        let (memory, state) = budgeted_state(limit);
+        {
+            let mut s = state.borrow_mut();
+            s.assign_parameter("payload".into(), "x".repeat(32 * 1024))
+                .unwrap();
+            s.assign_parameter("x".into(), "outer".into()).unwrap();
+        }
         let frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
         state
             .borrow_mut()
@@ -3824,11 +3827,10 @@ mod tests {
 
     #[test]
     fn failed_export_of_a_local_keeps_shared_versions_and_refunds_admission() {
-        use crate::exec::{RESOURCE_STATUS, StorageBudget};
+        use crate::exec::RESOURCE_STATUS;
 
         let limit = 64 * 1024;
-        let memory = StorageBudget::new(limit);
-        let state = State::with_memory(memory.clone()).shared();
+        let (memory, state) = budgeted_state(limit);
         let _frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
         state
             .borrow_mut()
@@ -3959,22 +3961,29 @@ mod tests {
         assert_eq!(child.pipeline_status(), codes);
     }
 
-    #[test]
-    fn multi_pipeline_status_snapshot_can_be_cancelled_mid_copy() {
-        let state = State::default().shared();
-        state.borrow_mut().publish_pipeline_status(vec![1; 4096]);
+    fn assert_snapshot_cancels_after_yield(state: &SharedState, work: &mut Work) {
         let cancel = Cancel::new();
-        let mut work = Work::new(8192, 64 * 1024, 0);
-        let mut snapshot = Box::pin(State::snapshot(&state, &cancel, &mut work));
+        let mut snapshot = Box::pin(State::snapshot(state, &cancel, work));
         let waker = noop_waker();
         let mut context = Context::from_waker(&waker);
         assert!(snapshot.as_mut().poll(&mut context).is_pending());
-        assert!(state.try_borrow_mut().is_ok());
+        assert!(
+            state.try_borrow_mut().is_ok(),
+            "no source borrow crosses a yield"
+        );
         cancel.cancel();
         assert!(matches!(
             snapshot.as_mut().poll(&mut context),
             Poll::Ready(Err(Error::Status(130)))
         ));
+    }
+
+    #[test]
+    fn multi_pipeline_status_snapshot_can_be_cancelled_mid_copy() {
+        let state = State::default().shared();
+        state.borrow_mut().publish_pipeline_status(vec![1; 4096]);
+        let mut work = Work::new(8192, 64 * 1024, 0);
+        assert_snapshot_cancels_after_yield(&state, &mut work);
     }
 
     #[test]
@@ -4135,22 +4144,8 @@ mod tests {
         );
 
         state.borrow_mut().cwd = "x".repeat(4096);
-        let cancel = Cancel::new();
         let mut work = Work::new(1_000_000, 64 * 1024, 0);
-        let mut snapshot = Box::pin(State::snapshot(&state, &cancel, &mut work));
-        let waker = noop_waker();
-        let mut context = Context::from_waker(&waker);
-        assert!(snapshot.as_mut().poll(&mut context).is_pending());
-        assert!(
-            state.try_borrow_mut().is_ok(),
-            "no source borrow crosses a yield"
-        );
-        cancel.cancel();
-        assert!(matches!(
-            snapshot.as_mut().poll(&mut context),
-            Poll::Ready(Err(Error::Status(130)))
-        ));
-        drop(snapshot);
+        assert_snapshot_cancels_after_yield(&state, &mut work);
         assert_eq!(state.borrow().cwd.len(), 4096);
     }
 

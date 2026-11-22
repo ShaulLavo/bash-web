@@ -78,21 +78,18 @@ impl<T> SharedTree<T> {
     }
 
     #[cfg(test)]
+    fn ticket_bytes(slot: &RefCell<Option<StorageAllocation>>) -> usize {
+        slot.borrow().as_ref().map_or(0, StorageAllocation::bytes)
+    }
+
+    #[cfg(test)]
     pub(super) fn copy_bytes(&self) -> usize {
-        self.0
-            .copy
-            .borrow()
-            .as_ref()
-            .map_or(0, StorageAllocation::bytes)
+        Self::ticket_bytes(&self.0.copy)
     }
 
     #[cfg(test)]
     pub(super) fn cleanup_bytes(&self) -> usize {
-        self.0
-            .cleanup
-            .borrow()
-            .as_ref()
-            .map_or(0, StorageAllocation::bytes)
+        Self::ticket_bytes(&self.0.cleanup)
     }
 
     pub(super) fn is_shared(&self) -> bool {
