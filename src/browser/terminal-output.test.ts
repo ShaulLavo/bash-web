@@ -110,6 +110,31 @@ test("reentrant callback observes CR state of delivered prefix rather than trail
     }
   });
   assert.deepEqual(Buffer.concat(nested), Buffer.from([13, 10]));
+
+  // Reentrant write ending with CR before an outer bare LF must not duplicate CR,
+  // and ending with non-CR after an outer CR must still emit CR before the outer LF.
+  const outA = new TerminalNewlines();
+  const chunksA: Uint8Array[] = [];
+  const inA = new Uint8Array(32769).fill(120);
+  inA[32768] = 10;
+  let callsA = 0;
+  outA.write(inA, (chunk) => {
+    chunksA.push(chunk);
+    if (++callsA === 1) outA.write(Uint8Array.of(13), (inner) => chunksA.push(inner));
+  });
+  assert.deepEqual(Buffer.concat(chunksA).subarray(32767), Buffer.from([120, 13, 10]));
+
+  const outB = new TerminalNewlines();
+  const chunksB: Uint8Array[] = [];
+  const inB = new Uint8Array(32769).fill(120);
+  inB[32767] = 13;
+  inB[32768] = 10;
+  let callsB = 0;
+  outB.write(inB, (chunk) => {
+    chunksB.push(chunk);
+    if (++callsB === 1) outB.write(Uint8Array.of(65), (inner) => chunksB.push(inner));
+  });
+  assert.deepEqual(Buffer.concat(chunksB).subarray(32767), Buffer.from([13, 65, 13, 10]));
 });
 
 test("a new terminal attachment does not inherit the preceding session's CR", () => {

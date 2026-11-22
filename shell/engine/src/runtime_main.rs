@@ -491,9 +491,6 @@ mod guest {
                     stale = true;
                 }
                 if matches!(action, Action::Submit(_)) {
-                    if self.interrupted(terminal_batches) {
-                        return Ok(Action::Interrupt);
-                    }
                     *self.skip_lf = byte == b'\r';
                 }
                 if action != Action::None {

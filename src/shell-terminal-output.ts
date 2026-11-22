@@ -45,8 +45,8 @@ export class TerminalNewlines {
     };
     try {
       for (; lf !== -1; lf = bytes.indexOf(10, lf + 1)) {
-        if (lf === 0 ? this.previousCR : bytes[lf - 1] === 13) continue;
         copyThrough(lf);
+        if (count > 0 ? buffer[count - 1] === 13 : this.previousCR) continue;
         buffer[count++] = 13;
         if (count === buffer.length) flush();
       }
