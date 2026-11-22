@@ -245,7 +245,7 @@ fn commit_all(
             (publication.target.as_str(), value.capacity())
         })
     });
-    let reservation = state.reserve_getopts_publication(&bindings)?;
+    let reservation = state.reserve_scalar_publication(&bindings)?;
     state.prepare_getopts_changes(publications.each_ref().map(|publication| {
         (
             publication.target.as_str(),

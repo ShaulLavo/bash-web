@@ -47,7 +47,7 @@ fn publish_index_at_capacity(
 ) -> crate::exec::StorageAllocation {
     let reservation = state
         .borrow()
-        .reserve_getopts_publication(publications)
+        .reserve_scalar_publication(publications)
         .unwrap();
     let hold = memory.admit(CAPACITY - memory.observation().0).unwrap();
     drop(reservation);

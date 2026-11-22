@@ -6,9 +6,9 @@
 //! and charge as they were. Clones and snapshots share an immutable version; whoever
 //! changes it builds an admitted copy. A State without a memory budget holds
 //! no ticket, like the positional parameters.
-use super::State;
+use super::{AssignmentKind, CaseLocale, ScalarResolution, State};
 use crate::exec::{RESOURCE_STATUS, StorageAllocation, StorageBudget};
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 
 /// Bash's pushd_directory_list, bottom entry first. No variable exposes it.
 #[derive(Clone, Debug, Default)]
@@ -51,6 +51,77 @@ fn admit(budget: Option<&StorageBudget>, bytes: usize) -> Result<Option<StorageA
 impl State {
     pub(crate) fn directories(&self) -> &[String] {
         self.directories.entries()
+    }
+
+    pub(crate) fn publish_directory(
+        &mut self,
+        cwd: String,
+        previous: String,
+    ) -> Result<[bool; 2], i32> {
+        let oldpwd = self.prepare_directory_binding("OLDPWD", previous, &cwd, None)?;
+        let pwd = self.prepare_directory_binding("PWD", cwd.clone(), &cwd, oldpwd.as_ref())?;
+        let writes = [oldpwd, pwd];
+        let names = writes.each_ref().map(|write| {
+            write
+                .as_ref()
+                .map_or(("", 0), |(name, value)| (name.as_str(), value.capacity()))
+        });
+        let writes_ordinary = names.iter().any(|(name, _)| !matches!(*name, "" | "_"));
+        let copy = if writes_ordinary {
+            self.variables.ordinary.reserve_copy(self.memory.as_ref())?
+        } else {
+            None
+        };
+        let room = self.reserve_scalar_publication(&names)?;
+        if writes_ordinary {
+            self.variables.ordinary.make_private(copy);
+        }
+        self.cwd = cwd;
+        drop(room);
+        let readonly = writes.each_ref().map(Option::is_none);
+        for (name, value) in writes.into_iter().flatten() {
+            let assignment = self
+                .admit_scalar_write(&name, value.capacity())
+                .expect("aggregate directory binding admission");
+            self.write_scalar(
+                Cow::Owned(name),
+                value,
+                AssignmentKind::Explicit,
+                assignment,
+            );
+        }
+        Ok(readonly)
+    }
+
+    fn prepare_directory_binding(
+        &self,
+        name: &str,
+        value: String,
+        cwd: &str,
+        prior: Option<&(String, String)>,
+    ) -> Result<Option<(String, String)>, i32> {
+        let target = self.assignment_name(name.into())?;
+        if self.is_readonly(&target) {
+            return Ok(None);
+        }
+        let parameter = |name: &str| {
+            let ScalarResolution::Target(name) = self.resolve_scalar_target(name) else {
+                return None;
+            };
+            if name == "PWD" {
+                return Some(cwd);
+            }
+            if let Some((_, value)) =
+                prior.filter(|(target, _)| target == name && !self.special_stack_array(name))
+            {
+                return Some(value.as_str());
+            }
+            self.scalar_value(name)
+        };
+        let value = self.map_case_in_locale(self.case_mapping(&target), value, || {
+            CaseLocale::from_parameters(parameter)
+        })?;
+        Ok(Some((target, value)))
     }
     /// Builds, without publishing, the next version from old entries and at
     /// most one incoming string. The requested layout's bytes are admitted
@@ -127,10 +198,13 @@ impl State {
         self.prepare(len, Slot::Old, None)
     }
     /// Replaces the top entry. Nothing changes when the budget refuses it.
-    pub(crate) fn replace_top_directory(&mut self, entry: String) -> Result<(), i32> {
+    pub(crate) fn prepare_replace_top_directory(
+        &self,
+        entry: String,
+    ) -> Result<DirectoryStack, i32> {
         let len = self.directories().len();
         if len == 0 {
-            return Ok(());
+            return Ok(DirectoryStack::default());
         }
         let slot = |index| {
             if index + 1 < len {
@@ -139,8 +213,7 @@ impl State {
                 Slot::Incoming
             }
         };
-        self.directories = self.prepare(len, slot, Some(entry))?;
-        Ok(())
+        self.prepare(len, slot, Some(entry))
     }
     /// Removes an entry by its bottom-first position.
     pub(crate) fn remove_directory(&mut self, position: usize) -> Result<(), i32> {
@@ -156,8 +229,11 @@ impl State {
         self.directories = DirectoryStack::default();
     }
     /// pushd +N/-N: the current directory joins the ring, the ring turns and
-    /// the entry that reaches the front leaves the stack. Returns that entry.
-    pub(crate) fn rotate_directories(&mut self, count: usize) -> Result<String, i32> {
+    /// the entry that reaches the front leaves the prepared stack.
+    pub(crate) fn prepare_rotate_directories(
+        &self,
+        count: usize,
+    ) -> Result<(String, DirectoryStack), i32> {
         let len = self.directories().len();
         let ring = len + 1;
         // Ring position `len` is the current directory.
@@ -170,8 +246,7 @@ impl State {
             position if position == len => Slot::Incoming,
             position => Slot::Old(position),
         };
-        self.directories = self.prepare(len, slot, Some(self.cwd.clone()))?;
-        Ok(target)
+        Ok((target, self.prepare(len, slot, Some(self.cwd.clone()))?))
     }
 }
 
@@ -240,7 +315,11 @@ mod tests {
         let charged = used(&budget);
         assert_eq!(charged, retained(&state));
         assert!(push(&mut state, "x".repeat(1024)).is_err());
-        assert!(state.replace_top_directory("y".repeat(1024)).is_err());
+        assert!(
+            state
+                .prepare_replace_top_directory("y".repeat(1024))
+                .is_err()
+        );
         assert_eq!(state.directories(), ["/a"]);
         assert_eq!(used(&budget), charged);
         assert_eq!(used(&budget), retained(&state));
@@ -306,11 +385,15 @@ mod tests {
         push(&mut state, "/".into()).unwrap();
         push(&mut state, "/usr".into()).unwrap();
         // Display order: /tmp /usr /. pushd +1 shows /usr / /tmp.
-        assert_eq!(state.rotate_directories(1).unwrap(), "/usr");
+        let (target, rotated) = state.prepare_rotate_directories(1).unwrap();
+        assert_eq!(target, "/usr");
+        state.install_directories(rotated);
         assert_eq!(state.directories(), ["/tmp", "/"]);
         // pushd -0 from /usr / /tmp shows /tmp /usr /.
         state.cwd = "/usr".into();
-        assert_eq!(state.rotate_directories(2).unwrap(), "/tmp");
+        let (target, rotated) = state.prepare_rotate_directories(2).unwrap();
+        assert_eq!(target, "/tmp");
+        state.install_directories(rotated);
         assert_eq!(state.directories(), ["/", "/usr"]);
         assert_eq!(used(&budget), retained(&state));
     }

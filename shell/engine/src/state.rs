@@ -24,7 +24,7 @@ pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;
 use call_stack::CallStack;
-pub(crate) use declarations::DeclarationView;
+pub(crate) use declarations::{DeclarationKind, DeclarationView};
 mod binding;
 mod prefixes;
 mod references;
@@ -154,7 +154,7 @@ pub struct StoredFunction {
     pub(crate) storage: Option<crate::exec::RetainedStorage>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 enum PipeStatus {
     #[default]
     Empty,
@@ -169,6 +169,26 @@ impl PipeStatus {
             Self::Single(code) => std::slice::from_ref(code),
             Self::Multi(codes) => codes,
         }
+    }
+
+    async fn snapshot(
+        source: &SharedState,
+        cancel: &Cancel,
+        work: &mut Work,
+    ) -> Result<Self, Error> {
+        let count = match source.borrow().pipestatus {
+            Self::Empty => return Ok(Self::Empty),
+            Self::Single(code) => return Ok(Self::Single(code)),
+            Self::Multi(ref codes) => codes.len(),
+        };
+        work.checkpoint(cancel).await?;
+        let mut codes = snapshot_slots(count, work)?;
+        for index in 0..count {
+            work.checkpoint(cancel).await?;
+            let state = source.borrow();
+            codes.push(*state.pipestatus.as_slice().get(index).ok_or(2)?);
+        }
+        Ok(Self::Multi(codes))
     }
 }
 
@@ -613,10 +633,8 @@ impl State {
             state.variables.last_argument_bytes()
         };
         snapshot_steps(last_argument_bytes, cancel, work).await?;
+        let pipestatus = PipeStatus::snapshot(source, cancel, work).await?;
         let state = source.borrow();
-        if let PipeStatus::Multi(codes) = &state.pipestatus {
-            work.admit_storage(std::mem::size_of_val(codes.as_slice()))?;
-        }
         let prefixes = prefixes::Prefixes::from_snapshot(prefixes, &state)?;
         state.reserve_snapshot_cleanup()?;
         Ok(Self {
@@ -637,7 +655,7 @@ impl State {
             functions: state.functions.clone(),
             traps: state.traps.inherited(),
             status: state.status,
-            pipestatus: state.pipestatus.clone(),
+            pipestatus,
             pipefail: state.pipefail,
             nounset: state.nounset,
             errexit: state.errexit,
@@ -801,6 +819,9 @@ impl State {
         let ScalarResolution::Target(name) = self.resolve_scalar_target(name) else {
             return None;
         };
+        self.scalar_value(name)
+    }
+    fn scalar_value(&self, name: &str) -> Option<&str> {
         if name == "PWD" {
             return Some(&self.cwd);
         }
@@ -1135,20 +1156,25 @@ impl State {
         name: &'a str,
         scope: Option<usize>,
     ) -> ScalarResolution<'a> {
+        Self::resolve_scalar_with(name, |name| self.nameref_at(name, scope))
+    }
+    fn resolve_scalar_with<'a>(
+        name: &'a str,
+        nameref: impl Fn(&str) -> Option<&'a str>,
+    ) -> ScalarResolution<'a> {
         let mut current = name;
         let mut fast = Some(name);
         for _ in 0..MAX_NAMEREF_DEPTH {
-            let Some(next) = self.nameref_at(current, scope) else {
+            let Some(next) = nameref(current) else {
                 return ScalarResolution::Target(current);
             };
             current = next;
-            fast = fast.and_then(|name| self.nameref_at(name, scope));
-            fast = fast.and_then(|name| self.nameref_at(name, scope));
+            fast = fast.and_then(&nameref).and_then(&nameref);
             if fast == Some(current) {
                 return ScalarResolution::Cycle;
             }
         }
-        if self.nameref_at(current, scope).is_some() {
+        if nameref(current).is_some() {
             return ScalarResolution::DepthExceeded;
         }
         ScalarResolution::Target(current)
@@ -1577,11 +1603,11 @@ impl State {
     pub(crate) fn getopts_publication_budget(&self) -> Option<crate::exec::StorageBudget> {
         self.memory.clone()
     }
-    pub(crate) fn reserve_getopts_publication(
+    pub(crate) fn reserve_scalar_publication<const N: usize>(
         &self,
-        names: &[(&str, usize); 3],
+        names: &[(&str, usize); N],
     ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
-        let mut growth = [("", 0usize, 0usize); 3];
+        let mut growth = [("", 0usize, 0usize); N];
         let journal = self.assignment_undo.0.upgrade();
         let mut effects = 0usize;
         for (index, (target, bytes)) in names.iter().copied().enumerate() {
@@ -2004,12 +2030,7 @@ impl State {
         changes: u8,
         resize: bool,
     ) -> Result<(), i32> {
-        if self.readonly.contains(name)
-            || self.current_local_readonly(name)
-            || self.locals.is_empty()
-        {
-            return Err(1);
-        }
+        self.check_local_declaration(name)?;
         if self.is_current_local(name) {
             let copies = self.reserve_binding_changes(name, changes)?;
             if resize {
@@ -3918,6 +3939,42 @@ mod tests {
         state.borrow_mut().publish_pipeline_status(vec![9, 0]);
         assert_eq!(state.borrow().pipeline_status(), [9, 0]);
         assert_eq!(child.pipeline_status(), [17]);
+    }
+
+    #[test]
+    fn multi_pipeline_status_snapshot_checks_work_per_entry() {
+        let state = State::default().shared();
+        let codes: Vec<i32> = (0..128).collect();
+        state.borrow_mut().publish_pipeline_status(codes.clone());
+        let cancel = Cancel::new();
+        let mut small = Work::new(64, 64 * 1024, 0);
+        assert!(matches!(
+            finish_snapshot(&state, &cancel, &mut small),
+            Err(Error::Status(2))
+        ));
+        let mut enough = Work::new(1024, 64 * 1024, 0);
+        let child = finish_snapshot(&state, &cancel, &mut enough)
+            .unwrap_or_else(|_| panic!("pipeline status snapshot fits"));
+        state.borrow_mut().publish_status(0);
+        assert_eq!(child.pipeline_status(), codes);
+    }
+
+    #[test]
+    fn multi_pipeline_status_snapshot_can_be_cancelled_mid_copy() {
+        let state = State::default().shared();
+        state.borrow_mut().publish_pipeline_status(vec![1; 4096]);
+        let cancel = Cancel::new();
+        let mut work = Work::new(8192, 64 * 1024, 0);
+        let mut snapshot = Box::pin(State::snapshot(&state, &cancel, &mut work));
+        let waker = noop_waker();
+        let mut context = Context::from_waker(&waker);
+        assert!(snapshot.as_mut().poll(&mut context).is_pending());
+        assert!(state.try_borrow_mut().is_ok());
+        cancel.cancel();
+        assert!(matches!(
+            snapshot.as_mut().poll(&mut context),
+            Poll::Ready(Err(Error::Status(130)))
+        ));
     }
 
     #[test]

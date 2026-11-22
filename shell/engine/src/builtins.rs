@@ -18,7 +18,7 @@ use crate::{
     expand::{self, Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
     io::{Endpoint, FdTable, IoError},
-    state::{SharedState, State},
+    state::{DeclarationKind, SharedState, State},
 };
 use shell_parser::parser::{Word, WordPart};
 use std::borrow::Cow;
@@ -1009,17 +1009,30 @@ async fn declarations(
         }
         let result = {
             let mut state = state.borrow_mut();
-            let declares_local =
-                local && (inherit || case.specified() || !append || !state.is_current_local(&key));
-            state.declare_with_attributes(&key, declares_local, exported, readonly, |state| {
-                if inherit {
-                    return state.declare_inherited_local(key.clone(), value, work);
+            let kind = if inherit {
+                DeclarationKind::InheritedLocal
+            } else if case.specified() {
+                DeclarationKind::Case {
+                    local,
+                    options: case,
                 }
-                if case.specified() {
-                    return state.declare_case(key.clone(), value, local, case, work);
-                }
-                apply_declaration(name, &key, value, append, state)
-            })
+            } else if local && (!append || !state.is_current_local(&key)) {
+                DeclarationKind::Local
+            } else {
+                DeclarationKind::Scalar
+            };
+            match name {
+                "readonly" => state.readonly(key.clone(), value),
+                "export" => state.export(key.clone(), value),
+                _ => state.declare_with_attributes(
+                    key.clone(),
+                    value,
+                    kind,
+                    exported,
+                    readonly,
+                    work,
+                ),
+            }
         };
         if declaration_status(result)? == 0 {
             continue;
@@ -1150,30 +1163,6 @@ async fn nameref_declaration(
     state
         .borrow_mut()
         .declare_nameref(key.to_owned(), target, local)
-}
-
-fn apply_declaration(
-    name: &str,
-    key: &str,
-    value: Option<String>,
-    append: bool,
-    state: &mut crate::state::State,
-) -> Result<(), i32> {
-    if name == "readonly" {
-        return state.readonly(key.to_owned(), value);
-    }
-    if name == "export" {
-        return state.export(key.to_owned(), value);
-    }
-    let local =
-        name == "local" || matches!(name, "declare" | "typeset") && state.in_function_scope();
-    if local && (!append || !state.is_current_local(key)) {
-        return state.declare_local(key.to_owned(), value);
-    }
-    if let Some(value) = value {
-        state.assign_parameter(key.to_owned(), value)?;
-    }
-    Ok(())
 }
 
 /// `unset [-f] [-v] [-n] [--] name...`. Bash 5.3 ignores names that are not
