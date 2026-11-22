@@ -18,14 +18,58 @@ const POSIX_FORMAT: &str = "real %2R";
 const REPORT_BYTES_PER_FORMAT_BYTE: usize = 16;
 
 #[inline(never)]
-pub(super) fn run(
-    time: &TimeCommand,
+pub(super) fn run<'a>(
+    time: Syntax<'a, TimeCommand>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> eval::Frame<'_> {
+) -> eval::Frame<'a> {
     let evaluation = context.evaluation.clone();
-    evaluation.frame(time_body(time, state, fds, context), Outcome::status)
+    match time {
+        Syntax::Owned(time) => {
+            evaluation.frame(time_owned_body(time, state, fds, context), Outcome::status)
+        }
+        Syntax::Borrowed(time) => {
+            evaluation.frame(time_body(time, state, fds, context), Outcome::status)
+        }
+    }
+}
+
+async fn time_owned_body(
+    time: TimeCommand,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let (posix, command) = flatten_owned(time);
+    let started = Instant::now();
+    let result = match command {
+        Some(command) => {
+            execute_owned_item(command, state.clone(), fds.clone(), context.clone()).await
+        }
+        None => Outcome::status(0),
+    };
+    let elapsed = started.elapsed();
+    // The report is printed even when the pipeline exits, returns or breaks,
+    // and its own failure never replaces the pipeline's outcome.
+    let _ = report(posix, elapsed, &state, &fds, &context).await;
+    result
+}
+
+fn flatten_owned(mut time: TimeCommand) -> (bool, Option<Command>) {
+    let mut posix = time.posix_format;
+    loop {
+        let Some(command) = time.command else {
+            return (posix, None);
+        };
+        match *command {
+            Command::Compound(CompoundCommand::Time(inner), redirects) if redirects.is_empty() => {
+                time = *inner;
+                posix |= time.posix_format;
+            }
+            other => return (posix, Some(other)),
+        }
+    }
 }
 
 async fn time_body(

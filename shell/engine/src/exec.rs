@@ -7,12 +7,12 @@ use futures::{
 };
 use shell_parser::limits::{ExecutionBudget, ExecutionLimits};
 use std::{
-    cell::{Cell, OnceCell},
+    cell::{Cell, OnceCell, RefCell},
     future::Future,
     mem::{size_of, size_of_val},
     ops::Deref,
     pin::Pin,
-    rc::Rc,
+    rc::{Rc, Weak},
     sync::{Arc, atomic::AtomicBool},
     task::{Context as TaskContext, Poll},
     time::Duration,
@@ -63,8 +63,31 @@ struct Shared {
     execution: StorageBudget,
 }
 
+pub(crate) trait Evictable {
+    /// Release cached reservations when ordinary admission needs headroom.
+    /// Returns `false` if the entry is actively in use and must stay registered.
+    fn evict(&self) -> bool;
+}
+
+const MAX_EVICTABLE_CACHES: usize = 64;
+
+struct BudgetInner {
+    remaining: Cell<usize>,
+    caches: RefCell<Vec<Weak<dyn Evictable>>>,
+    #[cfg(test)]
+    observation: MemoryObservation,
+}
+
+impl std::fmt::Debug for BudgetInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BudgetInner")
+            .field("remaining", &self.remaining.get())
+            .finish()
+    }
+}
+
 #[derive(Clone, Debug)]
-pub(crate) struct StorageBudget(Rc<Cell<usize>>, #[cfg(test)] Rc<MemoryObservation>);
+pub(crate) struct StorageBudget(Rc<BudgetInner>);
 #[cfg(test)]
 #[derive(Debug)]
 struct MemoryObservation {
@@ -74,20 +97,63 @@ struct MemoryObservation {
 
 impl StorageBudget {
     pub(crate) fn new(bytes: usize) -> Self {
-        Self(
-            Rc::new(Cell::new(bytes)),
+        Self(Rc::new(BudgetInner {
+            remaining: Cell::new(bytes),
+            caches: RefCell::new(Vec::new()),
             #[cfg(test)]
-            Rc::new(MemoryObservation {
+            observation: MemoryObservation {
                 limit: bytes,
                 peak: Cell::new(0),
-            }),
-        )
+            },
+        }))
+    }
+
+    pub(crate) fn available(&self) -> usize {
+        self.0.remaining.get()
+    }
+
+    pub(crate) fn register_cache(&self, cache: Weak<dyn Evictable>) -> bool {
+        let mut caches = self.0.caches.borrow_mut();
+        if caches.len() >= MAX_EVICTABLE_CACHES {
+            caches.retain(|entry| entry.strong_count() > 0);
+            if caches.len() >= MAX_EVICTABLE_CACHES {
+                return false;
+            }
+        }
+        caches.push(cache);
+        true
+    }
+
+    fn evict_caches(&self, needed: usize) {
+        let mut kept = Vec::new();
+        while self.0.remaining.get() < needed {
+            let next = self.0.caches.borrow_mut().pop();
+            let Some(weak) = next else {
+                break;
+            };
+            if let Some(cache) = weak.upgrade()
+                && !cache.evict()
+            {
+                kept.push(weak);
+            }
+        }
+        if !kept.is_empty() {
+            self.0.caches.borrow_mut().extend(kept);
+        }
+    }
+
+    fn reserve(&self, bytes: usize) -> Result<(), i32> {
+        if self.0.remaining.get() < bytes {
+            self.evict_caches(bytes);
+        }
+        let remaining = self.0.remaining.get().checked_sub(bytes).ok_or(2)?;
+        self.0.remaining.set(remaining);
+        self.record_peak();
+        Ok(())
     }
 
     pub(crate) fn admit(&self, bytes: usize) -> Result<StorageAllocation, i32> {
-        let remaining = self.0.get().checked_sub(bytes).ok_or(2)?;
-        self.0.set(remaining);
-        self.record_peak();
+        self.reserve(bytes)?;
         Ok(StorageAllocation {
             budget: self.clone(),
             bytes,
@@ -95,13 +161,20 @@ impl StorageBudget {
     }
     fn record_peak(&self) {
         #[cfg(test)]
-        self.1
-            .peak
-            .set(self.1.peak.get().max(self.1.limit - self.0.get()));
+        self.0.observation.peak.set(
+            self.0
+                .observation
+                .peak
+                .get()
+                .max(self.0.observation.limit - self.0.remaining.get()),
+        );
     }
     #[cfg(test)]
     pub(crate) fn observation(&self) -> (usize, usize) {
-        (self.1.limit - self.0.get(), self.1.peak.get())
+        (
+            self.0.observation.limit - self.0.remaining.get(),
+            self.0.observation.peak.get(),
+        )
     }
 }
 
@@ -117,9 +190,7 @@ impl StorageAllocation {
     }
     pub(crate) fn grow(&mut self, bytes: usize) -> Result<(), i32> {
         let total = self.bytes.checked_add(bytes).ok_or(2)?;
-        let remaining = self.budget.0.get().checked_sub(bytes).ok_or(2)?;
-        self.budget.0.set(remaining);
-        self.budget.record_peak();
+        self.budget.reserve(bytes)?;
         self.bytes = total;
         Ok(())
     }
@@ -127,7 +198,10 @@ impl StorageAllocation {
         if bytes > self.bytes {
             self.grow(bytes - self.bytes)?;
         } else {
-            self.budget.0.set(self.budget.0.get() + self.bytes - bytes);
+            self.budget
+                .0
+                .remaining
+                .set(self.budget.0.remaining.get() + self.bytes - bytes);
             self.bytes = bytes;
         }
         Ok(())
@@ -147,7 +221,10 @@ impl StorageAllocation {
 
 impl Drop for StorageAllocation {
     fn drop(&mut self) {
-        self.budget.0.set(self.budget.0.get() + self.bytes);
+        self.budget
+            .0
+            .remaining
+            .set(self.budget.0.remaining.get() + self.bytes);
     }
 }
 
@@ -262,6 +339,12 @@ pub(crate) struct Allocation {
     _storage: StorageAllocation,
 }
 
+impl Allocation {
+    pub(crate) fn resize(&mut self, bytes: usize) -> Result<(), i32> {
+        self._storage.resize(bytes)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct Scope {
     shared: Rc<Shared>,
@@ -306,7 +389,11 @@ impl Scope {
     }
 
     pub(crate) fn execution_available(&self) -> usize {
-        self.shared.execution.0.get()
+        self.shared.execution.available()
+    }
+
+    pub(crate) fn register_execution_cache(&self, cache: Weak<dyn Evictable>) -> bool {
+        self.shared.execution.register_cache(cache)
     }
 
     pub(crate) fn retained(&self) -> Option<RetainedStorage> {
