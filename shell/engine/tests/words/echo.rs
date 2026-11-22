@@ -62,6 +62,26 @@ fn echo_unicode_respects_character_locale_without_scalar_validation() {
 }
 
 #[test]
+fn plain_echo_does_not_inspect_locale_variables_when_escapes_are_disabled() {
+    let rig = Rig::new(Limits {
+        source_bytes: 160,
+        expansion_bytes: 1024,
+        arguments: 16,
+        ..Limits::default()
+    });
+    let mut prev = "LC_ALL".to_owned();
+    for index in 0..8 {
+        let next = format!("{}{index}", "x".repeat(25));
+        assert_eq!(rig.run(&format!("declare -n {prev}={next}")), 0);
+        prev = next;
+    }
+    assert_eq!(rig.run("echo hello"), 0);
+    assert_eq!(rig.output.bytes(), b"hello\n");
+    assert_eq!(rig.run("echo -e hello"), 2);
+    assert_eq!(rig.output.bytes(), b"hello\n");
+}
+
+#[test]
 fn echo_large_byte_output_and_closed_descriptor_recovery() {
     let rig = Rig::new(Limits::default());
     rig.variable("payload", &r"\0377".repeat(12_000));

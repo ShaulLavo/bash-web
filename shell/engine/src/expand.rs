@@ -607,7 +607,10 @@ impl Fields {
                 glob_protected,
             } => (value, protected, glob_protected),
         };
-        if protected && (!self.pathname || glob_protected || !has_glob_meta(&value)) {
+        if protected
+            && (!self.pathname || glob_protected || !has_glob_meta(&value))
+            && self.can_bulk_protected(&value, glob_protected, work)
+        {
             return self
                 .protected_text(&value, glob_protected, work, cancel)
                 .await;
@@ -628,6 +631,50 @@ impl Fields {
     async fn join_checkpoints(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
         work.checkpoint_steps(std::mem::take(&mut self.join_work), cancel)
             .await
+    }
+    fn can_bulk_protected(&self, value: &str, glob_protected: bool, work: &Work) -> bool {
+        if self.whitespace && self.present {
+            if self.account_storage
+                || self.current_magic
+                || self.count.saturating_add(1) >= self.max_fields
+            {
+                return false;
+            }
+        } else if self.count >= self.max_fields {
+            return false;
+        }
+        let separator = usize::from(self.joined && !self.present && self.count != 0);
+        let Some(total) = value.len().checked_add(separator) else {
+            return false;
+        };
+        if total > self.max_bytes.saturating_sub(self.bytes) {
+            return false;
+        }
+        if self.joined || self.account_storage {
+            let Some(needed) = self.current.len().checked_add(total) else {
+                return false;
+            };
+            if needed > self.current.capacity() {
+                let Some(pow2) = needed.checked_next_power_of_two() else {
+                    return false;
+                };
+                let capacity = pow2.max(self.current.capacity().saturating_mul(2)).max(8);
+                if capacity.saturating_sub(self.current.capacity()) > work.storage_left() {
+                    return false;
+                }
+            }
+        }
+        if self.pathname
+            && self.account_storage
+            && self
+                .current_runs
+                .last()
+                .is_none_or(|(_, last)| *last != glob_protected)
+            && self.current_runs.len() == self.current_runs.capacity()
+        {
+            return false;
+        }
+        true
     }
     async fn protected_text(
         &mut self,
@@ -3609,6 +3656,25 @@ mod tests {
             fields.protections,
             [(1, vec![true, true, true, true, false])]
         );
+    }
+
+    #[test]
+    fn protected_text_rejects_byte_limit_before_yielding() {
+        let mut fields = Fields::new(0, 2);
+        let ifs = Ifs::single(' ');
+        let mut work = Work::new(1024, 1024, 2);
+        let segment = Segment::Text {
+            value: "a".repeat(128),
+            protected: true,
+            glob_protected: true,
+        };
+        let cancel = Cancel::new();
+        assert!(matches!(
+            fields
+                .segment(segment, &ifs, &mut work, &cancel)
+                .now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
     }
 
     #[test]

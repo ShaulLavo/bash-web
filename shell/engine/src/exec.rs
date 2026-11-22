@@ -587,7 +587,7 @@ impl Work {
             return Err(130.into());
         }
         if self.remaining == 0 {
-            return Err(2.into());
+            return Err(if cancel.probe_now() { 130 } else { 2 }.into());
         }
         self.remaining -= 1;
         if self.quantum.charge(1) {
@@ -640,7 +640,7 @@ impl WorkQuantum {
             }
             let count = steps.min(*remaining).min(self.0);
             if count == 0 {
-                return Err(2.into());
+                return Err(if cancel.probe_now() { 130 } else { 2 }.into());
             }
             steps -= count;
             *remaining -= count;
@@ -707,6 +707,36 @@ mod tests {
             work.checkpoint_steps(0, &cancel).now_or_never(),
             Some(Ok(()))
         ));
+    }
+
+    #[test]
+    fn host_interrupt_beats_work_exhaustion_in_scalar_and_batched_checkpoints() {
+        for batched in [false, true] {
+            let probes = Rc::new(Cell::new(0usize));
+            let count = probes.clone();
+            let cancel = Cancel::with_probe(Rc::new(move || {
+                let next = count.get() + 1;
+                count.set(next);
+                next >= 2
+            }));
+            let mut work = Work::new(8, 0, 0);
+            let result = if batched {
+                work.checkpoint_steps(9, &cancel).now_or_never().unwrap()
+            } else {
+                let mut outcome = Ok(());
+                for _ in 0..9 {
+                    outcome = work.checkpoint(&cancel).now_or_never().unwrap();
+                    if outcome.is_err() {
+                        break;
+                    }
+                }
+                outcome
+            };
+            assert!(
+                matches!(result, Err(Error::Status(130))),
+                "batched={batched}"
+            );
+        }
     }
 
     #[test]

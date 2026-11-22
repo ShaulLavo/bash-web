@@ -459,7 +459,7 @@ async fn read_chunk(
     if timer.is_some() {
         return timeout::read(input, chunk, cancel, timer).await;
     }
-    if cancel.is_cancelled() {
+    if cancel.probe_now() {
         return Err(IoError::Cancelled);
     }
     // Subscribe to cancellation only if the endpoint needs to wait.
@@ -663,5 +663,32 @@ mod tests {
         assert_eq!(reader.protected[63], 1 << 6);
         assert_eq!(reader.protected[64], 1 << 2);
         assert_eq!(reader.byte(b'z'), Err(2));
+    }
+
+    #[test]
+    fn untimed_read_checks_parent_host_interrupt_before_consuming_ready_input() {
+        use crate::executor::Cancel;
+        use crate::io::pipe;
+        use futures::FutureExt;
+        use std::{cell::Cell, rc::Rc};
+
+        let (reader, writer) = pipe();
+        writer.write(b"x").now_or_never().unwrap().unwrap();
+        let probes = Rc::new(Cell::new(0usize));
+        let count = probes.clone();
+        let parent = Cancel::with_probe(Rc::new(move || {
+            let next = count.get() + 1;
+            count.set(next);
+            next >= 2
+        }));
+        assert!(!parent.probe_now());
+        let child = parent.child();
+        let mut buf = [0u8; 1];
+        let result = read_chunk(&reader, &mut buf, &child, None)
+            .now_or_never()
+            .unwrap();
+        assert_eq!(result, Err(IoError::Cancelled));
+        assert_eq!(reader.read(&mut buf).now_or_never().unwrap().unwrap(), 1);
+        assert_eq!(buf, *b"x");
     }
 }

@@ -239,6 +239,8 @@ pub(super) async fn echo(
 ) -> Result<(), PrintFailure> {
     let options = EchoOptions::parse(args, context, work).await?;
     let args = &args[options.operands..];
+    // Plain `echo` without `-e` never decodes locale-dependent unicode escapes, so
+    // only `echo -e` inspects and admits LC_ALL/LC_CTYPE/LANG.
     let utf8 = options.escapes && character_locale(state, context, work).await?;
     let mut printer = Printer::new(fds, context, work, utf8);
     if options.escapes {
