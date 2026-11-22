@@ -7,53 +7,13 @@ import { familyProgramNames, familyWasmPath, familyWasiAdapter } from "./family-
 import { guestRecord } from "./verify-family-guests.ts";
 import { functionNames, verifyWasiGuest } from "./verify-wasi-guests.ts";
 import { verifyInstalledPrograms } from "./waffle-program-release.ts";
+import { stripNames } from "./wasm-name-sections.ts";
 
 const json = (path: string) => guestRecord(JSON.parse(readFileSync(path, "utf8")));
 const identity = (bytes: Uint8Array) => ({
   bytes: bytes.byteLength,
   sha256: createHash("sha256").update(bytes).digest("hex"),
 });
-
-function unsigned(bytes: Uint8Array, start: number) {
-  let value = 0;
-  let shift = 0;
-  for (let next = start; next < start + 5; next++) {
-    const byte = bytes[next];
-    assert.notEqual(byte, undefined, "Truncated section length");
-    value += (byte & 127) * 2 ** shift;
-    if (!(byte & 128)) return { value, next: next + 1 };
-    shift += 7;
-  }
-  throw new Error("Oversized section length");
-}
-
-function customName(bytes: Uint8Array, start: number) {
-  const size = unsigned(bytes, start);
-  return new TextDecoder().decode(bytes.subarray(size.next, size.next + size.value));
-}
-
-// Preserve every encoded byte except complete name custom sections.
-export function stripNames(bytes: Uint8Array) {
-  const retained = [bytes.subarray(0, 8)];
-  let offset = 8;
-  let kept = 8;
-  let nameOffset: number | undefined;
-  while (offset < bytes.length) {
-    const start = offset;
-    const kind = bytes[offset++];
-    const size = unsigned(bytes, offset);
-    offset = size.next + size.value;
-    assert.ok(offset <= bytes.length, "Truncated section body");
-    if (kind === 0 && customName(bytes, size.next) === "name") {
-      nameOffset ??= kept;
-      continue;
-    }
-    retained.push(bytes.subarray(start, offset));
-    kept += offset - start;
-  }
-  assert.ok(nameOffset !== undefined, "Named guest has no name section");
-  return { bytes: Buffer.concat(retained), nameOffset };
-}
 
 function capture(name: string, directory: string, revision: string) {
   const path = familyWasmPath(name);
@@ -76,6 +36,7 @@ function capture(name: string, directory: string, revision: string) {
   assert.deepEqual(receipt.output, finalIdentity);
   const module = new WebAssembly.Module(named);
   const recovered = stripNames(named);
+  assert.ok(recovered.nameOffset !== undefined, "Named guest has no name section");
   assert.deepEqual(recovered.bytes, final, `${name}: name stripping changed executable bytes`);
   verifyWasiGuest(namedPath, undefined, familyWasiAdapter(name));
   const symbols = Array.from(functionNames(module))

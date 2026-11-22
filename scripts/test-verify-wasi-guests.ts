@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { functionNames, verifyWasiGuest } from "./verify-wasi-guests.ts";
 import { verifyStrippedWasiGuest } from "./verify-family-guests.ts";
-import { stripNames } from "./capture-family-symbols.ts";
+import { stripNames } from "./wasm-name-sections.ts";
 
 const integer = (value: number): number[] => {
   const bytes: number[] = [];
@@ -133,11 +133,14 @@ test("direct Rust adapter imports prove scanner omission without hiding libc", (
   });
 });
 
-test("capture removes only complete name sections and preserves every other encoded byte", () => {
+test("stripping returns the removed name section's offset for symbol capture", () => {
   const extra = Buffer.from(section(0, text("names").concat([1, 2, 3])));
   const named = Buffer.concat([moduleBytes(4096), extra]);
   const stripped = Buffer.concat([moduleBytes(4096, false), extra]);
-  assert.deepEqual(stripNames(named).bytes, stripped);
+  assert.deepEqual(stripNames(named), {
+    bytes: stripped,
+    nameOffset: moduleBytes(4096, false).byteLength,
+  });
 });
 
 function strippedProof(bytes: Uint8Array) {

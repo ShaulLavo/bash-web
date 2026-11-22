@@ -31,8 +31,9 @@ import { cappedWasiFixture as wasm } from "./wasi-artifact-fixture.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const shellNotice = "# Third-party notices\n\nfixture license bytes: ©\n";
+const nameSection = Buffer.from("0005046e616d65", "hex");
 
-function fixture(run: (directory: string, consumer: string) => void) {
+function fixture(run: (directory: string, consumer: string) => void, runtime = wasm) {
   mkdirSync(resolve(root, ".build"), { recursive: true });
   const scratch = mkdtempSync(resolve(root, ".build/ci-artifacts-test-"));
   const directory = resolve(scratch, "artifact");
@@ -41,7 +42,7 @@ function fixture(run: (directory: string, consumer: string) => void) {
   try {
     for (const name of nativeArtifactFiles) {
       mkdirSync(dirname(resolve(directory, name)), { recursive: true });
-      writeFileSync(resolve(directory, name), wasm);
+      writeFileSync(resolve(directory, name), name === "shell-runtime.wasm" ? runtime : wasm);
     }
     writeFileSync(resolve(directory, "THIRD_PARTY_NOTICES.txt"), shellNotice);
     const source = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
@@ -78,11 +79,46 @@ test("the complete exact-source artifact stages both CLIs and every shell guest"
         readFileSync(resolve(consumer, `public/programs/${name}.wasm`)),
         Buffer.from(wasm),
       );
+    assert.ok(
+      WebAssembly.validate(readFileSync(resolve(consumer, "public/programs/shell-engine.wasm"))),
+    );
     assert.equal(
       readFileSync(resolve(consumer, "dist/THIRD_PARTY_NOTICES.txt"), "utf8"),
       shellNotice,
     );
   });
+});
+
+test("CI stages a nameless browser guest and keeps the named runtime for WASI tests", () => {
+  const executable = Buffer.from(
+    "0061736d01000000" + // Wasm header
+      "0105016000017f" + // () -> i32
+      "03020100" + // One function of type 0
+      "0707010372756e0000" + // Export the function as run
+      "0a06010400412a0b", // Return 42
+    "hex",
+  );
+  const otherCustomSection = Buffer.from("0007056e616d6573ff", "hex");
+  const runtime = Buffer.concat([executable, nameSection, otherCustomSection]);
+  fixture((directory, consumer) => {
+    stageCiArtifacts(consumer, directory);
+    const browser = readFileSync(resolve(consumer, "public/programs/shell-engine.wasm"));
+    assert.deepEqual(browser, Buffer.concat([executable, otherCustomSection]));
+    const module = new WebAssembly.Module(browser);
+    assert.equal(WebAssembly.Module.customSections(module, "name").length, 0);
+    const { run } = new WebAssembly.Instance(module).exports;
+    assert.ok(typeof run === "function");
+    assert.equal(run(), 42);
+    const stagedRuntime = readFileSync(
+      resolve(consumer, ".build/shell/wasm32-wasip1/release/shell-runtime.wasm"),
+    );
+    assert.deepEqual(stagedRuntime, runtime);
+    assert.equal(
+      WebAssembly.Module.customSections(new WebAssembly.Module(stagedRuntime), "name").length,
+      1,
+    );
+    assert.deepEqual(readFileSync(resolve(directory, "shell-runtime.wasm")), runtime);
+  }, runtime);
 });
 
 for (const name of nativeArtifactFiles) {
@@ -165,23 +201,21 @@ function shellIdentity(directory: string) {
 }
 
 test("accepted shell subset stages normal browser and native paths without other guests", () => {
+  const runtime = Buffer.concat([wasm, nameSection]);
   fixture((directory, consumer) => {
     const identity = shellIdentity(directory);
     rmSync(resolve(directory, "shell-cli"));
     stageShellArtifacts(consumer, directory, identity, "browser");
     stageShellArtifacts(consumer, directory, identity, "native");
-    for (const path of [
-      "public/programs/shell-engine.wasm",
-      "dist/env.wasm",
-      "dist/bash-web-shell.wasm",
-      "dist/bash-web-env.wasm",
-    ])
+    for (const path of ["public/programs/shell-engine.wasm", "dist/bash-web-shell.wasm"])
+      assert.deepEqual(readFileSync(resolve(consumer, path)), runtime);
+    for (const path of ["dist/env.wasm", "dist/bash-web-env.wasm"])
       assert.deepEqual(readFileSync(resolve(consumer, path)), Buffer.from(wasm));
     assert.equal(
       readFileSync(resolve(consumer, "dist/BASH_WEB_THIRD_PARTY_NOTICES.txt"), "utf8"),
       shellNotice,
     );
-  });
+  }, runtime);
 });
 
 for (const name of [
