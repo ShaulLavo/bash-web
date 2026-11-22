@@ -1,7 +1,6 @@
 //! Borrowed public values never expose the engine's shared array handles.
-use super::Binding;
+use super::Variables;
 use std::{
-    collections::BTreeMap,
     fmt,
     ops::{Deref, Index},
 };
@@ -45,9 +44,9 @@ impl PartialEq<String> for BindingValue {
     }
 }
 #[derive(Clone, Copy)]
-pub struct Bindings<'a>(&'a BTreeMap<String, Binding>);
+pub struct Bindings<'a>(&'a Variables);
 impl<'a> Bindings<'a> {
-    pub(super) fn new(values: &'a BTreeMap<String, Binding>) -> Self {
+    pub(super) fn new(values: &'a Variables) -> Self {
         Self(values)
     }
     pub fn get(&self, name: &str) -> Option<&'a BindingValue> {
@@ -65,7 +64,7 @@ impl<'a> Bindings<'a> {
         self.0.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.0.len() == 0
     }
     pub fn keys(&self) -> impl Iterator<Item = &'a String> {
         self.0.keys()

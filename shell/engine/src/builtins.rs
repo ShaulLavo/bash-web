@@ -1239,7 +1239,7 @@ async fn unset(
             continue;
         }
         if functions {
-            state.borrow_mut().unset_function(name);
+            state.borrow_mut().unset_function(name)?;
             continue;
         }
         let removed = if namerefs {
@@ -1280,6 +1280,7 @@ async fn unset(
             }
         };
         match removed {
+            Err(status) if status != 1 => return Err(status),
             Err(_) => {
                 let diagnostic =
                     format!("/usr/bin/bash: unset: {name}: cannot unset: readonly variable\n");
@@ -1287,7 +1288,7 @@ async fn unset(
                 code = 1;
             }
             Ok(false) if !variables && !namerefs => {
-                state.borrow_mut().unset_function(name);
+                state.borrow_mut().unset_function(name)?;
             }
             Ok(_) => {}
         }

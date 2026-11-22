@@ -252,6 +252,13 @@ fn commit_all(
     let mut failures = [None, None, None];
     let mut destination_ok = true;
     let mut state = state.borrow_mut();
+    state.prepare_getopts_changes(publications.each_ref().map(|publication| {
+        (
+            publication.name.as_str(),
+            publication.value.is_some(),
+            publication.unbind,
+        )
+    }))?;
     // All fallible scans and resource admissions precede the cursor commit.
     // Transfer the aggregate reservation to local tickets without yielding.
     drop(reservation);
@@ -271,7 +278,7 @@ fn commit(publication: &mut Publication, state: &mut State) -> Result<Option<Str
         return Ok(None);
     }
     if publication.unbind {
-        state.unset_getopts_argument();
+        state.unset_getopts_argument()?;
         return Ok(None);
     }
     let target = state.assignment_name(publication.name.clone())?;

@@ -113,10 +113,10 @@ fn expansion_checks_readonly_but_builtin_replay_and_restore_are_privileged() {
         .readonly("locked".into(), Some("caller".into()))
         .unwrap();
     let expansion = PrefixFrame::test_enter(state.clone());
-    assert_eq!(
+    assert!(matches!(
         expansion.set("locked".into(), "rejected".into()),
-        Err("locked".into())
-    );
+        Err(Error::Readonly { name, .. }) if name == "locked"
+    ));
     assert_eq!(state.borrow().bindings()["locked"], "caller");
     drop(expansion);
 
@@ -188,7 +188,7 @@ fn builtin_ifs_replay_keeps_cache_while_expansion_refreshes_and_restores_it() {
     assert_eq!(state.borrow().cached_ifs_members(), Some(members));
 
     let frame = PrefixFrame::test_enter(state.clone());
-    frame.set("IFS".into(), ",".into()).unwrap();
+    assert!(frame.set("IFS".into(), ",".into()).is_ok());
     // The effective target is sep, not IFS: even expansion leaves the IFS
     // special-variable cache alone when writing through this alias.
     assert_eq!(state.borrow().cached_ifs_members(), Some(members));
@@ -200,7 +200,7 @@ fn builtin_ifs_replay_keeps_cache_while_expansion_refreshes_and_restores_it() {
         .assign_parameter("IFS".into(), ":".into())
         .unwrap();
     let frame = PrefixFrame::test_enter(direct.clone());
-    frame.set("IFS".into(), ",".into()).unwrap();
+    assert!(frame.set("IFS".into(), ",".into()).is_ok());
     assert_eq!(direct.borrow().positional_separator(), Some(','));
     drop(frame);
     assert_eq!(direct.borrow().positional_separator(), Some(':'));
@@ -232,9 +232,9 @@ fn builtin_inside_expansion_routes_durable_writes_to_only_the_last_expansion_sav
         .declare_nameref("alias".into(), "x".into(), false)
         .unwrap();
     let outer = PrefixFrame::test_enter(state.clone());
-    outer.set("x".into(), "outer".into()).unwrap();
+    assert!(outer.set("x".into(), "outer".into()).is_ok());
     let inner = PrefixFrame::test_enter(state.clone());
-    inner.set("alias".into(), "inner".into()).unwrap();
+    assert!(inner.set("alias".into(), "inner".into()).is_ok());
     let frame = builtin(
         &state,
         &[
@@ -685,10 +685,10 @@ fn typed_reference_durable_element_amends_nested_prefixes_and_completed_inverse(
     );
     let outer = PrefixFrame::test_enter(state.clone());
     outer.reserve("a", 16_384).unwrap();
-    outer.set("a".into(), "outer".into()).unwrap();
+    assert!(outer.set("a".into(), "outer".into()).is_ok());
     let inner = PrefixFrame::test_enter(state.clone());
     inner.reserve("a", 16_384).unwrap();
-    inner.set("a".into(), "inner".into()).unwrap();
+    assert!(inner.set("a".into(), "inner".into()).is_ok());
     let place = Place {
         name: "a".into(),
         index: Some(9),
@@ -728,7 +728,7 @@ fn typed_reference_selected_index_survives_current_local_recreation_and_owner_re
     write_selected(&state, &place, "recreated").unwrap_or_else(|_| panic!("selected store fits"));
     assert_eq!(state.borrow().array_element("a", 2), Some("recreated"));
     let prefix = PrefixFrame::test_enter(state.clone());
-    prefix.set("a".into(), "temporary".into()).unwrap();
+    assert!(prefix.set("a".into(), "temporary".into()).is_ok());
     let inner = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
     state.borrow_mut().unset_variable("a").unwrap();
     assert_ne!(state.borrow().reference_owner("a"), place.owner);

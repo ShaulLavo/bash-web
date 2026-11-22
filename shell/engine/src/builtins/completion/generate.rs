@@ -333,7 +333,7 @@ async fn names(
         }
         return Ok(());
     }
-    for (name, binding) in state.raw_bindings() {
+    for (name, binding) in state.raw_bindings().iter() {
         let selected = match action {
             "export" => state.exported_bindings().contains(name),
             "arrayvar" => matches!(binding, Binding::Indexed(_)),

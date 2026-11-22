@@ -4258,6 +4258,13 @@ struct AssignmentMode<'a> {
     fds: &'a Descriptors,
 }
 
+fn prefix_readonly_name(error: expand::Error) -> Result<String, expand::Error> {
+    match error {
+        expand::Error::Readonly { name, .. } => Ok(name),
+        error => Err(error),
+    }
+}
+
 async fn assignments(
     assignments: Vec<Assignment>,
     state: &SharedState,
@@ -4394,6 +4401,7 @@ async fn assignments_body(
         if let Err(name) = frame.set(assignment.name, value) {
             if let Some(fds) = function_diagnostics {
                 let stderr = fds.borrow().get(2);
+                let name = prefix_readonly_name(name)?;
                 if let Some(stderr) = stderr {
                     let _ = stderr.write_all(name.as_bytes(), &context.cancel).await;
                     let _ = stderr
@@ -4402,6 +4410,7 @@ async fn assignments_body(
                 }
                 continue;
             }
+            let name = prefix_readonly_name(name)?;
             work.admit_storage(name.len().saturating_add(160))?;
             return Err(expand::Error::Readonly {
                 name,
@@ -6001,7 +6010,15 @@ mod function_measurements {
             ),
             0
         );
-        assert_eq!(session.core.execution_storage.observation().0, held);
+        let function_copy = session.state.borrow().function_bindings_copy_bytes();
+        assert!(
+            function_copy > 0,
+            "the background retains the previous function table"
+        );
+        assert_eq!(
+            session.core.execution_storage.observation().0,
+            held + function_copy
+        );
         release.cancel();
         assert_eq!(finish(session.start("wait; unset -f hold").unwrap()), 0);
         assert_eq!(ex.drive(64).pending, 0);

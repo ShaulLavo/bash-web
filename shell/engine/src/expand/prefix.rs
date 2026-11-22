@@ -71,12 +71,9 @@ fn next_name(
 ) -> Result<Option<String>, Error> {
     let state = state.borrow();
     let lower = previous.map_or(Included(prefix), Excluded);
-    let binding = state
-        .raw_bindings()
-        .range::<str, _>((lower, Unbounded))
-        .next();
+    let binding = state.raw_bindings().name_from(lower);
     let nameref = state.namerefs().range::<str, _>((lower, Unbounded)).next();
-    let name = binding.map(|(name, _)| name).into_iter();
+    let name = binding.into_iter();
     let Some(name) = name.chain(nameref.map(|(name, _)| name)).min() else {
         return Ok(None);
     };

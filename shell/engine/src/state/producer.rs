@@ -117,19 +117,21 @@ impl State {
                 .ok_or(2)?,
             (_, Some(binding)) => binding.storage_bytes(),
         };
+        let copy = self.variables.reserve_copy(target, self.memory.as_ref())?;
         self.reserve_local_value(target, storage)?;
-        match (mode, self.variables.get_mut(target)) {
-            (IndexedMode::Overlay, Some(Binding::Indexed(_))) => {}
-            (IndexedMode::Overlay, Some(binding @ Binding::Scalar(_))) => {
-                let scalar = std::mem::replace(binding, String::new().into());
-                *binding = Binding::Indexed(Rc::new(scalar.into_indexed()));
-            }
-            _ => {
-                self.variables.insert(
-                    target.to_owned(),
-                    Binding::Indexed(Rc::new(Indexed::default())),
-                );
-            }
+        self.variables.make_private(target, copy);
+        let updated = mode == IndexedMode::Overlay
+            && self.variables.update(target, |binding| {
+                if matches!(binding, Binding::Scalar(_)) {
+                    let scalar = std::mem::replace(binding, String::new().into());
+                    *binding = Binding::Indexed(Rc::new(scalar.into_indexed()));
+                }
+            });
+        if !updated {
+            self.variables.insert(
+                target.to_owned(),
+                Binding::Indexed(Rc::new(Indexed::default())),
+            );
         }
         if target == "IFS" {
             self.refresh_star_separator();
@@ -232,6 +234,9 @@ impl IndexedProducer {
             .checked_sub(binding.slot(self.next).map_or(0, String::capacity))
             .ok_or(2)?;
         let previous = state.held_local_value(&self.target);
+        let copy = state
+            .variables
+            .reserve_copy(&self.target, state.memory.as_ref())?;
         let _live = if self.local {
             state.reserve_local_value(&self.target, storage.max(previous))?;
             None
@@ -246,10 +251,13 @@ impl IndexedProducer {
             return Err(RESOURCE_STATUS.into());
         }
         mapping.fill(value, &mut record);
-        let Some(Binding::Indexed(values)) = state.variables.get_mut(&self.target) else {
-            unreachable!("producer owns an indexed target")
-        };
-        Rc::make_mut(values).insert(self.next, record);
+        state.variables.make_private(&self.target, copy);
+        assert!(state.variables.update(&self.target, |binding| {
+            let Binding::Indexed(values) = binding else {
+                unreachable!("producer owns an indexed target")
+            };
+            Rc::make_mut(values).insert(self.next, record);
+        }));
         if self.target == "IFS" {
             state.refresh_star_separator();
         }
@@ -572,7 +580,7 @@ mod tests {
         ));
         assert!(state.borrow().ifs_members.is_none());
         assert_eq!(state.borrow().array_count("BASH_ARGC"), 0);
-        let before = state.borrow().variables.clone();
+        let before = state.borrow().variables.snapshot();
         let pressure = memory.admit(32_768).unwrap();
         let mut work = Work::new(1000, 0, 0);
         let result = finish(State::begin_indexed_producer(
@@ -584,7 +592,7 @@ mod tests {
             &mut work,
         ));
         assert!(matches!(result, Err(ProducerError::Rejected(actual)) if actual == expected));
-        assert_eq!(state.borrow().variables, before);
+        assert!(state.borrow().variables.iter().eq(before.iter()));
         assert!(state.borrow().ifs_members.is_none());
         assert_eq!(state.borrow().array_count("BASH_ARGC"), 0);
         assert_eq!(memory.observation().0, 32_768);

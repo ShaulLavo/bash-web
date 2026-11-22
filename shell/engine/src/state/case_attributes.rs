@@ -97,6 +97,8 @@ impl State {
             .len()
             .saturating_add(snapshot_node_bytes::<CaseMapping>().map_err(|_| 2)?);
         work.admit_storage(bytes).map_err(|_| 2)?;
+        let changes = super::CASE_ATTRIBUTES | (u8::from(value.is_some()) * super::VARIABLES);
+        self.prepare_binding_changes(&name, changes)?;
         if local {
             self.declare_local(name.clone(), None)?;
         }

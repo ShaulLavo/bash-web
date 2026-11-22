@@ -27,6 +27,10 @@ pub(super) async fn declare(
         }
         return result;
     }
+    let binding_copy = match state.borrow().admit_function_definition() {
+        Ok(copy) => copy,
+        Err(code) => return Outcome::status(code),
+    };
     if context
         .source
         .retain_root(&context.core.execution_storage)
@@ -49,6 +53,7 @@ pub(super) async fn declare(
             storage: context.evaluation.retained(),
             reader: context.reader.clone(),
         },
+        binding_copy,
     );
     Outcome::status(0)
 }

@@ -56,7 +56,11 @@ impl ScanTrial {
             frame,
             memory,
             used,
-            bindings: state.raw_bindings().clone(),
+            bindings: state
+                .raw_bindings()
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
             cursor: cursor(&state),
         }
     }
@@ -80,9 +84,8 @@ impl ScanTrial {
             self.cursor,
             "rejected getopts must not consume b"
         );
-        assert_eq!(
-            state.raw_bindings(),
-            &self.bindings,
+        assert!(
+            state.raw_bindings().iter().eq(&self.bindings),
             "rejected getopts must not publish bindings"
         );
         assert_eq!(
