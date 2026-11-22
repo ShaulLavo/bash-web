@@ -3653,6 +3653,14 @@ mod tests {
         Ok((fields, work.storage_remaining))
     }
 
+    fn protected_text_segment(value: String) -> Segment {
+        Segment::Text {
+            value,
+            protected: true,
+            glob_protected: true,
+        }
+    }
+
     #[test]
     fn protected_text_keeps_ifs_boundaries_glob_masks_and_unicode_work() {
         let mut fields = Fields::new(64, 2);
@@ -3669,12 +3677,7 @@ mod tests {
                 .character(' ', Delimiter::Whitespace, false, &mut work)
                 .is_ok()
         );
-        let literal = "é *";
-        let segment = Segment::Text {
-            value: literal.to_owned(),
-            protected: true,
-            glob_protected: true,
-        };
+        let segment = protected_text_segment("é *".to_owned());
         let cancel = Cancel::new();
         assert!(matches!(
             fields
@@ -3701,18 +3704,15 @@ mod tests {
         let mut fields = Fields::new(0, 2);
         let ifs = Ifs::single(' ');
         let mut work = Work::new(1024, 1024, 2);
-        let segment = Segment::Text {
-            value: "a".repeat(128),
-            protected: true,
-            glob_protected: true,
-        };
-        let cancel = Cancel::new();
-        assert!(matches!(
-            fields
-                .segment(segment, &ifs, &mut work, &cancel)
-                .now_or_never(),
-            Some(Err(Error::Status(2)))
-        ));
+        let result = fields
+            .segment(
+                protected_text_segment("a".repeat(128)),
+                &ifs,
+                &mut work,
+                &Cancel::new(),
+            )
+            .now_or_never();
+        assert!(matches!(result, Some(Err(Error::Status(2)))));
     }
 
     #[test]
