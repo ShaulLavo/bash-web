@@ -1357,14 +1357,18 @@ async fn sequence_body(
     }
     result
 }
+#[derive(Debug)]
+enum OwnedCommand {
+    Syntax(Command),
+    AndOr(Command, Vec<(ListOperator, Command)>),
+}
+
 fn has_owned_function(command: &Command) -> bool {
     match command {
         Command::Function(_) => true,
         Command::List(list) => {
-            matches!(list.first.as_ref(), Command::Function(_))
-                || list.rest.iter().any(|(operator, cmd)| {
-                    *operator == ListOperator::Semicolon && matches!(cmd, Command::Function(_))
-                })
+            has_owned_function(&list.first)
+                || list.rest.iter().any(|(_, cmd)| has_owned_function(cmd))
         }
         _ => false,
     }
@@ -1372,6 +1376,15 @@ fn has_owned_function(command: &Command) -> bool {
 
 fn execute_owned(
     command: Command,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'static> {
+    execute_owned_command(OwnedCommand::Syntax(command), state, fds, context)
+}
+
+fn execute_owned_command(
+    command: OwnedCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -1400,10 +1413,15 @@ fn execute_owned(
                 return Outcome::status(130);
             }
             let mut result = match command {
-                Command::Function(function) => {
+                OwnedCommand::Syntax(Command::Function(function)) => {
                     function_names::declare_owned(function, state.clone(), fds, context).await
                 }
-                Command::List(list) => execute_owned_list(list, state.clone(), fds, context).await,
+                OwnedCommand::Syntax(Command::List(list)) => {
+                    execute_owned_list(list, state.clone(), fds, context).await
+                }
+                OwnedCommand::AndOr(first, links) => {
+                    owned_and_or(first, links, state.clone(), fds, context).await
+                }
                 other => unreachable!("non-function command routed to execute_owned: {other:?}"),
             };
             result.flow = settle_reported_error(result.flow, &state);
@@ -1411,6 +1429,69 @@ fn execute_owned(
         },
         Outcome::status,
     )
+}
+
+async fn execute_owned_item(
+    command: Command,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    if has_owned_function(&command) {
+        execute_owned(command, state, fds, context).await
+    } else {
+        execute(&command, state, fds, context).await
+    }
+}
+
+async fn execute_owned_and_or(
+    first: Command,
+    links: Vec<(ListOperator, Command)>,
+    state: SharedState,
+    fds: Descriptors,
+    context: &Context,
+) -> Outcome {
+    let context = Context {
+        tail_exec: false,
+        ..context.clone()
+    };
+    if links.is_empty() {
+        return execute_owned_item(first, state, fds, context).await;
+    }
+    execute_owned_command(OwnedCommand::AndOr(first, links), state, fds, context).await
+}
+
+async fn owned_and_or(
+    first: Command,
+    links: Vec<(ListOperator, Command)>,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let first_context = if links.is_empty() {
+        context.clone()
+    } else {
+        context.condition()
+    };
+    let mut result = execute_owned_item(first, state.clone(), fds.clone(), first_context).await;
+    let total = links.len();
+    for (index, (operator, next)) in links.into_iter().enumerate() {
+        if result.flow != Flow::Normal || context.cancel.is_cancelled() {
+            break;
+        }
+        let run_next = (operator == ListOperator::And && result.code == 0)
+            || (operator == ListOperator::Or && result.code != 0);
+        if !run_next {
+            continue;
+        }
+        let next_context = if index + 1 == total {
+            context.clone()
+        } else {
+            context.condition()
+        };
+        result = execute_owned_item(next, state.clone(), fds.clone(), next_context).await;
+    }
+    result
 }
 
 async fn execute_owned_list(
@@ -1441,23 +1522,14 @@ async fn execute_owned_list(
                 first = next;
             }
             Some((ListOperator::Semicolon, next)) => {
-                let result = if links.is_empty() && matches!(first, Command::Function(_)) {
-                    execute_owned(first, state.clone(), fds.clone(), context.clone()).await
-                } else {
-                    execute_and_or(&first, &links, state.clone(), fds.clone(), &context).await
-                };
+                let result =
+                    execute_owned_and_or(first, links, state.clone(), fds.clone(), &context).await;
                 if result.flow != Flow::Normal || context.cancel.is_cancelled() {
                     return result;
                 }
                 first = next;
             }
-            _ => {
-                return if links.is_empty() && matches!(first, Command::Function(_)) {
-                    execute_owned(first, state, fds, context).await
-                } else {
-                    and_or(&first, &links, state, fds, context).await
-                };
-            }
+            _ => return owned_and_or(first, links, state, fds, context).await,
         }
     }
 }
@@ -2040,7 +2112,7 @@ fn loop_sequence<'a>(
 
 struct CachedArithmetic<'a> {
     program: arithmetic::Program<'a>,
-    _storage: crate::exec::StorageAllocation,
+    _storage: crate::exec::Allocation,
 }
 
 async fn cache_loop_arithmetic<'a>(
@@ -2065,9 +2137,11 @@ async fn cache_arithmetic<'a>(source: &'a str, context: &Context) -> Option<Cach
     {
         return None;
     }
+    // Admit from the live execution pool rather than the per-script eval source
+    // storage pool so cached loop clauses never starve eval inside the loop body.
     let storage = context
         .evaluation
-        .admit_storage(arithmetic::Program::retained_bytes(source))
+        .admit_execution(arithmetic::Program::retained_bytes(source))
         .ok()?;
     let mut work = expansion_work(context);
     let program = match arithmetic::Program::compile(source, &mut work, &context.cancel).await {
@@ -6608,6 +6682,46 @@ mod function_measurements {
         );
         assert_eq!(finish_review(&ex, session.start(&script).unwrap()), 0);
         assert_eq!(capture.bytes(), b"ran\nfinished\n");
+    }
+
+    #[test]
+    fn arithmetic_for_cached_step_does_not_starve_eval_on_later_iteration() {
+        let (ex, _host, session) = review_session(Limits::default());
+        let (output, capture) = io::capture(1024);
+        let mut fds = session.core.descriptors.borrow().clone();
+        fds.insert(1, output);
+        session.set_descriptors(fds).unwrap();
+        let step = format!("i+=1+{}0", " ".repeat(239));
+        let script = format!(
+            "set -e; for ((i=0;i<2;{step})); do if (( i )); then eval \"echo ran{}\"; fi; done; echo finished",
+            " ".repeat(288)
+        );
+        assert_eq!(finish_review(&ex, session.start(&script).unwrap()), 0);
+        assert_eq!(capture.bytes(), b"ran\nfinished\n");
+    }
+
+    #[test]
+    fn top_level_and_or_function_definitions_move_body_without_cloning() {
+        for prefix in ["true &&", "false ||"] {
+            let (ex, _host, session) = review_session(Limits {
+                execution_bytes: 128 * 1024,
+                ..Limits::default()
+            });
+            let (output, capture) = io::capture(1024);
+            let mut fds = session.core.descriptors.borrow().clone();
+            fds.insert(1, output);
+            session.set_descriptors(fds).unwrap();
+            let script = format!(
+                "{prefix} large() {{ echo '{}'; }}; type -t large",
+                "x".repeat(100 * 1024)
+            );
+            assert_eq!(
+                finish_review(&ex, session.start(&script).unwrap()),
+                0,
+                "prefix={prefix}"
+            );
+            assert_eq!(capture.bytes(), b"function\n", "prefix={prefix}");
+        }
     }
 
     #[test]
