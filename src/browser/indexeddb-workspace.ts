@@ -34,6 +34,8 @@ export async function deleteUnreadableWorkspace(selection: {
 }): Promise<Removal> {
   const workspace = selection.name;
   if (!globalThis.indexedDB || !globalThis.navigator?.locks) return "missing";
+  // A delete already waiting on an open connection would block this attempt's own open forever.
+  if (queued.has(workspace)) return "busy";
   return underLock(`bun-wasm:filesystem:indexeddb-maintenance:${workspace}`, () =>
     underLock(`bun-wasm:filesystem:indexeddb:${workspace}`, () => removeUnreadable(workspace)),
   );
@@ -54,14 +56,27 @@ async function removeUnreadable(workspace: string): Promise<Removal> {
   return deleteDatabase(workspace);
 }
 
+/** Workspaces whose delete is queued behind a connection that is still open. */
+const queued = new Set<string>();
+
 /** Waits for the delete; a connection that stays open elsewhere in this browser reports "busy". */
 function deleteDatabase(workspace: string): Promise<Removal> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(workspace);
-    // The delete stays queued and completes once the other connection closes.
-    request.onblocked = () => resolve("busy");
-    request.onsuccess = () => resolve("deleted");
-    request.onerror = () => reject(request.error);
+    // The delete stays queued and completes once the other connection closes. Until then every
+    // open of this database waits behind it, so another attempt must not start (see above).
+    request.onblocked = () => {
+      queued.add(workspace);
+      resolve("busy");
+    };
+    request.onsuccess = () => {
+      queued.delete(workspace);
+      resolve("deleted");
+    };
+    request.onerror = () => {
+      queued.delete(workspace);
+      reject(request.error);
+    };
   });
 }
 

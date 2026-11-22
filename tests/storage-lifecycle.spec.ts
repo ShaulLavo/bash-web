@@ -518,6 +518,10 @@ test("Start fresh reports a connection that keeps the workspace open instead of 
   await confirmStartFresh(page);
   await expect(page.getByRole("alert")).toContainText("open in another tab");
   await expect(page.getByRole("button", { name: "Start fresh" })).toBeEnabled();
+  // A second attempt while the delete is queued answers busy again instead of hanging.
+  await confirmStartFresh(page);
+  await expect(page.getByRole("alert")).toContainText("open in another tab");
+  await expect(page.getByRole("button", { name: "Start fresh" })).toBeEnabled();
   // The queued delete finishes once the connection closes.
   await page.evaluate(() =>
     (window as unknown as { rawConnection: IDBDatabase }).rawConnection.close(),
