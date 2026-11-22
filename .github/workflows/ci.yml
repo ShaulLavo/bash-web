@@ -106,12 +106,16 @@ jobs:
   prepare:
     if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: read
     outputs:
       code: ${{ github.event_name != 'pull_request' || steps.paths.outputs.code == 'true' }}
+    env:
+      CARGO_TARGET_DIR: .build/shell
+      CARGO_BUILD_JOBS: "4"
+      WASI_LIBC_JOBS: "4"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -154,6 +158,85 @@ jobs:
           path: ${{ runner.temp }}/javascript.tar.zst
           compression-level: 0
           retention-days: 1
+      - uses: actions/cache@v4
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        with:
+          path: ~/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu
+          key: rustup-${{ runner.os }}-${{ runner.arch }}-1.98.1-wasip1-rustfmt-clippy
+      - uses: dtolnay/rust-toolchain@1.98.1
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        with:
+          targets: wasm32-wasip1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        with:
+          workspaces: |
+            shell -> ../.build/shell
+            tests/guest -> ../../.build/test-guest
+          cache-all-crates: true
+          cache-workspace-crates: true
+          cache-directories: .build/wasi-libc
+      - uses: Swatinem/rust-cache@v2
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        with:
+          prefix-key: v0-rust-cli
+          workspaces: shell -> ../.build/shell-cli
+          cache-all-crates: true
+          cache-workspace-crates: true
+      - uses: Swatinem/rust-cache@v2
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        with:
+          prefix-key: v0-wasi-tests
+          workspaces: shell -> ../.build/shell-wasi-tests
+          cache-all-crates: true
+          cache-workspace-crates: true
+      - uses: ./.github/actions/wasi-sdk
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+      - name: Build shared WASI guests, test binaries, and native CLI
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        run: |
+          ulimit -c 0
+          node scripts/wasi-build.ts --prepare .
+          npm run build:shell & p_shell=$!
+          CARGO_TARGET_DIR=.build/shell-wasi-tests npm run prepare:wasi-tests & p_tests=$!
+          npm run build:test-guest & p_guest=$!
+          CARGO_TARGET_DIR=.build/shell-cli cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures & p_cli=$!
+          status=0
+          for pid in "$p_shell" "$p_tests" "$p_guest" "$p_cli"; do
+            if ! wait "$pid"; then status=1; fi
+          done
+          exit "$status"
+        env:
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
+      - name: Pack shared native artifacts
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        run: |
+          mkdir -p .build/shell/release
+          cp .build/shell-cli/release/shell-engine .build/shell-cli/release/shell-cli .build/shell/release/
+          sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
+          git rev-parse HEAD > .build/shell/cli-source.txt
+          npm run notices:shell
+          node scripts/ci-artifacts.ts pack .build/ci-native
+      - name: Core dependency proof
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        run: npm run check:capabilities
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        with:
+          name: native-${{ github.sha }}
+          path: .build/ci-native
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
+        with:
+          name: shell-cli-${{ github.sha }}
+          path: |
+            .build/shell/release/shell-engine
+            .build/shell/release/shell-cli
+            .build/shell/cli-sha256.txt
+            .build/shell/cli-source.txt
+          retention-days: 3
   quality:
     if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
@@ -184,91 +267,11 @@ jobs:
       - run: npm run test:guest-build
       - run: npm run typecheck:guest-build
       - run: npm run typecheck:ci
-  native:
-    if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    needs: [prepare]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      CARGO_TARGET_DIR: .build/shell
-      CARGO_BUILD_JOBS: "4"
-      WASI_LIBC_JOBS: "4"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.12.1
-      - uses: ./.github/actions/javascript
-      - uses: actions/cache@v4
-        with:
-          path: ~/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu
-          key: rustup-${{ runner.os }}-${{ runner.arch }}-1.98.1-wasip1-rustfmt-clippy
-      - uses: dtolnay/rust-toolchain@1.98.1
-        with:
-          targets: wasm32-wasip1
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            shell -> ../.build/shell
-            tests/guest -> ../../.build/test-guest
-          cache-all-crates: true
-          cache-workspace-crates: true
-          cache-directories: .build/wasi-libc
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: v0-rust-cli
-          workspaces: shell -> ../.build/shell-cli
-          cache-all-crates: true
-          cache-workspace-crates: true
-      - uses: ./.github/actions/wasi-sdk
-      - name: Build shared WASI guests, test binaries, and native CLI
-        run: |
-          ulimit -c 0
-          node scripts/wasi-build.ts --prepare .
-          (
-            npm run build:shell
-            npm run prepare:wasi-tests
-          ) & p_wasi=$!
-          npm run build:test-guest & p_guest=$!
-          CARGO_TARGET_DIR=.build/shell-cli cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures & p_cli=$!
-          status=0
-          for pid in "$p_wasi" "$p_guest" "$p_cli"; do
-            if ! wait "$pid"; then status=1; fi
-          done
-          exit "$status"
-        env:
-          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
-      - name: Pack shared native artifacts
-        run: |
-          mkdir -p .build/shell/release
-          cp .build/shell-cli/release/shell-engine .build/shell-cli/release/shell-cli .build/shell/release/
-          sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
-          git rev-parse HEAD > .build/shell/cli-source.txt
-          npm run notices:shell
-          node scripts/ci-artifacts.ts pack .build/ci-native
-      - name: Core dependency proof
-        run: npm run check:capabilities
-      - uses: actions/upload-artifact@v4
-        with:
-          name: native-${{ github.sha }}
-          path: .build/ci-native
-          retention-days: 1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: shell-cli-${{ github.sha }}
-          path: |
-            .build/shell/release/shell-engine
-            .build/shell/release/shell-cli
-            .build/shell/cli-sha256.txt
-            .build/shell/cli-source.txt
-          retention-days: 3
-  # Downstream jobs need only native's builds, so Rust quality/tests, WASI tests, and fuzz run together here.
+  # Downstream jobs consume prepare's JS and native artifacts directly, eliminating a hop.
   wasi:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
-      - native
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -372,10 +375,9 @@ jobs:
           cargo test --locked --manifest-path shell/Cargo.toml --workspace --no-fail-fast
           npm run test:terminal:display
   own-shell-scoreboard:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
-      - native
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -416,7 +418,7 @@ jobs:
         env:
           SCOREBOARD_TEST_CONCURRENCY: "4"
   own-shell-observation:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     permissions:
       contents: read
       actions: read
@@ -424,7 +426,6 @@ jobs:
       current-artifact-id: ${{ steps.current-upload.outputs.artifact-id }}
     needs:
       - prepare
-      - native
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -556,10 +557,9 @@ jobs:
         run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
   # Playwright uses the checked-in worker count across two shards.
   browser:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
       - prepare
-      - native
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -628,7 +628,6 @@ jobs:
       - main-qualification
       - prepare
       - quality
-      - native
       - wasi
       - own-shell-scoreboard
       - own-shell-observation

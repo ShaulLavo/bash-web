@@ -181,12 +181,35 @@ test("the actual aggregate shell command rejects each non-success result in ever
   assert.equal(evaluate(docs, "false"), 0);
   assert.notEqual(evaluate(docs, "true"), 0);
   assert.notEqual(evaluate(docs, ""), 0);
+  const prepareSteps = object(workflowJobs.prepare).steps;
+  assert.ok(Array.isArray(prepareSteps));
+  const guarded = prepareSteps.map(object);
+  const uploadJs = guarded.findIndex(
+    (step) =>
+      step.uses === "actions/upload-artifact@v4" &&
+      object(step.with).name === "javascript-${{ github.sha }}",
+  );
+  assert.ok(uploadJs >= 0);
+  for (const step of guarded.slice(uploadJs + 1)) {
+    assert.equal(
+      step.if,
+      "github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'",
+    );
+  }
 });
 
 test("each moved current-main gate has one owner", () => {
   const workflowJobs = jobs();
   const expected: Record<string, readonly string[]> = {
-    prepare: ["sources:browser", "build:worker", "build:node-harness"],
+    prepare: [
+      "sources:browser",
+      "build:worker",
+      "build:node-harness",
+      "build:shell",
+      "build:test-guest",
+      "prepare:wasi-tests",
+      "check:capabilities",
+    ],
     quality: [
       "test:check-layers",
       "check:layers",
@@ -197,7 +220,6 @@ test("each moved current-main gate has one owner", () => {
       "typecheck:guest-build",
       "typecheck:ci",
     ],
-    native: ["build:shell", "build:test-guest", "prepare:wasi-tests", "check:capabilities"],
     wasi: ["check:rust", "test:shell:wasi", "test:terminal:display"],
     browser: [
       "build:browser:assets:ci",
@@ -433,12 +455,12 @@ test("shell notices have exactly one native producer and a Cargo-free browser co
     .flatMap(([owner, job]) =>
       Array.from(expanded(commands(job)).matchAll(/node scripts\/notices\.ts/g), () => owner),
     );
-  assert.deepEqual(owners, ["native"]);
+  assert.deepEqual(owners, ["prepare"]);
   const browser = expanded(commands(jobs().browser));
   assert.equal(browser.match(/node scripts\/browser-notices\.ts/g)?.length, 1);
   assert.match(browser, /node scripts\/ci-artifacts\.ts notices \.build\/ci-native/);
   assert.doesNotMatch(browser, /\b(cargo|rustup)\b|scripts\/notices\.ts/);
-  const native = expanded(commands(jobs().native));
+  const native = expanded(commands(jobs().prepare));
   assert.ok(
     native.indexOf("node scripts/notices.ts") < native.indexOf("node scripts/ci-artifacts.ts pack"),
   );
@@ -723,15 +745,22 @@ test("scoreboard and observation run independently using one shared node build",
   const scoreboard = object(workflowJobs["own-shell-scoreboard"]);
   const observation = object(workflowJobs["own-shell-observation"]);
   const publisher = object(workflowJobs["own-shell-compatibility"]);
-  assert.deepEqual(scoreboard.needs, ["prepare", "native"]);
-  assert.deepEqual(observation.needs, ["prepare", "native"]);
+  assert.deepEqual(scoreboard.needs, ["prepare"]);
+  assert.deepEqual(observation.needs, ["prepare"]);
   assert.deepEqual(publisher.needs, ["prepare", "own-shell-scoreboard", "own-shell-observation"]);
-  for (const job of [scoreboard, observation, publisher]) {
+  for (const job of [scoreboard, observation]) {
     assert.equal(
       job.if,
-      "${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}",
-      "failed or skipped prerequisites must block publication through implicit success()",
+      "${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}",
+      "docs-only skips and failed prerequisites must block through implicit success()",
     );
+  }
+  assert.equal(
+    publisher.if,
+    "${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}",
+    "failed or skipped prerequisites must block publication through implicit success()",
+  );
+  for (const job of [scoreboard, observation, publisher]) {
     assert.ok(!("continue-on-error" in job));
     assert.ok(Array.isArray(job.steps));
     const checked = job.steps.map(object).filter((step) => typeof step.run === "string");
