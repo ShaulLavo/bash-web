@@ -156,7 +156,8 @@ if (!data.pooled) {
   const activeLeaseListeners: ListenerSpec[] = [];
   const deferredAdds: ListenerSpec[] = [];
   let leaseEvents = new EventTarget();
-  const wrappedListeners = new WeakMap<EventListenerOrEventListenerObject, EventListener>();
+  const wrappedCaptureListeners = new WeakMap<EventListenerOrEventListenerObject, EventListener>();
+  const wrappedBubbleListeners = new WeakMap<EventListenerOrEventListenerObject, EventListener>();
 
   function removeActiveSpec(
     type: string,
@@ -167,12 +168,20 @@ if (!data.pooled) {
     if (index >= 0) activeLeaseListeners.splice(index, 1);
   }
 
-  function wrapMessageListener(listener: EventListenerOrEventListenerObject): EventListener {
-    const existing = wrappedListeners.get(listener);
+  function wrapMessageListener(
+    listener: EventListenerOrEventListenerObject,
+    capture: boolean,
+  ): EventListener {
+    const map = capture ? wrappedCaptureListeners : wrappedBubbleListeners;
+    const existing = map.get(listener);
     if (existing) return existing;
     const wrapped: EventListener = (event) => {
       const activeIndex = activeLeaseListeners.findIndex(
-        (entry) => entry.type === event.type && entry.listener === listener && entry.options.once,
+        (entry) =>
+          entry.type === event.type &&
+          entry.listener === listener &&
+          entry.options.capture === capture &&
+          entry.options.once,
       );
       if (activeIndex >= 0) activeLeaseListeners.splice(activeIndex, 1);
       if (activeTrackInvoke) {
@@ -181,7 +190,7 @@ if (!data.pooled) {
       }
       invokeListener(listener, event);
     };
-    wrappedListeners.set(listener, wrapped);
+    map.set(listener, wrapped);
     return wrapped;
   }
 
@@ -189,7 +198,10 @@ if (!data.pooled) {
     if (spec.options.signal?.aborted) return;
     if (findSpec(activeLeaseListeners, spec.type, spec.listener, spec.options.capture) >= 0) return;
     activeLeaseListeners.push(spec);
-    const handler = spec.type === "message" ? wrapMessageListener(spec.listener) : spec.listener;
+    const handler =
+      spec.type === "message"
+        ? wrapMessageListener(spec.listener, spec.options.capture)
+        : spec.listener;
     target.addEventListener(spec.type, handler, spec.options);
   }
 
@@ -254,8 +266,8 @@ if (!data.pooled) {
         const deferredIndex = findSpec(deferredAdds, type, listener, capture);
         if (deferredIndex >= 0) deferredAdds.splice(deferredIndex, 1);
         removeActiveSpec(type, listener, capture);
-        const handler =
-          type === "message" ? (wrappedListeners.get(listener) ?? listener) : listener;
+        const map = capture ? wrappedCaptureListeners : wrappedBubbleListeners;
+        const handler = type === "message" ? (map.get(listener) ?? listener) : listener;
         leaseEvents.removeEventListener(type, handler, capture);
       },
       configurable: true,
