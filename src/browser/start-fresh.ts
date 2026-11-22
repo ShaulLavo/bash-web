@@ -1,6 +1,7 @@
-import { deleteWorkspace, openIdleWorkspace } from "waffle";
+import { openIdleWorkspace } from "waffle";
+import { deleteIndexedDbWorkspace } from "./indexeddb-workspace.ts";
 
-/** Shown when another tab still holds the workspace; Waffle then deletes nothing. */
+/** Shown when another tab still holds the workspace; nothing is deleted then. */
 export const START_FRESH_BUSY =
   "This workspace is open in another tab. Close the other tabs, then press Start fresh again.";
 
@@ -46,7 +47,7 @@ function vfsCodes(error: unknown): string[] {
   return found;
 }
 
-const waffle: WorkspaceStorage = { open: openIdleWorkspace, remove: deleteWorkspace };
+const waffle: WorkspaceStorage = { open: openIdleWorkspace, remove: deleteIndexedDbWorkspace };
 
 /**
  * Deletes the named fast-mode workspace, but only while it still cannot be opened, so the page

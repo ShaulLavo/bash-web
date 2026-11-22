@@ -96,8 +96,7 @@ mountBrowser({
     return {
       runtime,
       ready,
-      // The demo's own storage is IndexedDB. Waffle's delete also clears a same-named OPFS store,
-      // which the unreadable check never looked at, so the OPFS conformance mode offers no reset.
+      // Start fresh checks and deletes IndexedDB only, so the OPFS conformance mode offers no reset.
       workspace:
         filesystem.mode === "fast" && query.get("storage") !== "opfs"
           ? (filesystem.name ?? DEFAULT_WORKSPACE)

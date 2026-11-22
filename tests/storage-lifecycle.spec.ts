@@ -448,6 +448,41 @@ test("Start fresh never deletes a database that is not a Waffle workspace", asyn
   });
 });
 
+opfsTest("Start fresh keeps a healthy OPFS workspace of the same name", async ({ page }) => {
+  const name = `bash-web-start-fresh-opfs-${randomUUID()}`;
+  const opfs = new URLSearchParams({
+    test: "1",
+    renderer: "canvas",
+    storage: "opfs",
+    workspace: name,
+  });
+  await navigateTestPage(page, `/?${opfs}`);
+  await startupReady(page);
+  await page.evaluate(() => window.bashWeb?.submit("printf 'opfs-kept\\n' > /tmp/kept.txt"));
+  await page.evaluate(() => window.bashWeb?.dispose());
+  // An unreadable IndexedDB workspace of the same name fails the default storage.
+  await oldFormatWorkspace(page, name);
+  await navigateTestPage(
+    page,
+    `/?${new URLSearchParams({ test: "1", renderer: "canvas", workspace: name })}`,
+  );
+  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Start fresh" }).click();
+  await startupReady(page);
+  expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await page.evaluate(() => window.bashWeb?.dispose());
+  // The OPFS workspace still has its file.
+  await navigateTestPage(page, `/?${opfs}`);
+  await startupReady(page);
+  await page.locator("textarea").focus();
+  await page.keyboard.insertText("cat /tmp/kept.txt");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
+    .toContain("opfs-kept");
+});
+
 test("a startup failure a retry can fix offers no Start fresh", async ({ page }) => {
   const query = new URLSearchParams({
     test: "1",
