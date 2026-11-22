@@ -1,10 +1,17 @@
 import { createRuntime, VfsError, type Runtime, type VfsMode } from "waffle";
 import type { StartupObserver } from "../runtime/startup-diagnostics";
 import type { StorageStartup } from "../runtime/storage";
+import { DEFAULT_WORKSPACE } from "./start-fresh";
 
 export type BrowserRuntimeLease = {
   runtime: Runtime;
   ready: Promise<void>;
+  /**
+   * The saved IndexedDB workspace this lease opened in fast mode. Set it so the demo can offer
+   * Start fresh when that workspace cannot be read. Start fresh checks and deletes IndexedDB
+   * only, so leave it unset for OPFS storage and for a runtime the page must not delete.
+   */
+  workspace?: string;
   dispose(): Promise<void>;
 };
 export type BrowserHostOptions =
@@ -46,5 +53,13 @@ export function acquireBrowserRuntime(
     filesystem: { mode, workerURL: creation.workerURL },
     onStartupStage: creation.onStartupStage,
   });
-  return { runtime, ready: Promise.resolve(), dispose: () => runtime.dispose() };
+  return {
+    runtime,
+    ready: Promise.resolve(),
+    workspace:
+      mode === "fast" && runtime.filesystem.vfs.implementation === "indexeddb"
+        ? DEFAULT_WORKSPACE
+        : undefined,
+    dispose: () => runtime.dispose(),
+  };
 }

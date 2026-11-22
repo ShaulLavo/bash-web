@@ -18,6 +18,7 @@ import {
 import { VfsError, type Runtime, type SharedFilesystemState } from "waffle";
 import { createStorageStartup, waitForStorage } from "../runtime/storage";
 import { acquireBrowserRuntime, type BrowserHostOptions } from "./runtime";
+import { START_FRESH_MESSAGES, startFresh, unreadableWorkspace } from "./start-fresh";
 export type { BrowserHostOptions, BrowserRuntimeLease } from "./runtime";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import "./style.css";
@@ -161,6 +162,12 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     let storage: SharedFilesystemState | undefined;
     let error: string | undefined;
     let warning: string | undefined;
+    // Start fresh: the saved workspace this page opened, and whether startup could not read it.
+    let workspace: string | undefined;
+    let leasedRuntime: Runtime | undefined;
+    let unreadable = false;
+    let startingFresh = false;
+    let recovery: string | undefined;
     let busy = true;
     let host: HTMLElement | undefined;
     let terminal: Terminal | undefined;
@@ -219,6 +226,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     function fail(cause: unknown, expectedGeneration: number) {
       if (generation !== expectedGeneration || handle.signal.aborted) return;
       error = errorText(cause);
+      unreadable =
+        workspace !== undefined && unreadableWorkspace(cause, leasedRuntime?.filesystem.state);
       state = "failed";
       busy = false;
       const failedSession = session;
@@ -296,7 +305,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     }
 
     async function start() {
-      if (!host || handle.signal.aborted) return;
+      if (!host || handle.signal.aborted || startingFresh) return;
       const stopped = stop();
       const expectedGeneration = generation;
       const currentDiagnostics = (diagnostics = createStartupDiagnostics(expectedGeneration));
@@ -309,6 +318,10 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       storage = undefined;
       error = undefined;
       warning = undefined;
+      workspace = undefined;
+      leasedRuntime = undefined;
+      unreadable = false;
+      recovery = undefined;
       busy = true;
       firstFrameMs = undefined;
       hasOutput = false;
@@ -341,6 +354,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         });
         // The owner must make lease disposal idempotent, including during preparation.
         disposeRuntime = () => lease.dispose();
+        workspace = lease.workspace;
+        leasedRuntime = lease.runtime;
         const controller = new AbortController();
         startup = controller;
         await Promise.all([
@@ -424,6 +439,34 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       busy = false;
       if (current.textarea) current.textarea.disabled = state === "exited" || state === "failed";
       current.focus();
+      render();
+    }
+
+    /** Deletes a saved workspace that cannot be opened, then reloads into a fresh one. */
+    async function startFreshWorkspace() {
+      if (!unreadable || workspace === undefined || startingFresh) return;
+      if (
+        !window.confirm(
+          "Delete this browser's saved workspace and start a new one? Its files cannot be opened and will be lost.",
+        )
+      )
+        return;
+      startingFresh = true;
+      recovery = undefined;
+      render();
+      try {
+        // stop() disposes the failed runtime, so it holds no connection when the workspace is claimed.
+        const result = await startFresh(stop, workspace);
+        if (result === "deleted") {
+          location.reload();
+          return;
+        }
+        // Reloading when nothing was deleted could loop on the same error.
+        recovery = START_FRESH_MESSAGES[result];
+      } catch (cause) {
+        recovery = `Start fresh failed. ${errorText(cause)}`;
+      }
+      startingFresh = false;
       render();
     }
 
@@ -590,7 +633,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
               <button
                 type="button"
                 class="quiet-button"
-                disabled={busy}
+                disabled={busy || startingFresh}
                 title={
                   options.runtime
                     ? "Restart the shell. Application-owned files and runtime are preserved."
@@ -606,9 +649,27 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
             <div class="error-banner" role="alert">
               <strong>Session stopped</strong>
               <p>{error}</p>
-              <button type="button" mix={on("click", () => start())}>
+              {unreadable && (
+                <p>
+                  This browser's saved copy of the workspace cannot be opened. Start fresh deletes
+                  it and opens a new one.
+                </p>
+              )}
+              {recovery && <p>{recovery}</p>}
+              <button type="button" disabled={startingFresh} mix={on("click", () => start())}>
                 Restart session
               </button>
+              {unreadable && (
+                <button
+                  type="button"
+                  data-testid="start-fresh"
+                  title="Delete the workspace that cannot be opened and start a new one"
+                  disabled={startingFresh}
+                  mix={on("click", startFreshWorkspace)}
+                >
+                  Start fresh
+                </button>
+              )}
             </div>
           )}
           {warning && (
