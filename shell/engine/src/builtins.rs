@@ -266,6 +266,14 @@ pub(crate) fn run_set<'a>(
     admitted(set(args, state, context, work), context)
 }
 
+fn strip_double_dash(args: &[String]) -> &[String] {
+    if args.first().is_some_and(|arg| arg == "--") {
+        &args[1..]
+    } else {
+        args
+    }
+}
+
 fn exit_return<'a>(
     name: &'a str,
     args: &[String],
@@ -273,11 +281,7 @@ fn exit_return<'a>(
     fds: &'a FdTable,
     context: &'a Context,
 ) -> BuiltinFuture<'a> {
-    let args = if args.first().is_some_and(|arg| arg == "--") {
-        &args[1..]
-    } else {
-        args
-    };
+    let args = strip_double_dash(args);
     let flow = if name == "return" {
         Flow::Return
     } else {
@@ -309,11 +313,7 @@ fn shift<'a>(
     fds: &'a FdTable,
     context: &'a Context,
 ) -> BuiltinFuture<'a> {
-    let args = if args.first().is_some_and(|arg| arg == "--") {
-        &args[1..]
-    } else {
-        args
-    };
+    let args = strip_double_dash(args);
     let count = match args.first() {
         None => 1,
         Some(value) => match value.trim_matches([' ', '\t', '\n']).parse::<i64>() {

@@ -1396,11 +1396,12 @@ async fn sequence_owned_body(
     context: Context,
 ) -> Outcome {
     let mut result = Outcome::status(0);
-    for command in commands {
-        result = execute_owned_item(command, state.clone(), fds.clone(), context.clone()).await;
-        if result.flow != Flow::Normal || context.cancel.is_cancelled() {
+    let mut iter = commands.into_iter();
+    while result.flow == Flow::Normal && !context.cancel.is_cancelled() {
+        let Some(command) = iter.next() else {
             break;
-        }
+        };
+        result = execute_owned_item(command, state.clone(), fds.clone(), context.clone()).await;
     }
     finish_sequence(result, &fds, &context).await
 }
@@ -1570,19 +1571,18 @@ enum CommandRef<'a> {
     Borrowed(&'a Command),
 }
 
-impl CommandRef<'_> {
-    fn as_ref(&self) -> &Command {
-        match self {
-            Self::Owned(command) => command,
-            Self::Borrowed(command) => command,
-        }
-    }
-}
-
 enum CommandView<'a> {
     Syntax(CommandRef<'a>),
     AndOr(&'a Command, &'a [(ListOperator, Command)]),
     OwnedAndOr(Box<(Command, Vec<(ListOperator, Command)>)>),
+}
+
+fn view_target<'a>(view: &'a CommandView<'a>) -> Option<&'a Command> {
+    match view {
+        CommandView::Syntax(CommandRef::Owned(command)) => Some(command),
+        CommandView::Syntax(CommandRef::Borrowed(command)) => Some(command),
+        CommandView::AndOr(..) | CommandView::OwnedAndOr(..) => None,
+    }
 }
 
 fn execute_command<'a>(
@@ -1615,10 +1615,10 @@ fn execute_command<'a>(
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
-            let preserve = match &command {
-                CommandView::AndOr(..) | CommandView::OwnedAndOr(..) => true,
-                CommandView::Syntax(command) => matches!(
-                    command.as_ref(),
+            let preserve = match view_target(&command) {
+                None => true,
+                Some(command) => matches!(
+                    command,
                     Command::Pipeline(_)
                         | Command::List(_)
                         | Command::Function(_)
@@ -1631,9 +1631,10 @@ fn execute_command<'a>(
                 ),
             };
             let check_errexit = !context.ignore_errexit
-                && match &command {
-                    CommandView::Syntax(command) => matches!(
-                        command.as_ref(),
+                && match view_target(&command) {
+                    None => false,
+                    Some(command) => matches!(
+                        command,
                         Command::Simple(_)
                             | Command::Pipeline(Pipeline { negated: false, .. })
                             | Command::Compound(
@@ -1643,7 +1644,6 @@ fn execute_command<'a>(
                                 _
                             )
                     ),
-                    CommandView::AndOr(..) | CommandView::OwnedAndOr(..) => false,
                 };
             let mut result = command_body(command, state.clone(), fds, context).await;
             result.flow = settle_reported_error(result.flow, &state);
@@ -1766,6 +1766,19 @@ fn command_body<'a>(
     }
 }
 
+async fn pipeline_error(
+    error: expand::Error,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+) -> Outcome {
+    let outcome = expansion_failure(error.into(), fds, context).await;
+    state
+        .borrow_mut()
+        .publish_pipeline_status(vec![outcome.code]);
+    outcome
+}
+
 async fn pipeline_command(
     pipeline: Syntax<'_, Pipeline>,
     state: SharedState,
@@ -1793,13 +1806,7 @@ async fn pipeline_command(
     let mut work = expansion_work(&context);
     let children = match pipeline_children(count, &state, &context, &mut work).await {
         Ok(children) => children,
-        Err(error) => {
-            let outcome = expansion_failure(error.into(), &fds, &context).await;
-            state
-                .borrow_mut()
-                .publish_pipeline_status(vec![outcome.code]);
-            return outcome;
-        }
+        Err(error) => return pipeline_error(error, &state, &fds, &context).await,
     };
     let mut children = children.into_iter();
     let (negated, syntax) = match &pipeline {
@@ -1808,13 +1815,7 @@ async fn pipeline_command(
             // Stages are independently polled tasks and may outlive this waiter.
             let syntax = match admit_task_syntax(&pipeline.commands, &context).await {
                 Ok(syntax) => syntax,
-                Err(error) => {
-                    let outcome = expansion_failure(error.into(), &fds, &context).await;
-                    state
-                        .borrow_mut()
-                        .publish_pipeline_status(vec![outcome.code]);
-                    return outcome;
-                }
+                Err(error) => return pipeline_error(error, &state, &fds, &context).await,
             };
             (pipeline.negated, Some(syntax))
         }
@@ -2002,36 +2003,16 @@ enum CompoundSyntax<'a> {
     Borrowed(&'a CompoundCommand, &'a [Redirect]),
 }
 
-impl<'a> CompoundSyntax<'a> {
-    fn compound(&self) -> &CompoundCommand {
-        match self {
-            Self::Owned(compound, _) => compound,
-            Self::Borrowed(compound, _) => compound,
-        }
-    }
-
-    fn redirs(&self) -> &[Redirect] {
-        match self {
-            Self::Owned(_, redirs) => redirs,
-            Self::Borrowed(_, redirs) => redirs,
-        }
-    }
-
-    fn into_compound(self) -> Syntax<'a, CompoundCommand> {
-        match self {
-            Self::Owned(compound, _) => Syntax::Owned(compound),
-            Self::Borrowed(compound, _) => Syntax::Borrowed(compound),
-        }
-    }
-}
-
 async fn compound_command(
     syntax: CompoundSyntax<'_>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    let redirs = syntax.redirs();
+    let (compound_ref, redirs) = match &syntax {
+        CompoundSyntax::Owned(compound, redirs) => (compound, redirs.as_slice()),
+        CompoundSyntax::Borrowed(compound, redirs) => (*compound, *redirs),
+    };
     let caller = Rc::downgrade(&fds);
     let fds = if redirs.is_empty() {
         fds
@@ -2047,7 +2028,7 @@ async fn compound_command(
         Ok(fds) => fds,
     };
     let expands = matches!(
-        syntax.compound(),
+        compound_ref,
         CompoundCommand::Arithmetic(_)
             | CompoundCommand::Case(_)
             | CompoundCommand::For(_)
@@ -2086,7 +2067,11 @@ async fn compound_command(
         fds: fds.clone(),
         generated_fds: Some(generated.clone()),
     });
-    execute_compound_body(syntax.into_compound(), state, fds, context, &mut work).await
+    let compound = match syntax {
+        CompoundSyntax::Owned(compound, _) => Syntax::Owned(compound),
+        CompoundSyntax::Borrowed(compound, _) => Syntax::Borrowed(compound),
+    };
+    execute_compound_body(compound, state, fds, context, &mut work).await
 }
 
 #[inline(never)]
@@ -2456,6 +2441,73 @@ async fn loop_checkpoint(budget: &mut Budget, context: &Context) -> Result<(), O
         .map_err(|_| Outcome::status(130))
 }
 
+struct CaseState<'a> {
+    word: &'a str,
+    matched: bool,
+    result: Outcome,
+    state: &'a SharedState,
+    fds: &'a Descriptors,
+    context: &'a Context,
+    work: &'a mut expand::Work,
+    budget: Budget,
+}
+
+async fn run_case_arm(item: Syntax<'_, CaseItem>, state: &mut CaseState<'_>) -> Option<Outcome> {
+    if let Err(outcome) = loop_checkpoint(&mut state.budget, state.context).await {
+        return Some(outcome);
+    }
+    if !state.matched {
+        let patterns = &item.as_ref().patterns;
+        match case_item_matches(
+            patterns,
+            state.word,
+            state.state,
+            state.fds,
+            state.context,
+            state.work,
+            &mut state.budget,
+        )
+        .await
+        {
+            Ok(true) => state.matched = true,
+            Ok(false) => return None,
+            Err(outcome) => return Some(outcome),
+        }
+    }
+    let terminator = item.as_ref().terminator.clone();
+    state.result = match item {
+        Syntax::Owned(item) => {
+            sequence_owned(
+                item.commands,
+                state.state.clone(),
+                state.fds.clone(),
+                state.context.clone(),
+            )
+            .await
+        }
+        Syntax::Borrowed(item) => {
+            sequence(
+                &item.commands,
+                state.state.clone(),
+                state.fds.clone(),
+                state.context.clone(),
+            )
+            .await
+        }
+    };
+    if state.result.flow != Flow::Normal {
+        return Some(state.result);
+    }
+    match terminator {
+        CaseTerminator::Break => Some(state.result),
+        CaseTerminator::FallThrough => None,
+        CaseTerminator::Continue => {
+            state.matched = false;
+            None
+        }
+    }
+}
+
 /// `case` expands its word as a scalar (no splitting or globbing) and each
 /// pattern with quote protection, then matches through the bounded matcher.
 async fn run_case(
@@ -2469,80 +2521,33 @@ async fn run_case(
         Ok(word) => word,
         Err(error) => return expansion_failure(error.into(), &fds, &context).await,
     };
-    let mut matched = false;
-    let mut result = Outcome::status(0);
-    let mut budget = Budget::default();
+    let mut runner = CaseState {
+        word: &word,
+        matched: false,
+        result: Outcome::status(0),
+        state: &state,
+        fds: &fds,
+        context: &context,
+        work,
+        budget: Budget::default(),
+    };
     match case_ {
         Syntax::Owned(case_) => {
             for item in case_.cases {
-                if let Err(outcome) = loop_checkpoint(&mut budget, &context).await {
-                    return outcome;
-                }
-                if !matched {
-                    match case_item_matches(
-                        &item.patterns,
-                        &word,
-                        &state,
-                        &fds,
-                        &context,
-                        work,
-                        &mut budget,
-                    )
-                    .await
-                    {
-                        Ok(true) => matched = true,
-                        Ok(false) => continue,
-                        Err(outcome) => return outcome,
-                    }
-                }
-                result = sequence_owned(item.commands, state.clone(), fds.clone(), context.clone())
-                    .await;
-                if result.flow != Flow::Normal {
-                    return result;
-                }
-                match item.terminator {
-                    CaseTerminator::Break => return result,
-                    CaseTerminator::FallThrough => {}
-                    CaseTerminator::Continue => matched = false,
+                if let Some(done) = run_case_arm(Syntax::Owned(item), &mut runner).await {
+                    return done;
                 }
             }
         }
         Syntax::Borrowed(case_) => {
             for item in &case_.cases {
-                if let Err(outcome) = loop_checkpoint(&mut budget, &context).await {
-                    return outcome;
-                }
-                if !matched {
-                    match case_item_matches(
-                        &item.patterns,
-                        &word,
-                        &state,
-                        &fds,
-                        &context,
-                        work,
-                        &mut budget,
-                    )
-                    .await
-                    {
-                        Ok(true) => matched = true,
-                        Ok(false) => continue,
-                        Err(outcome) => return outcome,
-                    }
-                }
-                result =
-                    sequence(&item.commands, state.clone(), fds.clone(), context.clone()).await;
-                if result.flow != Flow::Normal {
-                    return result;
-                }
-                match item.terminator {
-                    CaseTerminator::Break => return result,
-                    CaseTerminator::FallThrough => {}
-                    CaseTerminator::Continue => matched = false,
+                if let Some(done) = run_case_arm(Syntax::Borrowed(item), &mut runner).await {
+                    return done;
                 }
             }
         }
     }
-    result
+    runner.result
 }
 
 #[inline(never)]
@@ -3336,7 +3341,7 @@ impl Substitutions {
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
             let body = async {
-                let result = sequence(&commands, child, fds, context.clone()).await;
+                let result = sequence_owned(commands, child, fds, context.clone()).await;
                 // Capturing waits for actual stdout EOF, not every background
                 // job: redirected descendants may keep running after EOF.
                 if context.cancel.run(captured.cancelled()).await.is_err() {
@@ -6971,54 +6976,53 @@ mod function_measurements {
         }
     }
 
-    #[test]
-    fn arithmetic_for_unused_large_step_does_not_starve_eval() {
-        let (ex, _host, session) = review_session(Limits::default());
+    fn run_captured_review(limits: Limits, script: &str) -> (i32, Vec<u8>) {
+        let (ex, _host, session) = review_session(limits);
         let (output, capture) = io::capture(1024);
         let mut fds = session.core.descriptors.borrow().clone();
         fds.insert(1, output);
         session.set_descriptors(fds).unwrap();
+        let status = finish_review(&ex, session.start(script).unwrap());
+        (status, capture.bytes())
+    }
+
+    #[test]
+    fn arithmetic_for_unused_large_step_does_not_starve_eval() {
         let script = format!(
             "set -e; for ((i=0; i<1; 0 +{}0)); do eval \"echo ran\"; break; done; echo finished",
             " ".repeat(43_300)
         );
-        assert_eq!(finish_review(&ex, session.start(&script).unwrap()), 0);
-        assert_eq!(capture.bytes(), b"ran\nfinished\n");
+        let (status, out) = run_captured_review(Limits::default(), &script);
+        assert_eq!(status, 0);
+        assert_eq!(out, b"ran\nfinished\n");
     }
 
     #[test]
     fn arithmetic_for_cached_step_does_not_starve_eval_on_later_iteration() {
-        let (ex, _host, session) = review_session(Limits::default());
-        let (output, capture) = io::capture(1024);
-        let mut fds = session.core.descriptors.borrow().clone();
-        fds.insert(1, output);
-        session.set_descriptors(fds).unwrap();
         let step = format!("i+=1+{}0", " ".repeat(239));
         let script = format!(
             "set -e; for ((i=0;i<2;{step})); do if (( i )); then eval \"echo ran{}\"; fi; done; echo finished",
             " ".repeat(288)
         );
-        assert_eq!(finish_review(&ex, session.start(&script).unwrap()), 0);
-        assert_eq!(capture.bytes(), b"ran\nfinished\n");
+        let (status, out) = run_captured_review(Limits::default(), &script);
+        assert_eq!(status, 0);
+        assert_eq!(out, b"ran\nfinished\n");
     }
 
     #[test]
     fn arithmetic_cache_evicts_under_tight_execution_limit() {
-        let (ex, _host, session) = review_session(Limits {
-            execution_bytes: 40 * 1024,
-            ..Limits::default()
-        });
-        let (output, capture) = io::capture(1024);
-        let mut fds = session.core.descriptors.borrow().clone();
-        fds.insert(1, output);
-        session.set_descriptors(fds).unwrap();
         let condition = format!("i<2+{}0", " ".repeat(239));
         let step = format!("i+=1+{}0", " ".repeat(239));
         let script = format!(
             "set -e; for ((i=0;{condition};{step})); do if (( i )); then eval \"echo ran\"; fi; done; echo finished"
         );
-        assert_eq!(finish_review(&ex, session.start(&script).unwrap()), 0);
-        assert_eq!(capture.bytes(), b"ran\nfinished\n");
+        let limits = Limits {
+            execution_bytes: 40 * 1024,
+            ..Limits::default()
+        };
+        let (status, out) = run_captured_review(limits, &script);
+        assert_eq!(status, 0);
+        assert_eq!(out, b"ran\nfinished\n");
     }
 
     #[test]
@@ -7056,20 +7060,13 @@ mod function_measurements {
             ),
         ];
         for (label, script) in cases {
-            let (ex, _host, session) = review_session(Limits {
+            let limits = Limits {
                 execution_bytes: 128 * 1024,
                 ..Limits::default()
-            });
-            let (output, capture) = io::capture(1024);
-            let mut fds = session.core.descriptors.borrow().clone();
-            fds.insert(1, output);
-            session.set_descriptors(fds).unwrap();
-            assert_eq!(
-                finish_review(&ex, session.start(&script).unwrap()),
-                0,
-                "case={label}"
-            );
-            assert_eq!(capture.bytes(), b"function\n", "case={label}");
+            };
+            let (status, out) = run_captured_review(limits, &script);
+            assert_eq!(status, 0, "case={label}");
+            assert_eq!(out, b"function\n", "case={label}");
         }
     }
 

@@ -112,6 +112,23 @@ pub(super) fn run_for<'a>(
     )
 }
 
+async fn run_loop_body(
+    body: &[Command],
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+    cache: Option<&CachedArithmetic>,
+    result: &mut Outcome,
+) -> Option<Outcome> {
+    let outcome = loop_sequence(body, state, fds, context, cache).await;
+    match loop_step(outcome, context.loop_depth) {
+        LoopStep::Normal(outcome) => *result = outcome,
+        LoopStep::Continue => *result = Outcome::status(0),
+        LoopStep::Stop(outcome) => return Some(outcome),
+    }
+    None
+}
+
 async fn for_body(
     command: &ForCommand,
     state: SharedState,
@@ -131,11 +148,10 @@ async fn for_body(
         if let Err(outcome) = for_assignment(command, value, &state, &fds, &context).await {
             return outcome;
         }
-        let outcome = loop_sequence(&command.body, &state, &fds, &context, None).await;
-        match loop_step(outcome, context.loop_depth) {
-            LoopStep::Normal(outcome) => result = outcome,
-            LoopStep::Continue => result = Outcome::status(0),
-            LoopStep::Stop(outcome) => return outcome,
+        if let Some(stop) =
+            run_loop_body(&command.body, &state, &fds, &context, None, &mut result).await
+        {
+            return stop;
         }
     }
     result
@@ -437,12 +453,17 @@ async fn arithmetic_for_body(
             Ok(_) => {}
             Err(outcome) => return outcome,
         }
-        let outcome =
-            loop_sequence(&command.body, &state, &fds, &context, body_cache.as_ref()).await;
-        match loop_step(outcome, context.loop_depth) {
-            LoopStep::Normal(outcome) => result = outcome,
-            LoopStep::Continue => result = Outcome::status(0),
-            LoopStep::Stop(outcome) => return outcome,
+        if let Some(stop) = run_loop_body(
+            &command.body,
+            &state,
+            &fds,
+            &context,
+            body_cache.as_ref(),
+            &mut result,
+        )
+        .await
+        {
+            return stop;
         }
         let step = match &mut step_cache {
             Some(cached) => cached.as_ref(),

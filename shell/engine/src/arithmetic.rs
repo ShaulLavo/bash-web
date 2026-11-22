@@ -262,8 +262,9 @@ impl Program {
     }
 }
 
-pub(crate) fn evaluate<'a>(
+fn evaluate_inner<'a>(
     source: &'a str,
+    program: Option<&'a Program>,
     state: &'a SharedState,
     cancel: &'a Cancel,
     max: usize,
@@ -275,6 +276,10 @@ pub(crate) fn evaluate<'a>(
             work.checkpoint(cancel).await?;
             if source.len() > max {
                 return Err(2.into());
+            }
+            if let Some(program) = program {
+                let mut parser = program.parser(source);
+                return finish_parse(&mut parser, state, cancel, max, work, 1).await;
             }
             let expanded;
             let source = if source.contains(['$', '"', '\\', '`']) {
@@ -299,6 +304,37 @@ pub(crate) fn evaluate<'a>(
     })
 }
 
+pub(crate) fn evaluate<'a>(
+    source: &'a str,
+    state: &'a SharedState,
+    cancel: &'a Cancel,
+    max: usize,
+    work: &'a mut Work,
+) -> ResultFuture<'a, i64> {
+    evaluate_inner(source, None, state, cancel, max, work)
+}
+
+async fn finish_parse(
+    parser: &mut Parser<'_>,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+    depth: usize,
+) -> Result<i64, Error> {
+    if parser.current == Token::End {
+        return Ok(0);
+    }
+    let result = parse(parser, (0, true), state, cancel, max, work, depth).await?;
+    if parser.current == Token::Unsupported {
+        return Err(2.into());
+    }
+    if parser.current != Token::End {
+        return fault("syntax error in expression", work);
+    }
+    Ok(result)
+}
+
 pub(crate) fn evaluate_program<'a>(
     source: &'a str,
     program: &'a Program,
@@ -307,30 +343,7 @@ pub(crate) fn evaluate_program<'a>(
     max: usize,
     work: &'a mut Work,
 ) -> ResultFuture<'a, i64> {
-    admitted(work, move |work| async move {
-        work.enter_arithmetic()?;
-        let result = async {
-            work.checkpoint(cancel).await?;
-            if source.len() > max {
-                return Err(2.into());
-            }
-            let mut parser = program.parser(source);
-            if parser.current == Token::End {
-                return Ok(0);
-            }
-            let result = parse(&mut parser, (0, true), state, cancel, max, work, 1).await?;
-            if parser.current == Token::Unsupported {
-                return Err(2.into());
-            }
-            if parser.current != Token::End {
-                return fault("syntax error in expression", work);
-            }
-            Ok(result)
-        }
-        .await;
-        work.leave_arithmetic();
-        result
-    })
+    evaluate_inner(source, Some(program), state, cancel, max, work)
 }
 
 /// let arguments have already undergone shell expansion as ordinary words.
@@ -361,17 +374,7 @@ fn expression<'a>(
             return Err(2.into());
         }
         let mut parser = Parser::new(source, work, cancel).await?;
-        if parser.current == Token::End {
-            return Ok(0);
-        }
-        let result = parse(&mut parser, (0, true), state, cancel, max, work, depth + 1).await?;
-        if parser.current == Token::Unsupported {
-            return Err(2.into());
-        }
-        if parser.current != Token::End {
-            return fault("syntax error in expression", work);
-        }
-        Ok(result)
+        finish_parse(&mut parser, state, cancel, max, work, depth + 1).await
     })
 }
 
