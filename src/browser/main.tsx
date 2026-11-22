@@ -18,12 +18,7 @@ import {
 import { VfsError, type Runtime, type SharedFilesystemState } from "waffle";
 import { createStorageStartup, waitForStorage } from "../runtime/storage";
 import { acquireBrowserRuntime, type BrowserHostOptions } from "./runtime";
-import {
-  START_FRESH_BUSY,
-  START_FRESH_NOTHING,
-  startFresh,
-  unreadableWorkspace,
-} from "./start-fresh";
+import { START_FRESH_MESSAGES, startFresh, unreadableWorkspace } from "./start-fresh";
 export type { BrowserHostOptions, BrowserRuntimeLease } from "./runtime";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import "./style.css";
@@ -460,14 +455,14 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       recovery = undefined;
       render();
       try {
-        // stop() disposes the failed runtime, so it holds neither store when Waffle claims them.
+        // stop() disposes the failed runtime, so it holds no connection when the workspace is claimed.
         const result = await startFresh(stop, workspace);
-        if (result === "deleted" || result === "readable") {
+        if (result === "deleted") {
           location.reload();
           return;
         }
-        // Reloading after "missing" could loop on the same error: nothing here was deleted.
-        recovery = result === "busy" ? START_FRESH_BUSY : START_FRESH_NOTHING;
+        // Reloading when nothing was deleted could loop on the same error.
+        recovery = START_FRESH_MESSAGES[result];
       } catch (cause) {
         recovery = `Start fresh failed. ${errorText(cause)}`;
       }

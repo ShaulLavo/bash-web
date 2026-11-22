@@ -1,26 +1,43 @@
+import type { IndexedDBStorage } from "waffle/fs/indexeddb";
+
+/** The VfsError codes along an error's cause chain. Errors cross the filesystem worker as VfsError. */
+export function vfsCodes(error: unknown): string[] {
+  const found: string[] = [];
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    if ("name" in current && current.name === "VfsError" && "code" in current)
+      if (typeof current.code === "string") found.push(current.code);
+    current = "cause" in current ? current.cause : undefined;
+  }
+  return found;
+}
+
+export type Removal = "deleted" | "missing" | "busy" | "readable";
+
 /**
- * Deletes a saved workspace from IndexedDB only. Waffle's own `deleteWorkspace` also removes an
- * OPFS workspace of the same name, but the page's unreadable-format check looked at IndexedDB
- * alone, so a healthy OPFS workspace must not go with it. Waffle has no IndexedDB-only call, so
- * this takes the two Web Locks Waffle's owners hold for a workspace (names from Waffle's
- * `fs/storage-maintenance.ts` and `fs/indexeddb.ts`) and deletes the database under them. If
- * Waffle changes those names, the e2e test "Start fresh keeps a healthy OPFS workspace" fails.
+ * Deletes a saved workspace from IndexedDB only, and only while it still cannot be read.
+ * Waffle's own `deleteWorkspace` also removes an OPFS workspace of the same name, which the
+ * page's unreadable-format check never looked at, and Waffle has no IndexedDB-only call. So this
+ * takes the two Web Locks Waffle's owners hold for a workspace (names from Waffle's
+ * `fs/storage-maintenance.ts` and `fs/indexeddb.ts`) and does the check and the delete under
+ * them, so no other tab can recover the workspace in between. If Waffle changes the lock names,
+ * the e2e test "Start fresh keeps a healthy OPFS workspace of the same name" fails.
  *
- * "busy" means another tab or handle holds the workspace and nothing was deleted. "missing"
- * means no database of that name was saved by Waffle; a database that is not a Waffle workspace
- * is never touched.
+ * "busy": another tab or handle holds the workspace, nothing was deleted. "missing": no database
+ * of that name was saved by Waffle (a database that is not a Waffle workspace is never touched).
+ * "readable": the workspace opens now, so it was kept.
  */
-export async function deleteIndexedDbWorkspace(selection: {
+export async function deleteUnreadableWorkspace(selection: {
   readonly name: string;
-}): Promise<"deleted" | "missing" | "busy"> {
+}): Promise<Removal> {
   const workspace = selection.name;
   if (!globalThis.indexedDB || !globalThis.navigator?.locks) return "missing";
   return underLock(`bun-wasm:filesystem:indexeddb-maintenance:${workspace}`, () =>
-    underLock(`bun-wasm:filesystem:indexeddb:${workspace}`, () => removeDatabase(workspace)),
+    underLock(`bun-wasm:filesystem:indexeddb:${workspace}`, () => removeUnreadable(workspace)),
   );
 }
-
-type Removal = "deleted" | "missing" | "busy";
 
 function underLock(lock: string, body: () => Promise<Removal>): Promise<Removal> {
   const options = { mode: "exclusive", ifAvailable: true } as const;
@@ -29,39 +46,57 @@ function underLock(lock: string, body: () => Promise<Removal>): Promise<Removal>
   );
 }
 
-async function removeDatabase(workspace: string): Promise<Removal> {
+async function removeUnreadable(workspace: string): Promise<Removal> {
   const names = (await indexedDB.databases()).map((database) => database.name);
   if (!names.includes(workspace)) return "missing";
-  if (!(await savedByWaffle(workspace))) return "missing";
-  await new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(workspace);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-  return "deleted";
+  const state = await inspect(workspace);
+  if (state !== "unreadable") return state;
+  return deleteDatabase(workspace);
 }
 
-/** Whether the saved database is a Waffle workspace, whichever format version wrote it. */
-function savedByWaffle(workspace: string): Promise<boolean> {
+/** Waits for the delete; a connection that stays open elsewhere in this browser reports "busy". */
+function deleteDatabase(workspace: string): Promise<Removal> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(workspace);
+    // The delete stays queued and completes once the other connection closes.
+    request.onblocked = () => resolve("busy");
+    request.onsuccess = () => resolve("deleted");
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Whether the saved database is no Waffle workspace ("missing"), one this Waffle opens
+ * ("readable"), or one it rejects with INVALID_VFS_FORMAT ("unreadable"). The read uses Waffle's
+ * own read-only reader, as its stored-workspace inspection does.
+ */
+async function inspect(workspace: string): Promise<"missing" | "readable" | "unreadable"> {
+  const database = await openExisting(workspace);
+  if (!database) return "missing";
+  let storage: IndexedDBStorage | undefined;
+  try {
+    if (!(await looksLikeWorkspace(database))) return "missing";
+    const { IndexedDBStorage: Storage } = await import("waffle/fs/indexeddb");
+    storage = Storage.readOnlyConnection(database, () => Promise.resolve()).storage;
+    await storage.load();
+    return "readable";
+  } catch (error) {
+    if (vfsCodes(error).includes("INVALID_VFS_FORMAT")) return "unreadable";
+    throw error;
+  } finally {
+    await storage?.close();
+    database.close();
+  }
+}
+
+function openExisting(workspace: string): Promise<IDBDatabase | undefined> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(workspace);
-    // Opening a database that vanished since the listing would create it; roll that back.
+    // A database that vanished since the listing would be created by this open; roll that back.
     request.onupgradeneeded = () => request.transaction?.abort();
     request.onerror = () =>
-      request.error?.name === "AbortError" ? resolve(false) : reject(request.error);
-    request.onsuccess = () => {
-      const database = request.result;
-      looksLikeWorkspace(database).then(
-        (found) => {
-          database.close();
-          resolve(found);
-        },
-        (error: unknown) => {
-          database.close();
-          reject(error);
-        },
-      );
-    };
+      request.error?.name === "AbortError" ? resolve(undefined) : reject(request.error);
+    request.onsuccess = () => resolve(request.result);
   });
 }
 

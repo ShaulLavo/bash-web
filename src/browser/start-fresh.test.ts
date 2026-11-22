@@ -39,25 +39,19 @@ test("failures a retry can fix keep the workspace and offer no Start fresh", () 
   assert.equal(unreadableWorkspace("INVALID_VFS_FORMAT", undefined), false);
 });
 
-function storage(open: () => Promise<unknown>, answer: "deleted" | "missing" | "busy" = "deleted") {
+function storage(answer: Awaited<ReturnType<WorkspaceStorage["remove"]>>) {
   const calls: string[] = [];
   const workspaceStorage: WorkspaceStorage = {
-    async open(selection) {
-      calls.push(`open ${selection.mode} ${selection.name}`);
-      return (await open()) as never;
-    },
     async remove(selection) {
-      calls.push(`delete ${selection.mode} ${selection.name}`);
+      calls.push(`remove ${selection.name}`);
       return answer;
     },
   };
   return { calls, storage: workspaceStorage };
 }
 
-test("Start fresh disposes the failed runtime, then deletes the workspace only while it still cannot be opened", async () => {
-  const { calls, storage: waffle } = storage(async () => {
-    throw vfsError("INVALID_VFS_FORMAT");
-  });
+test("Start fresh disposes the failed runtime before it claims the workspace", async () => {
+  const { calls, storage: waffle } = storage("deleted");
   const result = await startFresh(
     async () => {
       calls.push("dispose");
@@ -66,47 +60,32 @@ test("Start fresh disposes the failed runtime, then deletes the workspace only w
     waffle,
   );
   assert.equal(result, "deleted");
-  assert.deepEqual(calls, [
-    "dispose",
-    "open fast waffle-workspace",
-    "delete fast waffle-workspace",
-  ]);
+  assert.deepEqual(calls, ["dispose", "remove waffle-workspace"]);
 });
 
-test("a workspace another tab recovered in the meantime is kept", async () => {
-  const closed: string[] = [];
-  const readable = storage(async () => ({
-    close: async () => {
-      closed.push("closed");
+test("Start fresh passes every reason for deleting nothing through", async () => {
+  for (const answer of ["missing", "busy", "readable"] as const) {
+    const { calls, storage: waffle } = storage(answer);
+    assert.equal(await startFresh(undefined, "waffle-workspace", waffle), answer);
+    assert.deepEqual(calls, ["remove waffle-workspace"]);
+  }
+});
+
+test("Start fresh surfaces a failing claim and still removes nothing it did not check", async () => {
+  const failing: WorkspaceStorage = {
+    async remove() {
+      throw new Error("Connection to Indexed Database server lost");
     },
-  }));
-  assert.equal(await startFresh(undefined, "waffle-workspace", readable.storage), "readable");
-  assert.deepEqual(readable.calls, ["open fast waffle-workspace"]);
-  assert.deepEqual(closed, ["closed"]);
-  const missing = storage(async () => "missing");
-  assert.equal(await startFresh(undefined, "waffle-workspace", missing.storage), "missing");
-  assert.deepEqual(missing.calls, ["open fast waffle-workspace"]);
-});
-
-test("Start fresh deletes nothing while another tab holds the workspace, or when the check itself fails", async () => {
-  const held = storage(async () => "busy");
-  assert.equal(await startFresh(undefined, "waffle-workspace", held.storage), "busy");
-  assert.deepEqual(held.calls, ["open fast waffle-workspace"]);
-  const failing = storage(async () => {
-    throw new Error("Connection to Indexed Database server lost");
-  });
+  };
   await assert.rejects(
-    startFresh(undefined, "waffle-workspace", failing.storage),
+    startFresh(undefined, "waffle-workspace", failing),
     /Connection to Indexed Database server lost/,
   );
-  assert.deepEqual(failing.calls, ["open fast waffle-workspace"]);
 });
 
-test("Start fresh still checks and deletes when disposal fails, and passes a busy delete through", async (context) => {
+test("Start fresh still claims the workspace when disposal fails", async (context) => {
   context.mock.method(console, "warn", () => {});
-  const { calls, storage: waffle } = storage(async () => {
-    throw vfsError("INVALID_VFS_FORMAT");
-  }, "busy");
+  const { calls, storage: waffle } = storage("deleted");
   const result = await startFresh(
     async () => {
       calls.push("dispose");
@@ -115,10 +94,6 @@ test("Start fresh still checks and deletes when disposal fails, and passes a bus
     "waffle-workspace",
     waffle,
   );
-  assert.equal(result, "busy");
-  assert.deepEqual(calls, [
-    "dispose",
-    "open fast waffle-workspace",
-    "delete fast waffle-workspace",
-  ]);
+  assert.equal(result, "deleted");
+  assert.deepEqual(calls, ["dispose", "remove waffle-workspace"]);
 });

@@ -312,6 +312,68 @@ async function oldFormatWorkspace(page: Page, name: string) {
   );
 }
 
+function deleteStoredDatabase(page: Page, name: string) {
+  return page.evaluate(
+    (workspace) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase(workspace);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      }),
+    name,
+  );
+}
+
+/** Seeds a saved workspace Waffle cannot read and opens the demo on it, which fails to start. */
+async function failedStartup(page: Page, label: string, seed = oldFormatWorkspace) {
+  const name = `bash-web-start-fresh-${label}-${randomUUID()}`;
+  await seed(page, name);
+  const query = new URLSearchParams({ test: "1", renderer: "canvas", workspace: name });
+  await navigateTestPage(page, `/?${query}`);
+  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  return { name, query };
+}
+
+async function confirmStartFresh(page: Page) {
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Start fresh" }).click();
+}
+
+/** Confirms Start fresh and waits for the page it reloads into. */
+async function confirmStartFreshAndReload(page: Page) {
+  page.once("dialog", (dialog) => void dialog.accept());
+  await Promise.all([
+    page.waitForEvent("load"),
+    page.getByRole("button", { name: "Start fresh" }).click(),
+  ]);
+}
+
+/** Types a shell command and waits for an output line. */
+async function expectOutput(page: Page, command: string, line: string) {
+  await page.locator("textarea").focus();
+  await page.keyboard.insertText(command);
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((text) => text.trim())))
+    .toContain(line);
+}
+
+/** A plain IndexedDB connection, with no Waffle locks, that stays open until closed. */
+function openRawConnection(page: Page, name: string) {
+  return page.evaluate(
+    (workspace) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(workspace);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          Object.assign(window, { rawConnection: request.result });
+          resolve();
+        };
+      }),
+    name,
+  );
+}
+
 /** Holds Waffle's writer lock for the workspace until the page closes. */
 async function holdWorkspaceLock(page: Page, name: string) {
   await seedOrigin(page);
@@ -398,11 +460,7 @@ test("Start fresh deletes a workspace Waffle cannot open and reloads into a work
   context,
   page,
 }) => {
-  const name = `bash-web-start-fresh-${randomUUID()}`;
-  await oldFormatWorkspace(page, name);
-  const query = new URLSearchParams({ test: "1", renderer: "canvas", workspace: name });
-  await navigateTestPage(page, `/?${query}`);
-  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  const { name } = await failedStartup(page, "deleted");
   await expect(page.getByRole("alert")).toContainText("cannot be opened");
   // Declining the confirmation keeps the stored data.
   page.once("dialog", (dialog) => void dialog.dismiss());
@@ -412,35 +470,64 @@ test("Start fresh deletes a workspace Waffle cannot open and reloads into a work
   const other = await context.newPage();
   try {
     await holdWorkspaceLock(other, name);
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "Start fresh" }).click();
+    await confirmStartFresh(page);
     await expect(page.getByRole("alert")).toContainText("open in another tab");
     expect(await storedName(page, name)).toBe(true);
   } finally {
     await other.close();
   }
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByRole("button", { name: "Start fresh" }).click();
+  await confirmStartFreshAndReload(page);
   await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await page.locator("textarea").focus();
-  await page.keyboard.insertText("printf 'started-fresh\\n'");
-  await page.keyboard.press("Enter");
-  await expect
-    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
-    .toContain("started-fresh");
+  await expectOutput(page, "printf 'started-fresh\\n'", "started-fresh");
   expect(await storedName(page, name)).toBe(true);
 });
 
-test("Start fresh never deletes a database that is not a Waffle workspace", async ({ page }) => {
-  const name = `bash-web-start-fresh-foreign-${randomUUID()}`;
-  await foreignWorkspace(page, name);
-  const query = new URLSearchParams({ test: "1", renderer: "canvas", workspace: name });
+test("Start fresh keeps a workspace another tab recovered in the meantime", async ({
+  context,
+  page,
+}) => {
+  const { name, query } = await failedStartup(page, "recovered");
+  // Another tab replaces the unreadable workspace with a working one and saves a file in it.
+  const other = await context.newPage();
+  try {
+    await seedOrigin(other);
+    await deleteStoredDatabase(other, name);
+    await navigateTestPage(other, `/?${query}`);
+    await startupReady(other);
+    await other.evaluate(() =>
+      window.bashWeb?.submit("printf 'recovered\\n' > /tmp/recovered.txt"),
+    );
+    await other.evaluate(() => window.bashWeb?.dispose());
+  } finally {
+    await other.close();
+  }
+  await confirmStartFresh(page);
+  await expect(page.getByRole("alert")).toContainText("opens now");
   await navigateTestPage(page, `/?${query}`);
-  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByRole("button", { name: "Start fresh" }).click();
+  await startupReady(page);
+  await expectOutput(page, "cat /tmp/recovered.txt", "recovered");
+});
+
+test("Start fresh reports a connection that keeps the workspace open instead of waiting silently", async ({
+  page,
+}) => {
+  const { name } = await failedStartup(page, "blocked");
+  await openRawConnection(page, name);
+  await confirmStartFresh(page);
+  await expect(page.getByRole("alert")).toContainText("open in another tab");
+  await expect(page.getByRole("button", { name: "Start fresh" })).toBeEnabled();
+  // The queued delete finishes once the connection closes.
+  await page.evaluate(() =>
+    (window as unknown as { rawConnection: IDBDatabase }).rawConnection.close(),
+  );
+  await expect.poll(() => storedName(page, name)).toBe(false);
+});
+
+test("Start fresh never deletes a database that is not a Waffle workspace", async ({ page }) => {
+  const { name } = await failedStartup(page, "foreign", foreignWorkspace);
+  await confirmStartFresh(page);
   await expect(page.getByRole("alert")).toContainText("nothing was changed");
   expect(await preservedWorkspace(page, name)).toEqual({
     stores: ["foreign"],
@@ -467,20 +554,14 @@ opfsTest("Start fresh keeps a healthy OPFS workspace of the same name", async ({
     `/?${new URLSearchParams({ test: "1", renderer: "canvas", workspace: name })}`,
   );
   await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByRole("button", { name: "Start fresh" }).click();
+  await confirmStartFreshAndReload(page);
   await startupReady(page);
   expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
   await page.evaluate(() => window.bashWeb?.dispose());
   // The OPFS workspace still has its file.
   await navigateTestPage(page, `/?${opfs}`);
   await startupReady(page);
-  await page.locator("textarea").focus();
-  await page.keyboard.insertText("cat /tmp/kept.txt");
-  await page.keyboard.press("Enter");
-  await expect
-    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
-    .toContain("opfs-kept");
+  await expectOutput(page, "cat /tmp/kept.txt", "opfs-kept");
 });
 
 test("a startup failure a retry can fix offers no Start fresh", async ({ page }) => {

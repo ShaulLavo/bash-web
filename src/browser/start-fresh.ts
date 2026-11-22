@@ -1,23 +1,21 @@
-import { openIdleWorkspace } from "waffle";
-import { deleteIndexedDbWorkspace } from "./indexeddb-workspace.ts";
+import { deleteUnreadableWorkspace, vfsCodes, type Removal } from "./indexeddb-workspace.ts";
 
-/** Shown when another tab still holds the workspace; nothing is deleted then. */
-export const START_FRESH_BUSY =
-  "This workspace is open in another tab. Close the other tabs, then press Start fresh again.";
-
-/** Shown when no saved workspace of that name exists to delete, so a reload would fail the same way. */
-export const START_FRESH_NOTHING =
-  "Start fresh found no saved workspace to delete, so nothing was changed. Reload the page to try again.";
+/** What the page says when Start fresh deleted nothing, by reason. */
+export const START_FRESH_MESSAGES: Record<Exclude<Removal, "deleted">, string> = {
+  busy: "This workspace is open in another tab. Close the other tabs, then press Start fresh again.",
+  // A reload would fail the same way, so the page stays put.
+  missing:
+    "Start fresh found no saved workspace to delete, so nothing was changed. Reload the page to try again.",
+  readable: "This workspace opens now, so nothing was deleted. Reload the page to use it.",
+};
 
 /** The workspace Waffle opens when the page names none. */
 export const DEFAULT_WORKSPACE = "waffle-workspace";
 
 type FilesystemState = { readonly status: string; readonly error?: unknown };
-type StartFreshResult = "deleted" | "missing" | "busy" | "readable";
-type Selection = { readonly mode: "fast"; readonly name: string };
+type Selection = { readonly name: string };
 export type WorkspaceStorage = {
-  open(selection: Selection): Promise<Awaited<ReturnType<typeof openIdleWorkspace>>>;
-  remove(selection: Selection): Promise<"deleted" | "missing" | "busy">;
+  remove(selection: Selection): Promise<Removal>;
 };
 
 /**
@@ -33,48 +31,25 @@ export function unreadableWorkspace(error: unknown, state: FilesystemState | und
   );
 }
 
-/** The VfsError codes along an error's cause chain. Errors cross the filesystem worker as VfsError. */
-function vfsCodes(error: unknown): string[] {
-  const found: string[] = [];
-  const seen = new Set<unknown>();
-  let current = error;
-  while (current && typeof current === "object" && !seen.has(current)) {
-    seen.add(current);
-    if ("name" in current && current.name === "VfsError" && "code" in current)
-      if (typeof current.code === "string") found.push(current.code);
-    current = "cause" in current ? current.cause : undefined;
-  }
-  return found;
-}
-
-const waffle: WorkspaceStorage = { open: openIdleWorkspace, remove: deleteIndexedDbWorkspace };
+const waffle: WorkspaceStorage = { remove: deleteUnreadableWorkspace };
 
 /**
- * Deletes the named fast-mode workspace, but only while it still cannot be opened, so the page
- * can open it fresh. The failed runtime is disposed first, so it holds neither store when Waffle
- * claims them. Another tab may have recovered the workspace since this page failed: a workspace
- * that now opens, or no longer exists, is kept ("readable", "missing"). "busy" means another tab
- * or handle holds it and nothing was deleted.
+ * Deletes the named IndexedDB workspace, but only while it still cannot be opened, so the page
+ * can open it fresh. The failed runtime is disposed first, so it holds no connection when the
+ * workspace is claimed. The check and the delete happen under one claim, so another tab that
+ * recovered the workspace keeps it ("readable"); a workspace that is gone or was never a Waffle
+ * workspace is kept ("missing"). "busy" means another tab or connection holds it and nothing was
+ * deleted.
  */
 export async function startFresh(
   dispose: (() => Promise<unknown>) | undefined,
   workspace: string,
   storage: WorkspaceStorage = waffle,
-): Promise<StartFreshResult> {
+): Promise<Removal> {
   try {
     await dispose?.();
   } catch (error) {
     console.warn("Start fresh: the failed runtime did not dispose cleanly", error);
   }
-  const selection = { mode: "fast", name: workspace } as const;
-  let opened: Awaited<ReturnType<WorkspaceStorage["open"]>>;
-  try {
-    opened = await storage.open(selection);
-  } catch (error) {
-    if (!vfsCodes(error).includes("INVALID_VFS_FORMAT")) throw error;
-    return storage.remove(selection);
-  }
-  if (typeof opened === "string") return opened;
-  await opened.close();
-  return "readable";
+  return storage.remove({ name: workspace });
 }
