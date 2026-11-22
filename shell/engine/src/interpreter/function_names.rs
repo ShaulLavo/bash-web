@@ -2,22 +2,21 @@
 use super::*;
 
 pub(super) async fn declare(
-    mut function: FunctionDef,
+    function: &FunctionDef,
     state: SharedState,
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    let line = match declaration_line(&function, &context.cancel).await {
+    let line = match declaration_line(function, &context.cancel).await {
         Ok(line) => line,
         Err(_) => return Outcome::status(context.cancel_status()),
     };
-    let (name, valid) = match normalize(function.name, &context.cancel).await {
+    let (name, valid) = match normalize(function.name.clone(), &context.cancel).await {
         Ok(result) => result,
         Err(_) => return Outcome::status(context.cancel_status()),
     };
-    function.name = name;
     if !valid {
-        let code = invalid_name(&function.name, line, &fds, &context)
+        let code = invalid_name(&name, line, &fds, &context)
             .await
             .err()
             .unwrap_or(1);
@@ -40,10 +39,19 @@ pub(super) async fn declare(
         )
         .await;
     }
+    // The definition's source keeps its existing live-storage ticket. Bound
+    // the one-time copy with the parser's AST allowance.
+    let bytes = shell_parser::limits::ExecutionLimits::default().max_work_units as usize;
+    let mut copy_work = crate::exec::Work::new(bytes, bytes, 0);
+    if let Err(error) =
+        crate::ast_copy::command(&function.body, &context.cancel, &mut copy_work).await
+    {
+        return expansion_failure(error.into(), &fds, &context).await;
+    }
     state.borrow_mut().define_function(
-        function.name,
+        name,
         StoredFunction {
-            body: Rc::new(*function.body),
+            body: Rc::new(function.body.as_ref().clone()),
             source: context.source.clone(),
             line,
             storage: context.evaluation.retained(),

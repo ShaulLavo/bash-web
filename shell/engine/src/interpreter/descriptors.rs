@@ -2,12 +2,42 @@ use super::{CommandError, Context, Descriptors, PreparedCommand, commands, expan
 use crate::{io::FdTable, state::SharedState};
 use shell_parser::parser::{Redirect, RedirectKind};
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, Ref, RefCell, RefMut},
     rc::{Rc, Weak},
 };
 
+// A scope owns its mutable bindings. Sharing the underlying table until a
+// write preserves the snapshot without holding a RefCell borrow across await.
+pub(super) struct DescriptorTable(RefCell<Rc<FdTable>>);
+
+impl DescriptorTable {
+    pub(super) fn new(table: FdTable) -> Self {
+        Self(RefCell::new(Rc::new(table)))
+    }
+
+    pub(super) fn fork(&self) -> Descriptors {
+        Rc::new(Self(RefCell::new(self.snapshot())))
+    }
+
+    pub(super) fn snapshot(&self) -> Rc<FdTable> {
+        self.0.borrow().clone()
+    }
+
+    pub(super) fn borrow(&self) -> Ref<'_, FdTable> {
+        Ref::map(self.0.borrow(), Rc::as_ref)
+    }
+
+    pub(super) fn borrow_mut(&self) -> RefMut<'_, FdTable> {
+        RefMut::map(self.0.borrow_mut(), Rc::make_mut)
+    }
+
+    pub(super) fn replace(&self, table: FdTable) {
+        self.0.replace(Rc::new(table));
+    }
+}
+
 pub(super) struct CallerDescriptors {
-    caller: Weak<RefCell<FdTable>>,
+    caller: Weak<DescriptorTable>,
     temporary: Vec<u32>,
     generated: Rc<Cell<u64>>,
     parent: Option<Rc<Self>>,
@@ -30,7 +60,7 @@ impl Context {
     }
     pub(super) fn with_caller_descriptors(
         &self,
-        caller: Weak<RefCell<FdTable>>,
+        caller: Weak<DescriptorTable>,
         temporary: Vec<u32>,
         generated: Rc<Cell<u64>>,
     ) -> Result<Self, i32> {

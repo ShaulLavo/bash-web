@@ -19,17 +19,17 @@ const REPORT_BYTES_PER_FORMAT_BYTE: usize = 16;
 
 #[inline(never)]
 pub(super) fn run(
-    time: TimeCommand,
+    time: &TimeCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> eval::Frame<'static> {
+) -> eval::Frame<'_> {
     let evaluation = context.evaluation.clone();
     evaluation.frame(time_body(time, state, fds, context), Outcome::status)
 }
 
 async fn time_body(
-    time: TimeCommand,
+    time: &TimeCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -48,25 +48,20 @@ async fn time_body(
 }
 
 /// Bash keeps one timing bit per pipeline, so `time time -p cmd` reports once.
-fn flatten(mut time: TimeCommand) -> (bool, Option<Command>) {
+fn flatten(mut time: &TimeCommand) -> (bool, Option<&Command>) {
     let mut posix = time.posix_format;
     loop {
-        let Some(command) = time.command.take() else {
+        let Some(command) = time.command.as_deref() else {
             return (posix, None);
         };
-        if !nested_time(&command) {
-            return (posix, Some(*command));
-        }
-        if let Command::Compound(CompoundCommand::Time(inner), _) = *command {
-            time = *inner;
-            posix |= time.posix_format;
+        match command {
+            Command::Compound(CompoundCommand::Time(inner), redirects) if redirects.is_empty() => {
+                time = inner;
+                posix |= time.posix_format;
+            }
+            _ => return (posix, Some(command)),
         }
     }
-}
-
-/// A nested `time` without redirections of its own merges into the outer one.
-fn nested_time(command: &Command) -> bool {
-    matches!(command, Command::Compound(CompoundCommand::Time(_), redirects) if redirects.is_empty())
 }
 
 async fn report(

@@ -13,6 +13,7 @@ use crate::{
 use futures::{FutureExt, future::join_all};
 use shell_parser::parser::*;
 use std::{
+    borrow::Cow,
     cell::{Cell, RefCell},
     collections::{BTreeMap, VecDeque},
     rc::Rc,
@@ -25,6 +26,8 @@ mod builtin_wrapper;
 mod command_builtin;
 mod conditional;
 mod control;
+mod descriptors;
+use descriptors::DescriptorTable;
 pub(crate) mod eval;
 mod file_substitution;
 mod function_names;
@@ -167,10 +170,9 @@ impl From<i32> for CommandError {
     }
 }
 
-mod descriptors;
 use descriptors::CallerDescriptors;
 
-type Descriptors = Rc<RefCell<FdTable>>;
+type Descriptors = Rc<DescriptorTable>;
 const TASK_METADATA_BYTES: usize = 4096;
 /// Shared forwarding keeps descendants attached when several isolated scopes
 /// finish in a different order. Captured parent handles follow later transfers.
@@ -837,7 +839,7 @@ impl Session {
                 execution_storage: memory,
                 invocation_name_storage,
                 limits,
-                descriptors: Rc::new(RefCell::new(FdTable::default())),
+                descriptors: Rc::new(DescriptorTable::new(FdTable::default())),
                 jobs: RefCell::new(BTreeMap::new()),
                 residuals: RefCell::new(BTreeMap::new()),
                 next: Cell::new(1),
@@ -933,7 +935,7 @@ impl Session {
         if self.core.foreground.borrow().is_some() {
             return Err("foreground job is already running".into());
         }
-        *self.core.descriptors.borrow_mut() = fds;
+        self.core.descriptors.replace(fds);
         Ok(())
     }
     fn foreground_cancellation(&self) -> (Rc<Interrupts>, Rc<Strand>, Cancel) {
@@ -1119,7 +1121,7 @@ impl Session {
             }
         }
         self.core.residuals.borrow_mut().clear();
-        *self.core.descriptors.borrow_mut() = FdTable::default();
+        self.core.descriptors.replace(FdTable::default());
         self.core.host.shutdown_io().await;
     }
 }
@@ -1313,11 +1315,11 @@ async fn parse_failure(
 }
 
 fn sequence(
-    commands: Vec<Command>,
+    commands: &[Command],
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> eval::Frame<'static, Outcome> {
+) -> eval::Frame<'_, Outcome> {
     let evaluation = context.evaluation.clone();
     evaluation.frame(
         sequence_body(commands, state, fds, context),
@@ -1326,7 +1328,7 @@ fn sequence(
 }
 
 async fn sequence_body(
-    commands: Vec<Command>,
+    commands: &[Command],
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -1356,11 +1358,25 @@ async fn sequence_body(
     result
 }
 fn execute(
-    command: Command,
+    command: &Command,
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> eval::Frame<'static, Outcome> {
+) -> eval::Frame<'_> {
+    execute_command(CommandView::Syntax(command), state, fds, context)
+}
+
+enum CommandView<'a> {
+    Syntax(&'a Command),
+    AndOr(&'a Command, &'a [(ListOperator, Command)]),
+}
+
+fn execute_command<'a>(
+    command: CommandView<'a>,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'a> {
     if context.cancel.is_cancelled() {
         return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
     }
@@ -1387,27 +1403,32 @@ fn execute(
             }
             let preserve = matches!(
                 command,
-                Command::Pipeline(_)
-                    | Command::List(_)
-                    | Command::Function(_)
-                    | Command::Compound(
-                        CompoundCommand::Time(_)
-                            | CompoundCommand::BraceGroup(_)
-                            | CompoundCommand::Case(_),
-                        _
+                CommandView::AndOr(..)
+                    | CommandView::Syntax(
+                        Command::Pipeline(_)
+                            | Command::List(_)
+                            | Command::Function(_)
+                            | Command::Compound(
+                                CompoundCommand::Time(_)
+                                    | CompoundCommand::BraceGroup(_)
+                                    | CompoundCommand::Case(_),
+                                _
+                            )
                     )
             );
             let check_errexit = !context.ignore_errexit
                 && matches!(
-                    &command,
-                    Command::Simple(_)
-                        | Command::Pipeline(Pipeline { negated: false, .. })
-                        | Command::Compound(
-                            CompoundCommand::Arithmetic(_)
-                                | CompoundCommand::Test(_)
-                                | CompoundCommand::Subshell(_),
-                            _
-                        )
+                    command,
+                    CommandView::Syntax(
+                        Command::Simple(_)
+                            | Command::Pipeline(Pipeline { negated: false, .. })
+                            | Command::Compound(
+                                CompoundCommand::Arithmetic(_)
+                                    | CompoundCommand::Test(_)
+                                    | CompoundCommand::Subshell(_),
+                                _
+                            )
+                    )
                 );
             let mut result = command_body(command, state.clone(), fds, context).await;
             result.flow = settle_reported_error(result.flow, &state);
@@ -1446,13 +1467,19 @@ fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool)
 // Select the future outside the recursive poll frame. An async match retains
 // every branch's largest expansion/dispatch frame even when polling a brace.
 #[inline(never)]
-fn command_body(
-    command: Command,
+fn command_body<'a>(
+    view: CommandView<'a>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> eval::Frame<'static> {
+) -> eval::Frame<'a> {
     let evaluation = context.evaluation.clone();
+    let command = match view {
+        CommandView::Syntax(command) => command,
+        CommandView::AndOr(first, links) => {
+            return evaluation.frame(and_or(first, links, state, fds, context), Outcome::status);
+        }
+    };
     match command {
         Command::Simple(simple) => {
             evaluation.frame(simple_command(simple, state, fds, context), Outcome::status)
@@ -1469,7 +1496,7 @@ fn command_body(
             evaluation.frame(list_command(list, state, fds, context), Outcome::status)
         }
         Command::Compound(CompoundCommand::Subshell(commands), redirs) => evaluation.frame(
-            subshell(commands, redirs, state, fds, context),
+            subshell(command, commands, redirs, state, fds, context),
             Outcome::status,
         ),
         Command::Compound(compound, redirs) => evaluation.frame(
@@ -1480,7 +1507,7 @@ fn command_body(
 }
 
 async fn pipeline_command(
-    pipeline: Pipeline,
+    pipeline: &Pipeline,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -1515,6 +1542,17 @@ async fn pipeline_command(
         }
     };
     let mut children = children.into_iter();
+    // Stages are independently polled tasks and may outlive this waiter.
+    let _syntax = match admit_task_syntax(&pipeline.commands, &context).await {
+        Ok(syntax) => syntax,
+        Err(error) => {
+            let outcome = expansion_failure(error.into(), &fds, &context).await;
+            state
+                .borrow_mut()
+                .publish_pipeline_status(vec![outcome.code]);
+            return outcome;
+        }
+    };
     let mut pipes = VecDeque::new();
     for _ in 1..count {
         let pipe = match context.fs().pipe() {
@@ -1537,7 +1575,7 @@ async fn pipeline_command(
         state.borrow_mut().publish_pipeline_status(vec![2]);
         return Outcome::status(2);
     }
-    for (index, command) in pipeline.commands.into_iter().enumerate() {
+    for (index, command) in pipeline.commands.iter().enumerate() {
         let mut stage_fds = fds.borrow().clone();
         if let Some(input) = previous.take() {
             stage_fds.insert(0, input);
@@ -1560,7 +1598,7 @@ async fn pipeline_command(
                 last_context.clone()
             }
         } else {
-            let child = context.isolated_command(&command);
+            let child = context.isolated_command(command);
             if index + 1 < count || pipeline.negated {
                 child.condition()
             } else {
@@ -1573,11 +1611,12 @@ async fn pipeline_command(
         let stage_fds = if count == 1 {
             fds.clone()
         } else {
-            Rc::new(RefCell::new(stage_fds))
+            Rc::new(DescriptorTable::new(stage_fds))
         };
         let parent_scope = context.scope.clone();
         tasks.push(context.core.executor.spawn(pipeline_stage(
-            command,
+            command.clone(),
+            _syntax.clone(),
             child,
             stage_fds,
             stage_context,
@@ -1668,13 +1707,14 @@ async fn pipeline_children_body(
 
 async fn pipeline_stage(
     command: Command,
+    _syntax: Rc<crate::exec::Allocation>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
     parent_scope: Scope,
     isolated: bool,
 ) -> Outcome {
-    let result = execute(command, state, fds, context.clone()).await;
+    let result = execute(&command, state, fds, context.clone()).await;
     if isolated {
         context.finish_scope(parent_scope).await;
     }
@@ -1682,8 +1722,8 @@ async fn pipeline_stage(
 }
 
 async fn compound_command(
-    compound: CompoundCommand,
-    redirs: Vec<Redirect>,
+    compound: &CompoundCommand,
+    redirs: &[Redirect],
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -1694,11 +1734,11 @@ async fn compound_command(
     } else {
         let table = fds.borrow().clone();
         drop(fds);
-        Rc::new(RefCell::new(table))
+        Rc::new(DescriptorTable::new(table))
     };
     let generated = Rc::new(Cell::new(0));
     let mut work = substitution_work(&context, &fds, Some(generated.clone()));
-    let fds = match command_redirects(&redirs, &state, fds, &context, &mut work).await {
+    let fds = match command_redirects(redirs, &state, fds, &context, &mut work).await {
         Err(outcome) => return outcome,
         Ok(fds) => fds,
     };
@@ -1711,7 +1751,7 @@ async fn compound_command(
             | CompoundCommand::ArithmeticFor(_)
             | CompoundCommand::Test(_)
     );
-    let temporary = match descriptors::redirected(&redirs, &mut work) {
+    let temporary = match descriptors::redirected(redirs, &mut work) {
         Ok(temporary) => temporary,
         Err(error) => return expansion_failure(error, &fds, &context).await,
     };
@@ -1779,7 +1819,7 @@ fn command_redirects<'a>(
 
 #[inline(never)]
 fn execute_compound_body<'a>(
-    compound: CompoundCommand,
+    compound: &'a CompoundCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -1788,21 +1828,21 @@ fn execute_compound_body<'a>(
     let evaluation = context.evaluation.clone();
     match compound {
         CompoundCommand::Arithmetic(source) => evaluation.frame(
-            async move { arithmetic_command(&source, &state, &fds, &context, work).await },
+            async move { arithmetic_command(source, &state, &fds, &context, work).await },
             Outcome::status,
         ),
         CompoundCommand::BraceGroup(commands) => sequence(commands, state, fds, context),
         CompoundCommand::While(loop_) => evaluation.frame(
-            while_command(loop_.condition, loop_.body, false, state, fds, context),
+            while_command(&loop_.condition, &loop_.body, false, state, fds, context),
             Outcome::status,
         ),
         CompoundCommand::Test(expression) => evaluation.frame(
-            async move { conditional::run(&expression, &state, &fds, &context, work).await },
+            async move { conditional::run(expression, &state, &fds, &context, work).await },
             Outcome::status,
         ),
         CompoundCommand::If(if_) => control::run_if(if_, state, fds, context),
         CompoundCommand::Until(loop_) => evaluation.frame(
-            while_command(loop_.condition, loop_.body, true, state, fds, context),
+            while_command(&loop_.condition, &loop_.body, true, state, fds, context),
             Outcome::status,
         ),
         CompoundCommand::For(loop_) => control::run_for(loop_, state, fds, context, work),
@@ -1813,14 +1853,14 @@ fn execute_compound_body<'a>(
         CompoundCommand::Case(case_) => {
             evaluation.frame(run_case(case_, state, fds, context, work), Outcome::status)
         }
-        CompoundCommand::Time(time) => timing::run(*time, state, fds, context),
+        CompoundCommand::Time(time) => timing::run(time, state, fds, context),
         _ => futures::future::Either::Left(futures::future::ready(Outcome::status(2))),
     }
 }
 
 async fn while_command(
-    condition: Vec<Command>,
-    body: Vec<Command>,
+    condition: &[Command],
+    body: &[Command],
     until: bool,
     state: SharedState,
     fds: Descriptors,
@@ -1840,10 +1880,10 @@ async fn while_command(
         }
         if !condition_cache_attempted {
             condition_cache_attempted = true;
-            condition_cache = cache_loop_arithmetic(&condition, &condition_context).await;
+            condition_cache = cache_loop_arithmetic(condition, &condition_context).await;
         }
         let test = loop_sequence(
-            &condition,
+            condition,
             &state,
             &fds,
             &condition_context,
@@ -1867,9 +1907,9 @@ async fn while_command(
         }
         if !body_cache_attempted {
             body_cache_attempted = true;
-            body_cache = cache_loop_arithmetic(&body, &context).await;
+            body_cache = cache_loop_arithmetic(body, &context).await;
         }
-        let body_result = loop_sequence(&body, &state, &fds, &context, body_cache.as_ref()).await;
+        let body_result = loop_sequence(body, &state, &fds, &context, body_cache.as_ref()).await;
         match control::loop_step(body_result, context.loop_depth) {
             control::LoopStep::Normal(outcome) => result = outcome,
             control::LoopStep::Continue => result = Outcome::status(0),
@@ -1890,24 +1930,7 @@ fn loop_sequence<'a>(
     {
         return loop_arithmetic(source, state, fds, context, cache);
     }
-    context.evaluation.frame(
-        async move {
-            // The prior iteration's copy is gone. Admit this retained AST
-            // copy against fresh command storage, never elapsed loop work.
-            let mut work = expansion_work(context);
-            if let Err(error) = crate::ast_copy::admit(commands, &context.cancel, &mut work).await {
-                return expansion_failure(error.into(), fds, context).await;
-            }
-            sequence(
-                commands.to_vec(),
-                state.clone(),
-                fds.clone(),
-                context.clone(),
-            )
-            .await
-        },
-        Outcome::status,
-    )
+    sequence(commands, state.clone(), fds.clone(), context.clone())
 }
 
 struct CachedArithmetic<'a> {
@@ -1922,7 +1945,14 @@ async fn cache_loop_arithmetic<'a>(
     let [Command::Compound(CompoundCommand::Arithmetic(source), redirs)] = commands else {
         return None;
     };
-    if !redirs.is_empty() || !arithmetic::Program::is_static(source) {
+    if !redirs.is_empty() {
+        return None;
+    }
+    cache_arithmetic(source, context).await
+}
+
+async fn cache_arithmetic<'a>(source: &'a str, context: &Context) -> Option<CachedArithmetic<'a>> {
+    if source.trim().is_empty() || !arithmetic::Program::is_static(source) {
         return None;
     }
     let storage = context
@@ -1968,8 +1998,7 @@ fn loop_arithmetic<'a>(
             if context.cancel.is_cancelled() {
                 return Outcome::status(130);
             }
-            let table = fds.borrow().clone();
-            let fds = Rc::new(RefCell::new(table));
+            let fds = fds.fork();
             let mut work = substitution_work(&context, &fds, None);
             let result = match cache {
                 Some(cache) => {
@@ -2026,7 +2055,7 @@ async fn loop_checkpoint(budget: &mut Budget, context: &Context) -> Result<(), O
 /// `case` expands its word as a scalar (no splitting or globbing) and each
 /// pattern with quote protection, then matches through the bounded matcher.
 async fn run_case(
-    case_: CaseCommand,
+    case_: &CaseCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -2039,7 +2068,7 @@ async fn run_case(
     let mut matched = false;
     let mut result = Outcome::status(0);
     let mut budget = Budget::default();
-    for item in case_.cases {
+    for item in &case_.cases {
         if let Err(outcome) = loop_checkpoint(&mut budget, &context).await {
             return outcome;
         }
@@ -2063,7 +2092,7 @@ async fn run_case(
             }
             matched = true;
         }
-        result = sequence(item.commands, state.clone(), fds.clone(), context.clone()).await;
+        result = sequence(&item.commands, state.clone(), fds.clone(), context.clone()).await;
         if result.flow != Flow::Normal {
             return result;
         }
@@ -2323,8 +2352,9 @@ async fn expansion_failure(error: CommandError, fds: &Descriptors, context: &Con
 }
 
 async fn subshell(
-    commands: Vec<Command>,
-    redirs: Vec<Redirect>,
+    command: &Command,
+    commands: &[Command],
+    redirs: &[Redirect],
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -2347,9 +2377,16 @@ async fn subshell(
         cancel: child_cancel.clone(),
         ..context.isolated()
     };
-    let child_fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let child_fds = fds.fork();
     drop(fds);
+    let syntax = match admit_task_syntax(std::slice::from_ref(command), &context).await {
+        Ok(syntax) => syntax,
+        Err(error) => return expansion_failure(error.into(), &child_fds, &context).await,
+    };
+    let commands = commands.to_vec();
+    let redirs = redirs.to_vec();
     let child = context.core.executor.spawn(async move {
+        let _syntax = syntax;
         work.substitutions = Some(Substitutions {
             context: child_context.clone(),
             fds: child_fds.clone(),
@@ -2364,7 +2401,7 @@ async fn subshell(
                         compound_child: false,
                         ..child_context.clone()
                     };
-                    sequence(commands, child, fds, body_context).await
+                    sequence(&commands, child, fds, body_context).await
                 }
                 Err(outcome) => outcome,
             };
@@ -2384,43 +2421,59 @@ async fn subshell(
 }
 
 async fn list_command(
-    list: CommandList,
+    list: &CommandList,
     state: SharedState,
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    // `&` backgrounds the preceding AND/OR list, not the command after it.
-    let mut first = *list.first;
-    let mut links = Vec::new();
-    let mut result;
-    for (operator, next) in list.rest {
-        if matches!(operator, ListOperator::And | ListOperator::Or) {
-            links.push((operator, next));
-            continue;
-        }
-        let command = and_or(first, std::mem::take(&mut links), list.span);
-        result = if operator == ListOperator::Background {
-            background(command, &state, &fds, &context).await
+    let mut first = list.first.as_ref();
+    let mut rest = list.rest.as_slice();
+    while let Some(separator) = rest.iter().position(|(operator, _)| {
+        matches!(operator, ListOperator::Background | ListOperator::Semicolon)
+    }) {
+        let links = &rest[..separator];
+        let (operator, next) = &rest[separator];
+        let result = if *operator == ListOperator::Background {
+            background(first, links, list.span, &state, &fds, &context).await
         } else {
-            execute(
-                command,
-                state.clone(),
-                fds.clone(),
-                Context {
-                    tail_exec: false,
-                    ..context.clone()
-                },
-            )
-            .await
+            execute_and_or(first, links, state.clone(), fds.clone(), &context).await
         };
         if result.flow != Flow::Normal || context.cancel.is_cancelled() {
             return result;
         }
         first = next;
+        rest = &rest[separator + 1..];
     }
-    // There are no separators left: evaluate AND/OR directly to avoid wrapping
-    // the same AST into another list forever.
-    result = execute(
+    and_or(first, rest, state, fds, context).await
+}
+
+// A separated AND/OR group is a command in its own right, with the same
+// descent, yield and status publication as a standalone list.
+fn execute_and_or<'a>(
+    first: &'a Command,
+    links: &'a [(ListOperator, Command)],
+    state: SharedState,
+    fds: Descriptors,
+    context: &Context,
+) -> eval::Frame<'a> {
+    let context = Context {
+        tail_exec: false,
+        ..context.clone()
+    };
+    if links.is_empty() {
+        return execute(first, state, fds, context);
+    }
+    execute_command(CommandView::AndOr(first, links), state, fds, context)
+}
+
+async fn and_or(
+    first: &Command,
+    links: &[(ListOperator, Command)],
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let mut result = execute(
         first,
         state.clone(),
         fds.clone(),
@@ -2431,60 +2484,48 @@ async fn list_command(
         },
     )
     .await;
-    let count = links.len();
-    for (index, (operator, next)) in links.into_iter().enumerate() {
+    for (index, (operator, next)) in links.iter().enumerate() {
         if result.flow != Flow::Normal || context.cancel.is_cancelled() {
             break;
         }
-        if (operator == ListOperator::And && result.code == 0)
-            || (operator == ListOperator::Or && result.code != 0)
+        if (*operator == ListOperator::And && result.code == 0)
+            || (*operator == ListOperator::Or && result.code != 0)
         {
-            result = execute(
-                next,
-                state.clone(),
-                fds.clone(),
-                if index + 1 == count {
-                    context.clone()
-                } else {
-                    context.condition()
-                },
-            )
-            .await;
+            let next_context = if index + 1 == links.len() {
+                context.clone()
+            } else {
+                context.condition()
+            };
+            result = execute(next, state.clone(), fds.clone(), next_context).await;
         }
     }
     result
 }
-fn and_or(first: Command, rest: Vec<(ListOperator, Command)>, span: Span) -> Command {
-    if rest.is_empty() {
-        first
-    } else {
-        Command::List(CommandList {
-            first: Box::new(first),
-            rest,
-            span,
-        })
-    }
-}
+
 #[inline(never)]
 fn background<'a>(
-    command: Command,
+    first: &'a Command,
+    links: &'a [(ListOperator, Command)],
+    span: Span,
     state: &'a SharedState,
     fds: &'a Descriptors,
     context: &'a Context,
 ) -> eval::Frame<'a> {
     context.evaluation.frame(
-        background_body(command, state, fds, context),
+        background_body(first, links, span, state, fds, context),
         Outcome::status,
     )
 }
 
 async fn background_body(
-    command: Command,
+    first: &Command,
+    links: &[(ListOperator, Command)],
+    span: Span,
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
 ) -> Outcome {
-    let result = launch_background(command, state, fds, context).await;
+    let result = launch_background(first, links, span, state, fds, context).await;
     let mut state = state.borrow_mut();
     state.publish_status(result.code);
     state.publish_pipeline_status(vec![result.code]);
@@ -2492,7 +2533,9 @@ async fn background_body(
 }
 
 async fn launch_background(
-    command: Command,
+    first: &Command,
+    links: &[(ListOperator, Command)],
+    span: Span,
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
@@ -2514,6 +2557,24 @@ async fn launch_background(
     let identity = match async_identity(job, &context.cancel, &mut work).await {
         Ok(identity) => identity,
         Err(error) => return expansion_failure(error.into(), fds, context).await,
+    };
+    let mut syntax_work = ast_copy_work(context);
+    if let Err(error) = crate::ast_copy::list(first, links, &context.cancel, &mut syntax_work).await
+    {
+        return expansion_failure(error.into(), fds, context).await;
+    }
+    let syntax = match admit_copied_syntax(&syntax_work, context) {
+        Ok(syntax) => syntax,
+        Err(code) => return Outcome::status(code),
+    };
+    let command = if links.is_empty() {
+        first.clone()
+    } else {
+        Command::List(CommandList {
+            first: Box::new(first.clone()),
+            rest: links.to_vec(),
+            span,
+        })
     };
     let limit = context.limits().expansion_bytes;
     let printed = command_string(
@@ -2578,12 +2639,13 @@ async fn launch_background(
         caller_descriptors: None,
         tail_exec: false,
     };
-    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let fds = fds.fork();
     let parent_scope = context.scope.clone();
     let join = context.core.executor.spawn(async move {
         let mut processes = ProcessGroup::new(child_context.core.host.clone(), group)
             .with_signal(child_context.signal.clone());
-        let result = execute(command, child, fds, child_context.clone()).await;
+        let _syntax = syntax;
+        let result = execute(&command, child, fds, child_context.clone()).await;
         child_context.finish_scope(parent_scope).await;
         child_context.finish_group(&mut processes, result).await
     });
@@ -2604,6 +2666,28 @@ async fn launch_background(
     );
     state.borrow_mut().publish_async_identity(identity);
     Outcome::status(0)
+}
+
+fn ast_copy_work(context: &Context) -> crate::exec::Work {
+    let limits = context.limits();
+    crate::exec::Work::new(limits.execution_bytes, limits.execution_bytes, 0)
+}
+
+fn admit_copied_syntax(
+    work: &crate::exec::Work,
+    context: &Context,
+) -> Result<crate::exec::Allocation, i32> {
+    let bytes = context.limits().execution_bytes - work.storage_left();
+    context.evaluation.admit_execution(bytes)
+}
+
+async fn admit_task_syntax(
+    commands: &[Command],
+    context: &Context,
+) -> Result<Rc<crate::exec::Allocation>, expand::Error> {
+    let mut work = ast_copy_work(context);
+    crate::ast_copy::admit(commands, &context.cancel, &mut work).await?;
+    Ok(Rc::new(admit_copied_syntax(&work, context)?))
 }
 
 fn admit_task_metadata<T>(
@@ -2691,6 +2775,9 @@ struct ProcessSubstitutionFds {
 impl Drop for ProcessSubstitutionFds {
     fn drop(&mut self) {
         let mut opened = self.opened.get();
+        if opened == 0 {
+            return;
+        }
         let mut fds = self.fds.borrow_mut();
         while opened != 0 {
             let fd = opened.trailing_zeros();
@@ -2743,7 +2830,7 @@ impl Substitutions {
         }
         let mut table = self.fds.borrow().clone();
         table.insert(1, writer);
-        let fds = Rc::new(RefCell::new(table));
+        let fds = Rc::new(DescriptorTable::new(table));
         let cancel = Cancel::new();
         let group = self.context.core.host.allocate_background_group();
         let signal = Rc::new(Cell::new(None));
@@ -2762,7 +2849,7 @@ impl Substitutions {
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
             let body = async {
-                let result = sequence(commands, child, fds, context.clone()).await;
+                let result = sequence(&commands, child, fds, context.clone()).await;
                 // Capturing waits for actual stdout EOF, not every background
                 // job: redirected descendants may keep running after EOF.
                 if context.cancel.run(captured.cancelled()).await.is_err() {
@@ -2885,7 +2972,7 @@ impl Substitutions {
             table.insert(0, reader);
             writer
         };
-        let fds = Rc::new(RefCell::new(table));
+        let fds = Rc::new(DescriptorTable::new(table));
         let child = state;
         let cancel = Cancel::new();
         let group = core.host.allocate_background_group();
@@ -2902,7 +2989,7 @@ impl Substitutions {
             let mut processes = ProcessGroup::new(context.core.host.clone(), group)
                 .with_signal(context.signal.clone());
             let body = async {
-                let result = sequence(commands, child, fds, context.clone()).await;
+                let result = sequence(&commands, child, fds, context.clone()).await;
                 let _ = context.wait_jobs(None, true).await;
                 context.finish_scope(parent_scope).await;
                 context.finish_group(&mut processes, result).await
@@ -2995,21 +3082,20 @@ impl Drop for SubstitutionTask {
 /// Function words already retain raw spelling. For top-level declarations use
 /// the unchanged lexer's raw-capture API on this command's bounded source span.
 /// AST order supplies assignment/argument counts; operators stay lexer-owned.
-async fn retain_declaration_syntax(
-    simple: &mut SimpleCommand,
+async fn declaration_syntax(
+    simple: &SimpleCommand,
     source: &str,
     cancel: &Cancel,
-) -> Result<(), i32> {
+) -> Result<Vec<String>, i32> {
     if simple.name.raw.is_some() || !builtins::declaration_command(&simple.name) {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let source = source
         .get(simple.span.start.offset..simple.span.end.offset)
         .ok_or(2)?;
     let tokens = parse::declaration_tokens(source);
     let mut assignments = simple.assignments.len();
-    let mut words = std::iter::once(&mut simple.name).chain(simple.args.iter_mut());
-    let mut target = words.next();
+    let mut spelling = Vec::new();
     let mut redirect_operand = false;
     let mut budget = Budget::default();
     for token in tokens {
@@ -3030,14 +3116,21 @@ async fn retain_declaration_syntax(
             assignments -= 1;
             continue;
         }
-        let word = target.take().ok_or(2)?;
-        word.raw = Some(raw);
-        target = words.next();
-        if target.is_none() {
-            return Ok(());
+        spelling.push(raw);
+        if spelling.len() > simple.args.len() {
+            return Ok(spelling);
         }
     }
     Err(2)
+}
+
+fn word_with_spelling(word: &Word, raw: Option<String>) -> Cow<'_, Word> {
+    let Some(raw) = raw else {
+        return Cow::Borrowed(word);
+    };
+    let mut word = word.clone();
+    word.raw = Some(raw);
+    Cow::Owned(word)
 }
 
 struct PreparedCommand {
@@ -3055,7 +3148,7 @@ struct PreparedExecution {
 }
 
 async fn simple_command(
-    simple: SimpleCommand,
+    simple: &SimpleCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -3246,12 +3339,12 @@ fn diagnostic_descriptors(stderr: &WeakStderr) -> Descriptors {
     {
         fds.insert(2, fd);
     }
-    Rc::new(RefCell::new(fds))
+    Rc::new(DescriptorTable::new(fds))
 }
 
 #[inline(never)]
 fn prepare_simple_command<'a>(
-    simple: SimpleCommand,
+    simple: &'a SimpleCommand,
     state: &'a SharedState,
     fds: Descriptors,
     context: &'a Context,
@@ -3268,12 +3361,14 @@ fn prepare_simple_command<'a>(
 }
 
 async fn prepare_simple_command_body(
-    mut simple: SimpleCommand,
+    simple: &SimpleCommand,
     state: &SharedState,
     fds: Descriptors,
     context: &Context,
 ) -> Result<PreparedCommand, CommandError> {
-    retain_declaration_syntax(&mut simple, &context.source, &context.cancel).await?;
+    let mut spelling = declaration_syntax(simple, &context.source, &context.cancel)
+        .await?
+        .into_iter();
     let assignment_count = simple.assignments.len();
     if assignment_count > context.limits().arguments {
         return Err(2.into());
@@ -3281,15 +3376,16 @@ async fn prepare_simple_command_body(
     let mut bytes = 0usize;
     let mut budget = Budget::default();
     // Process substitutions open descriptors for this command only.
-    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let fds = fds.fork();
     // Fixed descriptor metadata uses the active execution pool, not expansion bytes.
     let _generated_allocation = context
         .evaluation
         .admit_execution(std::mem::size_of::<Cell<u64>>() + 2 * std::mem::size_of::<usize>())?;
     let generated_fds = Rc::new(Cell::new(0));
     let mut work = substitution_work(context, &fds, Some(generated_fds.clone()));
+    let name = word_with_spelling(&simple.name, spelling.next());
     let mut argv = expand::fields(
-        &simple.name,
+        &name,
         state,
         &context.cancel,
         expand::FieldContext::Argv,
@@ -3302,9 +3398,11 @@ async fn prepare_simple_command_body(
     )
     .await?;
     bytes += argv.iter().map(String::len).sum::<usize>();
-    let declaration = builtins::declaration_command(&simple.name);
-    for word in std::mem::take(&mut simple.args) {
+    let declaration = builtins::declaration_command(&name);
+    drop(name);
+    for word in &simple.args {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
+        let word = word_with_spelling(word, spelling.next());
         let remaining_bytes = context.limits().expansion_bytes.saturating_sub(bytes);
         let remaining_words = context
             .limits()
@@ -3356,7 +3454,7 @@ async fn prepare_simple_command_body(
 }
 
 async fn prepare_execution_body(
-    simple: SimpleCommand,
+    simple: &SimpleCommand,
     argv: &[String],
     state: &SharedState,
     fds: Descriptors,
@@ -3369,7 +3467,7 @@ async fn prepare_execution_body(
     // redirects so a fatal RHS does not create the command's output files.
     if argv.is_empty() {
         assignments(
-            simple.assignments,
+            &simple.assignments,
             state,
             context,
             &mut bytes,
@@ -3394,7 +3492,7 @@ async fn prepare_execution_body(
     }
     let function_prefix = state.borrow().functions().contains_key(&argv[0]);
     let assigned = assignments(
-        simple.assignments,
+        &simple.assignments,
         state,
         context,
         &mut bytes,
@@ -3676,28 +3774,6 @@ async fn dispatch_arguments(
             )
             .await);
         }
-        // Function syntax has a source-size budget independent of argv bytes.
-        // Admit its execution copy before cloning even with a tiny argv ceiling.
-        let source_bytes = context.limits().source_bytes;
-        let mut copy_work = expand::Work::new(source_bytes, source_bytes, 0);
-        if let Err(error) =
-            crate::ast_copy::command(body.body.as_ref(), &context.cancel, &mut copy_work).await
-        {
-            return Ok(expansion_failure(error.into(), &fds, &context).await);
-        }
-        let copied_bytes = source_bytes - copy_work.storage_left();
-        let call_storage = match context.evaluation.admit_execution(copied_bytes) {
-            Ok(storage) => storage,
-            Err(_) => {
-                return Ok(abort_diagnostic(
-                    &fds,
-                    &context,
-                    b"function live-memory limit exceeded",
-                    2,
-                )
-                .await);
-            }
-        };
         for (name, value) in &assigned {
             let bytes = state
                 .borrow()
@@ -3758,9 +3834,8 @@ async fn dispatch_arguments(
         let call = evaluation.frame(
             async move {
                 let _frame = frame;
-                let _call_storage = call_storage;
                 let _allocation = allocation;
-                execute(body.body.as_ref().clone(), state, fds, context).await
+                execute(&body.body, state, fds, context).await
             },
             Outcome::status,
         );
@@ -3853,18 +3928,14 @@ async fn dispatch_arguments(
                 generated_fds: None,
             });
         }
-        let bindings = fds.borrow().clone();
-        let (name, arguments) = if builtin == commands::Builtin::Set {
-            (
-                "set",
-                std::borrow::Cow::Owned(
-                    take_command_arguments(argv, last_storage, argument_offset, context).await?,
-                ),
-            )
+        let result = if builtin == commands::Builtin::Set {
+            let arguments =
+                take_command_arguments(argv, last_storage, argument_offset, context).await?;
+            builtins::run_set(arguments, state, context, work).await
         } else {
-            (name.as_str(), std::borrow::Cow::Borrowed(args))
+            let bindings = fds.snapshot();
+            builtins::run(builtin, name, args, state, &bindings, context, work).await
         };
-        let result = builtins::run(builtin, name, arguments, state, &bindings, context, work).await;
         builtin_prefix.set(Some(frame));
         return result;
     }
@@ -4259,7 +4330,7 @@ struct AssignmentMode<'a> {
 }
 
 async fn assignments(
-    assignments: Vec<Assignment>,
+    assignments: &[Assignment],
     state: &SharedState,
     context: &Context,
     bytes: &mut usize,
@@ -4292,7 +4363,7 @@ async fn assignments(
 }
 
 async fn assignments_body(
-    assignments: Vec<Assignment>,
+    assignments: &[Assignment],
     state: &SharedState,
     context: &Context,
     bytes: &mut usize,
@@ -4334,15 +4405,15 @@ async fn assignments_body(
             return Err(2.into());
         }
         if indexed {
-            indexed::assign(&assignment, state, context, work, frame, bytes, completed).await?;
+            indexed::assign(assignment, state, context, work, frame, bytes, completed).await?;
             frame = PrefixFrame::enter_prepared(state.clone());
             continue;
         }
-        let AssignmentValue::Scalar(word) = assignment.value else {
+        let AssignmentValue::Scalar(word) = &assignment.value else {
             unreachable!()
         };
         let value = expand::assignment(
-            &word,
+            word,
             state,
             &context.cancel,
             context
@@ -4390,8 +4461,7 @@ async fn assignments_body(
         if commit {
             xtrace::assignment(&assignment.name, &value, state, fds, context).await?;
         }
-        let assignment_name = assignment.name.clone();
-        if let Err(name) = frame.set(assignment.name, value) {
+        if let Err(name) = frame.set(assignment.name.clone(), value) {
             if let Some(fds) = function_diagnostics {
                 let stderr = fds.borrow().get(2);
                 if let Some(stderr) = stderr {
@@ -4410,9 +4480,9 @@ async fn assignments_body(
             });
         }
         if !commit {
-            xtrace::prefix_assignment(&assignment_name, state, fds, context).await?;
+            xtrace::prefix_assignment(&assignment.name, state, fds, context).await?;
+            names.push(&assignment.name);
         }
-        names.push(assignment_name);
         if commit {
             frame.commit(Some(completed)).map_err(expand::Error::from)?;
             frame = PrefixFrame::enter_prepared(state.clone());
@@ -4426,7 +4496,7 @@ async fn assignments_body(
     for name in names {
         budget.checkpoint(&context.cancel).await.map_err(|_| 130)?;
         let state = state.borrow();
-        let value = state.scalar_parameter(&name).ok_or(2)?;
+        let value = state.scalar_parameter(name).ok_or(2)?;
         *bytes = bytes
             .saturating_add(name.len())
             .saturating_add(1)
@@ -4438,11 +4508,11 @@ async fn assignments_body(
             // PrefixFrame applied the assignment through its nameref. Preserve
             // that effective binding in the temporary environment, not the
             // source alias (which may itself be named PATH).
-            let target = state.scalar_target(&name)?.ok_or(2)?;
+            let target = state.scalar_target(name)?.ok_or(2)?;
             if target != name {
                 work.admit_storage(target.len())?;
             }
-            assigned.push((state.assignment_name(name)?, value.to_owned()));
+            assigned.push((state.assignment_name(name.clone())?, value.to_owned()));
         }
     }
     Ok(assigned)
@@ -4561,7 +4631,7 @@ async fn redirects(
     if redirs.is_empty() {
         return Ok(fds);
     }
-    let fds = Rc::new(RefCell::new(fds.borrow().clone()));
+    let fds = fds.fork();
     // Target substitutions observe the redirections already applied, and
     // process substitutions insert their descriptors into this same table.
     if let Some(runner) = &mut work.substitutions {
@@ -4777,15 +4847,19 @@ mod scope_tests {
         context: &'a Context,
         work: &'a mut expand::Work,
     ) -> std::pin::Pin<Box<impl std::future::Future<Output = Result<Outcome, i32>> + 'a>> {
-        Box::pin(builtins::run(
-            commands::Builtin::Read,
-            "read",
-            vec![option.into(), "value".into()].into(),
-            state,
-            fds,
-            context,
-            work,
-        ))
+        let arguments = [option.into(), "value".into()];
+        Box::pin(async move {
+            builtins::run(
+                commands::Builtin::Read,
+                "read",
+                &arguments,
+                state,
+                fds,
+                context,
+                work,
+            )
+            .await
+        })
     }
 
     fn check_pending_read_cancellation(option: &str) {

@@ -143,7 +143,7 @@ pub(super) async fn run(
             && reader.next_position.is_none()
             && super::replacement::eligible(&command);
         result = execute(
-            command,
+            &command,
             state.clone(),
             fds.clone(),
             Context {

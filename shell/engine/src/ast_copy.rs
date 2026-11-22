@@ -26,6 +26,32 @@ pub(crate) async fn admit(
     work.checkpoint(cancel).await?;
     let mut stack = Vec::new();
     push_vec(&mut stack, commands, Visit::Commands, work)?;
+    admit_visits(stack, cancel, work).await
+}
+
+/// Admit the owned AND/OR group copied into a background task.
+pub(crate) async fn list(
+    first: &Command,
+    rest: &[(ListOperator, Command)],
+    cancel: &Cancel,
+    work: &mut Work,
+) -> Result<(), Error> {
+    if rest.is_empty() {
+        return command(first, cancel, work).await;
+    }
+    work.checkpoint(cancel).await?;
+    let mut stack = Vec::new();
+    work.admit_storage(size_of::<Command>())?;
+    push_vec(&mut stack, rest, Visit::ListRest, work)?;
+    push_boxed_command(&mut stack, first, work)?;
+    admit_visits(stack, cancel, work).await
+}
+
+async fn admit_visits(
+    mut stack: Vec<Visit<'_>>,
+    cancel: &Cancel,
+    work: &mut Work,
+) -> Result<(), Error> {
     while let Some(visit) = stack.pop() {
         work.checkpoint(cancel).await?;
         match visit {
