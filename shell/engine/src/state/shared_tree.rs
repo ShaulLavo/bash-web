@@ -14,24 +14,73 @@ pub(super) struct SharedTree<T>(Rc<Version<T>>, Cell<bool>);
 struct Version<T> {
     tree: T,
     bytes: usize,
-    copy: RefCell<Option<StorageAllocation>>,
+    copy: RefCell<Option<CopyMembership>>,
     cleanup: RefCell<Option<StorageAllocation>>,
+}
+
+#[derive(Debug, Default)]
+struct CopyMembership {
+    cohort: Rc<RefCell<CopyCohort>>,
+    version: u64,
+}
+
+#[derive(Debug, Default)]
+struct CopyCohort {
+    next_version: u64,
+    tickets: BTreeMap<u64, StorageAllocation>,
+}
+
+impl Drop for CopyMembership {
+    fn drop(&mut self) {
+        let mut cohort = self.cohort.borrow_mut();
+        // When the uncharged version drops, one survivor takes its place.
+        if cohort.tickets.remove(&self.version).is_none() {
+            cohort.tickets.pop_first();
+        }
+    }
+}
+
+impl<T> Version<T> {
+    fn fork_copy(&self, ticket: StorageAllocation, writer_keeps_charge: bool) -> CopyMembership {
+        let mut copy = self.copy.borrow_mut();
+        let parent = copy.get_or_insert_with(CopyMembership::default);
+        let mut cohort = parent.cohort.borrow_mut();
+        cohort.next_version += 1;
+        let mut version = cohort.next_version;
+        cohort.tickets.insert(version, ticket);
+        if writer_keeps_charge {
+            std::mem::swap(&mut parent.version, &mut version);
+        }
+        CopyMembership {
+            cohort: parent.cohort.clone(),
+            version,
+        }
+    }
 }
 
 impl<T: Default> Version<T> {
     fn refund_shrunk_copy(&mut self) {
-        let allocation = self.copy.get_mut();
-        let Some(copy) = allocation else {
+        let membership = self.copy.get_mut();
+        let Some(copy) = membership else {
             return;
         };
-        if self.bytes == 0 {
-            self.tree = T::default();
-            *allocation = None;
+        if Rc::strong_count(&copy.cohort) == 1 {
+            *membership = None;
             return;
         }
-        let bytes = self.bytes + SharedTree::<T>::version_bytes();
-        if bytes < copy.bytes() {
-            copy.resize(bytes).expect("shrinking a tree ticket");
+        let mut cohort = copy.cohort.borrow_mut();
+        let Some(ticket) = cohort.tickets.get_mut(&copy.version) else {
+            return;
+        };
+        let bytes = if self.bytes == 0 {
+            self.tree = T::default();
+            // Keep the zero-byte ticket to identify the charged version.
+            0
+        } else {
+            self.bytes + SharedTree::<T>::version_bytes()
+        };
+        if bytes < ticket.bytes() {
+            ticket.resize(bytes).expect("shrinking a tree ticket");
         }
     }
 }
@@ -57,7 +106,7 @@ impl<T> Deref for SharedTree<T> {
 }
 
 impl<T> SharedTree<T> {
-    fn new(tree: T, bytes: usize, copy: Option<StorageAllocation>) -> Self {
+    fn new(tree: T, bytes: usize, copy: Option<CopyMembership>) -> Self {
         Self(
             Rc::new(Version {
                 tree,
@@ -78,18 +127,23 @@ impl<T> SharedTree<T> {
     }
 
     #[cfg(test)]
-    fn ticket_bytes(slot: &RefCell<Option<StorageAllocation>>) -> usize {
-        slot.borrow().as_ref().map_or(0, StorageAllocation::bytes)
-    }
-
-    #[cfg(test)]
     pub(super) fn copy_bytes(&self) -> usize {
-        Self::ticket_bytes(&self.0.copy)
+        self.0.copy.borrow().as_ref().map_or(0, |copy| {
+            copy.cohort
+                .borrow()
+                .tickets
+                .get(&copy.version)
+                .map_or(0, StorageAllocation::bytes)
+        })
     }
 
     #[cfg(test)]
     pub(super) fn cleanup_bytes(&self) -> usize {
-        Self::ticket_bytes(&self.0.cleanup)
+        self.0
+            .cleanup
+            .borrow()
+            .as_ref()
+            .map_or(0, StorageAllocation::bytes)
     }
 
     pub(super) fn is_shared(&self) -> bool {
@@ -159,14 +213,13 @@ impl<T> SharedTree<T> {
     }
 
     fn install_copy(&mut self, tree: T, bytes: usize, copy: Option<StorageAllocation>) {
-        let copy = if let Some(retained) = self.take_cleanup_copy() {
-            // The writer keeps its earlier charge. The reservation pays for
-            // the version that now lives on only because snapshots retain it.
-            self.0.copy.borrow_mut().replace(retained)
-        } else {
-            copy
-        };
-        *self = Self::new(tree, bytes, copy);
+        let cleanup = self.take_cleanup_copy();
+        // A cleanup reservation pays for the version retained by snapshots.
+        let writer_keeps_charge = cleanup.is_some();
+        let membership = cleanup
+            .or(copy)
+            .map(|ticket| self.0.fork_copy(ticket, writer_keeps_charge));
+        *self = Self::new(tree, bytes, membership);
     }
 }
 
@@ -311,5 +364,57 @@ impl FromIterator<String> for SharedTree<BTreeSet<String>> {
             tree.insert(name);
         }
         tree
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn three_tree_versions_hold_one_copy_after_any_version_drops() {
+        for first_drop in 0..3 {
+            let memory = StorageBudget::new(128 * 1024);
+            let root: SharedTree<BTreeMap<String, String>> =
+                [("payload".into(), "x".repeat(8192))].into_iter().collect();
+            let mut left = root.clone();
+            let mut right = root.clone();
+            left.make_private(left.reserve_copy(Some(&memory)).unwrap());
+            let one_copy = memory.observation().0;
+            assert!(one_copy >= 8192);
+            right.make_private(right.reserve_copy(Some(&memory)).unwrap());
+            assert_eq!(memory.observation().0, 2 * one_copy);
+
+            let mut versions = vec![root, left, right];
+            drop(versions.remove(first_drop));
+            assert_eq!(memory.observation().0, one_copy);
+            drop(versions.pop());
+            assert_eq!(memory.observation().0, 0);
+        }
+    }
+
+    #[test]
+    fn shrunk_tree_refunds_its_own_copy_and_admits_a_new_fork_after_growth() {
+        let memory = StorageBudget::new(128 * 1024);
+        let root: SharedTree<BTreeMap<String, String>> =
+            [("payload".into(), "x".repeat(8192))].into_iter().collect();
+        let mut edited = root.clone();
+        edited.make_private(edited.reserve_copy(Some(&memory)).unwrap());
+        let first_copy = edited.copy_bytes();
+        edited.insert("payload".into(), "short".into());
+        assert_eq!(memory.observation().0, first_copy - 8192 + 5);
+        edited.remove("payload");
+        assert_eq!(memory.observation().0, 0);
+
+        edited.insert("payload".into(), "y".repeat(16384));
+        let mut fork = edited.clone();
+        fork.make_private(fork.reserve_copy(Some(&memory)).unwrap());
+        let second_copy = first_copy + 8192;
+        assert_eq!(memory.observation().0, second_copy);
+        drop(root);
+        assert_eq!(memory.observation().0, second_copy);
+        drop(edited);
+        assert_eq!(memory.observation().0, 0);
+        assert_eq!(fork["payload"].len(), 16384);
     }
 }

@@ -3761,6 +3761,68 @@ mod tests {
     }
 
     #[test]
+    fn foreground_writes_fit_with_consecutive_binding_snapshots() {
+        let limit = 64 * 1024;
+        let (memory, state) = budgeted_state(limit);
+        state
+            .borrow_mut()
+            .assign_parameter("payload".into(), "x".repeat(32 * 1024))
+            .unwrap();
+
+        let retained = [("", "first"), ("first", "second")].map(|(previous, next)| {
+            let child = finish_snapshot(&state, &Cancel::new(), &mut Work::new(512, limit, 0))
+                .unwrap_or_else(|_| panic!("binding snapshot fits"));
+            assert_eq!(
+                state.borrow_mut().assign_parameter("x".into(), next.into()),
+                Ok(())
+            );
+            assert_eq!(child.parameter("x"), previous);
+            assert!(memory.observation().0 >= 32 * 1024);
+            drop(child);
+            memory.observation().0
+        });
+        assert_eq!(retained, [0, 0]);
+    }
+
+    #[test]
+    fn failed_function_prefix_releases_binding_copy_after_snapshot_exits() {
+        let limit = 128 * 1024;
+        let (memory, state) = budgeted_state(limit);
+        for (name, value) in [
+            ("payload", "x".repeat(32 * 1024)),
+            ("first", "outer".into()),
+            ("second", "kept".into()),
+        ] {
+            state
+                .borrow_mut()
+                .assign_parameter(name.into(), value)
+                .unwrap();
+        }
+        let child = finish_snapshot(&state, &Cancel::new(), &mut Work::new(512, limit, 0))
+            .unwrap_or_else(|_| panic!("binding snapshot fits"));
+        let pressure = memory.admit(64 * 1024).unwrap();
+        let mut frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        assert_eq!(
+            frame.prefixes(vec![
+                ("first".into(), "inner".into()),
+                ("second".into(), "x".repeat(96 * 1024)),
+            ]),
+            Err(crate::exec::RESOURCE_STATUS)
+        );
+        assert_eq!(state.borrow().parameter("first"), "inner");
+        drop(frame);
+        assert_eq!(state.borrow().parameter("first"), "outer");
+        assert_eq!(state.borrow().parameter("second"), "kept");
+        assert!(!state.borrow().exported.contains("first"));
+        assert!(!state.borrow().exported.contains("second"));
+        assert_eq!(child.parameter("first"), "outer");
+        drop(pressure);
+        assert!(memory.observation().0 >= 32 * 1024);
+        drop(child);
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
     fn snapshot_reserves_a_function_unwind_copy_before_sharing() {
         use crate::exec::RESOURCE_STATUS;
 

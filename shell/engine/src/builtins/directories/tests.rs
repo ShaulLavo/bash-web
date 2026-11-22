@@ -160,6 +160,30 @@ fn refused_directory_bindings_keep_cwd_stack_and_budget() {
 }
 
 #[test]
+fn cyclic_oldpwd_keeps_prepared_swap_and_rotation_on_status_one() {
+    for (command, stack) in [
+        ("pushd", ["/tmp/b", "/tmp/a"]),
+        ("pushd +2", ["/", "/tmp/a"]),
+        ("pushd -0", ["/", "/tmp/a"]),
+    ] {
+        let rig = Rig::new();
+        assert_eq!(
+            rig.run(
+                "cd /tmp/a; pushd -n /tmp/b >/dev/null; pushd -n / >/dev/null; \
+                     declare -n a=OLDPWD; declare -n OLDPWD=a"
+            ),
+            0
+        );
+        assert_eq!(rig.run(command), 1, "{command}");
+        let state = rig.session.state();
+        let state = state.borrow();
+        assert_eq!(state.cwd, "/tmp/a", "{command}");
+        assert_eq!(state.parameter("PWD"), "/tmp/a", "{command}");
+        assert_eq!(state.directories(), stack, "{command}");
+    }
+}
+
+#[test]
 fn readonly_directory_binding_still_changes_directory_and_writes_the_other_binding() {
     for (readonly, pwd, oldpwd) in [("PWD", "/tmp/a", "/tmp/a"), ("OLDPWD", "/tmp/b", "kept")] {
         let rig = Rig::new();

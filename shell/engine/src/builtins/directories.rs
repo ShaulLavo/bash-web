@@ -581,9 +581,12 @@ async fn swap(
     work.admit_storage(top.len()).map_err(error_status)?;
     let cwd = state.borrow().cwd.clone();
     let swapped = state.borrow().prepare_replace_top_directory(cwd)?;
-    let status = change("pushd", Some(&top), state, fds, context, work).await?;
     // Bash keeps the swap on an ordinary cd failure.
-    state.borrow_mut().install_directories(swapped);
+    let status = change("pushd", Some(&top), state, fds, context, work).await;
+    if matches!(status, Ok(_) | Err(1)) {
+        state.borrow_mut().install_directories(swapped);
+    }
+    let status = status?;
     if status != 0 {
         return Ok(Outcome::status(status));
     }
@@ -609,13 +612,16 @@ async fn rotate(
         (target, Some(rotated))
     };
     let status = if nocd {
-        0
+        Ok(0)
     } else {
-        change("pushd", Some(&target), state, fds, context, work).await?
+        change("pushd", Some(&target), state, fds, context, work).await
     };
-    if let Some(rotated) = rotated {
+    if matches!(status, Ok(_) | Err(1))
+        && let Some(rotated) = rotated
+    {
         state.borrow_mut().install_directories(rotated);
     }
+    let status = status?;
     if !nocd && status == 0 {
         print_stack("pushd", state, fds, context, work).await?;
     }
