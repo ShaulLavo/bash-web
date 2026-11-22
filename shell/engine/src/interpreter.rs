@@ -1357,6 +1357,111 @@ async fn sequence_body(
     }
     result
 }
+fn has_owned_function(command: &Command) -> bool {
+    match command {
+        Command::Function(_) => true,
+        Command::List(list) => {
+            matches!(list.first.as_ref(), Command::Function(_))
+                || list.rest.iter().any(|(operator, cmd)| {
+                    *operator == ListOperator::Semicolon && matches!(cmd, Command::Function(_))
+                })
+        }
+        _ => false,
+    }
+}
+
+fn execute_owned(
+    command: Command,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> eval::Frame<'static> {
+    if context.cancel.is_cancelled() {
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(130)));
+    }
+    if state.borrow().noexec {
+        let status = state.borrow().status();
+        return futures::future::Either::Left(futures::future::ready(Outcome::status(status)));
+    }
+    let context = match context.evaluation.descend() {
+        Ok(evaluation) => Context {
+            evaluation,
+            ..context
+        },
+        Err(code) => {
+            return futures::future::Either::Left(futures::future::ready(Outcome::status(code)));
+        }
+    };
+    let evaluation = context.evaluation.clone();
+    evaluation.frame(
+        async move {
+            yield_now().await;
+            if context.cancel.is_cancelled() {
+                return Outcome::status(130);
+            }
+            let mut result = match command {
+                Command::Function(function) => {
+                    function_names::declare_owned(function, state.clone(), fds, context).await
+                }
+                Command::List(list) => execute_owned_list(list, state.clone(), fds, context).await,
+                other => unreachable!("non-function command routed to execute_owned: {other:?}"),
+            };
+            result.flow = settle_reported_error(result.flow, &state);
+            finish_command(&state, result, true)
+        },
+        Outcome::status,
+    )
+}
+
+async fn execute_owned_list(
+    list: CommandList,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let span = list.span;
+    let mut first = *list.first;
+    let mut rest = list.rest.into_iter().peekable();
+    loop {
+        let mut links = Vec::new();
+        let mut separator = None;
+        while let Some((op, _)) = rest.peek() {
+            if matches!(op, ListOperator::Background | ListOperator::Semicolon) {
+                separator = rest.next();
+                break;
+            }
+            links.push(rest.next().unwrap());
+        }
+        match separator {
+            Some((ListOperator::Background, next)) => {
+                let result = background(&first, &links, span, &state, &fds, &context).await;
+                if result.flow != Flow::Normal || context.cancel.is_cancelled() {
+                    return result;
+                }
+                first = next;
+            }
+            Some((ListOperator::Semicolon, next)) => {
+                let result = if links.is_empty() && matches!(first, Command::Function(_)) {
+                    execute_owned(first, state.clone(), fds.clone(), context.clone()).await
+                } else {
+                    execute_and_or(&first, &links, state.clone(), fds.clone(), &context).await
+                };
+                if result.flow != Flow::Normal || context.cancel.is_cancelled() {
+                    return result;
+                }
+                first = next;
+            }
+            _ => {
+                return if links.is_empty() && matches!(first, Command::Function(_)) {
+                    execute_owned(first, state, fds, context).await
+                } else {
+                    and_or(&first, &links, state, fds, context).await
+                };
+            }
+        }
+    }
+}
+
 fn execute(
     command: &Command,
     state: SharedState,
@@ -1951,8 +2056,13 @@ async fn cache_loop_arithmetic<'a>(
     cache_arithmetic(source, context).await
 }
 
+const MAX_CACHED_ARITHMETIC_BYTES: usize = 256;
+
 async fn cache_arithmetic<'a>(source: &'a str, context: &Context) -> Option<CachedArithmetic<'a>> {
-    if source.trim().is_empty() || !arithmetic::Program::is_static(source) {
+    if source.trim().is_empty()
+        || source.len() > MAX_CACHED_ARITHMETIC_BYTES
+        || !arithmetic::Program::is_static(source)
+    {
         return None;
     }
     let storage = context
@@ -2488,16 +2598,17 @@ async fn and_or(
         if result.flow != Flow::Normal || context.cancel.is_cancelled() {
             break;
         }
-        if (*operator == ListOperator::And && result.code == 0)
-            || (*operator == ListOperator::Or && result.code != 0)
-        {
-            let next_context = if index + 1 == links.len() {
-                context.clone()
-            } else {
-                context.condition()
-            };
-            result = execute(next, state.clone(), fds.clone(), next_context).await;
+        let run_next = (*operator == ListOperator::And && result.code == 0)
+            || (*operator == ListOperator::Or && result.code != 0);
+        if !run_next {
+            continue;
         }
+        let next_context = if index + 1 == links.len() {
+            context.clone()
+        } else {
+            context.condition()
+        };
+        result = execute(next, state.clone(), fds.clone(), next_context).await;
     }
     result
 }
@@ -6482,5 +6593,53 @@ mod function_measurements {
                 );
             }
         }
+    }
+
+    #[test]
+    fn arithmetic_for_unused_large_step_does_not_starve_eval() {
+        let (ex, _host, session) = review_session(Limits::default());
+        let (output, capture) = io::capture(1024);
+        let mut fds = session.core.descriptors.borrow().clone();
+        fds.insert(1, output);
+        session.set_descriptors(fds).unwrap();
+        let script = format!(
+            "set -e; for ((i=0; i<1; 0 +{}0)); do eval \"echo ran\"; break; done; echo finished",
+            " ".repeat(43_300)
+        );
+        assert_eq!(finish_review(&ex, session.start(&script).unwrap()), 0);
+        assert_eq!(capture.bytes(), b"ran\nfinished\n");
+    }
+
+    #[test]
+    fn stored_function_body_clones_respect_live_memory_limit() {
+        let (ex, _host, session) = review_session(Limits {
+            execution_bytes: 64 * 1024,
+            ..Limits::default()
+        });
+        let body = ":;".repeat(45);
+        let script = format!("make() {{ f() {{ {body} }}; }}");
+        assert_eq!(finish_review(&ex, session.start(&script).unwrap()), 0);
+        let mut retained = Vec::new();
+        let mut rejected = false;
+        for _ in 0..8 {
+            let status = finish_review(&ex, session.start("make").unwrap());
+            if status == 2 {
+                rejected = true;
+                break;
+            }
+            assert_eq!(status, 0);
+            retained.push(session.state.borrow().functions()["f"].clone());
+        }
+        assert!(
+            rejected && !retained.is_empty(),
+            "retaining repeated function body copies must hit the 64 KiB live-memory limit"
+        );
+        assert!(session.core.execution_storage.observation().0 <= 64 * 1024);
+        drop(retained);
+        assert_eq!(
+            finish_review(&ex, session.start("unset -f f make").unwrap()),
+            0
+        );
+        assert_eq!(session.core.execution_storage.observation().0, 0);
     }
 }

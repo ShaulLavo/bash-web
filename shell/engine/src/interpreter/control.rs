@@ -381,7 +381,7 @@ async fn arithmetic_for_body(
     let condition = &command.condition;
     let has_condition = !condition.trim().is_empty();
     let condition_cache = cache_arithmetic(condition, &context).await;
-    let step_cache = cache_arithmetic(&command.step, &context).await;
+    let mut step_cache: Option<Option<CachedArithmetic<'_>>> = None;
     let body_cache = cache_loop_arithmetic(&command.body, &context).await;
     let mut result = Outcome::status(0);
     let mut budget = Budget::default();
@@ -406,9 +406,13 @@ async fn arithmetic_for_body(
             LoopStep::Continue => result = Outcome::status(0),
             LoopStep::Stop(outcome) => return outcome,
         }
-        if let Err(outcome) =
-            arithmetic_clause(&command.step, step_cache.as_ref(), &state, &fds, &context).await
-        {
+        let step = match &mut step_cache {
+            Some(cached) => cached.as_ref(),
+            None => step_cache
+                .insert(cache_arithmetic(&command.step, &context).await)
+                .as_ref(),
+        };
+        if let Err(outcome) = arithmetic_clause(&command.step, step, &state, &fds, &context).await {
             return outcome;
         }
     }

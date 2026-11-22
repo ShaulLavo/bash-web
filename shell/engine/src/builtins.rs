@@ -227,26 +227,31 @@ pub(crate) fn run<'a>(
         ),
         Builtin::Set => unreachable!("set consumes its arguments"),
         Builtin::Shift => shift(name, args, state, fds, context),
-        Builtin::Jobs => admitted(
-            async move {
-                if !args.is_empty() {
-                    return Err(2);
-                }
-                context.list_jobs(fds).await?;
-                Ok(Outcome::status(0))
-            },
-            context,
-        ),
-        Builtin::Wait => admitted(
-            async move {
-                if args.len() > 1 {
-                    return Err(2);
-                }
-                let id = args.first().map(|s| JobSelector::parse(s)).transpose()?;
-                Ok(Outcome::status(context.wait_job(id).await?))
-            },
-            context,
-        ),
+        Builtin::Jobs => {
+            if !args.is_empty() {
+                return Either::Left(ready(Err(2)));
+            }
+            admitted(
+                async move {
+                    context.list_jobs(fds).await?;
+                    Ok(Outcome::status(0))
+                },
+                context,
+            )
+        }
+        Builtin::Wait => {
+            if args.len() > 1 {
+                return Either::Left(ready(Err(2)));
+            }
+            let id = match args.first().map(|s| JobSelector::parse(s)).transpose() {
+                Ok(id) => id,
+                Err(code) => return Either::Left(ready(Err(code))),
+            };
+            admitted(
+                async move { Ok(Outcome::status(context.wait_job(id).await?)) },
+                context,
+            )
+        }
         Builtin::Kill => admitted(kill(args, fds, context), context),
     }
 }

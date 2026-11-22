@@ -142,16 +142,15 @@ pub(super) async fn run(
             && reader.failure.is_none()
             && reader.next_position.is_none()
             && super::replacement::eligible(&command);
-        result = execute(
-            &command,
-            state.clone(),
-            fds.clone(),
-            Context {
-                tail_exec,
-                ..context.clone()
-            },
-        )
-        .await;
+        let next_context = Context {
+            tail_exec,
+            ..context.clone()
+        };
+        result = if super::has_owned_function(&command) {
+            super::execute_owned(command, state.clone(), fds.clone(), next_context).await
+        } else {
+            execute(&command, state.clone(), fds.clone(), next_context).await
+        };
         if result.flow == Flow::SpawnFailed {
             return result;
         }
