@@ -81,7 +81,7 @@ test("an idle prompt requests raw mode once instead of on every host call", (con
   terminals.phase(1);
   const wakes = () => Atomics.load(bridge.state, control.wake);
   const idle = wakes();
-  // The editor reads one byte per call, and every host import runs prepare first.
+  // An idle reactor can poll repeatedly without changing terminal mode.
   for (let call = 0; call < 32; call++) terminals.prepare();
   assert.equal(wakes(), idle, "an idle prompt must not wake the page on every host call");
 
@@ -101,6 +101,25 @@ test("an idle prompt requests raw mode once instead of on every host call", (con
   assert.equal(must(controls.snapshot()).mode, "cooked");
   terminals.phase(1);
   assert.equal(must(controls.snapshot()).mode, "raw", "each new prompt requests raw mode");
+});
+
+test("a prompt read leaves queued command input in the shared terminal", (context) => {
+  const session = terminalSession(context);
+  const { bridge, terminals } = rootTerminals(context, session);
+  terminals.ready();
+  terminals.phase(1);
+  const endpoint = terminals.resolve(0);
+  const input = new TextEncoder().encode("read value\rqueued input\n");
+  assert.equal(must(pushTerminalInput(session.display, session.input, input)), input.length);
+  const bytes = new Uint8Array(256);
+  const count = endpoint.tryRead!([bytes]);
+  const decoder = new TextDecoder();
+  assert.equal(decoder.decode(bytes.subarray(0, count)), "read value\r");
+
+  Atomics.store(bridge.state, control.phase, 2);
+  terminals.phase(2);
+  const payload = endpoint.tryRead!([bytes]);
+  assert.equal(decoder.decode(bytes.subarray(0, payload)), "queued input\n");
 });
 
 for (const operation of ["readiness", "tryRead"] as const) {

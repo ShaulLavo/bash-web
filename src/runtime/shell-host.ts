@@ -115,6 +115,10 @@ function createRegistration(runtime: Runtime, wasmUrl: string, workerUrl: string
     throw error;
   }
   let initialized: Promise<void> | undefined;
+  const filesystem = () => {
+    if (runtime.disposed) throw new Error("Runtime is disposed");
+    return runtime.filesystem;
+  };
   return {
     wasmUrl,
     workerUrl,
@@ -122,26 +126,29 @@ function createRegistration(runtime: Runtime, wasmUrl: string, workerUrl: string
     initialize(observer) {
       if (initialized) return initialized;
       const attempt = (async () => {
-        for (const [name, directory] of [
+        const directories = [
           ["home", "/home/guest"],
           ["tmp", "/tmp"],
           ["bin", "/bin"],
           ["programs", "/programs"],
-        ] as const) {
-          markStartup(observer, `shell-${name}-mkdir-requested`);
-          await runtime.filesystem.mkdirp(directory);
-          markStartup(observer, `shell-${name}-mkdir-resolved`);
-        }
+        ] as const;
+        await Promise.all(
+          directories.map(async ([name, directory]) => {
+            markStartup(observer, `shell-${name}-mkdir-requested`);
+            await filesystem().mkdirp(directory);
+            markStartup(observer, `shell-${name}-mkdir-resolved`);
+          }),
+        );
         markStartup(observer, "shell-executable-lookup-requested");
-        const exists = await runtime.filesystem.lookup(executable);
+        const exists = await filesystem().lookup(executable);
         markStartup(observer, "shell-executable-lookup-resolved");
         if (!exists) {
           markStartup(observer, "shell-executable-write-requested");
-          await runtime.filesystem.writeFile(executable, new Uint8Array());
+          await filesystem().writeFile(executable, new Uint8Array());
           markStartup(observer, "shell-executable-write-resolved");
         }
         markStartup(observer, "shell-filesystem-drain-requested");
-        await runtime.filesystem.drain();
+        await filesystem().drain();
         markStartup(observer, "shell-filesystem-drain-resolved");
       })();
       initialized = attempt;
@@ -253,6 +260,18 @@ export async function startShell(
     options.signal?.throwIfAborted();
     return value;
   };
+  const startupTask = async <T>(
+    name: "registration" | "module" | "processes",
+    task: () => Promise<T>,
+  ): Promise<T> => {
+    markStartup(options.onStartupStage, `shell-${name}-requested`);
+    options.signal?.throwIfAborted();
+    if (runtime.disposed) throw new Error("Runtime is disposed");
+    const value = await task();
+    options.signal?.throwIfAborted();
+    if (!runtime.disposed) markStartup(options.onStartupStage, `shell-${name}-resolved`);
+    return value;
+  };
   const killOwnedJobs = () => {
     const jobs = new Set(
       workerProcessSlots(transport)
@@ -344,19 +363,19 @@ export async function startShell(
     release = runtime.retainConsumer({ filesystem: identity, revoke, stop: physicallyStop });
     terminalController = createTerminalController(runtime, transport, terminal, signalFailure);
     transport.data = { ...workerData, ...terminalController.metadata };
-    markStartup(options.onStartupStage, "shell-registration-requested");
-    await pending(() => registration.initialize(options.onStartupStage));
-    markStartup(options.onStartupStage, "shell-registration-resolved");
-    markStartup(options.onStartupStage, "shell-module-requested");
-    const loaded = await pending(() => registration.module(options.onStartupStage));
-    const promptHosting = await pending(() => promptModule);
-    markStartup(options.onStartupStage, "shell-module-resolved");
+    const [, [loaded, promptHosting], processes] = await pending(() =>
+      Promise.all([
+        startupTask("registration", () => registration.initialize(options.onStartupStage)),
+        startupTask("module", () =>
+          Promise.all([registration.module(options.onStartupStage), promptModule]),
+        ),
+        startupTask("processes", () => runtime.processes()),
+      ]),
+    );
     if (runtime.disposed) throw new Error("Runtime is disposed");
-    markStartup(options.onStartupStage, "shell-processes-requested");
-    service = await pending(() => runtime.processes());
+    service = processes;
     terminalController.bind(service);
     observeProcessService(runtime, service);
-    markStartup(options.onStartupStage, "shell-processes-resolved");
     markStartup(options.onStartupStage, "shell-root-adopt-requested");
     await service.adoptRuntimeRoot(transport, {
       memory: loaded.memory,

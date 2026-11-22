@@ -34,16 +34,33 @@ function fixture(terminal?: SharedArrayBuffer, owner?: TestContext) {
   return { request, executor, memory, context };
 }
 
-test("root memory growth updates both terminal metrics and process diagnostics at host calls", (owner) => {
+test("root memory growth updates both terminal metrics and process diagnostics at reactor polls", (owner) => {
   const terminal = new SharedBridge();
   const { request, executor, memory, context } = fixture(terminal.buffer, owner);
-  const imports = { probe: { boundary: () => 17 } };
+  const clock = () => 17;
+  const imports = {
+    wasi_snapshot_preview1: { clock_time_get: clock },
+    runtime_proc: {
+      poll: (pointer: number, count: number, timeout: number, output: number) => ({
+        pointer,
+        count,
+        timeout,
+        output,
+      }),
+    },
+  };
   executor.imports!(imports, context);
+  assert.equal(imports.wasi_snapshot_preview1.clock_time_get, clock);
   executor.instantiated!(context);
   assert.equal(Atomics.load(terminal.state, control.memory), 65536);
   assert.equal(Atomics.load(new BigInt64Array(request.memoryUsage!), 0), 65536n);
   memory.grow(1);
-  assert.equal(imports.probe.boundary(), 17);
+  assert.deepEqual(imports.runtime_proc.poll(1, 2, 3, 4), {
+    pointer: 1,
+    count: 2,
+    timeout: 3,
+    output: 4,
+  });
   assert.equal(Atomics.load(terminal.state, control.memory), 131072);
   assert.equal(Atomics.load(new BigInt64Array(request.memoryUsage!), 0), 131072n);
   memory.grow(1);

@@ -65,6 +65,16 @@ test("newline expansion uses bounded deliveries even for an all-LF large input",
   assert.ok(input.every((byte) => byte === 10));
 });
 
+test("deliveries retain their bytes after a later write reuses the scratch buffer", () => {
+  const first = "x".repeat(32767) + "\n";
+  const plain = "y".repeat(32769);
+  const expected = first.replace("\n", "\r\n") + plain + "end\r\n";
+  assert.deepEqual(
+    present([encoder.encode(first), encoder.encode(plain), encoder.encode("end\n")]),
+    Buffer.from(expected),
+  );
+});
+
 test("a new terminal attachment does not inherit the preceding session's CR", () => {
   const first = new TerminalNewlines();
   first.write(Uint8Array.of(13), () => {});
