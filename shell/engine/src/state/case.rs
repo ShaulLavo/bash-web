@@ -10,9 +10,15 @@ pub(crate) enum Locale {
 }
 impl Locale {
     pub(crate) fn from_state(state: &State) -> Result<Self, Error> {
+        Self::from_parameters(|name| state.scalar_parameter(name))
+    }
+
+    pub(crate) fn from_parameters<'a>(
+        lookup: impl FnMut(&str) -> Option<&'a str>,
+    ) -> Result<Self, Error> {
         let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
-            .iter()
-            .filter_map(|name| state.scalar_parameter(name))
+            .into_iter()
+            .filter_map(lookup)
             .find(|value| !value.is_empty())
             .unwrap_or("C");
         match locale {

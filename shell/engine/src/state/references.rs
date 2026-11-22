@@ -237,7 +237,8 @@ impl State {
         let held = update
             .storage_after(self.variables.get(name))
             .max(self.held_local_value(name));
-        let local_growth = self.getopts_local_growth(name, held)?;
+        let local_growth = self.local_value_growth(name, held)?;
+        let copy = self.variables.reserve_copy(name, self.memory.as_ref())?;
         let reservation = self.admit_temporary(
             journal_bytes
                 .saturating_add(bytes.saturating_mul(prefix_count))
@@ -246,6 +247,7 @@ impl State {
         // Reserve the complete outside overlap together. No yield/admission can
         // intervene while its parts move to the existing owners below.
         drop(reservation);
+        self.variables.make_private(name, copy);
         if let Some(changes) = &changes {
             changes
                 .borrow_mut()

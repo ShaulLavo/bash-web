@@ -18,7 +18,7 @@ use crate::{
     expand::{self, Error, Work},
     interpreter::{Context, Flow, JobSelector, Outcome},
     io::{Endpoint, FdTable, IoError},
-    state::{SharedState, State},
+    state::{DeclarationKind, SharedState, State},
 };
 use futures::future::{Either, LocalBoxFuture, Ready, ready};
 use shell_parser::parser::{Word, WordPart};
@@ -1091,19 +1091,34 @@ async fn declarations(
                 .map_or(0, str::len);
             scan_bytes(bytes, context, work).await?;
         }
-        let result = if inherit {
-            state
-                .borrow_mut()
-                .declare_inherited_local(key.clone(), value, work)
-        } else if case.specified() {
-            state
-                .borrow_mut()
-                .declare_case(key.clone(), value, local, case, work)
-        } else {
-            apply_declaration(name, &key, value, append, &mut state.borrow_mut())
+        let result = {
+            let mut state = state.borrow_mut();
+            let kind = if inherit {
+                DeclarationKind::InheritedLocal
+            } else if case.specified() {
+                DeclarationKind::Case {
+                    local,
+                    options: case,
+                }
+            } else if local && (!append || !state.is_current_local(&key)) {
+                DeclarationKind::Local
+            } else {
+                DeclarationKind::Scalar
+            };
+            match name {
+                "readonly" => state.readonly(key.clone(), value),
+                "export" => state.export(key.clone(), value),
+                _ => state.declare_with_attributes(
+                    key.clone(),
+                    value,
+                    kind,
+                    exported,
+                    readonly,
+                    work,
+                ),
+            }
         };
         if declaration_status(result)? == 0 {
-            declaration_attributes(&key, exported, readonly, &mut state.borrow_mut())?;
             continue;
         }
         status = 1;
@@ -1120,21 +1135,6 @@ fn declaration_status(result: Result<(), i32>) -> Result<i32, i32> {
         Err(code @ (2 | crate::exec::RESOURCE_STATUS)) => Err(code),
         Err(_) => Ok(1),
     }
-}
-
-fn declaration_attributes(
-    key: &str,
-    exported: bool,
-    readonly: bool,
-    state: &mut crate::state::State,
-) -> Result<(), i32> {
-    if exported {
-        state.export(key.to_owned(), None)?;
-    }
-    if readonly {
-        state.readonly(key.to_owned(), None)?;
-    }
-    Ok(())
 }
 
 #[derive(Default)]
@@ -1249,30 +1249,6 @@ async fn nameref_declaration(
         .declare_nameref(key.to_owned(), target, local)
 }
 
-fn apply_declaration(
-    name: &str,
-    key: &str,
-    value: Option<String>,
-    append: bool,
-    state: &mut crate::state::State,
-) -> Result<(), i32> {
-    if name == "readonly" {
-        return state.readonly(key.to_owned(), value);
-    }
-    if name == "export" {
-        return state.export(key.to_owned(), value);
-    }
-    let local =
-        name == "local" || matches!(name, "declare" | "typeset") && state.in_function_scope();
-    if local && (!append || !state.is_current_local(key)) {
-        return state.declare_local(key.to_owned(), value);
-    }
-    if let Some(value) = value {
-        state.assign_parameter(key.to_owned(), value)?;
-    }
-    Ok(())
-}
-
 /// `unset [-f] [-v] [-n] [--] name...`. Bash 5.3 ignores names that are not
 /// identifiers. Without `-v` a name with no variable unsets a function.
 /// `-n` removes the reference itself without following its target.
@@ -1323,7 +1299,7 @@ async fn unset(
             continue;
         }
         if functions {
-            state.borrow_mut().unset_function(name);
+            state.borrow_mut().unset_function(name)?;
             continue;
         }
         let removed = if namerefs {
@@ -1364,6 +1340,7 @@ async fn unset(
             }
         };
         match removed {
+            Err(status) if status != 1 => return Err(status),
             Err(_) => {
                 let diagnostic =
                     format!("/usr/bin/bash: unset: {name}: cannot unset: readonly variable\n");
@@ -1371,7 +1348,7 @@ async fn unset(
                 code = 1;
             }
             Ok(false) if !variables && !namerefs => {
-                state.borrow_mut().unset_function(name);
+                state.borrow_mut().unset_function(name)?;
             }
             Ok(_) => {}
         }

@@ -5,7 +5,7 @@ use crate::{
     expand::Work,
     interpreter::{Context, Outcome},
     io::FdTable,
-    state::{GetoptsState, SharedState, State, getopts_number},
+    state::{CaseLocale, GetoptsState, SharedState, State, getopts_number},
 };
 
 const USAGE: &str = "getopts: usage: getopts optstring name [arg ...]\n";
@@ -133,24 +133,7 @@ pub(super) async fn run(
     if error_path && valid {
         publications.swap(1, 2);
     }
-    let bindings = publications.each_ref().map(|publication| {
-        (
-            if publication.unbind || publication.value.is_none() {
-                ""
-            } else {
-                publication.name.as_str()
-            },
-            publication.value.as_ref().map_or(0, String::len),
-        )
-    });
-    let reservation = state.borrow().reserve_getopts_publication(&bindings)?;
-    let (failures, destination_ok) = commit_all(
-        &mut publications,
-        parsed.cursor,
-        &args[1],
-        state,
-        reservation,
-    )?;
+    let (failures, destination_ok) = commit_all(&mut publications, parsed.cursor, &args[1], state)?;
     if !silent
         && enabled
         && let Some(problem) = parsed.problem
@@ -179,6 +162,7 @@ pub(super) async fn run(
 struct Publication {
     name: String,
     value: Option<String>,
+    target: String,
     _value_storage: Option<crate::exec::Allocation>,
     _storage: crate::exec::Allocation,
     unbind: bool,
@@ -236,6 +220,7 @@ async fn prepare(
     Ok(Publication {
         name: name.to_owned(),
         value,
+        target: String::new(),
         _value_storage: value_storage,
         _storage: storage,
         unbind,
@@ -247,13 +232,29 @@ fn commit_all(
     cursor: GetoptsState,
     destination: &str,
     state: &SharedState,
-    reservation: Option<crate::exec::StorageAllocation>,
 ) -> Result<([Option<String>; 3], bool), i32> {
     let mut failures = [None, None, None];
     let mut destination_ok = true;
     let mut state = state.borrow_mut();
-    // All fallible scans and resource admissions precede the cursor commit.
-    // Transfer the aggregate reservation to local tickets without yielding.
+    for index in 0..publications.len() {
+        let (earlier, current) = publications.split_at_mut(index);
+        prepare_value(&mut current[0], earlier, &state)?;
+    }
+    let bindings = publications.each_ref().map(|publication| {
+        publication.value.as_ref().map_or(("", 0), |value| {
+            (publication.target.as_str(), value.capacity())
+        })
+    });
+    let reservation = state.reserve_scalar_publication(&bindings)?;
+    state.prepare_getopts_changes(publications.each_ref().map(|publication| {
+        (
+            publication.target.as_str(),
+            publication.value.is_some(),
+            publication.unbind,
+        )
+    }))?;
+    // With the target tables private, the reservation is available for each
+    // write's local, prefix and journal growth. There are no yields in commit.
     drop(reservation);
     state.getopts = cursor;
     for (publication, failure) in publications.iter_mut().zip(&mut failures) {
@@ -266,33 +267,64 @@ fn commit_all(
     Ok((failures, destination_ok))
 }
 
+fn prepare_value(
+    publication: &mut Publication,
+    earlier: &[Publication],
+    state: &State,
+) -> Result<(), i32> {
+    if publication.unbind || publication.name.is_empty() {
+        return Ok(());
+    }
+    publication.target = state.assignment_name(publication.name.clone())?;
+    if state.is_readonly(&publication.target) {
+        return Ok(());
+    }
+    let Some(mut value) = publication.value.take() else {
+        return Ok(());
+    };
+    state.normalize_getopts_publication(&publication.target, &mut value);
+    let mapping = state.case_mapping(&publication.target);
+    publication.value = Some(state.map_case_in_locale(mapping, value, || {
+        CaseLocale::from_parameters(|name| {
+            let target = state.scalar_target(name).ok().flatten()?;
+            // These parameters read projections instead of the ordinary binding.
+            if target == "PWD" || state.stack_array(target) {
+                return state.scalar_parameter(name);
+            }
+            earlier
+                .iter()
+                .rev()
+                .find(|publication| publication.target == target && !state.is_readonly(target))
+                .map_or_else(
+                    || state.scalar_parameter(name),
+                    |publication| publication.value.as_deref(),
+                )
+        })
+    })?);
+    Ok(())
+}
+
 fn commit(publication: &mut Publication, state: &mut State) -> Result<Option<String>, i32> {
     if publication.name.is_empty() {
         return Ok(None);
     }
     if publication.unbind {
-        state.unset_getopts_argument();
+        state.unset_getopts_argument()?;
         return Ok(None);
     }
-    let target = state.assignment_name(publication.name.clone())?;
-    let Some(mut value) = publication.value.take() else {
+    let target = std::mem::take(&mut publication.target);
+    let Some(value) = publication.value.take() else {
         return match state.clear_getopts_argument(&target) {
             Ok(()) => Ok(None),
             Err(1) => Ok(Some(target)),
             Err(status) => Err(status),
         };
     };
-    state.normalize_getopts_publication(&target, &mut value);
-    let result = if publication.name == "OPTIND" {
-        state.publish_getopts_index(value)
-    } else {
-        state.assign_parameter(publication.name.clone(), value)
-    };
-    match result {
-        Ok(()) => Ok(None),
-        Err(1) => Ok(Some(target)),
-        Err(status) => Err(status),
+    if state.is_readonly(&target) {
+        return Ok(Some(target));
     }
+    state.publish_getopts_value(target, value, publication.name == "OPTIND")?;
+    Ok(None)
 }
 
 async fn binding_message(fds: &FdTable, target: &str, context: &Context) -> Result<(), i32> {

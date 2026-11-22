@@ -316,12 +316,13 @@ async fn assign_body(
     if work.admit_storage(bytes).is_err() {
         return Err(Outcome::status(2));
     }
-    if state
+    match state
         .borrow_mut()
         .assign_parameter(name.to_owned(), value.to_owned())
-        .is_ok()
     {
-        return Ok(());
+        Ok(()) => return Ok(()),
+        Err(1) => {}
+        Err(code) => return Err(Outcome::status(code)),
     }
     let error = expand::Error::Readonly {
         name: name.to_owned(),

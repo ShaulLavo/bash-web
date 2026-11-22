@@ -312,25 +312,27 @@ async fn for_assignment_body(
     if assignment.admit_storage(binding_bytes).is_err() {
         return Err(Outcome::status(2));
     }
-    if state
+    let result = state
         .borrow_mut()
-        .assign_parameter(command.variable.clone(), value)
-        .is_err()
-    {
-        let error = expand::Error::Readonly {
-            name: command.variable.clone(),
-            line: Some(command.span.start.line),
-            expansion: false,
-        };
-        let mut outcome = expansion_failure(error.into(), fds, context).await;
-        outcome.flow = if state.borrow().errexit {
-            Flow::Abort
-        } else {
-            Flow::Normal
-        };
-        return Err(outcome);
+        .assign_parameter(command.variable.clone(), value);
+    let Err(code) = result else {
+        return Ok(());
+    };
+    if code != 1 {
+        return Err(Outcome::status(code));
     }
-    Ok(())
+    let error = expand::Error::Readonly {
+        name: command.variable.clone(),
+        line: Some(command.span.start.line),
+        expansion: false,
+    };
+    let mut outcome = expansion_failure(error.into(), fds, context).await;
+    outcome.flow = if state.borrow().errexit {
+        Flow::Abort
+    } else {
+        Flow::Normal
+    };
+    Err(outcome)
 }
 
 #[inline(never)]

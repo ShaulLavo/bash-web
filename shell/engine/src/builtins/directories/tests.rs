@@ -3,9 +3,11 @@
 //! failed cd refunds the prepared version.
 use crate::{
     Limits, Session,
-    executor::Executor,
+    exec::Work,
+    executor::{Cancel, Executor},
     io::{Capture, Endpoint, FdTable, MemoryFs, capture},
     process::InProcessHost,
+    state::State,
 };
 use futures::FutureExt;
 use std::rc::Rc;
@@ -120,6 +122,83 @@ fn refused_pushd_changes_neither_cwd_nor_stack() {
     assert_eq!(status, 2);
     assert_eq!(after, before);
     assert_eq!(rig.observe(), "/tmp/a\n/\n262145\n1\n");
+}
+
+#[test]
+fn refused_directory_bindings_keep_cwd_stack_and_budget() {
+    for (setup, command) in [
+        ("", "pushd /tmp/b"),
+        ("", "cd /tmp/b"),
+        ("pushd -n /tmp/b >/dev/null;", "pushd"),
+        ("pushd -n /tmp/b >/dev/null;", "pushd +1"),
+        ("pushd -n /tmp/b >/dev/null;", "popd"),
+    ] {
+        let rig = Rig::new();
+        assert_eq!(rig.run(&format!("cd /tmp/a; {setup} OLDPWD=kept; :")), 0);
+        let state = rig.session.state();
+        state
+            .borrow_mut()
+            .assign_parameter("large".into(), "x".repeat(256 * 1024))
+            .unwrap();
+        let stack = state.borrow().directories().to_vec();
+        let mut work = Work::new(65536, 1024 * 1024, 0);
+        let cancel = Cancel::new();
+        let snapshot = State::snapshot(&state, &cancel, &mut work)
+            .now_or_never()
+            .expect("short snapshot does not yield")
+            .unwrap_or_else(|_| panic!("snapshot fits"));
+        let expected = rig.remaining();
+        let (status, after) = rig.squeezed(command);
+        assert_eq!(status, 2, "{command}");
+        assert_eq!(state.borrow().cwd, "/tmp/a", "{command}");
+        assert_eq!(state.borrow().directories(), stack, "{command}");
+        assert_eq!(state.borrow().bindings()["PWD"].as_str(), "/tmp/a");
+        assert_eq!(state.borrow().parameter("OLDPWD"), "kept");
+        assert_eq!(after, expected, "{command}");
+        drop(snapshot);
+    }
+}
+
+#[test]
+fn cyclic_oldpwd_keeps_prepared_swap_and_rotation_on_status_one() {
+    for (command, stack) in [
+        ("pushd", ["/tmp/b", "/tmp/a"]),
+        ("pushd +2", ["/", "/tmp/a"]),
+        ("pushd -0", ["/", "/tmp/a"]),
+    ] {
+        let rig = Rig::new();
+        assert_eq!(
+            rig.run(
+                "cd /tmp/a; pushd -n /tmp/b >/dev/null; pushd -n / >/dev/null; \
+                     declare -n a=OLDPWD; declare -n OLDPWD=a"
+            ),
+            0
+        );
+        assert_eq!(rig.run(command), 1, "{command}");
+        let state = rig.session.state();
+        let state = state.borrow();
+        assert_eq!(state.cwd, "/tmp/a", "{command}");
+        assert_eq!(state.parameter("PWD"), "/tmp/a", "{command}");
+        assert_eq!(state.directories(), stack, "{command}");
+    }
+}
+
+#[test]
+fn readonly_directory_binding_still_changes_directory_and_writes_the_other_binding() {
+    for (readonly, pwd, oldpwd) in [("PWD", "/tmp/a", "/tmp/a"), ("OLDPWD", "/tmp/b", "kept")] {
+        let rig = Rig::new();
+        assert_eq!(
+            rig.run(&format!("cd /tmp/a; OLDPWD=kept; readonly {readonly}")),
+            0
+        );
+        assert_eq!(rig.run("pushd /tmp/b"), 1);
+        let state = rig.session.state();
+        let state = state.borrow();
+        assert_eq!(state.cwd, "/tmp/b");
+        assert!(state.directories().is_empty());
+        assert_eq!(state.bindings()["PWD"].as_str(), pwd);
+        assert_eq!(state.parameter("OLDPWD"), oldpwd);
+    }
 }
 
 #[test]

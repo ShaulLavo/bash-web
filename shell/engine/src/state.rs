@@ -2,7 +2,7 @@
 //! this value: isolated shell environments copy rules/state, never byte streams.
 pub(crate) mod traps;
 use crate::{
-    exec::{Error, Work},
+    exec::{Error, StorageAllocation, Work},
     executor::Cancel,
 };
 use shell_parser::parser::Command;
@@ -16,6 +16,7 @@ use std::{
 mod call_stack;
 mod case;
 mod case_attributes;
+mod cleanup;
 pub(crate) mod command_hash;
 pub(crate) mod completion;
 mod producer;
@@ -23,11 +24,15 @@ pub(crate) use case::Locale as CaseLocale;
 pub(crate) use case_attributes::{CaseMapping, CaseOptions};
 mod declarations;
 use call_stack::CallStack;
-pub(crate) use declarations::DeclarationView;
+pub(crate) use declarations::{DeclarationKind, DeclarationView};
 mod binding;
 mod prefixes;
 mod references;
+mod shared_tree;
+mod variables;
 pub(crate) use binding::Binding;
+use shared_tree::SharedTree;
+use variables::Variables;
 mod view;
 use binding::BindingUndo;
 pub(crate) use binding::BindingUpdate;
@@ -149,16 +154,54 @@ pub struct StoredFunction {
     pub(crate) storage: Option<crate::exec::RetainedStorage>,
 }
 
+#[derive(Debug, Default)]
+enum PipeStatus {
+    #[default]
+    Empty,
+    Single(i32),
+    Multi(Vec<i32>),
+}
+
+impl PipeStatus {
+    fn as_slice(&self) -> &[i32] {
+        match self {
+            Self::Empty => &[],
+            Self::Single(code) => std::slice::from_ref(code),
+            Self::Multi(codes) => codes,
+        }
+    }
+
+    async fn snapshot(
+        source: &SharedState,
+        cancel: &Cancel,
+        work: &mut Work,
+    ) -> Result<Self, Error> {
+        let count = match source.borrow().pipestatus {
+            Self::Empty => return Ok(Self::Empty),
+            Self::Single(code) => return Ok(Self::Single(code)),
+            Self::Multi(ref codes) => codes.len(),
+        };
+        work.checkpoint(cancel).await?;
+        let mut codes = snapshot_slots(count, work)?;
+        for index in 0..count {
+            work.checkpoint(cancel).await?;
+            let state = source.borrow();
+            codes.push(*state.pipestatus.as_slice().get(index).ok_or(2)?);
+        }
+        Ok(Self::Multi(codes))
+    }
+}
+
 #[derive(Debug)]
 pub struct State {
     pub shell_name: String,
     pub(crate) shell_pid: Option<u64>,
-    variables: BTreeMap<String, Binding>,
-    exported: BTreeSet<String>,
-    readonly: BTreeSet<String>,
-    case_attributes: BTreeMap<String, CaseMapping>,
+    variables: Variables,
+    exported: SharedTree<BTreeSet<String>>,
+    readonly: SharedTree<BTreeSet<String>>,
+    case_attributes: SharedTree<BTreeMap<String, CaseMapping>>,
     /// Scalar reference targets, distinct from ordinary variable values.
-    namerefs: BTreeMap<String, String>,
+    namerefs: SharedTree<BTreeMap<String, String>>,
     pub cwd: String,
     directories: DirectoryStack,
     aliases: Aliases,
@@ -167,10 +210,10 @@ pub struct State {
     pub(crate) completions: completion::CompletionTable,
     pub(crate) command_hash: command_hash::CommandHash,
     /// Function bodies are immutable. Isolated shells copy bindings, not ASTs.
-    functions: BTreeMap<String, StoredFunction>,
+    functions: SharedTree<BTreeMap<String, StoredFunction>>,
     pub(crate) traps: traps::Traps,
     status: i32,
-    pipestatus: Vec<i32>,
+    pipestatus: PipeStatus,
     pub pipefail: bool,
     pub nounset: bool,
     pub errexit: bool,
@@ -216,23 +259,28 @@ pub struct State {
     prefixes: prefixes::Prefixes,
     next_local_incarnation: u64,
     assignment_undo: AssignmentJournal,
+    inherited_locals: usize,
+    inherited_prefixes: usize,
+    external_restores: usize,
 }
 impl Default for State {
     fn default() -> Self {
         Self {
             shell_name: "bash".into(),
             shell_pid: None,
-            variables: BTreeMap::from([
+            variables: [
                 ("IFS".into(), " \t\n".into()),
                 ("OPTIND".into(), "1".into()),
                 ("OPTERR".into(), "1".into()),
                 ("PS4".into(), "+ ".into()),
                 ("_".into(), "bash".into()),
-            ]),
-            exported: BTreeSet::new(),
-            readonly: BTreeSet::new(),
-            case_attributes: BTreeMap::new(),
-            namerefs: BTreeMap::new(),
+            ]
+            .into_iter()
+            .collect(),
+            exported: SharedTree::default(),
+            readonly: SharedTree::default(),
+            case_attributes: SharedTree::default(),
+            namerefs: SharedTree::default(),
             cwd: "/home/guest".into(),
             directories: DirectoryStack::default(),
             aliases: Aliases::default(),
@@ -240,10 +288,10 @@ impl Default for State {
             disabled_builtins: 0,
             completions: completion::CompletionTable::default(),
             command_hash: command_hash::CommandHash::default(),
-            functions: BTreeMap::new(),
+            functions: SharedTree::default(),
             traps: traps::Traps::default(),
             status: 0,
-            pipestatus: Vec::new(),
+            pipestatus: PipeStatus::Empty,
             pipefail: false,
             nounset: false,
             errexit: false,
@@ -281,6 +329,9 @@ impl Default for State {
             prefixes: prefixes::Prefixes::default(),
             next_local_incarnation: 0,
             assignment_undo: AssignmentJournal::default(),
+            inherited_locals: 0,
+            inherited_prefixes: 0,
+            external_restores: 0,
         }
     }
 }
@@ -290,7 +341,86 @@ enum AssignmentKind {
     Publication,
 }
 
+struct ScalarAssignment {
+    owner: references::Owner,
+    journal: Option<Rc<RefCell<AssignmentChanges>>>,
+    journal_bytes: usize,
+    prefix_bytes: usize,
+    held: usize,
+    copy: Option<StorageAllocation>,
+    room: Option<StorageAllocation>,
+}
+
+const VARIABLES: u8 = 1;
+const EXPORTED: u8 = 2;
+const READONLY: u8 = 4;
+const CASE_ATTRIBUTES: u8 = 8;
+const NAMEREFS: u8 = 16;
+
+#[derive(Default)]
+struct BindingCopies {
+    changes: u8,
+    variables: Option<StorageAllocation>,
+    exported: Option<StorageAllocation>,
+    readonly: Option<StorageAllocation>,
+    case_attributes: Option<StorageAllocation>,
+    namerefs: Option<StorageAllocation>,
+}
+
+impl BindingCopies {
+    fn install(self, state: &mut State, name: &str) {
+        if self.changes & VARIABLES != 0 {
+            state.variables.make_private(name, self.variables);
+        }
+        if self.changes & EXPORTED != 0 {
+            state.exported.make_private(self.exported);
+        }
+        if self.changes & READONLY != 0 {
+            state.readonly.make_private(self.readonly);
+        }
+        if self.changes & CASE_ATTRIBUTES != 0 {
+            state.case_attributes.make_private(self.case_attributes);
+        }
+        if self.changes & NAMEREFS != 0 {
+            state.namerefs.make_private(self.namerefs);
+        }
+    }
+}
+
 impl State {
+    fn reserve_binding_changes(&self, name: &str, changes: u8) -> Result<BindingCopies, i32> {
+        let memory = self.memory.as_ref();
+        Ok(BindingCopies {
+            changes,
+            variables: (changes & VARIABLES != 0)
+                .then(|| self.variables.reserve_copy(name, memory))
+                .transpose()?
+                .flatten(),
+            exported: (changes & EXPORTED != 0)
+                .then(|| self.exported.reserve_copy(memory))
+                .transpose()?
+                .flatten(),
+            readonly: (changes & READONLY != 0)
+                .then(|| self.readonly.reserve_copy(memory))
+                .transpose()?
+                .flatten(),
+            case_attributes: (changes & CASE_ATTRIBUTES != 0)
+                .then(|| self.case_attributes.reserve_copy(memory))
+                .transpose()?
+                .flatten(),
+            namerefs: (changes & NAMEREFS != 0)
+                .then(|| self.namerefs.reserve_copy(memory))
+                .transpose()?
+                .flatten(),
+        })
+    }
+
+    fn prepare_binding_changes(&mut self, name: &str, changes: u8) -> Result<(), i32> {
+        self.reserve_binding_changes(name, changes)?
+            .install(self, name);
+        Ok(())
+    }
+
     /// Ordinary bindings, without special-parameter or nameref resolution.
     pub fn bindings(&self) -> Bindings<'_> {
         Bindings::new(&self.variables)
@@ -299,7 +429,7 @@ impl State {
     pub(crate) fn prefix_capacity_bytes(&self) -> usize {
         self.prefixes.capacity_bytes()
     }
-    pub(crate) fn raw_bindings(&self) -> &BTreeMap<String, Binding> {
+    pub(crate) fn raw_bindings(&self) -> &Variables {
         &self.variables
     }
     pub fn exported_bindings(&self) -> &BTreeSet<String> {
@@ -317,11 +447,33 @@ impl State {
     pub fn functions(&self) -> &BTreeMap<String, StoredFunction> {
         &self.functions
     }
-    pub(crate) fn define_function(&mut self, name: String, function: StoredFunction) {
+    #[cfg(test)]
+    pub(crate) fn function_bindings_copy_bytes(&self) -> usize {
+        self.functions.copy_bytes()
+    }
+    pub(crate) fn admit_function_definition(
+        &self,
+    ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
+        self.functions.reserve_copy(self.memory.as_ref())
+    }
+    pub(crate) fn define_function(
+        &mut self,
+        name: String,
+        function: StoredFunction,
+        copy: Option<crate::exec::StorageAllocation>,
+    ) {
+        debug_assert!(copy.is_some() || !self.functions.is_shared() || self.memory.is_none());
+        self.functions.make_private(copy);
         self.functions.insert(name, function);
     }
-    pub(crate) fn unset_function(&mut self, name: &str) {
+    pub(crate) fn unset_function(&mut self, name: &str) -> Result<(), i32> {
+        if !self.functions.contains_key(name) {
+            return Ok(());
+        }
+        let copy = self.functions.reserve_copy(self.memory.as_ref())?;
+        self.functions.make_private(copy);
         self.functions.remove(name);
+        Ok(())
     }
     pub(crate) fn positional(&self) -> &Vec<String> {
         &self.positional
@@ -333,10 +485,14 @@ impl State {
         self.status = status;
     }
     pub fn pipeline_status(&self) -> &[i32] {
-        &self.pipestatus
+        self.pipestatus.as_slice()
     }
     pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {
-        self.pipestatus = statuses;
+        self.pipestatus = match statuses.as_slice() {
+            [] => PipeStatus::Empty,
+            [code] => PipeStatus::Single(*code),
+            _ => PipeStatus::Multi(statuses),
+        };
     }
     pub(crate) fn last_argument_needs_admission(&self) -> bool {
         self.is_nameref("_")
@@ -347,7 +503,6 @@ impl State {
                 && self.ifs_members.is_none()
     }
     pub(crate) fn publish_last_argument(&mut self, mut value: String) -> Result<(), Error> {
-        self.exported.remove("_");
         let name = if self.namerefs.contains_key("_") {
             Cow::Owned(self.assignment_name("_".into())?)
         } else {
@@ -360,9 +515,19 @@ impl State {
                 expansion: false,
             });
         }
+        let unexport = self.exported.contains("_");
+        let copy = if unexport {
+            self.exported.reserve_copy(self.memory.as_ref())?
+        } else {
+            None
+        };
         self.normalize_getopts_publication(&name, &mut value);
-        self.assign_resolved_parameter(name, value, AssignmentKind::Publication)
-            .map_err(Error::from)
+        self.assign_resolved_parameter(name, value, AssignmentKind::Publication)?;
+        if unexport {
+            self.exported.make_private(copy);
+            self.exported.remove("_");
+        }
+        Ok(())
     }
     pub(crate) fn last_async(&self) -> Option<&str> {
         self.last_async.as_deref()
@@ -382,34 +547,34 @@ impl State {
             .collect();
         self.exported = self.variables.keys().cloned().collect();
         self.initialize_shell_defaults();
-        self.variables
-            .entry("PATH".into())
-            .or_insert_with(|| "/usr/bin:/bin".into());
+        if !self.variables.contains_key("PATH") {
+            self.variables.insert("PATH".into(), "/usr/bin:/bin".into());
+        }
     }
     /// The browser process adapter keeps the engine's default IFS if absent
     /// from the inherited environment, and exports the resulting startup keys.
     pub fn inherit_environment(&mut self, environment: impl IntoIterator<Item = (String, String)>) {
+        self.variables.ordinary.make_private(None);
         self.variables.remove("_");
         self.variables.remove("OPTIND");
         self.variables.remove("OPTERR");
         self.variables.remove("PS4");
-        self.variables.extend(
-            environment
-                .into_iter()
-                .map(|(key, value)| (key, value.into())),
-        );
+        for (key, value) in environment {
+            self.variables.insert(key, value.into());
+        }
         self.exported = self.variables.keys().cloned().collect();
         self.initialize_shell_defaults();
     }
     fn initialize_shell_defaults(&mut self) {
-        self.variables
-            .entry("_".into())
-            .or_insert_with(|| self.shell_name.clone().into());
+        if !self.variables.contains_key("_") {
+            self.variables
+                .insert("_".into(), self.shell_name.clone().into());
+        }
         self.variables.insert("OPTIND".into(), "1".into());
         self.variables.insert("OPTERR".into(), "1".into());
-        self.variables
-            .entry("PS4".into())
-            .or_insert_with(|| "+ ".into());
+        if !self.variables.contains_key("PS4") {
+            self.variables.insert("PS4".into(), "+ ".into());
+        }
     }
     pub(crate) fn with_memory(memory: crate::exec::StorageBudget) -> Self {
         Self {
@@ -430,17 +595,9 @@ impl State {
     pub fn shared(self) -> SharedState {
         Rc::new(RefCell::new(self))
     }
-    /// Copy an isolated shell's retained state against the command's shared
-    /// storage/work limits. The calling shell must remain logically quiescent
-    /// until this finishes, as it does while awaiting substitution expansion.
-    /// No RefCell borrow crosses a checkpoint. Each individual copy is admitted
-    /// before allocation and bounded by the remaining storage allowance; its
-    /// bytes are then walked cooperatively, including bytes never emitted.
-    ///
-    /// Function payloads stay shared, so only their binding/name/node storage is
-    /// copied and charged here. A caller that clones an AST for execution must
-    /// separately admit and account for that clone. Charges remain with Work
-    /// for the command's lifetime, even if a child finishes sooner.
+    /// Fork an isolated shell. Work still bounds the retained state a command
+    /// can inherit, using cached tree sizes. Live storage admits tree copies on
+    /// write. The source must remain logically quiescent across checkpoints.
     pub(crate) async fn snapshot(
         source: &SharedState,
         cancel: &Cancel,
@@ -454,16 +611,7 @@ impl State {
         )?;
         let shell_name = snapshot_value(source, |s| Some(&s.shell_name), cancel, work).await?;
         let cwd = snapshot_value(source, |s| Some(&s.cwd), cancel, work).await?;
-        // Shares the immutable, already charged stack version; changes copy it.
-        let directories = source.borrow().directories.clone();
-        let variables = snapshot_map(source, |s| &s.variables, cancel, work).await?;
-        let exported = snapshot_set(source, |s| &s.exported, cancel, work).await?;
-        let readonly = snapshot_set(source, |s| &s.readonly, cancel, work).await?;
-        let namerefs = snapshot_map(source, |s| &s.namerefs, cancel, work).await?;
-        let case_attributes = snapshot_map(source, |s| &s.case_attributes, cancel, work).await?;
-        let functions = snapshot_map(source, |s| &s.functions, cancel, work).await?;
         let call_stack = CallStack::snapshot(source, cancel, work).await?;
-        let pipestatus = snapshot_vec(source, |s| &s.pipestatus, cancel, work).await?;
         let positional_memory = fork_memory(source.borrow().positional_memory.as_ref())?;
         let positional = snapshot_vec(source, |s| &s.positional, cancel, work).await?;
         let last_async = snapshot_value(source, |s| Some(&s.last_async), cancel, work).await?;
@@ -479,23 +627,32 @@ impl State {
         for index in 0..prefix_count {
             prefixes.push(snapshot_map(source, |s| &s.prefixes[index], cancel, work).await?);
         }
+        let last_argument_bytes = {
+            let state = source.borrow();
+            work.admit_storage(state.binding_snapshot_bytes())?;
+            state.variables.last_argument_bytes()
+        };
+        snapshot_steps(last_argument_bytes, cancel, work).await?;
+        let pipestatus = PipeStatus::snapshot(source, cancel, work).await?;
         let state = source.borrow();
+        let prefixes = prefixes::Prefixes::from_snapshot(prefixes, &state)?;
+        state.reserve_snapshot_cleanup()?;
         Ok(Self {
             shell_name,
             shell_pid: state.shell_pid,
-            variables,
-            exported,
-            readonly,
-            case_attributes,
-            namerefs,
+            variables: state.variables.snapshot(),
+            exported: state.exported.clone(),
+            readonly: state.readonly.clone(),
+            case_attributes: state.case_attributes.clone(),
+            namerefs: state.namerefs.clone(),
             cwd,
-            directories,
+            directories: state.directories.clone(),
             aliases: state.aliases.clone(),
             expand_aliases: state.expand_aliases,
             disabled_builtins: state.disabled_builtins,
             completions: state.completions.clone(),
             command_hash: state.command_hash.clone(),
-            functions,
+            functions: state.functions.clone(),
             traps: state.traps.inherited(),
             status: state.status,
             pipestatus,
@@ -533,10 +690,22 @@ impl State {
             memory: state.memory.clone(),
             positional_memory,
             locals,
-            prefixes: prefixes::Prefixes::from_snapshot(prefixes, &state)?,
+            prefixes,
             next_local_incarnation: state.next_local_incarnation,
             assignment_undo: AssignmentJournal::default(),
+            inherited_locals: local_count,
+            inherited_prefixes: prefix_count,
+            external_restores: 0,
         })
+    }
+
+    fn binding_snapshot_bytes(&self) -> usize {
+        self.variables.bytes()
+            + self.exported.bytes()
+            + self.readonly.bytes()
+            + self.namerefs.bytes()
+            + self.case_attributes.bytes()
+            + self.functions.bytes()
     }
     fn epoch_realtime_shadowed(&self) -> bool {
         self.locals
@@ -650,6 +819,9 @@ impl State {
         let ScalarResolution::Target(name) = self.resolve_scalar_target(name) else {
             return None;
         };
+        self.scalar_value(name)
+    }
+    fn scalar_value(&self, name: &str) -> Option<&str> {
         if name == "PWD" {
             return Some(&self.cwd);
         }
@@ -984,20 +1156,25 @@ impl State {
         name: &'a str,
         scope: Option<usize>,
     ) -> ScalarResolution<'a> {
+        Self::resolve_scalar_with(name, |name| self.nameref_at(name, scope))
+    }
+    fn resolve_scalar_with<'a>(
+        name: &'a str,
+        nameref: impl Fn(&str) -> Option<&'a str>,
+    ) -> ScalarResolution<'a> {
         let mut current = name;
         let mut fast = Some(name);
         for _ in 0..MAX_NAMEREF_DEPTH {
-            let Some(next) = self.nameref_at(current, scope) else {
+            let Some(next) = nameref(current) else {
                 return ScalarResolution::Target(current);
             };
             current = next;
-            fast = fast.and_then(|name| self.nameref_at(name, scope));
-            fast = fast.and_then(|name| self.nameref_at(name, scope));
+            fast = fast.and_then(&nameref).and_then(&nameref);
             if fast == Some(current) {
                 return ScalarResolution::Cycle;
             }
         }
-        if self.nameref_at(current, scope).is_some() {
+        if nameref(current).is_some() {
             return ScalarResolution::DepthExceeded;
         }
         ScalarResolution::Target(current)
@@ -1105,6 +1282,7 @@ impl State {
                     name,
                     value_bytes,
                     state.reference_owner(name),
+                    0,
                 ))?;
             }
             bytes
@@ -1126,6 +1304,7 @@ impl State {
                 target,
                 value_bytes,
                 self.reference_owner(target),
+                0,
             ))?;
         }
         if target == name {
@@ -1190,34 +1369,83 @@ impl State {
             return Err(1);
         }
         let value = self.case_value(&name, value)?;
-        let owner = self.reference_owner(&name);
-        let changes = self.assignment_undo.0.upgrade();
-        let journal_bytes = changes.as_ref().map_or(0, |changes| {
+        let assignment = self.admit_scalar_write(&name, value.capacity())?;
+        self.write_scalar(name, value, kind, assignment);
+        Ok(())
+    }
+
+    fn admit_scalar_write(&self, name: &str, value_bytes: usize) -> Result<ScalarAssignment, i32> {
+        let owner = self.reference_owner(name);
+        let journal = self.assignment_undo.0.upgrade();
+        let (journal_bytes, prefix_bytes) =
+            self.scalar_effect_storage(name, value_bytes, owner, journal.as_ref(), 0);
+        let held = self.scalar_assignment_value_bytes(name, value_bytes);
+        let local_growth = self.local_value_growth(name, held)?;
+        let copy = self.variables.reserve_copy(name, self.memory.as_ref())?;
+        let room = self.admit_temporary(
+            journal_bytes
+                .saturating_add(prefix_bytes)
+                .saturating_add(local_growth),
+        )?;
+        Ok(ScalarAssignment {
+            owner,
+            journal,
+            journal_bytes,
+            prefix_bytes,
+            held,
+            copy,
+            room,
+        })
+    }
+
+    fn scalar_effect_storage(
+        &self,
+        name: &str,
+        value_bytes: usize,
+        owner: references::Owner,
+        journal: Option<&Rc<RefCell<AssignmentChanges>>>,
+        prior_growth: usize,
+    ) -> (usize, usize) {
+        let journal_bytes = journal.map_or(0, |changes| {
             changes
                 .borrow()
-                .scalar_effect_bytes(&name, value.len(), owner)
+                .scalar_effect_bytes(name, value_bytes, owner, prior_growth)
         });
         let prefix_bytes = self
             .prefixes
             .last()
-            .and_then(|saved| saved.get(name.as_ref()))
+            .and_then(|saved| saved.get(name))
             .filter(|saved| saved.owner == owner)
             .map_or(0, |saved| {
                 saved
                     .value
                     .as_ref()
                     .map_or(0, Binding::storage_bytes)
-                    .saturating_add(value.len())
+                    .saturating_add(value_bytes)
                     .saturating_add(Binding::node_bytes())
+                    .saturating_add(prior_growth)
             });
-        let held = self.scalar_assignment_value_bytes(&name, value.len());
-        let local_growth = self.getopts_local_growth(&name, held)?;
-        let reservation = self.admit_temporary(
-            journal_bytes
-                .saturating_add(prefix_bytes)
-                .saturating_add(local_growth),
-        )?;
-        drop(reservation);
+        (journal_bytes, prefix_bytes)
+    }
+
+    fn write_scalar(
+        &mut self,
+        name: Cow<'_, str>,
+        value: String,
+        kind: AssignmentKind,
+        assignment: ScalarAssignment,
+    ) {
+        let ScalarAssignment {
+            owner,
+            journal: changes,
+            journal_bytes,
+            prefix_bytes,
+            held,
+            copy,
+            room,
+        } = assignment;
+        drop(room);
+        self.variables.make_private(&name, copy);
         if let Some(changes) = &changes {
             changes
                 .borrow_mut()
@@ -1252,15 +1480,17 @@ impl State {
         {
             changes.borrow_mut().getopts = Some(self.getopts);
         }
-        if let Some(binding) = self.variables.get_mut(name.as_ref()) {
-            binding.set_scalar(value);
-        } else {
-            self.variables.insert(name.into_owned(), value.into());
+        let mut value = Some(value);
+        if !self
+            .variables
+            .update(&name, |binding| binding.set_scalar(value.take().unwrap()))
+        {
+            self.variables
+                .insert(name.into_owned(), value.unwrap().into());
         }
         if direct_ifs {
             self.refresh_star_separator();
         }
-        Ok(())
     }
     fn scalar_assignment_value_bytes(&self, name: &str, bytes: usize) -> usize {
         self.variables
@@ -1289,12 +1519,18 @@ impl State {
         if self.is_readonly(target) {
             return Err(1);
         }
-        self.reserve_local_value(target, 0)?;
+        self.prepare_binding_changes(
+            target,
+            self.binding_removals(target) & (VARIABLES | EXPORTED),
+        )?;
+        self.reserve_local_value(target, 0)
+            .expect("shrinking a local binding");
         self.variables.remove(target);
         self.exported.remove(target);
         Ok(())
     }
-    pub(crate) fn unset_getopts_argument(&mut self) {
+    pub(crate) fn unset_getopts_argument(&mut self) -> Result<(), i32> {
+        self.prepare_binding_changes("OPTARG", self.getopts_unbind_changes())?;
         self.reserve_local_value("OPTARG", 0)
             .expect("shrinking a local binding");
         self.variables.remove("OPTARG");
@@ -1309,6 +1545,44 @@ impl State {
         {
             local.readonly = false;
         }
+        Ok(())
+    }
+    fn getopts_unbind_changes(&self) -> u8 {
+        (self.binding_removals("OPTARG") & (VARIABLES | NAMEREFS | EXPORTED))
+            | (u8::from(self.readonly.contains("OPTARG")) * READONLY)
+    }
+    pub(crate) fn prepare_getopts_changes(
+        &mut self,
+        publications: [(&str, bool, bool); 3],
+    ) -> Result<(), i32> {
+        if !self.variables.ordinary.is_shared()
+            && !self.exported.is_shared()
+            && !self.readonly.is_shared()
+            && !self.namerefs.is_shared()
+        {
+            return Ok(());
+        }
+        let mut changes = 0;
+        for (target, has_value, unbind) in publications {
+            if unbind {
+                changes |= self.getopts_unbind_changes();
+                continue;
+            }
+            if target.is_empty() || self.is_readonly(target) {
+                continue;
+            }
+            let write = if has_value {
+                VARIABLES
+            } else {
+                self.binding_removals(target) & (VARIABLES | EXPORTED)
+            };
+            changes |= if target == "_" {
+                write & !VARIABLES
+            } else {
+                write
+            };
+        }
+        self.prepare_binding_changes("", changes)
     }
     fn restore_getopts(&mut self, saved: Option<(GetoptsState, bool)>) {
         if let Some((cursor, numeric)) = saved {
@@ -1329,39 +1603,51 @@ impl State {
     pub(crate) fn getopts_publication_budget(&self) -> Option<crate::exec::StorageBudget> {
         self.memory.clone()
     }
-    pub(crate) fn reserve_getopts_publication(
+    pub(crate) fn reserve_scalar_publication<const N: usize>(
         &self,
-        names: &[(&str, usize); 3],
+        names: &[(&str, usize); N],
     ) -> Result<Option<crate::exec::StorageAllocation>, i32> {
-        let mut growth = [("", 0usize, 0usize); 3];
-        for (index, (name, bytes)) in names.iter().enumerate() {
-            let target = self.scalar_target(name)?.ok_or(2)?;
+        let mut growth = [("", 0usize, 0usize); N];
+        let journal = self.assignment_undo.0.upgrade();
+        let mut effects = 0usize;
+        for (index, (target, bytes)) in names.iter().copied().enumerate() {
+            if target.is_empty() || self.is_readonly(target) {
+                continue;
+            }
             let slot = growth[..index]
                 .iter()
                 .position(|(name, _, _)| *name == target)
                 .unwrap_or(index);
-            let (_, previous_growth, previous_writes) = growth[slot];
+            let (_, previous_local, previous_writes) = growth[slot];
+            let indexed = matches!(self.variables.get(target), Some(Binding::Indexed(_)));
             let requested = self
-                .scalar_assignment_value_bytes(target, *bytes)
-                .checked_add(previous_writes)
+                .scalar_assignment_value_bytes(target, bytes)
+                .checked_add(if indexed { previous_writes } else { 0 })
                 .ok_or(2)?;
-            let required = self.getopts_local_growth(target, requested)?;
-            let additional = if matches!(self.variables.get(target), Some(Binding::Indexed(_))) {
-                Binding::node_bytes().checked_add(*bytes).ok_or(2)?
-            } else {
-                0
-            };
+            let required = self.local_value_growth(target, requested)?;
+            let (journal_bytes, prefix_bytes) = self.scalar_effect_storage(
+                target,
+                bytes,
+                self.reference_owner(target),
+                journal.as_ref(),
+                previous_writes,
+            );
+            effects = effects
+                .checked_add(journal_bytes)
+                .and_then(|total| total.checked_add(prefix_bytes))
+                .ok_or(2)?;
+            let additional = Binding::node_bytes().checked_add(bytes).ok_or(2)?;
             growth[slot] = (
                 target,
-                previous_growth.max(required),
+                previous_local.max(required),
                 previous_writes.checked_add(additional).ok_or(2)?,
             );
         }
-        self.admit_temporary(growth.iter().try_fold(0usize, |sum, (_, bytes, _)| {
+        self.admit_temporary(growth.iter().try_fold(effects, |sum, (_, bytes, _)| {
             sum.checked_add(*bytes).ok_or(2)
         })?)
     }
-    fn getopts_local_growth(&self, name: &str, bytes: usize) -> Result<usize, i32> {
+    fn local_value_growth(&self, name: &str, bytes: usize) -> Result<usize, i32> {
         if self.is_readonly(name) {
             return Ok(0);
         }
@@ -1377,11 +1663,27 @@ impl State {
             .ok_or(2)?
             .saturating_sub(memory.borrow().bytes()))
     }
-    pub(crate) fn publish_getopts_index(&mut self, value: String) -> Result<(), i32> {
+    pub(crate) fn publish_getopts_value(
+        &mut self,
+        target: String,
+        value: String,
+        preserve_cursor: bool,
+    ) -> Result<(), i32> {
+        if self.is_readonly(&target) {
+            return Err(1);
+        }
+        let assignment = self.admit_scalar_write(&target, value.capacity())?;
         let cursor = self.getopts;
-        let result = self.assign_parameter("OPTIND".into(), value);
-        self.getopts = cursor;
-        result
+        self.write_scalar(
+            Cow::Owned(target),
+            value,
+            AssignmentKind::Explicit,
+            assignment,
+        );
+        if preserve_cursor {
+            self.getopts = cursor;
+        }
+        Ok(())
     }
     pub(crate) fn assignment_name(&self, name: String) -> Result<String, i32> {
         let ScalarResolution::Target(target) = self.resolve_scalar_target(&name) else {
@@ -1412,7 +1714,19 @@ impl State {
             .is_some_and(|local| local.readonly)
     }
     pub(crate) fn readonly(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
-        let name = self.prepare_assignment(name, value)?;
+        let name = self.assignment_name(name)?;
+        let local = self.locals.iter().any(|locals| locals.contains_key(&name));
+        let changes = if !local && !self.readonly.contains(&name) {
+            READONLY
+        } else {
+            0
+        };
+        self.prepare_attribute_assignment(&name, value, changes)?;
+        self.mark_readonly(name);
+        Ok(())
+    }
+
+    fn mark_readonly(&mut self, name: String) {
         let owner = self
             .locals
             .iter_mut()
@@ -1420,23 +1734,37 @@ impl State {
             .find_map(|locals| locals.get_mut(&name));
         if let Some(local) = owner {
             local.readonly = true;
-            return Ok(());
+            return;
         }
         self.readonly.insert(name);
-        Ok(())
     }
     pub(crate) fn export(&mut self, name: String, value: Option<String>) -> Result<(), i32> {
-        let name = self.prepare_assignment(name, value)?;
+        let name = self.assignment_name(name)?;
+        let changes = if self.exported.contains(&name) {
+            0
+        } else {
+            EXPORTED
+        };
+        self.prepare_attribute_assignment(&name, value, changes)?;
         self.exported.insert(name);
         Ok(())
     }
 
-    fn prepare_assignment(&mut self, name: String, value: Option<String>) -> Result<String, i32> {
-        let name = self.assignment_name(name)?;
-        if let Some(value) = value {
-            self.assign_parameter(name.clone(), value)?;
+    fn prepare_attribute_assignment(
+        &mut self,
+        name: &str,
+        value: Option<String>,
+        changes: u8,
+    ) -> Result<(), i32> {
+        if value.is_some() && self.is_readonly(name) {
+            return Err(1);
         }
-        Ok(name)
+        let copies = self.reserve_binding_changes(name, changes)?;
+        if let Some(value) = value {
+            self.assign_resolved_parameter(Cow::Borrowed(name), value, AssignmentKind::Explicit)?;
+        }
+        copies.install(self, name);
+        Ok(())
     }
     /// Resolve attributes and values to one binding. Admit the retained set
     /// node and all temporary/assignment keys before copying the target name.
@@ -1505,13 +1833,40 @@ impl State {
         if !self.namerefs.contains_key(name) {
             return Ok(false);
         }
-        self.namerefs.remove(name);
-        self.unset_binding(name)?;
+        self.unset_binding_and_attributes(name, true)?;
         Ok(true)
     }
     fn unset_binding(&mut self, name: &str) -> Result<bool, i32> {
+        self.unset_binding_and_attributes(name, false)
+    }
+    fn binding_removals(&self, name: &str) -> u8 {
+        (u8::from(self.variables.contains_key(name)) * VARIABLES)
+            | (u8::from(self.exported.contains(name)) * EXPORTED)
+            | (u8::from(self.namerefs.contains_key(name)) * NAMEREFS)
+            | (u8::from(self.case_attributes.contains_key(name)) * CASE_ATTRIBUTES)
+    }
+    fn unset_binding_and_attributes(
+        &mut self,
+        name: &str,
+        unbind_nameref: bool,
+    ) -> Result<bool, i32> {
         if self.is_readonly(name) {
             return Err(1);
+        }
+        let frame = self
+            .locals
+            .iter()
+            .rposition(|locals| locals.contains_key(name))
+            .filter(|&index| index + 1 != self.locals.len());
+        let mut changes = self.binding_removals(name);
+        if frame.is_some() {
+            changes |= VARIABLES | EXPORTED | NAMEREFS | CASE_ATTRIBUTES;
+        } else if !unbind_nameref {
+            changes &= !NAMEREFS;
+        }
+        self.prepare_binding_changes(name, changes)?;
+        if unbind_nameref {
+            self.namerefs.remove(name);
         }
         let owner = self.reference_owner(name);
         self.prefixes.clear(name, owner);
@@ -1540,21 +1895,13 @@ impl State {
         if was_dynamic {
             self.epoch_realtime = false;
         }
-        let frame = self
-            .locals
-            .iter()
-            .rposition(|locals| locals.contains_key(name));
-        if let Some(index) = frame
-            && index + 1 != self.locals.len()
-        {
-            let local = self.locals[index].remove(name).ok_or(1)?;
+        if let Some(index) = frame {
+            let local = self.locals[index]
+                .remove(name)
+                .expect("selected local exists");
             restore_nameref(&mut self.namerefs, name, local.nameref);
             self.restore_case(name, local.case_mapping);
-            if local.exported {
-                self.exported.insert(name.to_owned());
-            } else {
-                self.exported.remove(name);
-            }
+            self.restore_export(name, local.exported);
             let existed = self.variables.contains_key(name);
             match local.previous {
                 Some(value) => self.variables.insert(name.to_owned(), value),
@@ -1584,7 +1931,8 @@ impl State {
         }
         // Removing a current local keeps its saved outer binding but releases
         // its live value charge. Shrinking cannot fail admission.
-        self.reserve_local_value(name, 0).map_err(|_| 1)?;
+        self.reserve_local_value(name, 0)
+            .expect("shrinking a local binding");
         self.exported.remove(name);
         self.case_attributes.remove(name);
         let removed = self.variables.remove(name).is_some() || was_dynamic;
@@ -1593,6 +1941,7 @@ impl State {
         }
         Ok(removed)
     }
+    #[cfg(test)]
     pub(crate) fn local(&mut self, name: String, value: String) -> Result<(), i32> {
         self.declare_local(name, Some(value))
     }
@@ -1605,18 +1954,7 @@ impl State {
         value: Option<String>,
         inherit: bool,
     ) -> Result<(), i32> {
-        let already_local = self
-            .locals
-            .last()
-            .is_some_and(|frame| frame.contains_key(&name));
-        // Bare locals inherit function prefixes; -I also inherits ordinary
-        // visible bindings. Neither reloads a current local's saved outer value.
-        let inherit_value = inherit || self.inherits_function_prefix(&name);
-        let inherited_bytes = if !already_local && inherit_value && value.is_none() {
-            self.variables.get(&name).map_or(0, Binding::storage_bytes)
-        } else {
-            0
-        };
+        let already_local = self.is_current_local(&name);
         let value = value
             .map(|value| {
                 if already_local || inherit {
@@ -1625,18 +1963,34 @@ impl State {
                     Ok(value)
                 }
             })
-            .transpose()?
-            .map(Binding::from);
-        let bytes = value
-            .as_ref()
-            .map_or(inherited_bytes, Binding::storage_bytes);
-        // Validate readonly bindings before changing an existing ticket. A
-        // rejected declaration must leave both its value and charge untouched.
-        self.save_local(&name, bytes)?;
-        if already_local && value.is_some() {
-            self.reserve_local_value(&name, bytes)?;
-        }
-        let inherited = if !already_local && inherit_value && value.is_none() {
+            .transpose()?;
+        self.install_local(name, value, inherit, false, 0)
+    }
+
+    fn install_local(
+        &mut self,
+        name: String,
+        value: Option<String>,
+        inherit: bool,
+        preserve_indexed: bool,
+        changes: u8,
+    ) -> Result<(), i32> {
+        let already_local = self.is_current_local(&name);
+        // Bare locals inherit function prefixes; -I also inherits ordinary
+        // visible bindings. Neither reloads a current local's saved outer value.
+        let inherit_value = !already_local && (inherit || self.inherits_function_prefix(&name));
+        let bytes = match &value {
+            Some(value) if inherit_value && preserve_indexed => {
+                self.scalar_assignment_value_bytes(&name, value.capacity())
+            }
+            Some(value) => value.capacity(),
+            None if inherit_value => self.variables.get(&name).map_or(0, Binding::storage_bytes),
+            None => 0,
+        };
+        let writes =
+            self.binding_removals(&name) & NAMEREFS | (u8::from(value.is_some()) * VARIABLES);
+        self.save_local(&name, bytes, changes | writes, value.is_some())?;
+        let inherited = if inherit_value && (value.is_none() || preserve_indexed) {
             self.locals
                 .last()
                 .and_then(|frame| frame.get(&name))
@@ -1653,82 +2007,105 @@ impl State {
                 .map(GetoptsState::assigned)
                 .unwrap_or_default();
         }
-        if let Some(value) = value.or(inherited) {
-            self.variables.insert(name, value);
+        let binding = match (value, inherited) {
+            (Some(value), Some(mut inherited @ Binding::Indexed(_))) => {
+                inherited.set_scalar(value);
+                Some(inherited)
+            }
+            (Some(value), _) => Some(value.into()),
+            (None, inherited) => inherited,
+        };
+        if let Some(binding) = binding {
+            self.variables.insert(name, binding);
         }
         if direct_ifs {
             self.refresh_star_separator();
         }
         Ok(())
     }
-    fn save_local(&mut self, name: &str, value_bytes: usize) -> Result<(), i32> {
-        if self.readonly.contains(name) || self.current_local_readonly(name) {
-            return Err(1);
+    fn save_local(
+        &mut self,
+        name: &str,
+        value_bytes: usize,
+        changes: u8,
+        resize: bool,
+    ) -> Result<(), i32> {
+        self.check_local_declaration(name)?;
+        if self.is_current_local(name) {
+            let copies = self.reserve_binding_changes(name, changes)?;
+            if resize {
+                self.reserve_local_value(name, value_bytes)?;
+            }
+            copies.install(self, name);
+            return Ok(());
         }
-        if self.locals.is_empty() {
-            return Err(1);
-        }
-        if !self.locals.last().unwrap().contains_key(name) {
-            let storage_base = snapshot_node_bytes::<LocalVariable>()
-                .map_err(|_| 2)?
-                .checked_add(snapshot_node_bytes::<Binding>().map_err(|_| 2)?)
-                .ok_or(2)?
-                .checked_add(name.len().checked_mul(3).ok_or(2)?)
-                .ok_or(2)?
-                .checked_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
-                .ok_or(2)?
-                .checked_add(self.namerefs.get(name).map_or(0, String::len))
-                .ok_or(2)?
-                .checked_add(self.saved_case_storage(name))
-                .ok_or(2)?;
-            let memory = self
-                .memory
-                .as_ref()
-                .map(|memory| {
-                    memory
-                        .admit(storage_base.checked_add(value_bytes).ok_or(2)?)
-                        .map_err(|_| crate::exec::RESOURCE_STATUS)
-                })
-                .transpose()?
-                .map(|ticket| Rc::new(RefCell::new(ticket)));
-            let origin = self
-                .locals
-                .iter()
-                .rev()
-                .nth(1)
-                .and_then(|frame| frame.get(name))
-                .filter(|binding| binding.origin == LocalOrigin::FunctionPrefix)
-                .map_or(LocalOrigin::Declaration, |_| LocalOrigin::PrefixOwner);
-            self.next_local_incarnation = self.next_local_incarnation.checked_add(1).ok_or(2)?;
-            let previous = LocalVariable {
-                incarnation: self.next_local_incarnation,
-                getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
-                previous: self.variables.remove(name),
-                nameref: self.namerefs.remove(name),
-                exported: self.exported.contains(name),
-                case_mapping: self.case_attributes.remove(name),
-                readonly: false,
-                origin,
-                storage_base,
-                memory,
-            };
-            self.locals
-                .last_mut()
-                .unwrap()
-                .insert(name.to_owned(), previous);
-        }
+        let storage_base = snapshot_node_bytes::<LocalVariable>()
+            .map_err(|_| 2)?
+            .checked_add(snapshot_node_bytes::<Binding>().map_err(|_| 2)?)
+            .ok_or(2)?
+            .checked_add(name.len().checked_mul(3).ok_or(2)?)
+            .ok_or(2)?
+            .checked_add(self.variables.get(name).map_or(0, Binding::storage_bytes))
+            .ok_or(2)?
+            .checked_add(self.namerefs.get(name).map_or(0, String::len))
+            .ok_or(2)?
+            .checked_add(self.saved_case_storage(name))
+            .ok_or(2)?;
+        let memory = self
+            .admit_temporary(storage_base.checked_add(value_bytes).ok_or(2)?)?
+            .map(|ticket| Rc::new(RefCell::new(ticket)));
+        let origin = self
+            .locals
+            .iter()
+            .rev()
+            .nth(1)
+            .and_then(|frame| frame.get(name))
+            .filter(|binding| binding.origin == LocalOrigin::FunctionPrefix)
+            .map_or(LocalOrigin::Declaration, |_| LocalOrigin::PrefixOwner);
+        let incarnation = self.next_local_incarnation.checked_add(1).ok_or(2)?;
+        let changes =
+            changes | VARIABLES | (self.binding_removals(name) & (NAMEREFS | CASE_ATTRIBUTES));
+        self.prepare_binding_changes(name, changes)?;
+        self.next_local_incarnation = incarnation;
+        let previous = LocalVariable {
+            incarnation,
+            getopts: (name == "OPTIND").then_some((self.getopts, self.getopts_numeric)),
+            previous: self.variables.remove(name),
+            nameref: self.namerefs.remove(name),
+            exported: self.exported.contains(name),
+            case_mapping: self.case_attributes.remove(name),
+            readonly: false,
+            origin,
+            storage_base,
+            memory,
+        };
+        self.locals
+            .last_mut()
+            .unwrap()
+            .insert(name.to_owned(), previous);
         Ok(())
     }
+    fn restore_export(&mut self, name: &str, exported: bool) {
+        if exported {
+            self.exported.insert(name.to_owned());
+        } else {
+            self.exported.remove(name);
+        }
+    }
+
     fn restore_locals(&mut self, locals: BTreeMap<String, LocalVariable>) {
         for (name, local) in locals {
+            let changes = self.local_restore_changes(&name, &local);
+            self.prepare_binding_restore(&name, changes);
             self.restore_getopts(local.getopts);
-            restore_nameref(&mut self.namerefs, &name, local.nameref);
-            self.restore_case(&name, local.case_mapping);
-            // Ordinary export changes in functions belong to the caller.
-            if local.exported {
-                self.exported.insert(name.clone());
-            } else {
-                self.exported.remove(&name);
+            if changes & NAMEREFS != 0 {
+                restore_nameref(&mut self.namerefs, &name, local.nameref);
+            }
+            if changes & CASE_ATTRIBUTES != 0 {
+                self.restore_case(&name, local.case_mapping);
+            }
+            if changes & EXPORTED != 0 {
+                self.restore_export(&name, local.exported);
             }
             if let Some(value) = local.previous {
                 self.variables.insert(name, value);
@@ -1737,6 +2114,7 @@ impl State {
             }
         }
     }
+
     /// `declare -n` is local inside a function, like `local -n`. Only ordinary
     /// scalar targets are admitted by the declaration adapter.
     pub(crate) fn declare_nameref(
@@ -1751,15 +2129,11 @@ impl State {
         if name == target && !local {
             return Err(1);
         }
+        let changes = NAMEREFS | (self.binding_removals(&name) & VARIABLES);
         if local {
-            if self
-                .locals
-                .last()
-                .is_some_and(|frame| frame.contains_key(&name))
-            {
-                self.reserve_local_value(&name, target.len())?;
-            }
-            self.save_local(&name, target.len())?;
+            self.save_local(&name, target.capacity(), changes, true)?;
+        } else {
+            self.prepare_binding_changes(&name, changes)?;
         }
         let is_ifs = name == "IFS";
         self.variables.remove(&name);
@@ -1789,7 +2163,11 @@ impl State {
     }
 }
 
-fn restore_nameref(namerefs: &mut BTreeMap<String, String>, name: &str, target: Option<String>) {
+fn restore_nameref(
+    namerefs: &mut SharedTree<BTreeMap<String, String>>,
+    name: &str,
+    target: Option<String>,
+) {
     match target {
         Some(target) => {
             namerefs.insert(name.to_owned(), target);
@@ -1807,18 +2185,11 @@ trait SnapshotValue: Clone {
         Ok(self.clone())
     }
     fn snapshot_bytes(&self) -> usize;
+    fn detach_snapshot_value(&mut self) {}
 }
 impl SnapshotValue for String {
     fn snapshot_bytes(&self) -> usize {
         self.len()
-    }
-}
-impl SnapshotValue for Binding {
-    fn snapshot_clone(&self) -> Result<Self, Error> {
-        Ok(self.detached())
-    }
-    fn snapshot_bytes(&self) -> usize {
-        self.storage_bytes()
     }
 }
 impl SnapshotValue for Option<Binding> {
@@ -1886,11 +2257,6 @@ impl SnapshotValue for StoredFunction {
         0
     }
 }
-impl SnapshotValue for i32 {
-    fn snapshot_bytes(&self) -> usize {
-        0
-    }
-}
 
 async fn snapshot_steps(bytes: usize, cancel: &Cancel, work: &mut Work) -> Result<(), Error> {
     for _ in 0..bytes {
@@ -1942,13 +2308,14 @@ async fn snapshot_vec<T: SnapshotValue>(
 }
 
 fn snapshot_node_bytes<T>() -> Result<usize, Error> {
+    Ok(tree_node_bytes::<T>())
+}
+
+const fn tree_node_bytes<T>() -> usize {
     // Conservatively charge a whole B-tree node per binding, not merely the
     // occupied key/value slot. 16 slots/links cover std's 11-slot nodes and
     // their parent/child links, including sparse roots and insertion splits.
-    std::mem::size_of::<(String, T)>()
-        .checked_add(std::mem::size_of::<usize>())
-        .and_then(|slot| slot.checked_mul(16))
-        .ok_or(Error::Status(2))
+    (std::mem::size_of::<(String, T)>() + std::mem::size_of::<usize>()) * 16
 }
 
 async fn snapshot_map<T: SnapshotValue>(
@@ -1980,38 +2347,6 @@ async fn snapshot_map<T: SnapshotValue>(
         // Install before yielding: this copied key is the allocation-free
         // cursor for the next source lookup, and no source borrow survives.
         values.insert(key, value);
-        snapshot_steps(bytes, cancel, work).await?;
-    }
-    Ok(values)
-}
-
-async fn snapshot_set(
-    source: &SharedState,
-    select: impl Fn(&State) -> &BTreeSet<String>,
-    cancel: &Cancel,
-    work: &mut Work,
-) -> Result<BTreeSet<String>, Error> {
-    use std::ops::Bound::{Excluded, Unbounded};
-    let mut values: BTreeSet<String> = BTreeSet::new();
-    loop {
-        work.checkpoint(cancel).await?;
-        let (value, bytes) = {
-            let state = source.borrow();
-            let set = select(&state);
-            let next = match values.last() {
-                Some(key) => set
-                    .range::<str, _>((Excluded(key.as_str()), Unbounded))
-                    .next(),
-                None => set.iter().next(),
-            };
-            let Some(value) = next else {
-                break;
-            };
-            let bytes = value.len();
-            work.admit_storage(snapshot_node_bytes::<()>()?.checked_add(bytes).ok_or(2)?)?;
-            (value.snapshot_clone()?, bytes)
-        };
-        values.insert(value);
         snapshot_steps(bytes, cancel, work).await?;
     }
     Ok(values)
@@ -2116,12 +2451,13 @@ impl AssignmentChanges {
         name: &str,
         value_bytes: usize,
         owner: references::Owner,
+        prior_growth: usize,
     ) -> usize {
         self.undo
             .iter()
             .filter(|(target, _, saved)| target == name && *saved == owner)
             .fold(0usize, |bytes, (_, undo, _)| {
-                bytes.saturating_add(undo.scalar_effect_bytes(value_bytes))
+                bytes.saturating_add(undo.scalar_effect_bytes(value_bytes, prior_growth))
             })
     }
     fn scalar_effect(&mut self, name: &str, value: &str, owner: references::Owner) {
@@ -2140,6 +2476,11 @@ impl Drop for AssignmentFrame {
         let handle = self.changes.take().unwrap();
         let mut changes = handle.borrow_mut();
         state.assignment_undo = std::mem::take(&mut self.previous);
+        state.external_restores -= changes
+            .undo
+            .iter()
+            .filter(|(name, _, _)| name != "_")
+            .count();
         if !self.keep {
             for (name, undo, owner) in changes.undo.iter_mut().rev() {
                 if *owner != state.reference_owner(name) {
@@ -2169,18 +2510,17 @@ impl Drop for AssignmentFrame {
         drop(changes);
         drop(handle);
         drop(retained);
+        state.release_unused_cleanup();
     }
 }
 
 impl State {
     fn restore_assignment(&mut self, name: &str, undo: BindingUndo) {
+        self.prepare_binding_restore(name, VARIABLES);
         if let BindingUndo::Restore(old) = undo {
             match old {
                 Some(old) => {
-                    *self
-                        .variables
-                        .get_mut(name)
-                        .expect("live rollback slot survives durable unset") = old;
+                    assert!(self.variables.update(name, |binding| *binding = old));
                 }
                 None => {
                     self.variables.remove(name);
@@ -2188,14 +2528,12 @@ impl State {
             }
             return;
         }
-        let live = self
-            .variables
-            .get_mut(name)
-            .expect("completed binding exists");
-        let current = std::mem::replace(live, String::new().into());
-        *live = undo
-            .restore(Some(current))
-            .expect("previous binding exists");
+        assert!(self.variables.update(name, |live| {
+            let current = std::mem::replace(live, String::new().into());
+            *live = undo
+                .restore(Some(current))
+                .expect("previous binding exists");
+        }));
     }
 }
 
@@ -2316,6 +2654,7 @@ impl PrefixFrame {
                         )
                         .map_err(|_| Error::Status(crate::exec::RESOURCE_STATUS))?;
                 }
+                state_ref.prepare_binding_changes(&target, VARIABLES)?;
                 state_ref.assign_getopts_index(&target, value);
                 let mut binding = state_ref
                     .variables
@@ -2325,7 +2664,10 @@ impl PrefixFrame {
                 binding.set_scalar(value.clone());
                 let previous = state_ref.variables.insert(target.clone(), binding);
                 *restore_epoch_realtime |= state_ref.suspend_epoch_realtime(&target);
-                saved.entry(target).or_insert(previous);
+                if let std::collections::btree_map::Entry::Vacant(entry) = saved.entry(target) {
+                    state_ref.external_restores += usize::from(entry.key() != "_");
+                    entry.insert(previous);
+                }
             }
         }
         Ok(frame)
@@ -2345,29 +2687,24 @@ impl PrefixFrame {
         }
         Ok(())
     }
-    pub(crate) fn set(&self, name: String, value: String) -> Result<(), String> {
+    pub(crate) fn set(&self, name: String, value: String) -> Result<(), Error> {
         assert!(matches!(self.bindings, PrefixBindings::Expansion));
-        let name = self
-            .state
-            .borrow()
-            .assignment_name(name)
-            .map_err(|_| String::new())?;
-        let mut binding = self
-            .state
-            .borrow()
+        let mut state = self.state.borrow_mut();
+        let name = state.assignment_name(name)?;
+        if state.is_readonly(&name) {
+            return Err(Error::Readonly {
+                name,
+                line: None,
+                expansion: true,
+            });
+        }
+        state.prepare_binding_changes(&name, VARIABLES)?;
+        let mut binding = state
             .variables
             .get(&name)
             .cloned()
             .unwrap_or_else(|| "".into());
         binding.set_scalar(value);
-        self.set_binding(name, binding)
-    }
-    pub(crate) fn set_binding(&self, name: String, binding: Binding) -> Result<(), String> {
-        let mut state = self.state.borrow_mut();
-        let name = state.assignment_name(name).map_err(|_| String::new())?;
-        if state.is_readonly(&name) {
-            return Err(name);
-        }
         let direct_ifs = name == "IFS";
         if name == "OPTIND" && self.getopts.get().is_none() {
             self.getopts.set(Some(state.getopts));
@@ -2410,24 +2747,16 @@ impl PrefixFrame {
             });
         }
         let storage = update.storage_after(state.variables.get(&name));
+        let copy = state.variables.reserve_copy(&name, state.memory.as_ref())?;
         state
             .reserve_local_value(&name, storage.max(state.held_local_value(&name)))
             .map_err(Error::from)?;
         let direct_ifs = name == "IFS";
         let undo_name = name.clone();
-        let undo = match state.variables.entry(name) {
-            std::collections::btree_map::Entry::Occupied(mut entry) => {
-                let previous = std::mem::replace(entry.get_mut(), String::new().into());
-                let (binding, undo) = update.apply_with_undo(Some(previous));
-                *entry.get_mut() = binding;
-                undo
-            }
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                let (binding, undo) = update.apply_with_undo(None);
-                entry.insert(binding);
-                undo
-            }
-        };
+        state.variables.make_private(&name, copy);
+        let undo = state
+            .variables
+            .replace_with(name, |previous| update.apply_with_undo(previous));
         if undo_name == "OPTIND" {
             completed
                 .changes
@@ -2439,11 +2768,10 @@ impl PrefixFrame {
             let index = GetoptsState::assigned(state.variables[&undo_name].as_str()).index;
             state.set_getopts_index(index);
         }
-        completed.changes.as_ref().unwrap().borrow_mut().undo.push((
-            undo_name.clone(),
-            undo,
-            state.reference_owner(&undo_name),
-        ));
+        let owner = state.reference_owner(&undo_name);
+        let mut changes = completed.changes.as_ref().unwrap().borrow_mut();
+        state.external_restores += usize::from(undo_name != "_");
+        changes.undo.push((undo_name, undo, owner));
         state.prefixes.pop();
         state.prefixes.release_popped();
         self.active = false;
@@ -2500,25 +2828,22 @@ impl PrefixFrame {
         let saved = state.prefixes.pop().unwrap();
         let mut amendments = state.prefixes.pop_memory();
         if let Some(completed) = completed {
-            if let Some(memory) = &mut completed.changes.as_ref().unwrap().borrow_mut().memory
+            let mut changes = completed.changes.as_ref().unwrap().borrow_mut();
+            if let Some(memory) = &mut changes.memory
                 && let Some(source) = &mut amendments
             {
                 memory.take_from(source, source.bytes());
             }
-            completed
-                .changes
-                .as_ref()
-                .unwrap()
-                .borrow_mut()
-                .undo
-                .extend(
-                    saved
-                        .into_iter()
-                        .map(|(name, old)| (name, BindingUndo::Restore(old.value), old.owner)),
-                );
+            state.external_restores += saved.keys().filter(|name| name.as_str() != "_").count();
+            changes.undo.extend(
+                saved
+                    .into_iter()
+                    .map(|(name, old)| (name, BindingUndo::Restore(old.value), old.owner)),
+            );
         }
         state.prefixes.release_popped();
         self.active = false;
+        state.release_unused_cleanup();
         Ok(())
     }
 }
@@ -2548,9 +2873,11 @@ impl Drop for PrefixFrame {
                 restore_expansion_prefix(&mut state, saved, amendments.as_mut());
             }
             PrefixBindings::Builtin { saved, .. } => {
+                state.external_restores -= saved.keys().filter(|name| name.as_str() != "_").count();
                 restore_builtin_prefix(&mut state, std::mem::take(saved));
             }
         }
+        state.release_unused_cleanup();
     }
 }
 
@@ -2569,6 +2896,9 @@ fn restore_expansion_prefix(
     }
 }
 fn restore_prefix(state: &mut State, name: String, value: Option<Binding>) {
+    if value.is_some() || state.variables.contains_key(&name) {
+        state.prepare_binding_restore(&name, VARIABLES);
+    }
     if let Some(value) = value {
         state.assign_getopts_index(&name, &value);
         state.variables.insert(name, value);
@@ -2686,7 +3016,8 @@ impl FunctionFrame {
         let mut state = self.state.borrow_mut();
         for (name, value) in assigned {
             let name = state.assignment_name(name)?;
-            state.local(name.clone(), value)?;
+            let changes = u8::from(!state.exported.contains(&name)) * EXPORTED;
+            state.install_local(name.clone(), Some(value), false, false, changes)?;
             state
                 .locals
                 .last_mut()
@@ -2720,6 +3051,7 @@ impl Drop for FunctionFrame {
             let Some(locals) = s.locals.pop() else { break };
             s.restore_locals(locals);
         }
+        s.release_unused_cleanup();
         // Bash refreshes special-variable state when a function frame returns,
         // including a frame that did not declare a local IFS binding.
         s.refresh_star_separator();
@@ -2998,7 +3330,7 @@ mod tests {
         assert_eq!(state.borrow().array_element("a", 0).unwrap().len(), 12_288);
         assert_eq!(child.borrow().array_element("a", 9), Some("kept"));
         let frame = PrefixFrame::test_enter(state.clone());
-        frame.set("a".into(), "prefix".into()).unwrap();
+        assert!(frame.set("a".into(), "prefix".into()).is_ok());
         assert_eq!(state.borrow().array_element("a", 0), Some("prefix"));
         assert_eq!(state.borrow().array_element("a", 9), Some("kept"));
         drop(frame);
@@ -3241,13 +3573,13 @@ mod tests {
             .variables
             .insert("IFS".into(), ":".into());
         let frame = PrefixFrame::test_enter(state.clone());
-        frame.set("IFS".into(), " ".into()).unwrap();
+        assert!(frame.set("IFS".into(), " ".into()).is_ok());
         assert!(short_ifs_members(&state).contains(' '));
         drop(frame);
         assert_eq!(state.borrow().positional_separator(), Some(':'));
         assert!(short_ifs_members(&state).contains(':'));
         let frame = PrefixFrame::test_enter(state.clone());
-        frame.set("unrelated".into(), "prefix".into()).unwrap();
+        assert!(frame.set("unrelated".into(), "prefix".into()).is_ok());
         state
             .borrow_mut()
             .assign_parameter("IFS".into(), String::new())
@@ -3329,6 +3661,394 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_shares_large_bindings_and_admits_the_first_write() {
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
+
+        let memory = StorageBudget::new(64 * 1024);
+        let state = State::with_memory(memory.clone()).shared();
+        state
+            .borrow_mut()
+            .assign_parameter("large".into(), "x".repeat(32 * 1024))
+            .unwrap();
+        let pressure = memory.admit(64 * 1024).unwrap();
+        let mut work = Work::new(128, 64 * 1024, 0);
+        let mut child = finish_snapshot(&state, &Cancel::new(), &mut work)
+            .unwrap_or_else(|_| panic!("shared bindings fit without scanning their payloads"));
+        let original = state.borrow().parameter("large").as_ptr();
+        assert_eq!(child.parameter("large").as_ptr(), original);
+        child
+            .publish_last_argument("argument".into())
+            .unwrap_or_else(|_| panic!("inline publication fits"));
+        assert_eq!(child.parameter("_"), "argument");
+        assert_eq!(state.borrow().parameter("_"), "bash");
+        assert_eq!(child.parameter("large").as_ptr(), original);
+        assert_eq!(
+            child.assign_parameter("large".into(), "refused".into()),
+            Err(RESOURCE_STATUS)
+        );
+        assert_eq!(child.parameter("large").as_ptr(), original);
+        drop(pressure);
+
+        child
+            .assign_parameter("other".into(), "child".into())
+            .unwrap();
+        assert!(memory.observation().0 >= 32 * 1024);
+        assert_ne!(child.parameter("large").as_ptr(), original);
+        assert_eq!(child.parameter("other"), "child");
+        assert_eq!(state.borrow().scalar_parameter("other"), None);
+        drop(child);
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn shared_attribute_and_function_writes_fail_before_publication() {
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
+
+        let memory = StorageBudget::new(16 * 1024);
+        let state = State::with_memory(memory.clone()).shared();
+        let mut work = Work::new(10_000, 16 * 1024, 0);
+        let mut child = finish_snapshot(&state, &Cancel::new(), &mut work)
+            .unwrap_or_else(|_| panic!("empty attributes fit"));
+        let variable_copy = child
+            .variables
+            .ordinary
+            .reserve_copy(Some(&memory))
+            .unwrap()
+            .unwrap();
+        let pressure = memory.admit(16 * 1024 - variable_copy.bytes()).unwrap();
+        drop(variable_copy);
+        assert_eq!(
+            child.export("x".into(), Some("x".into())),
+            Err(RESOURCE_STATUS)
+        );
+        assert!(child.variables.ordinary.is_shared());
+        assert!(!child.exported.contains("x"));
+        assert_eq!(child.scalar_parameter("x"), None);
+        assert_eq!(memory.observation().0, pressure.bytes());
+        drop(pressure);
+
+        let _pressure = memory.admit(16 * 1024).unwrap();
+        assert_eq!(child.readonly("x".into(), None), Err(RESOURCE_STATUS));
+        assert_eq!(
+            child.declare_nameref("x".into(), "target".into(), false),
+            Err(RESOURCE_STATUS)
+        );
+        let function = StoredFunction {
+            reader: crate::exec::ReaderLocation::default(),
+            body: Rc::new(Command::Compound(
+                shell_parser::parser::CompoundCommand::Arithmetic("1".into()),
+                Vec::new(),
+            )),
+            source: crate::exec::Source::root(""),
+            line: 1,
+            storage: None,
+        };
+        assert_eq!(
+            child
+                .admit_function_definition()
+                .map(|copy| child.define_function("f".into(), function, copy)),
+            Err(RESOURCE_STATUS)
+        );
+        assert!(child.namerefs.is_empty());
+        assert!(child.readonly.is_empty());
+        assert!(child.functions.is_empty());
+    }
+
+    fn budgeted_state(limit: usize) -> (crate::exec::StorageBudget, SharedState) {
+        let memory = crate::exec::StorageBudget::new(limit);
+        let state = State::with_memory(memory.clone()).shared();
+        (memory, state)
+    }
+
+    #[test]
+    fn foreground_writes_fit_with_consecutive_binding_snapshots() {
+        let limit = 64 * 1024;
+        let (memory, state) = budgeted_state(limit);
+        state
+            .borrow_mut()
+            .assign_parameter("payload".into(), "x".repeat(32 * 1024))
+            .unwrap();
+
+        let retained = [("", "first"), ("first", "second")].map(|(previous, next)| {
+            let child = finish_snapshot(&state, &Cancel::new(), &mut Work::new(512, limit, 0))
+                .unwrap_or_else(|_| panic!("binding snapshot fits"));
+            assert_eq!(
+                state.borrow_mut().assign_parameter("x".into(), next.into()),
+                Ok(())
+            );
+            assert_eq!(child.parameter("x"), previous);
+            assert!(memory.observation().0 >= 32 * 1024);
+            drop(child);
+            memory.observation().0
+        });
+        assert_eq!(retained, [0, 0]);
+    }
+
+    #[test]
+    fn failed_function_prefix_releases_binding_copy_after_snapshot_exits() {
+        let limit = 128 * 1024;
+        let (memory, state) = budgeted_state(limit);
+        for (name, value) in [
+            ("payload", "x".repeat(32 * 1024)),
+            ("first", "outer".into()),
+            ("second", "kept".into()),
+        ] {
+            state
+                .borrow_mut()
+                .assign_parameter(name.into(), value)
+                .unwrap();
+        }
+        let child = finish_snapshot(&state, &Cancel::new(), &mut Work::new(512, limit, 0))
+            .unwrap_or_else(|_| panic!("binding snapshot fits"));
+        let pressure = memory.admit(64 * 1024).unwrap();
+        let mut frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        assert_eq!(
+            frame.prefixes(vec![
+                ("first".into(), "inner".into()),
+                ("second".into(), "x".repeat(96 * 1024)),
+            ]),
+            Err(crate::exec::RESOURCE_STATUS)
+        );
+        assert_eq!(state.borrow().parameter("first"), "inner");
+        drop(frame);
+        assert_eq!(state.borrow().parameter("first"), "outer");
+        assert_eq!(state.borrow().parameter("second"), "kept");
+        assert!(!state.borrow().exported.contains("first"));
+        assert!(!state.borrow().exported.contains("second"));
+        assert_eq!(child.parameter("first"), "outer");
+        drop(pressure);
+        assert!(memory.observation().0 >= 32 * 1024);
+        drop(child);
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn snapshot_reserves_a_function_unwind_copy_before_sharing() {
+        use crate::exec::RESOURCE_STATUS;
+
+        let limit = 64 * 1024;
+        let (memory, state) = budgeted_state(limit);
+        {
+            let mut s = state.borrow_mut();
+            s.assign_parameter("payload".into(), "x".repeat(32 * 1024))
+                .unwrap();
+            s.assign_parameter("x".into(), "outer".into()).unwrap();
+        }
+        let frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        state
+            .borrow_mut()
+            .local("x".into(), "inner".into())
+            .unwrap();
+        state.borrow_mut().export("x".into(), None).unwrap();
+        let before = memory.observation().0;
+        let work = || Work::new(512, limit, 0);
+
+        let pressure = memory.admit(limit - before).unwrap();
+        assert!(matches!(
+            finish_snapshot(&state, &Cancel::new(), &mut work()),
+            Err(Error::Status(RESOURCE_STATUS))
+        ));
+        assert!(!state.borrow().variables.ordinary.is_shared());
+        assert_eq!(memory.observation().0, limit);
+        drop(pressure);
+
+        let snapshot = || {
+            finish_snapshot(&state, &Cancel::new(), &mut work())
+                .unwrap_or_else(|_| panic!("local snapshot fits"))
+        };
+        let child = snapshot();
+        assert!(memory.observation().0 >= before + 32 * 1024);
+        assert_eq!(
+            child.parameter("payload").as_ptr(),
+            state.borrow().parameter("payload").as_ptr()
+        );
+        let sibling = snapshot();
+        drop(child);
+        assert!(memory.observation().0 >= before + 32 * 1024);
+        drop(sibling);
+        assert_eq!(memory.observation().0, before);
+
+        let child = snapshot();
+        let pressure = memory.admit(limit - memory.observation().0).unwrap();
+        drop(frame);
+        let copy_bytes = child.variables.ordinary.copy_bytes();
+        assert!(copy_bytes >= 32 * 1024);
+        assert_ne!(
+            child.parameter("payload").as_ptr(),
+            state.borrow().parameter("payload").as_ptr()
+        );
+        assert_eq!(state.borrow().parameter("x"), "outer");
+        assert!(!state.borrow().exported.contains("x"));
+        assert_eq!(child.parameter("x"), "inner");
+        assert!(child.exported.contains("x"));
+        drop(pressure);
+        assert!(memory.observation().0 >= copy_bytes);
+        drop(child);
+        assert_eq!(memory.observation().0, 0);
+    }
+
+    #[test]
+    fn failed_export_of_a_local_keeps_shared_versions_and_refunds_admission() {
+        use crate::exec::RESOURCE_STATUS;
+
+        let limit = 64 * 1024;
+        let (memory, state) = budgeted_state(limit);
+        let _frame = FunctionFrame::enter(state.clone(), Vec::new(), usize::MAX).unwrap();
+        state
+            .borrow_mut()
+            .local("x".into(), "original".into())
+            .unwrap();
+        let mut child = finish_snapshot(&state, &Cancel::new(), &mut Work::new(512, limit, 0))
+            .unwrap_or_else(|_| panic!("local snapshot fits"));
+        let pressure = memory
+            .admit(limit - memory.observation().0 - 8 * 1024)
+            .unwrap();
+        let charged = memory.observation().0;
+        assert_eq!(
+            child.export("x".into(), Some("x".repeat(16 * 1024))),
+            Err(RESOURCE_STATUS)
+        );
+        assert_eq!(child.parameter("x"), "original");
+        assert!(!child.exported.contains("x"));
+        assert!(child.variables.ordinary.is_shared());
+        assert!(child.exported.is_shared());
+        assert_eq!(memory.observation().0, charged);
+        drop(pressure);
+    }
+
+    #[test]
+    fn failed_last_argument_publication_keeps_export_and_refunds_copy() {
+        use crate::exec::{RESOURCE_STATUS, StorageBudget};
+
+        let limit = 64 * 1024;
+        let memory = StorageBudget::new(limit);
+        let mut state = State::with_memory(memory.clone());
+        state
+            .assign_parameter("target".into(), "x".repeat(limit))
+            .unwrap();
+        state.export("_".into(), None).unwrap();
+        state
+            .declare_nameref("_".into(), "target".into(), false)
+            .unwrap();
+        let state = state.shared();
+        let mut child = finish_snapshot(&state, &Cancel::new(), &mut Work::new(512, 2 * limit, 0))
+            .unwrap_or_else(|_| panic!("large snapshot fits"));
+        let pressure = memory.admit(32 * 1024).unwrap();
+        assert!(matches!(
+            child.publish_last_argument("new".into()),
+            Err(Error::Status(RESOURCE_STATUS))
+        ));
+        assert_eq!(child.parameter("target").len(), limit);
+        assert!(child.exported.contains("_"));
+        assert!(child.exported.is_shared());
+        assert_eq!(memory.observation().0, pressure.bytes());
+    }
+
+    #[test]
+    fn snapshot_checks_work_before_copying_scalar_and_indexed_last_argument() {
+        for index in [0, 3] {
+            let payload = "x".repeat(32 * 1024);
+            let binding = if index == 0 {
+                Binding::from(payload)
+            } else {
+                let mut indexed = Indexed::default();
+                indexed.insert(index, payload);
+                Binding::Indexed(Rc::new(indexed))
+            };
+            let state = State::default().shared();
+            state.borrow_mut().variables.insert("_".into(), binding);
+            let cancel = Cancel::new();
+            let mut short = Work::new(128, 64 * 1024, 0);
+            assert!(matches!(
+                finish_snapshot(&state, &cancel, &mut short),
+                Err(Error::Status(2))
+            ));
+            let mut ample = Work::new(64 * 1024, 64 * 1024, 0);
+            let mut child = finish_snapshot(&state, &cancel, &mut ample)
+                .unwrap_or_else(|_| panic!("last argument fits work budget"));
+            assert_eq!(
+                child.array_element("_", index).map(str::len),
+                Some(32 * 1024)
+            );
+            child
+                .publish_last_argument("child".into())
+                .unwrap_or_else(|_| panic!("last argument publication fits"));
+            assert_eq!(child.parameter("_"), "child");
+            assert_eq!(
+                state.borrow().array_element("_", index).map(str::len),
+                Some(32 * 1024)
+            );
+            if index != 0 {
+                assert_eq!(
+                    child.array_element("_", index).map(str::len),
+                    Some(32 * 1024)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn single_pipeline_status_is_inline_and_snapshots_independently() {
+        let state = State::default().shared();
+        let mut empty_work = Work::new(1000, 16 * 1024, 0);
+        let empty = finish_snapshot(&state, &Cancel::new(), &mut empty_work)
+            .unwrap_or_else(|_| panic!("empty status snapshot fits"));
+        assert!(empty.pipeline_status().is_empty());
+        state.borrow_mut().publish_pipeline_status(vec![17]);
+        let mut single_work = Work::new(1000, 16 * 1024, 0);
+        let child = finish_snapshot(&state, &Cancel::new(), &mut single_work)
+            .unwrap_or_else(|_| panic!("single status snapshot fits"));
+        assert!(matches!(child.pipestatus, PipeStatus::Single(17)));
+        assert_eq!(single_work.storage_left(), empty_work.storage_left());
+        state.borrow_mut().publish_pipeline_status(vec![9, 0]);
+        assert_eq!(state.borrow().pipeline_status(), [9, 0]);
+        assert_eq!(child.pipeline_status(), [17]);
+    }
+
+    #[test]
+    fn multi_pipeline_status_snapshot_checks_work_per_entry() {
+        let state = State::default().shared();
+        let codes: Vec<i32> = (0..128).collect();
+        state.borrow_mut().publish_pipeline_status(codes.clone());
+        let cancel = Cancel::new();
+        let mut small = Work::new(64, 64 * 1024, 0);
+        assert!(matches!(
+            finish_snapshot(&state, &cancel, &mut small),
+            Err(Error::Status(2))
+        ));
+        let mut enough = Work::new(1024, 64 * 1024, 0);
+        let child = finish_snapshot(&state, &cancel, &mut enough)
+            .unwrap_or_else(|_| panic!("pipeline status snapshot fits"));
+        state.borrow_mut().publish_status(0);
+        assert_eq!(child.pipeline_status(), codes);
+    }
+
+    fn assert_snapshot_cancels_after_yield(state: &SharedState, work: &mut Work) {
+        let cancel = Cancel::new();
+        let mut snapshot = Box::pin(State::snapshot(state, &cancel, work));
+        let waker = noop_waker();
+        let mut context = Context::from_waker(&waker);
+        assert!(snapshot.as_mut().poll(&mut context).is_pending());
+        assert!(
+            state.try_borrow_mut().is_ok(),
+            "no source borrow crosses a yield"
+        );
+        cancel.cancel();
+        assert!(matches!(
+            snapshot.as_mut().poll(&mut context),
+            Poll::Ready(Err(Error::Status(130)))
+        ));
+    }
+
+    #[test]
+    fn multi_pipeline_status_snapshot_can_be_cancelled_mid_copy() {
+        let state = State::default().shared();
+        state.borrow_mut().publish_pipeline_status(vec![1; 4096]);
+        let mut work = Work::new(8192, 64 * 1024, 0);
+        assert_snapshot_cancels_after_yield(&state, &mut work);
+    }
+
+    #[test]
     fn snapshot_shares_function_payloads_but_isolates_mutable_bindings() {
         let state = State::default().shared();
         let body = Rc::new(Command::Compound(
@@ -3351,7 +4071,7 @@ mod tests {
             source.exported.insert("v".into());
             source.readonly.insert("r".into());
             source.positional = vec!["argument".into()];
-            source.pipestatus = vec![3, 7];
+            source.publish_pipeline_status(vec![3, 7]);
             source.status = 7;
             source.pipefail = true;
             source.nounset = true;
@@ -3366,7 +4086,7 @@ mod tests {
         assert_eq!(child.shell_name, "bash");
         assert_eq!(child.cwd, "/home/guest");
         assert_eq!(child.status, 7);
-        assert_eq!(child.pipestatus, [3, 7]);
+        assert_eq!(child.pipeline_status(), [3, 7]);
         assert!(child.pipefail);
         assert!(child.nounset);
         assert!(child.noexec);
@@ -3374,10 +4094,10 @@ mod tests {
         assert!(child.exported.contains("v"));
         assert!(child.readonly.contains("r"));
         assert_eq!(child.positional, ["argument"]);
-        child.variables.insert("v".into(), "child".into());
-        child.functions.remove("f");
-        child.exported.clear();
-        child.readonly.clear();
+        child.unset_variable("v").unwrap();
+        child.assign_parameter("v".into(), "child".into()).unwrap();
+        child.unset_function("f").unwrap();
+        child.readonly("s".into(), None).unwrap();
         child.positional[0] = "changed".into();
         child.cwd = "/child".into();
         let source = state.borrow();
@@ -3485,27 +4205,10 @@ mod tests {
             "pre-cancel spends no storage"
         );
 
-        state
-            .borrow_mut()
-            .variables
-            .insert("retained".into(), "x".repeat(4096).into());
-        let cancel = Cancel::new();
+        state.borrow_mut().cwd = "x".repeat(4096);
         let mut work = Work::new(1_000_000, 64 * 1024, 0);
-        let mut snapshot = Box::pin(State::snapshot(&state, &cancel, &mut work));
-        let waker = noop_waker();
-        let mut context = Context::from_waker(&waker);
-        assert!(snapshot.as_mut().poll(&mut context).is_pending());
-        assert!(
-            state.try_borrow_mut().is_ok(),
-            "no source borrow crosses a yield"
-        );
-        cancel.cancel();
-        assert!(matches!(
-            snapshot.as_mut().poll(&mut context),
-            Poll::Ready(Err(Error::Status(130)))
-        ));
-        drop(snapshot);
-        assert_eq!(state.borrow().variables["retained"].len(), 4096);
+        assert_snapshot_cancels_after_yield(&state, &mut work);
+        assert_eq!(state.borrow().cwd.len(), 4096);
     }
 
     #[test]
@@ -3684,7 +4387,9 @@ mod tests {
         let mut work = Work::new(100_000, 100_000, 0);
         let mut snapshot = finish_snapshot(&state, &Cancel::new(), &mut work)
             .unwrap_or_else(|_| panic!("snapshot fits"));
-        assert_eq!(memory.observation().0, before * 2);
+        let cleanup = state.borrow().variables.ordinary.cleanup_bytes();
+        assert!(cleanup > 0);
+        assert_eq!(memory.observation().0, before * 2 + cleanup);
         snapshot.local("x".into(), "a".repeat(100)).unwrap();
         snapshot.replace_positional(vec!["b".repeat(100)]).unwrap();
         assert_eq!(state.borrow().parameter("x"), "caller");
@@ -3721,7 +4426,7 @@ mod tests {
         let before = memory.observation().0;
         let prefix = PrefixFrame::test_enter(state.clone());
         prefix.reserve("x", 100).unwrap();
-        prefix.set("x".into(), "a".repeat(100)).unwrap();
+        assert!(prefix.set("x".into(), "a".repeat(100)).is_ok());
         prefix.commit(None).unwrap();
         assert_eq!(
             memory.observation().0,
@@ -3744,7 +4449,7 @@ mod tests {
         let prefix = PrefixFrame::test_enter(state.clone());
         for name in ["x", "y"] {
             prefix.reserve(name, 100).unwrap();
-            prefix.set(name.into(), "a".repeat(100)).unwrap();
+            assert!(prefix.set(name.into(), "a".repeat(100)).is_ok());
         }
         let pressure = memory.admit(16_384 - memory.observation().0 - 150).unwrap();
         assert_eq!(prefix.commit(None), Err(RESOURCE_STATUS));

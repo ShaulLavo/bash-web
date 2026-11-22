@@ -1,9 +1,10 @@
 //! Validate literal function declaration names when they execute.
 use super::*;
 
-enum PreparedFunction {
-    Ready { name: String, line: usize },
-    Done(Outcome),
+struct PreparedFunction {
+    name: String,
+    line: usize,
+    binding_copy: Option<crate::exec::StorageAllocation>,
 }
 
 async fn prepare(
@@ -11,15 +12,14 @@ async fn prepare(
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
-) -> PreparedFunction {
-    let line = match declaration_line(function, &context.cancel).await {
-        Ok(line) => line,
-        Err(_) => return PreparedFunction::Done(Outcome::status(context.cancel_status())),
-    };
-    let (name, valid) = match normalize(function.name.clone(), &context.cancel).await {
-        Ok(result) => result,
-        Err(_) => return PreparedFunction::Done(Outcome::status(context.cancel_status())),
-    };
+) -> Result<PreparedFunction, Outcome> {
+    let cancelled = |_| Outcome::status(context.cancel_status());
+    let line = declaration_line(function, &context.cancel)
+        .await
+        .map_err(cancelled)?;
+    let (name, valid) = normalize(function.name.clone(), &context.cancel)
+        .await
+        .map_err(cancelled)?;
     if !valid {
         let code = invalid_name(&name, line, fds, context)
             .await
@@ -29,24 +29,30 @@ async fn prepare(
         if result.flow == Flow::Normal && !context.ignore_errexit && state.borrow().errexit {
             result.flow = Flow::Abort;
         }
-        return PreparedFunction::Done(result);
+        return Err(result);
     }
+    let binding_copy = state
+        .borrow()
+        .admit_function_definition()
+        .map_err(Outcome::status)?;
     if context
         .source
         .retain_root(&context.core.execution_storage)
         .is_err()
     {
-        return PreparedFunction::Done(
-            abort_diagnostic(
-                fds,
-                context,
-                b"function source live-memory limit exceeded",
-                2,
-            )
-            .await,
-        );
+        return Err(abort_diagnostic(
+            fds,
+            context,
+            b"function source live-memory limit exceeded",
+            2,
+        )
+        .await);
     }
-    PreparedFunction::Ready { name, line }
+    Ok(PreparedFunction {
+        name,
+        line,
+        binding_copy,
+    })
 }
 
 /// Move a top-level parsed function body without cloning or charging an extra AST copy.
@@ -56,19 +62,20 @@ pub(super) async fn declare_owned(
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    let (name, line) = match prepare(&function, &state, &fds, &context).await {
-        PreparedFunction::Ready { name, line } => (name, line),
-        PreparedFunction::Done(outcome) => return outcome,
+    let prepared = match prepare(&function, &state, &fds, &context).await {
+        Ok(prepared) => prepared,
+        Err(outcome) => return outcome,
     };
     state.borrow_mut().define_function(
-        name,
+        prepared.name,
         StoredFunction {
             body: Rc::new(*function.body),
             source: context.source.clone(),
-            line,
+            line: prepared.line,
             storage: context.evaluation.retained(),
             reader: context.reader.clone(),
         },
+        prepared.binding_copy,
     );
     Outcome::status(0)
 }
@@ -79,9 +86,9 @@ pub(super) async fn declare(
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    let (name, line) = match prepare(function, &state, &fds, &context).await {
-        PreparedFunction::Ready { name, line } => (name, line),
-        PreparedFunction::Done(outcome) => return outcome,
+    let prepared = match prepare(function, &state, &fds, &context).await {
+        Ok(prepared) => prepared,
+        Err(outcome) => return outcome,
     };
     // Borrowed definitions (inside loops or other functions) allocate a fresh
     // AST copy. Admit it against the shared live-memory pool and keep that
@@ -106,14 +113,15 @@ pub(super) async fn declare(
         .await;
     };
     state.borrow_mut().define_function(
-        name,
+        prepared.name,
         StoredFunction {
             body: Rc::new(function.body.as_ref().clone()),
             source: context.source.clone(),
-            line,
+            line: prepared.line,
             storage: Some(Rc::new(body_storage)),
             reader: context.reader.clone(),
         },
+        prepared.binding_copy,
     );
     Outcome::status(0)
 }

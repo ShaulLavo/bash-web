@@ -47,11 +47,16 @@ fn publish_index_at_capacity(
 ) -> crate::exec::StorageAllocation {
     let reservation = state
         .borrow()
-        .reserve_getopts_publication(publications)
+        .reserve_scalar_publication(publications)
         .unwrap();
     let hold = memory.admit(CAPACITY - memory.observation().0).unwrap();
     drop(reservation);
-    assert_eq!(state.borrow_mut().publish_getopts_index("1".into()), Ok(()));
+    assert_eq!(
+        state
+            .borrow_mut()
+            .publish_getopts_value("OPTIND".into(), "1".into(), true),
+        Ok(())
+    );
     hold
 }
 
@@ -76,7 +81,7 @@ fn getopts_indexed_local_preflight_covers_repeated_alias_publication() {
             .declare_nameref("ref".into(), "OPTIND".into(), false)
             .unwrap();
     }
-    let hold = publish_index_at_capacity(&state, &memory, &[("OPTIND", 1), ("", 0), ("ref", 1)]);
+    let hold = publish_index_at_capacity(&state, &memory, &[("OPTIND", 1), ("", 0), ("OPTIND", 1)]);
     assert_eq!(
         state
             .borrow_mut()

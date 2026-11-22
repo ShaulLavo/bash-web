@@ -2201,12 +2201,14 @@ impl Expansion<'_> {
             self.work
                 .admit_storage(name.len().saturating_add(value.len()))?;
         }
-        if state
+        let result = state
             .borrow_mut()
-            .assign_parameter(name.to_owned(), value.to_owned())
-            .is_ok()
-        {
+            .assign_parameter(name.to_owned(), value.to_owned());
+        let Err(code) = result else {
             return Ok(());
+        };
+        if code != 1 {
+            return Err(code.into());
         }
         self.work
             .admit_storage(name.len().saturating_mul(2).saturating_add(160))?;

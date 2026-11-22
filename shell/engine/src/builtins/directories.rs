@@ -274,31 +274,16 @@ async fn commit(
             .map_err(error_status)?;
     }
     work.admit_storage(cwd.len()).map_err(error_status)?;
-    state.borrow_mut().cwd = cwd.clone();
+    let readonly = state.borrow_mut().publish_directory(cwd, previous)?;
     let mut status = 0;
-    for (name, value) in [("OLDPWD", previous), ("PWD", cwd)] {
-        let result = state.borrow_mut().assign_parameter(name.into(), value);
-        status = status.max(published(name, result, fds, context).await?);
-    }
-    Ok(status)
-}
-
-/// A readonly binding is reported and fails the command; other errors abort.
-async fn published(
-    name: &str,
-    result: Result<(), i32>,
-    fds: &FdTable,
-    context: &Context,
-) -> Result<i32, i32> {
-    match result {
-        Ok(()) => Ok(0),
-        Err(1) => {
+    for (name, readonly) in ["OLDPWD", "PWD"].into_iter().zip(readonly) {
+        if readonly {
             let text = format!("/usr/bin/bash: {name}: readonly variable\n");
             diagnose(fds, &text, context).await?;
-            Ok(1)
+            status = 1;
         }
-        Err(error) => Err(error),
     }
+    Ok(status)
 }
 
 /// Bash cd_builtin after its options, shared by cd, pushd and popd. Failures
@@ -594,10 +579,14 @@ async fn swap(
         return fail("pushd", "no other directory", None, 1, fds, context).await;
     };
     work.admit_storage(top.len()).map_err(error_status)?;
-    // Bash swaps before changing directory and keeps the swap when cd fails.
     let cwd = state.borrow().cwd.clone();
-    state.borrow_mut().replace_top_directory(cwd)?;
-    let status = change("pushd", Some(&top), state, fds, context, work).await?;
+    let swapped = state.borrow().prepare_replace_top_directory(cwd)?;
+    // Bash keeps the swap on an ordinary cd failure.
+    let status = change("pushd", Some(&top), state, fds, context, work).await;
+    if matches!(status, Ok(_) | Err(1)) {
+        state.borrow_mut().install_directories(swapped);
+    }
+    let status = status?;
     if status != 0 {
         return Ok(Outcome::status(status));
     }
@@ -616,16 +605,24 @@ async fn rotate(
     context: &Context,
     work: &mut Work,
 ) -> Result<Outcome, i32> {
-    let target = if count == 0 {
-        state.borrow().cwd.clone()
+    let (target, rotated) = if count == 0 {
+        (state.borrow().cwd.clone(), None)
     } else {
-        state.borrow_mut().rotate_directories(count)?
+        let (target, rotated) = state.borrow().prepare_rotate_directories(count)?;
+        (target, Some(rotated))
     };
-    if nocd {
-        return Ok(Outcome::status(0));
+    let status = if nocd {
+        Ok(0)
+    } else {
+        change("pushd", Some(&target), state, fds, context, work).await
+    };
+    if matches!(status, Ok(_) | Err(1))
+        && let Some(rotated) = rotated
+    {
+        state.borrow_mut().install_directories(rotated);
     }
-    let status = change("pushd", Some(&target), state, fds, context, work).await?;
-    if status == 0 {
+    let status = status?;
+    if !nocd && status == 0 {
         print_stack("pushd", state, fds, context, work).await?;
     }
     Ok(Outcome::status(status))
