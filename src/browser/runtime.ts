@@ -56,7 +56,10 @@ export function acquireBrowserRuntime(
   return {
     runtime,
     ready: Promise.resolve(),
-    workspace: mode === "fast" ? DEFAULT_WORKSPACE : undefined,
+    workspace:
+      mode === "fast" && runtime.filesystem.vfs.implementation === "indexeddb"
+        ? DEFAULT_WORKSPACE
+        : undefined,
     dispose: () => runtime.dispose(),
   };
 }

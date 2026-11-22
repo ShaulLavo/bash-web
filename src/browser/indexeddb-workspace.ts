@@ -91,10 +91,12 @@ function deleteDatabase(workspace: string, report: (result: Removal) => void): P
 /**
  * Whether the saved database is no Waffle workspace ("missing"), one this Waffle opens
  * ("readable"), or one it rejects with INVALID_VFS_FORMAT ("unreadable"). The read uses Waffle's
- * own read-only reader, as its stored-workspace inspection does.
+ * own read-only reader, as its stored-workspace inspection does. "busy": the open stalled behind
+ * another tab's queued delete.
  */
-async function inspect(workspace: string): Promise<"missing" | "readable" | "unreadable"> {
+async function inspect(workspace: string): Promise<"missing" | "readable" | "unreadable" | "busy"> {
   const database = await openExisting(workspace);
+  if (database === "stalled") return "busy";
   if (!database) return "missing";
   let storage: IndexedDBStorage | undefined;
   try {
@@ -112,14 +114,34 @@ async function inspect(workspace: string): Promise<"missing" | "readable" | "unr
   }
 }
 
-function openExisting(workspace: string): Promise<IDBDatabase | undefined> {
+/**
+ * How long the open may wait. A delete another tab queued behind a still-open connection outlives
+ * that tab's locks, and every open of the database waits behind it, so give up and say busy.
+ */
+const OPEN_TIMEOUT_MS = 10_000;
+
+function openExisting(workspace: string): Promise<IDBDatabase | undefined | "stalled"> {
   return new Promise((resolve, reject) => {
+    let stalled = false;
+    const timer = setTimeout(() => {
+      stalled = true;
+      resolve("stalled");
+    }, OPEN_TIMEOUT_MS);
     const request = indexedDB.open(workspace);
     // A database that vanished since the listing would be created by this open; roll that back.
     request.onupgradeneeded = () => request.transaction?.abort();
-    request.onerror = () =>
-      request.error?.name === "AbortError" ? resolve(undefined) : reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      clearTimeout(timer);
+      if (stalled) return;
+      if (request.error?.name === "AbortError") resolve(undefined);
+      else reject(request.error);
+    };
+    request.onsuccess = () => {
+      clearTimeout(timer);
+      // The attempt was abandoned; do not keep a connection that would block the queued delete.
+      if (stalled) request.result.close();
+      else resolve(request.result);
+    };
   });
 }
 

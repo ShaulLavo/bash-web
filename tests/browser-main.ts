@@ -96,9 +96,10 @@ mountBrowser({
     return {
       runtime,
       ready,
-      // Start fresh checks and deletes IndexedDB only, so the OPFS conformance mode offers no reset.
+      // Start fresh checks and deletes IndexedDB only, so it is offered only when the runtime
+      // really uses IndexedDB (the URL's storage selector is ignored outside test mode).
       workspace:
-        filesystem.mode === "fast" && query.get("storage") !== "opfs"
+        filesystem.mode === "fast" && runtime.filesystem.vfs.implementation === "indexeddb"
           ? (filesystem.name ?? DEFAULT_WORKSPACE)
           : undefined,
       dispose() {

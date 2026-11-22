@@ -541,6 +541,49 @@ test("Start fresh reports a connection that keeps the workspace open instead of 
   await expect.poll(() => heldLocks(page, locks)).toEqual([]);
 });
 
+test("a second Start fresh behind another tab's queued delete gives up with the busy message", async ({
+  context,
+  page,
+}) => {
+  const { name, query } = await failedStartup(page, "stalled");
+  const second = await context.newPage();
+  const third = await context.newPage();
+  try {
+    await navigateTestPage(second, `/?${query}`);
+    await expect(second.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+    // A third tab keeps a plain connection open, so the first tab's delete stays queued.
+    await seedOrigin(third);
+    await openRawConnection(third, name);
+    await confirmStartFresh(page);
+    await expect(page.getByRole("alert")).toContainText("open in another tab");
+    // Closing the first tab releases its locks, but the browser keeps the delete queued, and the
+    // second tab's open now waits behind it.
+    await page.close();
+    await confirmStartFresh(second);
+    await expect(second.getByRole("alert")).toContainText("open in another tab");
+    await expect(second.getByRole("button", { name: "Start fresh" })).toBeEnabled();
+    await expect(second.getByRole("button", { name: "Restart session" })).toBeEnabled();
+    // Once the connection closes the queued delete completes.
+    await third.evaluate(() =>
+      (window as unknown as { rawConnection: IDBDatabase }).rawConnection.close(),
+    );
+    await expect.poll(() => storedName(third, name)).toBe(false);
+  } finally {
+    await second.close();
+    await third.close();
+  }
+});
+
+test("Start fresh is offered for the default workspace even with a storage selector in the URL", async ({
+  page,
+}) => {
+  // Outside test mode the demo ignores ?storage=opfs and opens its default IndexedDB workspace.
+  await oldFormatWorkspace(page, "waffle-workspace");
+  await navigateTestPage(page, "/?storage=opfs&renderer=canvas");
+  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  await expect(page.getByRole("button", { name: "Start fresh" })).toBeVisible();
+});
+
 test("Start fresh never deletes a database that is not a Waffle workspace", async ({ page }) => {
   const { name } = await failedStartup(page, "foreign", foreignWorkspace);
   await confirmStartFresh(page);
