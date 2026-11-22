@@ -103,9 +103,10 @@ jobs:
           path: ${{ runner.temp }}/main-score/floor.json
           retention-days: 90
           if-no-files-found: error
-  changes:
+  prepare:
     if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -126,13 +127,6 @@ jobs:
               - '!README.md'
               - '!AGENTS.md'
               - '!LICENSE'
-
-  prepare:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 26.12.1
@@ -153,18 +147,18 @@ jobs:
         run: npm ci --ignore-scripts
       - run: npm run sources:browser && npm run build:worker && npm run build:node-harness
       - name: Pack shared JavaScript inputs
-        run: tar -czf "$RUNNER_TEMP/javascript.tar.gz" node_modules .sources .build/browser .build/node dist/shell-worker.js dist/fs-worker.js
+        run: tar -I 'zstd -T0 -1' -cf "$RUNNER_TEMP/javascript.tar.zst" node_modules .sources .build/browser .build/node dist/shell-worker.js dist/fs-worker.js
       - uses: actions/upload-artifact@v4
         with:
           name: javascript-${{ github.sha }}
-          path: ${{ runner.temp }}/javascript.tar.gz
+          path: ${{ runner.temp }}/javascript.tar.zst
           compression-level: 0
           retention-days: 1
-  layers:
+  quality:
     if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -185,32 +179,20 @@ jobs:
           path: ${{ runner.temp }}/engine-layers.json
           retention-days: 90
           if-no-files-found: error
-  quality:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.12.1
-      - uses: ./.github/actions/javascript
       - run: ulimit -c 0; npm run quality:js
       - run: npm run test:ci
       - run: npm run test:guest-build
       - run: npm run typecheck:guest-build
       - run: npm run typecheck:ci
   native:
-    if: ${{ inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    needs: [prepare, changes]
+    if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    needs: [prepare]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       CARGO_TARGET_DIR: .build/shell
-      WASI_LIBC_JOBS: "2"
+      CARGO_BUILD_JOBS: "4"
+      WASI_LIBC_JOBS: "4"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -233,26 +215,34 @@ jobs:
           cache-all-crates: true
           cache-workspace-crates: true
           cache-directories: .build/wasi-libc
-      - uses: actions/cache@v4
-        id: machete
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: .build/quality-tools
-          key: cargo-machete-${{ runner.os }}-${{ runner.arch }}-0.9.2
-      - name: Install pinned Rust dependency checker
-        if: steps.machete.outputs.cache-hit != 'true'
-        run: cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools -j2
+          prefix-key: v0-rust-cli
+          workspaces: shell -> ../.build/shell-cli
+          cache-all-crates: true
+          cache-workspace-crates: true
       - uses: ./.github/actions/wasi-sdk
-      - name: Build shared WASI guests and test binaries
+      - name: Build shared WASI guests, test binaries, and native CLI
         run: |
           ulimit -c 0
-          npm run build:shell
-          npm run build:test-guest
-          npm run prepare:wasi-tests
+          node scripts/wasi-build.ts --prepare .
+          (
+            npm run build:shell
+            npm run prepare:wasi-tests
+          ) & p_wasi=$!
+          npm run build:test-guest & p_guest=$!
+          CARGO_TARGET_DIR=.build/shell-cli cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures & p_cli=$!
+          status=0
+          for pid in "$p_wasi" "$p_guest" "$p_cli"; do
+            if ! wait "$pid"; then status=1; fi
+          done
+          exit "$status"
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime run -W max-memory-size=268435456
-      - name: Build shared native CLI
+      - name: Pack shared native artifacts
         run: |
-          cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures -j2
+          mkdir -p .build/shell/release
+          cp .build/shell-cli/release/shell-engine .build/shell-cli/release/shell-cli .build/shell/release/
           sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
           git rev-parse HEAD > .build/shell/cli-source.txt
           npm run notices:shell
@@ -273,15 +263,17 @@ jobs:
             .build/shell/cli-sha256.txt
             .build/shell/cli-source.txt
           retention-days: 3
-  # Downstream jobs need only native's builds, so its tests run beside them.
-  native-checks:
-    if: ${{ inputs.main_source == '' && needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    needs: [prepare, changes]
+  # Downstream jobs need only native's builds, so Rust quality/tests, WASI tests, and fuzz run together here.
+  wasi:
+    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    needs:
+      - prepare
+      - native
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      CARGO_TARGET_DIR: .build/shell
-      WASI_LIBC_JOBS: "2"
+      CARGO_BUILD_JOBS: "4"
+      WASI_LIBC_JOBS: "4"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -298,9 +290,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            shell -> ../.build/shell
-            tests/guest -> ../../.build/test-guest
+          prefix-key: v0-native-checks
+          workspaces: shell -> ../.build/shell-checks
           cache-all-crates: true
           cache-workspace-crates: true
           cache-directories: .build/wasi-libc
@@ -311,28 +302,7 @@ jobs:
           key: cargo-machete-${{ runner.os }}-${{ runner.arch }}-0.9.2
       - name: Install pinned Rust dependency checker
         if: steps.machete.outputs.cache-hit != 'true'
-        run: cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools -j2
-      - uses: ./.github/actions/wasi-sdk
-      - name: Rust quality and native tests
-        run: |
-          ulimit -c 0
-          npm run check:rust
-          cargo fmt --manifest-path tests/guest/Cargo.toml --check
-          cargo test --locked --manifest-path shell/Cargo.toml --workspace -j2 --no-fail-fast
-          npm run test:terminal:display
-  wasi:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    needs:
-      - prepare
-      - native
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.12.1
-      - uses: ./.github/actions/javascript
+        run: cargo install cargo-machete --version 0.9.2 --locked --root .build/quality-tools
       - uses: ./.github/actions/native
       - uses: bytecodealliance/actions/wasmtime/setup@v1.1.3
         with:
@@ -341,42 +311,66 @@ jobs:
         run: |
           ulimit -c 0
           npm run test:shell:wasi -- --prebuilt .build/ci-native
-  fuzz:
-    if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
-    needs:
-      - prepare
-      - native
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 26.12.1
-      - uses: ./.github/actions/javascript
-      - uses: ./.github/actions/native
-      - run: npm run test:fuzz-shell-braces
-      - run: npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-cli
-      - run: npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-cli
-      - run: npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-cli
-      - run: npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-cli
-      - run: npm run test:fuzz-shell-substitutions
-      - run: npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-cli
-      - run: npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-cli
-      - run: npm run test:fuzz-shell-control-flow
-      - run: npm run fuzz:shell-control-flow:ci -- --shell .build/shell/release/shell-cli
-      - run: ulimit -c 0; npm run test:fuzz-shell-job-lifetime
-      - run: ulimit -c 0; npm run fuzz:shell-job-lifetime:ci -- --shell .build/shell/release/shell-cli
-      - run: ulimit -c 0; npm run test:fuzz-shell-functions
-      - run: ulimit -c 0; npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-cli
-      - run: ulimit -c 0; npm run test:fuzz-shell-path
-      - run: ulimit -c 0; npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-cli
-      - run: ulimit -c 0; npm run test:fuzz-shell-printf
-      - run: ulimit -c 0; npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
-      - run: npm run test:fuzz-shell-echo
-      - run: ulimit -c 0; npm run fuzz:shell-echo:ci -- --shell "$GITHUB_WORKSPACE/.build/shell/release/shell-cli"
+      - name: Run fuzz generator tests and native differential suites in parallel
         env:
           TMPDIR: ${{ runner.temp }}
+        run: |
+          ulimit -c 0
+          run_lane() {
+            local name="$1"; shift
+            local log="$RUNNER_TEMP/fuzz-$name.log"
+            if "$@" >"$log" 2>&1; then
+              echo "=== fuzz lane: $name (ok) ==="
+              cat "$log"
+            else
+              local status=$?
+              echo "=== fuzz lane: $name (FAILED: $status) ==="
+              cat "$log"
+              return "$status"
+            fi
+          }
+          run_lane braces bash -euo pipefail -c '
+            npm run test:fuzz-shell-braces
+            npm run fuzz:shell-braces:ci -- --shell .build/shell/release/shell-cli
+          ' & p1=$!
+          run_lane core bash -euo pipefail -c '
+            npm run fuzz:shell-words:ci -- --shell .build/shell/release/shell-cli
+            npm run fuzz:shell-arithmetic:ci -- --shell .build/shell/release/shell-cli
+            npm run fuzz:shell-readonly:ci -- --shell .build/shell/release/shell-cli
+            npm run fuzz:shell-parse-boundaries:ci -- --shell .build/shell/release/shell-cli
+          ' & p2=$!
+          run_lane flow bash -euo pipefail -c '
+            npm run test:fuzz-shell-substitutions
+            npm run fuzz:shell-substitutions:ci -- --shell .build/shell/release/shell-cli
+            npm run test:fuzz-shell-control-flow
+            npm run fuzz:shell-control-flow:ci -- --shell .build/shell/release/shell-cli
+            npm run test:fuzz-shell-job-lifetime
+            npm run fuzz:shell-job-lifetime:ci -- --shell .build/shell/release/shell-cli
+          ' & p3=$!
+          run_lane builtins bash -euo pipefail -c '
+            npm run test:fuzz-shell-functions
+            npm run fuzz:shell-functions:ci -- --shell .build/shell/release/shell-cli
+            npm run test:fuzz-shell-path
+            npm run fuzz:shell-path:ci -- --shell .build/shell/release/shell-cli
+            npm run test:fuzz-shell-printf
+            npm run fuzz:shell-printf:ci -- --shell .build/shell/release/shell-cli
+            npm run test:fuzz-shell-echo
+            npm run fuzz:shell-echo:ci -- --shell "$GITHUB_WORKSPACE/.build/shell/release/shell-cli"
+          ' & p4=$!
+          status=0
+          for pid in "$p1" "$p2" "$p3" "$p4"; do
+            if ! wait "$pid"; then status=1; fi
+          done
+          exit "$status"
+      - name: Rust quality and native tests
+        env:
+          CARGO_TARGET_DIR: .build/shell-checks
+        run: |
+          ulimit -c 0
+          npm run check:rust
+          cargo fmt --manifest-path tests/guest/Cargo.toml --check
+          cargo test --locked --manifest-path shell/Cargo.toml --workspace --no-fail-fast
+          npm run test:terminal:display
   own-shell-scoreboard:
     if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
@@ -384,10 +378,6 @@ jobs:
       - native
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
     env:
       CARGO_TARGET_DIR: .build/shell
       BASH_COMPAT_MODE: frozen
@@ -424,7 +414,7 @@ jobs:
           bwrap --unshare-all --ro-bind /usr /usr --symlink usr/lib /lib --symlink usr/lib64 /lib64 --proc /proc --dev /dev -- /usr/bin/true
       - run: npm run test:shell:scoreboard:prebuilt
         env:
-          SCOREBOARD_TEST_SHARD: ${{ matrix.shard }}/3
+          SCOREBOARD_TEST_CONCURRENCY: "4"
   own-shell-observation:
     if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     permissions:
@@ -564,7 +554,7 @@ jobs:
           if-no-files-found: error
       - name: Enforce qualification
         run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
-  # Playwright runs one worker per runner, so the suite is sharded across runners.
+  # Playwright uses the checked-in worker count across two shards.
   browser:
     if: ${{ inputs.main_source == '' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     needs:
@@ -575,7 +565,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -608,8 +598,12 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-chromium.json" chromium
-          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-firefox.json" firefox
+          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-chromium.json" chromium & p1=$!
+          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-firefox.json" firefox & p2=$!
+          status=0
+          if ! wait "$p1"; then status=1; fi
+          if ! wait "$p2"; then status=1; fi
+          exit "$status"
       - name: Retain complete Python host results and measurements
         if: always() && matrix.shard == 1
         uses: actions/upload-artifact@v4
@@ -618,7 +612,7 @@ jobs:
           path: ${{ runner.temp }}/python-host-*.json*
           retention-days: 7
           if-no-files-found: ignore
-      - run: npm run test:browser -- --shard=${{ matrix.shard }}/3
+      - run: npm run test:browser -- --shard=${{ matrix.shard }}/2
         env:
           BASH_WEB_MEASURE: "1"
       - uses: actions/upload-artifact@v4
@@ -632,14 +626,10 @@ jobs:
   shell:
     needs:
       - main-qualification
-      - changes
       - prepare
-      - layers
       - quality
       - native
-      - native-checks
       - wasi
-      - fuzz
       - own-shell-scoreboard
       - own-shell-observation
       - own-shell-compatibility
@@ -661,10 +651,8 @@ jobs:
         env:
           MAIN_SOURCE: ${{ inputs.main_source }}
           MAIN_QUALIFICATION: ${{ needs.main-qualification.result }}
-          CHANGES: ${{ needs.changes.result }}
-          CODE: ${{ needs.changes.outputs.code }}
+          CODE: ${{ needs.prepare.outputs.code }}
           PREPARE: ${{ needs.prepare.result }}
-          LAYERS: ${{ needs.layers.result }}
           QUALITY: ${{ needs.quality.result }}
           RESULTS: ${{ toJSON(needs) }}
         run: |
@@ -674,13 +662,13 @@ jobs:
             exit 0
           fi
           [[ "$MAIN_QUALIFICATION" == skipped ]]
-          [[ $CHANGES == success && $PREPARE == success && $LAYERS == success && $QUALITY == success ]]
+          [[ $PREPARE == success && $QUALITY == success ]]
           case "$CODE" in
             true) expected=success ;;
             false) expected=skipped ;;
             *) exit 1 ;;
           esac
-          echo "$RESULTS" | jq -e --arg expected "$expected" 'del(."main-qualification", .changes, .prepare, .layers, .quality) | all(.[]; .result == $expected)'
+          echo "$RESULTS" | jq -e --arg expected "$expected" 'del(."main-qualification", .prepare, .quality) | all(.[]; .result == $expected)'
 
       # Dispatch job checks do not satisfy PR requirements. Commit statuses do.
       - name: Report the real CI verdict on the tested commit

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { Worker } from "node:worker_threads";
 import { createWaffleRunner } from "./waffle-compat.ts";
-import { liveNodeWorkers } from "./node-worker-host.ts";
+import { installNodeWorkers, liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 
 import { fixture } from "./own-shell-runner-fixture.ts";
 
@@ -129,5 +129,31 @@ test("repeated fresh Waffle runtimes leave no threads or handles behind", async 
     assert.ok(handles() <= baseline, "repeated cases accumulated handles");
   } finally {
     await rm(scratch, { recursive: true, force: true });
+  }
+});
+
+test("pooled workers propagate rejected handlers and drop live counts on failure", async () => {
+  installNodeWorkers();
+  const rootUrl = new URL("../.build/node/root.mjs", import.meta.url);
+  const HostWorker = globalThis.Worker as unknown as new (url: URL) => {
+    onerror: ((event: { message?: string; error?: unknown }) => void) | null;
+    postMessage(message: unknown): void;
+    terminate(): Promise<number>;
+  };
+  const worker = new HostWorker(rootUrl);
+  try {
+    const failure = await new Promise<string>((done, fail) => {
+      const timer = setTimeout(() => fail(new Error("timed out waiting for worker error")), 5000);
+      worker.onerror = (event) => {
+        clearTimeout(timer);
+        done(String(event.message ?? event.error ?? ""));
+      };
+      worker.postMessage({ type: "run" });
+    });
+    assert.ok(failure.length > 0, "rejected worker handler must report an error message");
+    await worker.terminate();
+    assert.equal(liveNodeWorkers(), 0, "failed pooled worker must not remain live");
+  } finally {
+    await stopNodeWorkers();
   }
 });

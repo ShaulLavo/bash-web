@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncOptions } from "node:child_process";
 import { resolve } from "node:path";
-import { wasiBuildEnvironment } from "./wasi-build.ts";
+import { cargoJobArguments, wasiBuildEnvironment } from "./wasi-build.ts";
 
 const root = resolve(import.meta.dirname, "..");
 function run(command: string, args: readonly string[], options: SpawnSyncOptions = {}) {
@@ -30,8 +30,7 @@ for (const target of [[], ["--target", "wasm32-wasip1"]]) {
       "shell/Cargo.toml",
       "--workspace",
       "--all-targets",
-      "-j2",
-    ].concat(target, ["--", "-D", "warnings"]),
+    ].concat(cargoJobArguments(), target, ["--", "-D", "warnings"]),
     target.length
       ? { env: wasiBuildEnvironment(root, process.env.CARGO_TARGET_DIR ?? ".build/shell") }
       : {},

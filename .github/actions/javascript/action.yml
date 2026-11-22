@@ -9,4 +9,4 @@ runs:
         name: javascript-${{ github.sha }}
         path: ${{ runner.temp }}/javascript
     - shell: bash
-      run: tar -xzf "$RUNNER_TEMP/javascript/javascript.tar.gz"
+      run: tar --zstd -xf "$RUNNER_TEMP/javascript/javascript.tar.zst"
