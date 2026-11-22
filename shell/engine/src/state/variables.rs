@@ -41,6 +41,10 @@ impl Variables {
         }
     }
 
+    pub(super) fn last_argument_bytes(&self) -> usize {
+        self.get("_").map_or(0, Binding::storage_bytes)
+    }
+
     pub(super) fn bytes(&self) -> usize {
         self.ordinary.bytes()
             + self.last_argument.as_ref().map_or(0, |(name, value)| {

@@ -1,3 +1,4 @@
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
 use std::rc::Rc;
@@ -7,23 +8,25 @@ use crate::exec::{RESOURCE_STATUS, StorageAllocation, StorageBudget};
 use super::{SnapshotValue, tree_node_bytes};
 
 #[derive(Debug)]
-pub(super) struct SharedTree<T>(Rc<Version<T>>);
+pub(super) struct SharedTree<T>(Rc<Version<T>>, Cell<bool>);
 
 #[derive(Debug)]
 struct Version<T> {
     tree: T,
     bytes: usize,
-    copy: Option<StorageAllocation>,
+    copy: RefCell<Option<StorageAllocation>>,
+    cleanup: RefCell<Option<StorageAllocation>>,
 }
 
 impl<T: Default> Version<T> {
     fn refund_shrunk_copy(&mut self) {
-        let Some(copy) = &mut self.copy else {
+        let allocation = self.copy.get_mut();
+        let Some(copy) = allocation else {
             return;
         };
         if self.bytes == 0 {
             self.tree = T::default();
-            self.copy = None;
+            *allocation = None;
             return;
         }
         let bytes = self.bytes + SharedTree::<T>::version_bytes();
@@ -35,17 +38,13 @@ impl<T: Default> Version<T> {
 
 impl<T> Clone for SharedTree<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(self.0.clone(), Cell::new(false))
     }
 }
 
 impl<T: Default> Default for SharedTree<T> {
     fn default() -> Self {
-        Self(Rc::new(Version {
-            tree: T::default(),
-            bytes: 0,
-            copy: None,
-        }))
+        Self::new(T::default(), 0, None)
     }
 }
 
@@ -58,6 +57,18 @@ impl<T> Deref for SharedTree<T> {
 }
 
 impl<T> SharedTree<T> {
+    fn new(tree: T, bytes: usize, copy: Option<StorageAllocation>) -> Self {
+        Self(
+            Rc::new(Version {
+                tree,
+                bytes,
+                copy: RefCell::new(copy),
+                cleanup: RefCell::new(None),
+            }),
+            Cell::new(false),
+        )
+    }
+
     fn version_bytes() -> usize {
         std::mem::size_of::<Version<T>>() + 2 * std::mem::size_of::<usize>()
     }
@@ -68,7 +79,20 @@ impl<T> SharedTree<T> {
 
     #[cfg(test)]
     pub(super) fn copy_bytes(&self) -> usize {
-        self.0.copy.as_ref().map_or(0, StorageAllocation::bytes)
+        self.0
+            .copy
+            .borrow()
+            .as_ref()
+            .map_or(0, StorageAllocation::bytes)
+    }
+
+    #[cfg(test)]
+    pub(super) fn cleanup_bytes(&self) -> usize {
+        self.0
+            .cleanup
+            .borrow()
+            .as_ref()
+            .map_or(0, StorageAllocation::bytes)
     }
 
     pub(super) fn is_shared(&self) -> bool {
@@ -79,13 +103,58 @@ impl<T> SharedTree<T> {
         &self,
         memory: Option<&StorageBudget>,
     ) -> Result<Option<StorageAllocation>, i32> {
-        if !self.is_shared() {
+        if !self.is_shared() || self.has_cleanup_copy() {
             return Ok(None);
         }
+        memory.map(|budget| self.admit_copy(budget)).transpose()
+    }
+
+    fn admit_copy(&self, memory: &StorageBudget) -> Result<StorageAllocation, i32> {
         memory
-            .map(|budget| budget.admit(self.bytes().checked_add(Self::version_bytes()).ok_or(2)?))
-            .transpose()
+            .admit(
+                self.bytes()
+                    .checked_add(Self::version_bytes())
+                    .ok_or(RESOURCE_STATUS)?,
+            )
             .map_err(|_| RESOURCE_STATUS)
+    }
+
+    pub(super) fn reserve_cleanup(
+        &self,
+        memory: &StorageBudget,
+    ) -> Result<Option<StorageAllocation>, i32> {
+        if self.has_cleanup_copy() {
+            return Ok(None);
+        }
+        // A scope can only leave a pending table edit after writing its own
+        // version. Inherited scopes have no cleanup guards in the child.
+        assert!(self.0.cleanup.borrow().is_none());
+        self.admit_copy(memory).map(Some)
+    }
+
+    pub(super) fn install_cleanup(&self, ticket: Option<StorageAllocation>) {
+        if let Some(ticket) = ticket {
+            self.1.set(true);
+            *self.0.cleanup.borrow_mut() = Some(ticket);
+        }
+    }
+
+    pub(super) fn take_cleanup_copy(&self) -> Option<StorageAllocation> {
+        self.1
+            .replace(false)
+            .then(|| self.0.cleanup.borrow_mut().take())
+            .flatten()
+    }
+
+    pub(super) fn has_cleanup_copy(&self) -> bool {
+        self.1.get() && self.0.cleanup.borrow().is_some()
+    }
+
+    pub(super) fn require_cleanup_copy(&self, budgeted: bool) {
+        assert!(
+            !budgeted || !self.is_shared() || self.has_cleanup_copy(),
+            "shared scope restoration requires a copy ticket"
+        );
     }
 
     fn version_mut(&mut self) -> &mut Version<T> {
@@ -93,7 +162,23 @@ impl<T> SharedTree<T> {
     }
 
     fn install_copy(&mut self, tree: T, bytes: usize, copy: Option<StorageAllocation>) {
-        self.0 = Rc::new(Version { tree, bytes, copy });
+        let copy = if let Some(retained) = self.take_cleanup_copy() {
+            // The writer keeps its earlier charge. The reservation pays for
+            // the version that now lives on only because snapshots retain it.
+            self.0.copy.borrow_mut().replace(retained)
+        } else {
+            copy
+        };
+        *self = Self::new(tree, bytes, copy);
+    }
+}
+
+impl<T> Drop for SharedTree<T> {
+    fn drop(&mut self) {
+        self.take_cleanup_copy();
+        if Rc::strong_count(&self.0) == 2 {
+            self.0.cleanup.borrow_mut().take();
+        }
     }
 }
 

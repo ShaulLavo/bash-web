@@ -1,5 +1,9 @@
-use super::{CaseLocale, SnapshotValue, State, snapshot_node_bytes};
+use super::{
+    AssignmentKind, CASE_ATTRIBUTES, CaseLocale, NAMEREFS, SnapshotValue, State,
+    snapshot_node_bytes,
+};
 use crate::exec::Work;
+use std::borrow::Cow;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum CaseMapping {
@@ -51,13 +55,28 @@ impl State {
     pub(crate) fn case_mapping(&self, name: &str) -> CaseMapping {
         self.case_attributes.get(name).copied().unwrap_or_default()
     }
-    pub(crate) fn case_value(&self, name: &str, mut value: String) -> Result<String, i32> {
+    pub(crate) fn case_value(&self, name: &str, value: String) -> Result<String, i32> {
         let name = self.scalar_target(name)?.ok_or(1)?;
-        let mapping = self.case_mapping(name);
-        if mapping == CaseMapping::Unchanged || self.is_readonly(name) {
+        if self.is_readonly(name) {
             return Ok(value);
         }
-        let locale = CaseLocale::from_state(self).map_err(|_| 2)?;
+        self.map_case_value(self.case_mapping(name), value)
+    }
+
+    fn map_case_value(&self, mapping: CaseMapping, value: String) -> Result<String, i32> {
+        self.map_case_in_locale(mapping, value, || CaseLocale::from_state(self))
+    }
+
+    pub(crate) fn map_case_in_locale(
+        &self,
+        mapping: CaseMapping,
+        mut value: String,
+        locale: impl FnOnce() -> Result<CaseLocale, crate::exec::Error>,
+    ) -> Result<String, i32> {
+        if mapping == CaseMapping::Unchanged {
+            return Ok(value);
+        }
+        let locale = locale().map_err(|_| 2)?;
         let upper = mapping == CaseMapping::Upper;
         if value.is_ascii() {
             if upper {
@@ -97,16 +116,56 @@ impl State {
             .len()
             .saturating_add(snapshot_node_bytes::<CaseMapping>().map_err(|_| 2)?);
         work.admit_storage(bytes).map_err(|_| 2)?;
-        let changes = super::CASE_ATTRIBUTES | (u8::from(value.is_some()) * super::VARIABLES);
-        self.prepare_binding_changes(&name, changes)?;
+        let current_local = self.is_current_local(&name);
+        let mapping = if local && !current_local {
+            CaseMapping::Unchanged
+        } else {
+            self.case_mapping(&name)
+        };
+        let mapping = options.apply(mapping);
+        let value = value
+            .map(|value| self.map_case_value(mapping, value))
+            .transpose()?;
+        if local && !(current_local && value.is_some()) {
+            self.install_local(name.clone(), value, false, true, CASE_ATTRIBUTES)?;
+        } else {
+            self.apply_case_assignment(&name, value, local)?;
+        }
+        self.case_attributes.insert(name, mapping);
+        Ok(())
+    }
+
+    fn apply_case_assignment(
+        &mut self,
+        name: &str,
+        value: Option<String>,
+        local: bool,
+    ) -> Result<(), i32> {
+        if local && self.readonly.contains(name) {
+            return Err(1);
+        }
+        let changes =
+            CASE_ATTRIBUTES | (u8::from(local) * (self.binding_removals(name) & NAMEREFS));
+        let copies = self.reserve_binding_changes(name, changes)?;
+        let Some(value) = value else {
+            copies.install(self, name);
+            return Ok(());
+        };
+        let assignment = self.admit_scalar_write(name, value.capacity())?;
+        copies.install(self, name);
         if local {
-            self.declare_local(name.clone(), None)?;
+            self.namerefs.remove(name);
+            if name == "OPTIND" {
+                self.getopts_numeric = false;
+                self.getopts = Default::default();
+            }
         }
-        let mapping = options.apply(self.case_mapping(&name));
-        self.case_attributes.insert(name.clone(), mapping);
-        if let Some(value) = value {
-            self.assign_parameter(name, value)?;
-        }
+        self.write_scalar(
+            Cow::Borrowed(name),
+            value,
+            AssignmentKind::Explicit,
+            assignment,
+        );
         Ok(())
     }
     pub(super) fn saved_case_storage(&self, name: &str) -> usize {

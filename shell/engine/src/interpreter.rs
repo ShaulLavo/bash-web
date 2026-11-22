@@ -6060,6 +6060,138 @@ mod function_measurements {
         assert_eq!(ex.drive(64).pending, 0);
     }
 
+    fn retain_binding_snapshot(state: &SharedState) -> State {
+        let mut work = expand::Work::new(4096, 256 * 1024, 0);
+        State::snapshot(state, &Cancel::new(), &mut work)
+            .now_or_never()
+            .expect("small snapshot completes without a yield")
+            .unwrap_or_else(|_| panic!("shared bindings fit snapshot budget"))
+    }
+
+    #[test]
+    fn scalar_writes_report_resource_exhaustion_in_for_parameter_expansion_and_select() {
+        for source in [
+            "for dst in value; do :; done",
+            "echo \"${dst:=value}\"",
+            "select dst in value; do break; done",
+        ] {
+            let limit = 128 * 1024;
+            let (ex, _, session) = review_session(Limits::default());
+            let budget = crate::exec::StorageBudget::new(limit);
+            // Give the binding table its own pool so the select reader's
+            // execution frames fit before it reaches the scalar write.
+            *session.state.borrow_mut() = State::with_memory(budget.clone());
+            let (error, errors) = io::capture(4096);
+            let mut fds = FdTable::default();
+            fds.insert(0, io::Endpoint::bytes(b"1\n".to_vec()));
+            fds.insert(1, io::Endpoint::null());
+            fds.insert(2, error);
+            session.set_descriptors(fds).unwrap();
+            {
+                let mut state = session.state.borrow_mut();
+                state
+                    .assign_parameter("payload".into(), "x".repeat(64 * 1024))
+                    .unwrap();
+                // Let select publish REPLY without unsharing the ordinary variables.
+                state
+                    .declare_nameref("REPLY".into(), "_".into(), false)
+                    .unwrap();
+            }
+            let _snapshot = retain_binding_snapshot(&session.state);
+            let pressure = budget.admit(limit - 32 * 1024).unwrap();
+            assert_eq!(
+                finish_review(&ex, session.start(source).unwrap()),
+                2,
+                "{source}"
+            );
+            assert_eq!(session.state.borrow().scalar_parameter("dst"), None);
+            let diagnostic = String::from_utf8(errors.bytes()).unwrap();
+            assert!(
+                diagnostic.contains("live-execution memory limit exceeded"),
+                "{diagnostic}"
+            );
+            assert!(!diagnostic.contains("readonly"), "{diagnostic}");
+            if source.starts_with("select") {
+                assert_eq!(
+                    session.state.borrow().parameter("REPLY"),
+                    "1",
+                    "{diagnostic}"
+                );
+            }
+            drop(pressure);
+        }
+    }
+
+    #[test]
+    fn declare_export_is_atomic_when_only_the_variable_copy_fits() {
+        let limit = 128 * 1024;
+        let (ex, _, session) = review_session(Limits {
+            execution_bytes: limit,
+            ..Limits::default()
+        });
+        {
+            let mut state = session.state.borrow_mut();
+            for index in 0..100 {
+                state
+                    .export(format!("{}_{index}", "exported".repeat(40)), None)
+                    .unwrap();
+            }
+        }
+        let _snapshot = retain_binding_snapshot(&session.state);
+        let budget = &session.core.execution_storage;
+        let pressure = budget.admit(limit - 32 * 1024).unwrap();
+        assert_eq!(
+            finish_review(&ex, session.start("declare -x dst=value").unwrap()),
+            2
+        );
+        let state = session.state.borrow();
+        assert_eq!(state.scalar_parameter("dst"), None);
+        assert!(!state.exported_bindings().contains("dst"));
+        assert_eq!(budget.observation().0, pressure.bytes());
+    }
+
+    #[test]
+    fn failed_getopts_case_mapping_leaves_cursor_and_bindings_unchanged() {
+        let (ex, _, session) = review_session(Limits::default());
+        assert_eq!(
+            finish_review(
+                &ex,
+                session
+                    .start("declare -u OPTARG=kept; LC_ALL=unsupported")
+                    .unwrap()
+            ),
+            0
+        );
+        let _snapshot = retain_binding_snapshot(&session.state);
+        let budget = &session.core.execution_storage;
+        let before = budget.observation().0;
+        assert_eq!(
+            finish_review(&ex, session.start("getopts a: flag -a value").unwrap()),
+            2
+        );
+        let state = session.state.borrow();
+        assert_eq!(state.getopts.index, 1);
+        assert_eq!(state.parameter("OPTIND"), "1");
+        assert_eq!(state.parameter("OPTARG"), "KEPT");
+        assert_eq!(state.scalar_parameter("flag"), None);
+        assert_eq!(budget.observation().0, before);
+    }
+
+    #[test]
+    fn getopts_locale_uses_the_pwd_projection_instead_of_the_staged_binding() {
+        let (ex, _, session) = review_session(Limits::default());
+        let setup = "declare -n LC_ALL=PWD; declare -n OPTARG=PWD; declare -u flag";
+        assert_eq!(finish_review(&ex, session.start(setup).unwrap()), 0);
+        assert_eq!(
+            finish_review(&ex, session.start("getopts a: flag -a C").unwrap()),
+            2
+        );
+        let state = session.state.borrow();
+        assert_eq!(state.getopts.index, 1);
+        assert_eq!(state.scalar_parameter("flag"), None);
+        assert_eq!(state.scalar_parameter("LC_ALL"), Some(state.cwd.as_str()));
+    }
+
     #[test]
     fn review_shift_refunds_dropped_strings_but_keeps_vector_allocation() {
         let (ex, _host, session) = review_session(Limits::default());

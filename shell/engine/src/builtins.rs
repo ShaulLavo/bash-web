@@ -1007,19 +1007,21 @@ async fn declarations(
                 .map_or(0, str::len);
             scan_bytes(bytes, context, work).await?;
         }
-        let result = if inherit {
-            state
-                .borrow_mut()
-                .declare_inherited_local(key.clone(), value, work)
-        } else if case.specified() {
-            state
-                .borrow_mut()
-                .declare_case(key.clone(), value, local, case, work)
-        } else {
-            apply_declaration(name, &key, value, append, &mut state.borrow_mut())
+        let result = {
+            let mut state = state.borrow_mut();
+            let declares_local =
+                local && (inherit || case.specified() || !append || !state.is_current_local(&key));
+            state.declare_with_attributes(&key, declares_local, exported, readonly, |state| {
+                if inherit {
+                    return state.declare_inherited_local(key.clone(), value, work);
+                }
+                if case.specified() {
+                    return state.declare_case(key.clone(), value, local, case, work);
+                }
+                apply_declaration(name, &key, value, append, state)
+            })
         };
         if declaration_status(result)? == 0 {
-            declaration_attributes(&key, exported, readonly, &mut state.borrow_mut())?;
             continue;
         }
         status = 1;
@@ -1036,21 +1038,6 @@ fn declaration_status(result: Result<(), i32>) -> Result<i32, i32> {
         Err(code @ (2 | crate::exec::RESOURCE_STATUS)) => Err(code),
         Err(_) => Ok(1),
     }
-}
-
-fn declaration_attributes(
-    key: &str,
-    exported: bool,
-    readonly: bool,
-    state: &mut crate::state::State,
-) -> Result<(), i32> {
-    if exported {
-        state.export(key.to_owned(), None)?;
-    }
-    if readonly {
-        state.readonly(key.to_owned(), None)?;
-    }
-    Ok(())
 }
 
 #[derive(Default)]

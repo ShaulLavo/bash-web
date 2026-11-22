@@ -324,11 +324,12 @@ impl BindingUndo {
             Self::Append { .. } => 0,
         }
     }
-    pub(crate) fn scalar_effect_bytes(&self, value_bytes: usize) -> usize {
+    pub(crate) fn scalar_effect_bytes(&self, value_bytes: usize, prior_growth: usize) -> usize {
         match self {
             Self::Restore(Some(binding @ Binding::Indexed(_))) => value_bytes
                 .saturating_add(binding.storage_bytes())
-                .saturating_add(Binding::node_bytes()),
+                .saturating_add(Binding::node_bytes())
+                .saturating_add(prior_growth),
             Self::Restore(_) | Self::Element { index: 0, .. } => value_bytes,
             _ => 0,
         }

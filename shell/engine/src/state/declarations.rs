@@ -1,4 +1,4 @@
-use super::{Binding, LocalOrigin, State};
+use super::{Binding, EXPORTED, LocalOrigin, READONLY, State};
 
 #[derive(Clone, Copy)]
 pub(crate) struct DeclarationView<'a> {
@@ -10,6 +10,37 @@ pub(crate) struct DeclarationView<'a> {
 }
 
 impl State {
+    pub(crate) fn declare_with_attributes(
+        &mut self,
+        name: &str,
+        local: bool,
+        exported: bool,
+        readonly: bool,
+        declare: impl FnOnce(&mut Self) -> Result<(), i32>,
+    ) -> Result<(), i32> {
+        if !exported && !readonly {
+            return declare(self);
+        }
+        let name = if local {
+            name.to_owned()
+        } else {
+            self.assignment_name(name.to_owned())?
+        };
+        let local = local || self.locals.iter().any(|locals| locals.contains_key(&name));
+        let changes = (u8::from(exported && !self.exported.contains(&name)) * EXPORTED)
+            | (u8::from(readonly && !local && !self.readonly.contains(&name)) * READONLY);
+        let copies = self.reserve_binding_changes(&name, changes)?;
+        declare(self)?;
+        copies.install(self, &name);
+        if exported {
+            self.exported.insert(name.clone());
+        }
+        if readonly {
+            self.mark_readonly(name);
+        }
+        Ok(())
+    }
+
     pub(crate) fn declaration_append_base(
         &self,
         name: &str,

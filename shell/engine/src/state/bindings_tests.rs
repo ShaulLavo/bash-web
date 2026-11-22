@@ -29,6 +29,44 @@ fn builtin(state: &SharedState, assigned: &[(String, String)]) -> PrefixFrame {
         .unwrap_or_else(|_| panic!("short binding replay fits"))
 }
 
+#[test]
+fn snapshot_reserves_copies_for_both_prefix_unwind_paths() {
+    for builtin_prefix in [false, true] {
+        let limit = 64 * 1024;
+        let memory = crate::exec::StorageBudget::new(limit);
+        let state = State::with_memory(memory.clone()).shared();
+        state
+            .borrow_mut()
+            .assign_parameter("payload".into(), "x".repeat(32 * 1024))
+            .unwrap();
+        state
+            .borrow_mut()
+            .assign_parameter("x".into(), "outer".into())
+            .unwrap();
+        let frame = if builtin_prefix {
+            builtin(&state, &[("x".into(), "inner".into())])
+        } else {
+            let frame = PrefixFrame::test_enter(state.clone());
+            frame.reserve("x", "inner".len()).unwrap();
+            frame
+                .set("x".into(), "inner".into())
+                .unwrap_or_else(|_| panic!("prefix fits"));
+            frame
+        };
+        let mut work = Work::new(512, limit, 0);
+        let child = finish(State::snapshot(&state, &Cancel::new(), &mut work))
+            .unwrap_or_else(|_| panic!("prefix snapshot fits"));
+        let pressure = memory.admit(limit - memory.observation().0).unwrap();
+        drop(frame);
+        assert_eq!(state.borrow().parameter("x"), "outer");
+        assert_eq!(child.parameter("x"), "inner");
+        assert!(child.variables.ordinary.copy_bytes() >= 32 * 1024);
+        drop(pressure);
+        drop(child);
+        assert_state_drop_refunds(&memory, state);
+    }
+}
+
 fn assert_startup_defaults(state: &State) {
     assert_eq!(state.bindings().len(), 6);
     assert_eq!(state.bindings()["_"], "bash");
