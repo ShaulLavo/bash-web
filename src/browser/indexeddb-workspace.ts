@@ -123,11 +123,12 @@ const OPEN_TIMEOUT_MS = 10_000;
 function openExisting(workspace: string): Promise<IDBDatabase | undefined | "stalled"> {
   return new Promise((resolve, reject) => {
     let stalled = false;
+    // A synchronous failure rejects here, before any timer exists to clean up.
+    const request = indexedDB.open(workspace);
     const timer = setTimeout(() => {
       stalled = true;
       resolve("stalled");
     }, OPEN_TIMEOUT_MS);
-    const request = indexedDB.open(workspace);
     // A database that vanished since the listing would be created by this open; roll that back.
     request.onupgradeneeded = () => request.transaction?.abort();
     request.onerror = () => {

@@ -563,11 +563,14 @@ test("a second Start fresh behind another tab's queued delete gives up with the 
     await expect(second.getByRole("alert")).toContainText("open in another tab");
     await expect(second.getByRole("button", { name: "Start fresh" })).toBeEnabled();
     await expect(second.getByRole("button", { name: "Restart session" })).toBeEnabled();
-    // Once the connection closes the queued delete completes.
+    // Once the connection closes the queued delete completes, and no tab keeps either lock. (A
+    // browser that forgets the first delete with its tab queues the second tab's own delete,
+    // which holds the locks until it settles, so they can only be checked here.)
     await third.evaluate(() =>
       (window as unknown as { rawConnection: IDBDatabase }).rawConnection.close(),
     );
     await expect.poll(() => storedName(third, name)).toBe(false);
+    await expect.poll(() => heldLocks(third, workspaceLockNames(name))).toEqual([]);
   } finally {
     await second.close();
     await third.close();
