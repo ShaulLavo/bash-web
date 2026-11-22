@@ -7,8 +7,9 @@ export type BrowserRuntimeLease = {
   runtime: Runtime;
   ready: Promise<void>;
   /**
-   * The saved workspace this lease opened in fast mode. Set it so the demo can offer Start fresh
-   * when that workspace cannot be read. Leave it unset for a runtime the page must not delete.
+   * The saved IndexedDB workspace this lease opened in fast mode. Set it so the demo can offer
+   * Start fresh when that workspace cannot be read. Start fresh checks and deletes IndexedDB
+   * only, so leave it unset for OPFS storage and for a runtime the page must not delete.
    */
   workspace?: string;
   dispose(): Promise<void>;

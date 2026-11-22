@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { navigateTestPage } from "./helpers/navigate-test-page.ts";
 import { expect, test, type Page } from "@playwright/test";
 import { STORAGE_READY_TIMEOUT_MS } from "../src/runtime/storage.ts";
+import { workspaceLockNames } from "../src/browser/indexeddb-workspace.ts";
 import { startupReady } from "./helpers/readiness.ts";
 import { opfsTest } from "./helpers/opfs-test.ts";
 import { OUTCOME_HANG_MS } from "./helpers/outcome-timeouts.ts";
@@ -358,6 +359,14 @@ async function expectOutput(page: Page, command: string, line: string) {
     .toContain(line);
 }
 
+/** Which of the given Web Lock names are held right now. */
+function heldLocks(page: Page, names: readonly string[]) {
+  return page.evaluate(async (wanted) => {
+    const { held } = await navigator.locks.query();
+    return wanted.filter((lock) => held?.some((entry) => entry.name === lock));
+  }, names);
+}
+
 /** A plain IndexedDB connection, with no Waffle locks, that stays open until closed. */
 function openRawConnection(page: Page, name: string) {
   return page.evaluate(
@@ -378,9 +387,8 @@ function openRawConnection(page: Page, name: string) {
 async function holdWorkspaceLock(page: Page, name: string) {
   await seedOrigin(page);
   await page.evaluate(
-    (workspace) =>
+    (lock) =>
       new Promise<void>((held) => {
-        const lock = `bun-wasm:filesystem:indexeddb:${workspace}`;
         const never = new Promise<void>(() => {});
         const hold = () => {
           held();
@@ -388,7 +396,7 @@ async function holdWorkspaceLock(page: Page, name: string) {
         };
         void navigator.locks.request(lock, hold);
       }),
-    name,
+    workspaceLockNames(name)[1],
   );
 }
 
@@ -518,15 +526,19 @@ test("Start fresh reports a connection that keeps the workspace open instead of 
   await confirmStartFresh(page);
   await expect(page.getByRole("alert")).toContainText("open in another tab");
   await expect(page.getByRole("button", { name: "Start fresh" })).toBeEnabled();
-  // A second attempt while the delete is queued answers busy again instead of hanging.
+  // The queued delete keeps both of Waffle's locks, so every other attempt (here and in any tab)
+  // is refused at once instead of waiting behind it.
+  const locks = workspaceLockNames(name);
+  expect(await heldLocks(page, locks)).toEqual(locks);
   await confirmStartFresh(page);
-  await expect(page.getByRole("alert")).toContainText("open in another tab");
   await expect(page.getByRole("button", { name: "Start fresh" })).toBeEnabled();
-  // The queued delete finishes once the connection closes.
+  expect(await heldLocks(page, locks)).toEqual(locks);
+  // The queued delete finishes once the connection closes, and the locks are released.
   await page.evaluate(() =>
     (window as unknown as { rawConnection: IDBDatabase }).rawConnection.close(),
   );
   await expect.poll(() => storedName(page, name)).toBe(false);
+  await expect.poll(() => heldLocks(page, locks)).toEqual([]);
 });
 
 test("Start fresh never deletes a database that is not a Waffle workspace", async ({ page }) => {

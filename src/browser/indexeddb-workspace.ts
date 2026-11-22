@@ -22,61 +22,69 @@ export type Removal = "deleted" | "missing" | "busy" | "readable";
  * page's unreadable-format check never looked at, and Waffle has no IndexedDB-only call. So this
  * takes the two Web Locks Waffle's owners hold for a workspace (names from Waffle's
  * `fs/storage-maintenance.ts` and `fs/indexeddb.ts`) and does the check and the delete under
- * them, so no other tab can recover the workspace in between. If Waffle changes the lock names,
- * the e2e test "Start fresh keeps a healthy OPFS workspace of the same name" fails.
+ * them, so no other Waffle tab can recover the workspace in between. The locks stay held until
+ * the browser's delete settles, as Waffle's own deletion claim does, so a delete that is queued
+ * behind a still-open connection keeps every other attempt (any tab) answering "busy" instead of
+ * hanging behind it. Code that writes to IndexedDB behind Waffle's back is not covered.
  *
- * "busy": another tab or handle holds the workspace, nothing was deleted. "missing": no database
- * of that name was saved by Waffle (a database that is not a Waffle workspace is never touched).
- * "readable": the workspace opens now, so it was kept.
+ * "busy": another tab or handle holds the workspace, or a connection keeps the delete waiting
+ * (it then finishes by itself once that connection closes). "missing": no database of that name
+ * was saved by Waffle, or it was already gone (a database that is not a Waffle workspace is never
+ * touched). "readable": the workspace opens now, so it was kept.
  */
-export async function deleteUnreadableWorkspace(selection: {
-  readonly name: string;
-}): Promise<Removal> {
+export function deleteUnreadableWorkspace(selection: { readonly name: string }): Promise<Removal> {
   const workspace = selection.name;
-  if (!globalThis.indexedDB || !globalThis.navigator?.locks) return "missing";
-  // A delete already waiting on an open connection would block this attempt's own open forever.
-  if (queued.has(workspace)) return "busy";
-  return underLock(`bun-wasm:filesystem:indexeddb-maintenance:${workspace}`, () =>
-    underLock(`bun-wasm:filesystem:indexeddb:${workspace}`, () => removeUnreadable(workspace)),
-  );
+  if (!globalThis.indexedDB || !globalThis.navigator?.locks) return Promise.resolve("missing");
+  const outcome = Promise.withResolvers<Removal>();
+  // The claim outlives the answer when the delete is blocked, so it settles separately.
+  void claim(workspace, outcome.resolve).catch(outcome.reject);
+  return outcome.promise;
 }
 
-function underLock(lock: string, body: () => Promise<Removal>): Promise<Removal> {
+/** The two Web Locks Waffle's IndexedDB owners hold for a workspace: maintenance, then writer. */
+export function workspaceLockNames(workspace: string): [string, string] {
+  return [
+    `bun-wasm:filesystem:indexeddb-maintenance:${workspace}`,
+    `bun-wasm:filesystem:indexeddb:${workspace}`,
+  ];
+}
+
+async function claim(workspace: string, report: (result: Removal) => void): Promise<void> {
+  const [maintenance, writer] = workspaceLockNames(workspace);
+  const held = await underLock(maintenance, () =>
+    underLock(writer, () => removeUnreadable(workspace, report)),
+  );
+  if (!held) report("busy");
+}
+
+/** Runs `body` while holding the lock; false when another owner has it. */
+function underLock(lock: string, body: () => Promise<boolean>): Promise<boolean> {
   const options = { mode: "exclusive", ifAvailable: true } as const;
-  return navigator.locks.request(lock, options, (held) =>
-    held ? body() : Promise.resolve<Removal>("busy"),
-  );
+  return navigator.locks.request(lock, options, (held) => (held ? body() : Promise.resolve(false)));
 }
 
-async function removeUnreadable(workspace: string): Promise<Removal> {
+async function removeUnreadable(
+  workspace: string,
+  report: (result: Removal) => void,
+): Promise<boolean> {
   const names = (await indexedDB.databases()).map((database) => database.name);
-  if (!names.includes(workspace)) return "missing";
-  const state = await inspect(workspace);
-  if (state !== "unreadable") return state;
-  return deleteDatabase(workspace);
+  const state = names.includes(workspace) ? await inspect(workspace) : "missing";
+  if (state === "unreadable") await deleteDatabase(workspace, report);
+  else report(state);
+  return true;
 }
 
-/** Workspaces whose delete is queued behind a connection that is still open. */
-const queued = new Set<string>();
-
-/** Waits for the delete; a connection that stays open elsewhere in this browser reports "busy". */
-function deleteDatabase(workspace: string): Promise<Removal> {
+/** Resolves when the browser's delete settles; reports "busy" at once if a connection blocks it. */
+function deleteDatabase(workspace: string, report: (result: Removal) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(workspace);
-    // The delete stays queued and completes once the other connection closes. Until then every
-    // open of this database waits behind it, so another attempt must not start (see above).
-    request.onblocked = () => {
-      queued.add(workspace);
-      resolve("busy");
+    request.onblocked = () => report("busy");
+    request.onsuccess = (event) => {
+      // A delete that found nothing (another request removed it first) still succeeds, from 0.
+      report((event as IDBVersionChangeEvent).oldVersion === 0 ? "missing" : "deleted");
+      resolve();
     };
-    request.onsuccess = () => {
-      queued.delete(workspace);
-      resolve("deleted");
-    };
-    request.onerror = () => {
-      queued.delete(workspace);
-      reject(request.error);
-    };
+    request.onerror = () => reject(request.error);
   });
 }
 

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { workspaceLockNames } from "./indexeddb-workspace.ts";
 import { startFresh, unreadableWorkspace, type WorkspaceStorage } from "./start-fresh.ts";
 
 const vfsError = (code: string) =>
@@ -37,6 +39,16 @@ test("failures a retry can fix keep the workspace and offer no Start fresh", () 
     assert.equal(unreadableWorkspace(error, { status: "failed", error }), false);
   assert.equal(unreadableWorkspace(new Error("engine missing"), { status: "ready" }), false);
   assert.equal(unreadableWorkspace("INVALID_VFS_FORMAT", undefined), false);
+});
+
+test("the reset takes the lock names Waffle's IndexedDB owners use", () => {
+  // The names are Waffle internals; this fails when a Waffle update renames either one.
+  const [maintenance, writer] = workspaceLockNames("${name}");
+  const source = (file: string) =>
+    readFileSync(new URL(`../../node_modules/waffle/fs/${file}`, import.meta.url), "utf8");
+  assert.ok(source("storage-maintenance.ts").includes(maintenance), maintenance);
+  assert.ok(source("indexeddb.ts").includes(writer), writer);
+  assert.ok(source("idle-owner.ts").includes(writer), writer);
 });
 
 function storage(answer: Awaited<ReturnType<WorkspaceStorage["remove"]>>) {
