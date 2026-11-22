@@ -18,7 +18,12 @@ import {
 import { VfsError, type Runtime, type SharedFilesystemState } from "waffle";
 import { createStorageStartup, waitForStorage } from "../runtime/storage";
 import { acquireBrowserRuntime, type BrowserHostOptions } from "./runtime";
-import { START_FRESH_BUSY, startFresh, unreadableWorkspace } from "./start-fresh";
+import {
+  START_FRESH_BUSY,
+  START_FRESH_NOTHING,
+  startFresh,
+  unreadableWorkspace,
+} from "./start-fresh";
 export type { BrowserHostOptions, BrowserRuntimeLease } from "./runtime";
 import filesystemWorkerUrl from "../../.build/browser/fs-worker.js?url";
 import "./style.css";
@@ -305,7 +310,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     }
 
     async function start() {
-      if (!host || handle.signal.aborted) return;
+      if (!host || handle.signal.aborted || startingFresh) return;
       const stopped = stop();
       const expectedGeneration = generation;
       const currentDiagnostics = (diagnostics = createStartupDiagnostics(expectedGeneration));
@@ -457,11 +462,12 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       try {
         // stop() disposes the failed runtime, so it holds neither store when Waffle claims them.
         const result = await startFresh(stop, workspace);
-        if (result !== "busy") {
+        if (result === "deleted" || result === "readable") {
           location.reload();
           return;
         }
-        recovery = START_FRESH_BUSY;
+        // Reloading after "missing" could loop on the same error: nothing here was deleted.
+        recovery = result === "busy" ? START_FRESH_BUSY : START_FRESH_NOTHING;
       } catch (cause) {
         recovery = `Start fresh failed. ${errorText(cause)}`;
       }
@@ -632,7 +638,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
               <button
                 type="button"
                 class="quiet-button"
-                disabled={busy}
+                disabled={busy || startingFresh}
                 title={
                   options.runtime
                     ? "Restart the shell. Application-owned files and runtime are preserved."

@@ -312,6 +312,24 @@ async function oldFormatWorkspace(page: Page, name: string) {
   );
 }
 
+/** Holds Waffle's writer lock for the workspace until the page closes. */
+async function holdWorkspaceLock(page: Page, name: string) {
+  await seedOrigin(page);
+  await page.evaluate(
+    (workspace) =>
+      new Promise<void>((held) => {
+        const lock = `bun-wasm:filesystem:indexeddb:${workspace}`;
+        const never = new Promise<void>(() => {});
+        const hold = () => {
+          held();
+          return never;
+        };
+        void navigator.locks.request(lock, hold);
+      }),
+    name,
+  );
+}
+
 function storedName(page: Page, name: string) {
   return page.evaluate(
     async (workspace) => (await indexedDB.databases()).some((db) => db.name === workspace),
@@ -393,17 +411,7 @@ test("Start fresh deletes a workspace Waffle cannot open and reloads into a work
   // Another tab holding the workspace's writer lock makes Start fresh delete nothing.
   const other = await context.newPage();
   try {
-    await seedOrigin(other);
-    await other.evaluate(
-      (workspace) =>
-        new Promise<void>((held) => {
-          void navigator.locks.request(`bun-wasm:filesystem:indexeddb:${workspace}`, () => {
-            held();
-            return new Promise<void>(() => {});
-          });
-        }),
-      name,
-    );
+    await holdWorkspaceLock(other, name);
     page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Start fresh" }).click();
     await expect(page.getByRole("alert")).toContainText("open in another tab");
@@ -423,6 +431,21 @@ test("Start fresh deletes a workspace Waffle cannot open and reloads into a work
     .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
     .toContain("started-fresh");
   expect(await storedName(page, name)).toBe(true);
+});
+
+test("Start fresh never deletes a database that is not a Waffle workspace", async ({ page }) => {
+  const name = `bash-web-start-fresh-foreign-${randomUUID()}`;
+  await foreignWorkspace(page, name);
+  const query = new URLSearchParams({ test: "1", renderer: "canvas", workspace: name });
+  await navigateTestPage(page, `/?${query}`);
+  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Start fresh" }).click();
+  await expect(page.getByRole("alert")).toContainText("nothing was changed");
+  expect(await preservedWorkspace(page, name)).toEqual({
+    stores: ["foreign"],
+    value: "owner-data",
+  });
 });
 
 test("a startup failure a retry can fix offers no Start fresh", async ({ page }) => {

@@ -4,6 +4,10 @@ import { deleteWorkspace, openIdleWorkspace } from "waffle";
 export const START_FRESH_BUSY =
   "This workspace is open in another tab. Close the other tabs, then press Start fresh again.";
 
+/** Shown when no saved workspace of that name exists to delete, so a reload would fail the same way. */
+export const START_FRESH_NOTHING =
+  "Start fresh found no saved workspace to delete, so nothing was changed. Reload the page to try again.";
+
 /** The workspace Waffle opens when the page names none. */
 export const DEFAULT_WORKSPACE = "waffle-workspace";
 
