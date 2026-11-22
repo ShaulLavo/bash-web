@@ -65,6 +65,78 @@ test("newline expansion uses bounded deliveries even for an all-LF large input",
   assert.ok(input.every((byte) => byte === 10));
 });
 
+test("deliveries retain their bytes after a later write reuses the scratch buffer", () => {
+  const first = "x".repeat(32767) + "\n";
+  const plain = "y".repeat(32769);
+  const expected = first.replace("\n", "\r\n") + plain + "end\r\n";
+  assert.deepEqual(
+    present([encoder.encode(first), encoder.encode(plain), encoder.encode("end\n")]),
+    Buffer.from(expected),
+  );
+});
+
+test("LF-free deliveries remain independent when the caller reuses Uint8Array or Buffer inputs", () => {
+  for (const make of [
+    (size: number, fill: number) => new Uint8Array(size).fill(fill),
+    (size: number, fill: number) => Buffer.alloc(size, fill),
+  ]) {
+    const output = new TerminalNewlines();
+    const retained: Uint8Array[] = [];
+    const short = make(3, 65);
+    short[1] = 66;
+    short[2] = 67;
+    output.write(short, (chunk) => retained.push(chunk));
+    short.fill(88);
+    assert.equal(Buffer.concat(retained).toString(), "ABC");
+
+    const large = make(40000, 65);
+    const largeRetained: Uint8Array[] = [];
+    output.write(large, (chunk) => largeRetained.push(chunk));
+    large.fill(90);
+    assert.equal(Buffer.concat(largeRetained).length, 40000);
+    assert.ok(Buffer.concat(largeRetained).every((byte) => byte === 65));
+  }
+});
+
+test("reentrant callback observes CR state of delivered prefix rather than trailing bytes", () => {
+  const output = new TerminalNewlines();
+  const outer = new Uint8Array(32769).fill(120);
+  outer[32768] = 13;
+  const nested: Uint8Array[] = [];
+  let deliveries = 0;
+  output.write(outer, () => {
+    if (++deliveries === 1) {
+      output.write(Uint8Array.of(10), (chunk) => nested.push(chunk));
+    }
+  });
+  assert.deepEqual(Buffer.concat(nested), Buffer.from([13, 10]));
+
+  // Reentrant write ending with CR before an outer bare LF must not duplicate CR,
+  // and ending with non-CR after an outer CR must still emit CR before the outer LF.
+  const outA = new TerminalNewlines();
+  const chunksA: Uint8Array[] = [];
+  const inA = new Uint8Array(32769).fill(120);
+  inA[32768] = 10;
+  let callsA = 0;
+  outA.write(inA, (chunk) => {
+    chunksA.push(chunk);
+    if (++callsA === 1) outA.write(Uint8Array.of(13), (inner) => chunksA.push(inner));
+  });
+  assert.deepEqual(Buffer.concat(chunksA).subarray(32767), Buffer.from([120, 13, 10]));
+
+  const outB = new TerminalNewlines();
+  const chunksB: Uint8Array[] = [];
+  const inB = new Uint8Array(32769).fill(120);
+  inB[32767] = 13;
+  inB[32768] = 10;
+  let callsB = 0;
+  outB.write(inB, (chunk) => {
+    chunksB.push(chunk);
+    if (++callsB === 1) outB.write(Uint8Array.of(65), (inner) => chunksB.push(inner));
+  });
+  assert.deepEqual(Buffer.concat(chunksB).subarray(32767), Buffer.from([13, 65, 13, 10]));
+});
+
 test("a new terminal attachment does not inherit the preceding session's CR", () => {
   const first = new TerminalNewlines();
   first.write(Uint8Array.of(13), () => {});

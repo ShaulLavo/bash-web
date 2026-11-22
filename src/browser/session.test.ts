@@ -13,6 +13,11 @@ import { acquireBrowserRuntime } from "./runtime";
 function pendingRuntime(context: TestContext) {
   const isolation = Object.getOwnPropertyDescriptor(globalThis, "crossOriginIsolated");
   Object.defineProperty(globalThis, "crossOriginIsolated", { configurable: true, value: true });
+  context.mock.method(
+    globalThis,
+    "fetch",
+    async () => new Response(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)),
+  );
   let finishInitialization!: () => void;
   const initialization = new Promise<void>((resolve) => {
     finishInitialization = resolve;
@@ -47,8 +52,12 @@ function pendingRuntime(context: TestContext) {
       reap: reapFilesystem,
     },
     async processes() {
-      processAdmissions++;
-      throw new Error("Cancelled session admitted a process");
+      return {
+        adoptRuntimeRoot() {
+          processAdmissions++;
+          throw new Error("Cancelled session admitted a process");
+        },
+      };
     },
     async dispose() {
       ownerDisposals++;

@@ -382,7 +382,7 @@ test("a later shell retries failed filesystem initialization", async (context) =
   assert.equal(host.consumers.size, 0);
   assert.equal(host.requests.length, 0);
   const shell = await createShell(host.options);
-  assert.equal(attempts, 5);
+  assert.equal(attempts, 8);
   assert.equal(host.requests.length, 1);
   await shell.dispose();
   assert.equal(host.consumers.size, 0);
@@ -1107,11 +1107,21 @@ for (const stalled of ["mkdir", "fetch"] as const)
         stalled === "mkdir" ? "shell-home-mkdir-requested" : "shell-wasm-fetch-requested";
       const completion =
         stalled === "mkdir" ? "shell-home-mkdir-resolved" : "shell-wasm-fetch-resolved";
-      assert.equal(diagnostics.snapshot().last?.stage, stage);
-      assert.ok(diagnostics.snapshot().pending.includes(stage));
-      assert.equal(diagnostics.snapshot().stages[completion], undefined);
+      const snapshot = diagnostics.snapshot();
+      assert.ok(snapshot.pending.includes(stage));
+      assert.equal(snapshot.stages[completion], undefined);
+      for (const independent of [
+        "shell-home-mkdir-requested",
+        "shell-tmp-mkdir-requested",
+        "shell-bin-mkdir-requested",
+        "shell-programs-mkdir-requested",
+        "shell-wasm-fetch-requested",
+        "shell-processes-requested",
+      ] as const)
+        assert.notEqual(snapshot.stages[independent], undefined, independent);
+      assert.equal(snapshot.stages["shell-root-adopt-requested"], undefined);
       if (stalled === "mkdir")
-        assert.equal(diagnostics.snapshot().stages["shell-wasm-fetch-requested"], undefined);
+        assert.equal(snapshot.stages["shell-executable-lookup-requested"], undefined);
     } finally {
       release();
       await (await pending).dispose();

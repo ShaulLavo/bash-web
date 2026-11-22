@@ -10,6 +10,28 @@ import { SharedBridge, control } from "../bridge";
 import { createBridgeTerminal } from "./runtime-terminals";
 import type { TerminalAdmission } from "./terminal-admission";
 
+function readPromptBytes(
+  read: (chunks: readonly Uint8Array[]) => number,
+  chunks: readonly Uint8Array[],
+  byte: Uint8Array,
+  raw: boolean,
+): number {
+  const output = chunks[0];
+  if (chunks.length !== 1 || !output || output.length <= 1) return read(chunks);
+  if (!raw) return read([output.subarray(0, 1)]);
+  const single = [byte];
+  // Waffle's raw read cannot stop at a delimiter. Keep the unread suffix in
+  // the shared queue so a command or foreground process can read it.
+  for (let index = 0; index < output.length; index++) {
+    const count = read(single);
+    if (count <= 0) return index || count;
+    const value = byte[0]!;
+    output[index] = value;
+    if (value === 3 || value === 4 || value === 10 || value === 13) return index + 1;
+  }
+  return output.length;
+}
+
 export function createShellTerminals(
   request: Pick<RuntimeWorkerRequest, "runtimeProcess">,
   output: SharedArrayBuffer | undefined,
@@ -39,16 +61,29 @@ export function createShellTerminals(
     tryWrite: (target, chunks) => endpoints[target].tryWrite!(chunks),
     outputReadiness: (target) => ({ writable: endpoints[target].readiness().writable }),
   });
+  const inPrompt = () => root !== undefined && Atomics.load(root.state, control.phase) === 1;
   const blocked = (turn: Parameters<typeof base.tryRead>[0]) => {
-    if (root && turn.mode === "raw" && Atomics.load(root.state, control.phase) === 1)
-      root.acknowledgeInputDiscard();
-    return !!root?.cancelled();
+    if (!root) return false;
+    const cancel = Atomics.load(root.state, control.cancel);
+    if (cancel !== 1 || turn.mode !== "raw" || !inPrompt()) return cancel !== 0;
+    root.acknowledgeInputDiscard();
+    return root.cancelled();
   };
+  const byte = new Uint8Array(1);
   const policy = root
     ? {
         ...base,
-        tryRead: (turn: Parameters<typeof base.tryRead>[0], chunks: readonly Uint8Array[]) =>
-          blocked(turn) ? -6 : base.tryRead(turn, chunks),
+        tryRead(turn: Parameters<typeof base.tryRead>[0], chunks: readonly Uint8Array[]) {
+          if (blocked(turn)) return -6;
+          if (inPrompt())
+            return readPromptBytes(
+              (destination) => base.tryRead(turn, destination),
+              chunks,
+              byte,
+              turn.mode === "raw",
+            );
+          return base.tryRead(turn, chunks);
+        },
         inputReadiness: (turn: Parameters<typeof base.inputReadiness>[0]) =>
           blocked(turn) ? { readable: false, nbytes: 0 } : base.inputReadiness(turn),
       }
@@ -62,19 +97,18 @@ export function createShellTerminals(
   const controller = terminalControls(attachment.resolve(0))!;
   let pendingMode: TerminalMode | undefined = "raw";
   const prepare = () => {
-    if (root && Atomics.load(root.state, control.cancel) === 2) return;
+    const cancel = root ? Atomics.load(root.state, control.cancel) : 0;
+    if (cancel === 2 || (!pendingMode && cancel === 0)) return;
     const phase = root ? Atomics.load(root.state, control.phase) : 2;
-    if (root?.cancelled() && phase !== 1) return;
-    // phase(1) already requests raw mode once per prompt. Every host call runs this,
-    // so repeat the request only while an interrupt waits for the prompt to acknowledge it.
-    if (root?.cancelled() && phase === 1) pendingMode = "raw";
+    if (cancel !== 0 && phase !== 1) return;
+    if (cancel !== 0) pendingMode = "raw";
     if (!pendingMode) return;
     const snapshot = controller.snapshot();
     if (snapshot.kind === "error") return;
     const changed = controller.setMode({ expected: snapshot.value.selection, mode: pendingMode });
     if (changed.kind === "error") return;
     pendingMode = undefined;
-    if (root && phase === 1) root.acknowledgeInputDiscard();
+    if (root && cancel !== 0) root.acknowledgeInputDiscard();
   };
   // The shell can resume before the page retires an exited raw foreground group.
   // Reassert its input mode at the read boundary, not at unrelated host imports.
