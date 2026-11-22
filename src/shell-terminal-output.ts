@@ -13,9 +13,9 @@ export class TerminalNewlines {
     const previousCR = this.previousCR;
     this.previousCR = bytes[bytes.length - 1] === 13;
     if (lf === -1) {
-      if (bytes.length <= outputCapacity) return output(bytes);
+      if (bytes.length <= outputCapacity) return output(bytes.slice());
       for (let offset = 0; offset < bytes.length; offset += outputCapacity)
-        output(bytes.subarray(offset, offset + outputCapacity));
+        output(bytes.slice(offset, offset + outputCapacity));
       return;
     }
 

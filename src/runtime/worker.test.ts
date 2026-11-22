@@ -88,6 +88,21 @@ test("child memory telemetry never overwrites its parent's terminal metrics or p
   context.wasi.descriptors.dispose();
 });
 
+test("phase(-2) queries bridge cancellation without changing phase", (owner) => {
+  const terminal = new SharedBridge();
+  const { executor, context } = fixture(terminal.buffer, owner);
+  const namespaces = executor.namespaces!(context);
+  const phase = namespaces.shell_terminal!.phase;
+  assert.equal(typeof phase, "function");
+  if (typeof phase !== "function") throw new Error("Missing phase import");
+  assert.equal(phase(1, 0), 1);
+  assert.equal(phase(-2, 0), 0);
+  terminal.interrupt();
+  assert.equal(phase(-2, 0), 1);
+  assert.equal(Atomics.load(terminal.state, control.phase), 1);
+  context.wasi.descriptors.dispose();
+});
+
 test("the inherited shell descriptor snapshot excludes transferred preopens", () => {
   const { request, executor, context } = fixture();
   request.runtimeProcess!.bindings = [

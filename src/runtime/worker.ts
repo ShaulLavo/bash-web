@@ -115,6 +115,7 @@ function createShellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellW
                 } satisfies ShellWorkerMessage);
               return 0;
             }
+            if (phase === -2) return bridge?.cancelled() ? 1 : 0;
             shell.phase(phase, status);
             terminals?.phase(phase);
             prompt.phase(phase);

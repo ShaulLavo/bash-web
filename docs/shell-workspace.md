@@ -163,9 +163,12 @@ prompt SIGINT clears the edited line. Ctrl-D on an empty line or `exit` shuts do
 all shell-owned jobs. Parser and execution budget checkpoints dequeue signals
 even while the guest has not returned to the worker message loop.
 
-The guest also imports `shell_terminal.phase(i32)` for embedding/test state:
-1 means prompt painted and editor ready, 2 means a command is running, and 0
-means shutdown. This is UI metadata only, not a command or descriptor channel.
+The guest also imports `shell_terminal.phase(value: i32, status: i32) -> i32` for
+embedding/test state: 1 means prompt painted and editor ready, 2 means a command is
+running, and 0 means shutdown. Ordinary calls return `1` when the root terminal
+endpoint supports bounded prompt batch reads and `0` otherwise; `-1` reports a
+delegated interrupt and `-2` queries the bridge cancel flag without changing phase.
+This is UI metadata only, not a command or descriptor channel.
 With `--prompt-host`, the guest also calls `shell_terminal.prompt_names`, `prompt`,
 `prompt_update` and `output_position`, and handles SIGWINCH as a prompt wake. See
 the [prompt hook](prompt-hook.md).

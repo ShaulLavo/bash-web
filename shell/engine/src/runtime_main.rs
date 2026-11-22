@@ -175,6 +175,7 @@ mod guest {
         let input = Input {
             cancel: editor_cancel.clone(),
             wake: wake.clone(),
+            runtime: runtime.clone(),
         };
         let root = executor.spawn(async move {
             let result = run(shell.clone(), startup, input).await;
@@ -280,6 +281,7 @@ mod guest {
     struct Input {
         cancel: Rc<RefCell<Cancel>>,
         wake: Rc<Cell<Wake>>,
+        runtime: Runtime,
     }
     /// Writes `value` as a JSON string. serde_json already carries the escaping rules.
     fn json_string(json: &mut Vec<u8>, value: &str) {
@@ -392,10 +394,16 @@ mod guest {
         output: &'a Endpoint,
         cancel: &'a RefCell<Cancel>,
         wake: &'a Cell<Wake>,
+        runtime: &'a Runtime,
         host: Option<&'a mut PromptHost>,
         skip_lf: &'a mut bool,
     }
     impl PromptRead<'_> {
+        fn interrupted(&self, terminal_batches: bool) -> bool {
+            self.wake.get() == Wake::Interrupt
+                || self.runtime.take_interrupt()
+                || (terminal_batches && unsafe { phase(-2, 0) } != 0)
+        }
         async fn write(&mut self, bytes: &[u8]) -> Result<(), IoError> {
             let Some(host) = &self.host else {
                 return write(self.output, bytes).await;
@@ -412,20 +420,24 @@ mod guest {
                 self.editor.foreign_output();
             }
         }
-        async fn paint(&mut self, byte: u8) -> Result<Action, IoError> {
+        async fn paint(&mut self, byte: u8) -> Result<(Action, bool), IoError> {
             match self.editor.feed(byte) {
                 Action::Echo(byte) => {
                     self.write(&[byte]).await?;
                     self.editor.echoed(byte);
+                    Ok((Action::None, true))
                 }
                 Action::Redraw => {
                     let bytes = self.editor.redraw();
                     self.write(&bytes).await?;
+                    Ok((Action::None, true))
                 }
-                Action::Bell => self.write(b"\x07").await?,
-                action => return Ok(action),
+                Action::Bell => {
+                    self.write(b"\x07").await?;
+                    Ok((Action::None, true))
+                }
+                action => Ok((action, false)),
             }
-            Ok(Action::None)
         }
         /// Applies text the page pushed for this prompt, if any, and recounts a resize.
         async fn refresh(&mut self) -> Result<(), IoError> {
@@ -447,21 +459,38 @@ mod guest {
             *self.cancel.borrow_mut() = Cancel::new();
             self.refresh().await
         }
-        async fn paint_chunk(&mut self, bytes: &[u8]) -> Result<Action, IoError> {
-            self.editor.resize(geometry());
-            self.check_output();
+        async fn paint_chunk(
+            &mut self,
+            bytes: &[u8],
+            terminal_batches: bool,
+        ) -> Result<Action, IoError> {
+            let mut stale = true;
             for &byte in bytes {
                 while self.wake.get() == Wake::Prompt {
                     self.resume_prompt().await?;
+                    stale = false;
                 }
-                if self.wake.get() == Wake::Interrupt {
+                if self.wake.get() == Wake::Interrupt
+                    || (stale && self.interrupted(terminal_batches))
+                {
                     return Ok(Action::Interrupt);
                 }
                 if std::mem::take(self.skip_lf) && byte == b'\n' {
                     continue;
                 }
-                let action = self.paint(byte).await?;
+                if stale {
+                    self.editor.resize(geometry());
+                    self.check_output();
+                    stale = false;
+                }
+                let (action, wrote) = self.paint(byte).await?;
+                if wrote {
+                    stale = true;
+                }
                 if matches!(action, Action::Submit(_)) {
+                    if self.interrupted(terminal_batches) {
+                        return Ok(Action::Interrupt);
+                    }
                     *self.skip_lf = byte == b'\r';
                 }
                 if action != Action::None {
@@ -498,7 +527,7 @@ mod guest {
                     Err(error) => return Err(error),
                     Ok(count) => count,
                 };
-                let action = self.paint_chunk(&bytes[..count]).await?;
+                let action = self.paint_chunk(&bytes[..count], terminal_batches).await?;
                 if action != Action::None {
                     return Ok(action);
                 }
@@ -579,6 +608,7 @@ mod guest {
                 output: &output,
                 cancel: &input.cancel,
                 wake: &input.wake,
+                runtime: &input.runtime,
                 host: host.as_mut(),
                 skip_lf: &mut skip_lf,
             }
