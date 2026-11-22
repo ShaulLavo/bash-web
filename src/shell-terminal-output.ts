@@ -10,20 +10,27 @@ export class TerminalNewlines {
   write(bytes: Uint8Array, output: (bytes: Uint8Array) => void): void {
     if (bytes.length === 0) return;
     let lf = bytes.indexOf(10);
-    const previousCR = this.previousCR;
-    this.previousCR = bytes[bytes.length - 1] === 13;
     if (lf === -1) {
-      if (bytes.length <= outputCapacity) return output(bytes.slice());
-      for (let offset = 0; offset < bytes.length; offset += outputCapacity)
-        output(bytes.slice(offset, offset + outputCapacity));
+      if (bytes.length <= outputCapacity) {
+        this.previousCR = bytes[bytes.length - 1] === 13;
+        output(new Uint8Array(bytes));
+        return;
+      }
+      for (let offset = 0; offset < bytes.length; offset += outputCapacity) {
+        const end = Math.min(offset + outputCapacity, bytes.length);
+        this.previousCR = bytes[end - 1] === 13;
+        output(new Uint8Array(bytes.subarray(offset, end)));
+      }
       return;
     }
 
-    const buffer = (this.scratch ??= new Uint8Array(outputCapacity));
+    const buffer = this.scratch ?? new Uint8Array(outputCapacity);
+    this.scratch = undefined;
     let count = 0;
     let start = 0;
     const flush = () => {
       const ready = buffer.slice(0, count);
+      this.previousCR = ready[ready.length - 1] === 13;
       count = 0;
       output(ready);
     };
@@ -36,13 +43,17 @@ export class TerminalNewlines {
         if (count === buffer.length) flush();
       }
     };
-    for (; lf !== -1; lf = bytes.indexOf(10, lf + 1)) {
-      if (lf === 0 ? previousCR : bytes[lf - 1] === 13) continue;
-      copyThrough(lf);
-      buffer[count++] = 13;
-      if (count === buffer.length) flush();
+    try {
+      for (; lf !== -1; lf = bytes.indexOf(10, lf + 1)) {
+        if (lf === 0 ? this.previousCR : bytes[lf - 1] === 13) continue;
+        copyThrough(lf);
+        buffer[count++] = 13;
+        if (count === buffer.length) flush();
+      }
+      copyThrough(bytes.length);
+      if (count) flush();
+    } finally {
+      this.scratch = buffer;
     }
-    copyThrough(bytes.length);
-    if (count) flush();
   }
 }

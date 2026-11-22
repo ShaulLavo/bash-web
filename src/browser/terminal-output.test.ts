@@ -75,20 +75,41 @@ test("deliveries retain their bytes after a later write reuses the scratch buffe
   );
 });
 
-test("LF-free deliveries remain independent when the caller reuses the input buffer", () => {
-  const output = new TerminalNewlines();
-  const retained: Uint8Array[] = [];
-  const input = encoder.encode("ABC");
-  output.write(input, (chunk) => retained.push(chunk));
-  input.fill(88);
-  assert.equal(Buffer.concat(retained).toString(), "ABC");
+test("LF-free deliveries remain independent when the caller reuses Uint8Array or Buffer inputs", () => {
+  for (const make of [
+    (size: number, fill: number) => new Uint8Array(size).fill(fill),
+    (size: number, fill: number) => Buffer.alloc(size, fill),
+  ]) {
+    const output = new TerminalNewlines();
+    const retained: Uint8Array[] = [];
+    const short = make(3, 65);
+    short[1] = 66;
+    short[2] = 67;
+    output.write(short, (chunk) => retained.push(chunk));
+    short.fill(88);
+    assert.equal(Buffer.concat(retained).toString(), "ABC");
 
-  const large = new Uint8Array(40000).fill(65);
-  const largeRetained: Uint8Array[] = [];
-  output.write(large, (chunk) => largeRetained.push(chunk));
-  large.fill(90);
-  assert.equal(Buffer.concat(largeRetained).length, 40000);
-  assert.ok(Buffer.concat(largeRetained).every((byte) => byte === 65));
+    const large = make(40000, 65);
+    const largeRetained: Uint8Array[] = [];
+    output.write(large, (chunk) => largeRetained.push(chunk));
+    large.fill(90);
+    assert.equal(Buffer.concat(largeRetained).length, 40000);
+    assert.ok(Buffer.concat(largeRetained).every((byte) => byte === 65));
+  }
+});
+
+test("reentrant callback observes CR state of delivered prefix rather than trailing bytes", () => {
+  const output = new TerminalNewlines();
+  const outer = new Uint8Array(32769).fill(120);
+  outer[32768] = 13;
+  const nested: Uint8Array[] = [];
+  let deliveries = 0;
+  output.write(outer, () => {
+    if (++deliveries === 1) {
+      output.write(Uint8Array.of(10), (chunk) => nested.push(chunk));
+    }
+  });
+  assert.deepEqual(Buffer.concat(nested), Buffer.from([13, 10]));
 });
 
 test("a new terminal attachment does not inherit the preceding session's CR", () => {

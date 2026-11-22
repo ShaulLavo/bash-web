@@ -468,11 +468,9 @@ mod guest {
             for &byte in bytes {
                 while self.wake.get() == Wake::Prompt {
                     self.resume_prompt().await?;
-                    stale = false;
+                    stale = true;
                 }
-                if self.wake.get() == Wake::Interrupt
-                    || (stale && self.interrupted(terminal_batches))
-                {
+                if self.wake.get() == Wake::Interrupt {
                     return Ok(Action::Interrupt);
                 }
                 if std::mem::take(self.skip_lf) && byte == b'\n' {
@@ -482,6 +480,11 @@ mod guest {
                     self.editor.resize(geometry());
                     self.check_output();
                     stale = false;
+                    if self.interrupted(terminal_batches) {
+                        return Ok(Action::Interrupt);
+                    }
+                } else if matches!(byte, b'\r' | b'\n') && self.interrupted(terminal_batches) {
+                    return Ok(Action::Interrupt);
                 }
                 let (action, wrote) = self.paint(byte).await?;
                 if wrote {
