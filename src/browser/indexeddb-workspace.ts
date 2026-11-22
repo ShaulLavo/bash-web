@@ -41,7 +41,7 @@ async function removeDatabase(workspace: string): Promise<Removal> {
   return "deleted";
 }
 
-/** Whether the database carries a Waffle format marker, whichever format version wrote it. */
+/** Whether the saved database is a Waffle workspace, whichever format version wrote it. */
 function savedByWaffle(workspace: string): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(workspace);
@@ -51,10 +51,10 @@ function savedByWaffle(workspace: string): Promise<boolean> {
       request.error?.name === "AbortError" ? resolve(false) : reject(request.error);
     request.onsuccess = () => {
       const database = request.result;
-      readFormat(database).then(
-        (format) => {
+      looksLikeWorkspace(database).then(
+        (found) => {
           database.close();
-          resolve(typeof format === "string" && format.startsWith("waffle-indexeddb-"));
+          resolve(found);
         },
         (error: unknown) => {
           database.close();
@@ -65,14 +65,35 @@ function savedByWaffle(workspace: string): Promise<boolean> {
   });
 }
 
-function readFormat(database: IDBDatabase): Promise<unknown> {
-  if (!database.objectStoreNames.contains("metadata")) return Promise.resolve(undefined);
-  const request = database
-    .transaction("metadata", "readonly")
-    .objectStore("metadata")
-    .get("format");
+function request<T>(source: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    source.onsuccess = () => resolve(source.result);
+    source.onerror = () => reject(source.error);
   });
+}
+
+/**
+ * The same test as Waffle's `isWorkspace` (`fs/idle-database.ts`): a Waffle format marker, or the
+ * older three-store shape with Waffle's metadata keys. Anything else is not ours to delete.
+ */
+async function looksLikeWorkspace(database: IDBDatabase): Promise<boolean> {
+  if (!database.objectStoreNames.contains("metadata")) return false;
+  const metadata = database.transaction("metadata", "readonly").objectStore("metadata");
+  const [format, epoch, keys] = await Promise.all([
+    request<unknown>(metadata.get("format")),
+    request<unknown>(metadata.get("epoch")),
+    request(metadata.getAllKeys()),
+  ]);
+  if (typeof format === "string" && format.startsWith("waffle-indexeddb-")) return true;
+  if (database.version !== 1 || database.objectStoreNames.length !== 3) return false;
+  if (!["journal", "data"].every((store) => database.objectStoreNames.contains(store)))
+    return false;
+  const known = [0, 1, "epoch", "active", "identity", "format"];
+  return (
+    typeof epoch === "number" &&
+    Number.isSafeInteger(epoch) &&
+    epoch > 0 &&
+    keys.some((key) => key === 0 || key === 1) &&
+    keys.every((key) => known.includes(key as string | number))
+  );
 }
