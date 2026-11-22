@@ -295,6 +295,7 @@ if (!data.pooled) {
       activeLeaseListeners.length = 0;
       leaseEvents = new EventTarget();
     }
+    port.unref();
     port.close();
     await stopNodeWorkers();
     if (notifyHost && clean && activeSeq === seq && liveNodeWorkers() === 0) {

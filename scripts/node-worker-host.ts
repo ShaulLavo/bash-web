@@ -226,6 +226,12 @@ class NodeWorker extends EventTarget {
     notify?.(ok);
   }
 
+  private closeHostPort() {
+    this.hostPort?.removeAllListeners();
+    this.hostPort?.unref();
+    this.hostPort?.close();
+  }
+
   private bindPooled(pooled: PooledThread, hostPort: MessagePort, workerPort: MessagePort) {
     pooled.onSettled = (seq) => {
       if (seq !== this.seq) return;
@@ -246,8 +252,7 @@ class NodeWorker extends EventTarget {
     };
     pooled.onExit = () => {
       this.resolveSettleWaiter(false);
-      this.hostPort?.removeAllListeners();
-      this.hostPort?.close();
+      this.closeHostPort();
       if (!this.termination) live.delete(this);
     };
     hostPort.on("message", (data) => {
@@ -271,8 +276,7 @@ class NodeWorker extends EventTarget {
   private retireBrokenThread(pooled: PooledThread): Promise<number> {
     if (this.termination) return this.termination;
     pooled.dead = true;
-    this.hostPort?.removeAllListeners();
-    this.hostPort?.close();
+    this.closeHostPort();
     clearPooledHandlers(pooled);
     this.termination = pooled.thread.terminate().finally(() => {
       live.delete(this);
@@ -325,8 +329,7 @@ class NodeWorker extends EventTarget {
   }
 
   private async finishPooled(pooled: PooledThread): Promise<number> {
-    this.hostPort?.removeAllListeners();
-    this.hostPort?.close();
+    this.closeHostPort();
     const completedSingle = this.sentMessages === 1 && this.cleanCompletions === 1;
     const eligible = !this.errored && !pooled.dead && (this.isFilesystemWorker || completedSingle);
     if (eligible) {
