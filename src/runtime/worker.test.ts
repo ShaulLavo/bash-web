@@ -34,16 +34,33 @@ function fixture(terminal?: SharedArrayBuffer, owner?: TestContext) {
   return { request, executor, memory, context };
 }
 
-test("root memory growth updates both terminal metrics and process diagnostics at host calls", (owner) => {
+test("root memory growth updates both terminal metrics and process diagnostics at reactor polls", (owner) => {
   const terminal = new SharedBridge();
   const { request, executor, memory, context } = fixture(terminal.buffer, owner);
-  const imports = { probe: { boundary: () => 17 } };
+  const clock = () => 17;
+  const imports = {
+    wasi_snapshot_preview1: { clock_time_get: clock },
+    runtime_proc: {
+      poll: (pointer: number, count: number, timeout: number, output: number) => ({
+        pointer,
+        count,
+        timeout,
+        output,
+      }),
+    },
+  };
   executor.imports!(imports, context);
+  assert.equal(imports.wasi_snapshot_preview1.clock_time_get, clock);
   executor.instantiated!(context);
   assert.equal(Atomics.load(terminal.state, control.memory), 65536);
   assert.equal(Atomics.load(new BigInt64Array(request.memoryUsage!), 0), 65536n);
   memory.grow(1);
-  assert.equal(imports.probe.boundary(), 17);
+  assert.deepEqual(imports.runtime_proc.poll(1, 2, 3, 4), {
+    pointer: 1,
+    count: 2,
+    timeout: 3,
+    output: 4,
+  });
   assert.equal(Atomics.load(terminal.state, control.memory), 131072);
   assert.equal(Atomics.load(new BigInt64Array(request.memoryUsage!), 0), 131072n);
   memory.grow(1);
@@ -68,6 +85,21 @@ test("child memory telemetry never overwrites its parent's terminal metrics or p
   assert.equal(Atomics.load(new BigInt64Array(request.memoryUsage!), 0), 131072n);
   assert.equal(Atomics.load(terminal.state, control.memory), 12345);
   assert.equal(Atomics.load(terminal.state, control.phase), 2);
+  context.wasi.descriptors.dispose();
+});
+
+test("phase(-2) queries bridge cancellation without changing phase", (owner) => {
+  const terminal = new SharedBridge();
+  const { executor, context } = fixture(terminal.buffer, owner);
+  const namespaces = executor.namespaces!(context);
+  const phase = namespaces.shell_terminal!.phase;
+  assert.equal(typeof phase, "function");
+  if (typeof phase !== "function") throw new Error("Missing phase import");
+  assert.equal(phase(1, 0), 1);
+  assert.equal(phase(-2, 0), 0);
+  terminal.interrupt();
+  assert.equal(phase(-2, 0), 1);
+  assert.equal(Atomics.load(terminal.state, control.phase), 1);
   context.wasi.descriptors.dispose();
 });
 

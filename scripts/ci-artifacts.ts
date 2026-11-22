@@ -20,6 +20,7 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 import { pathToFileURL } from "node:url";
 import { ciInputs } from "./ci-inputs.ts";
 import { wasiTestFiles } from "./prepare-wasi-tests.ts";
+import { stripNames } from "./wasm-name-sections.ts";
 
 const guests = ["shell-engine", "shell-runtime", "argv-py", "printenv-py", "env"];
 const programs = guests.map((name) => `${name}.wasm`).concat(["test-guest.wasm", "test-spin.wasm"]);
@@ -292,6 +293,8 @@ export function stageCiNotices(root: string, directory: string) {
 
 export function stageCiArtifacts(root: string, directory: string) {
   verifyCiArtifacts(root, directory);
+  const runtime = readFileSync(resolve(directory, "shell-runtime.wasm"));
+  const browserRuntime = stripNames(runtime).bytes;
   for (const name of cliFiles) {
     const destination = resolve(
       root,
@@ -305,10 +308,10 @@ export function stageCiArtifacts(root: string, directory: string) {
     copy(resolve(directory, name), resolve(root, ".build/shell/wasm32-wasip1/release", name));
   for (const name of ["test-guest.wasm", "test-spin.wasm"])
     copy(resolve(directory, name), resolve(root, "public/programs", name));
-  copy(
-    resolve(directory, "shell-runtime.wasm"),
-    resolve(root, "public/programs/shell-engine.wasm"),
-  );
+  replaceStagedFile({
+    path: resolve(root, "public/programs/shell-engine.wasm"),
+    bytes: browserRuntime,
+  });
   copyNotices(root, directory);
 }
 

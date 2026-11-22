@@ -3,7 +3,7 @@ mod float;
 mod quoting;
 use super::error_status;
 use crate::{
-    executor::Budget,
+    exec::WorkQuantum,
     expand::Work,
     interpreter::Context,
     io::{FdTable, IoError},
@@ -68,7 +68,9 @@ impl<'a> Invocation<'a> {
         let mut operands = args;
         let mut name = None;
         while let Some((first, rest)) = operands.split_first() {
-            super::scan_bytes(first.len().max(1), context, work).await?;
+            work.checkpoint_steps(first.len().max(1), &context.cancel)
+                .await
+                .map_err(error_status)?;
             if first == "--" {
                 operands = rest;
                 break;
@@ -235,11 +237,22 @@ pub(super) async fn echo(
     context: &Context,
     work: &mut Work,
 ) -> Result<(), PrintFailure> {
-    let utf8 = character_locale(state, context, work).await?;
+    let options = EchoOptions::parse(args, context, work).await?;
+    let args = &args[options.operands..];
+    // Plain `echo` without `-e` never decodes locale-dependent unicode escapes, so
+    // only `echo -e` inspects and admits LC_ALL/LC_CTYPE/LANG.
+    let utf8 = options.escapes && character_locale(state, context, work).await?;
     let mut printer = Printer::new(fds, context, work, utf8);
-    echo_output(args, &mut printer).await?;
+    if options.escapes {
+        echo_output(args, options, &mut printer).await?;
+    } else {
+        let bytes = args.iter().map(String::len).sum::<usize>();
+        printer.scan(bytes + args.len()).await?;
+        let output = bytes + args.len().saturating_sub(1) + usize::from(!options.no_newline);
+        printer.remaining = printer.remaining.checked_sub(output).ok_or(2)?;
+    }
     printer.work = None;
-    echo_output(args, &mut printer).await?;
+    echo_output(args, options, &mut printer).await?;
     printer.flush_output().await
 }
 
@@ -250,14 +263,16 @@ struct EchoOptions {
     escapes: bool,
 }
 impl EchoOptions {
-    async fn parse(args: &[String], printer: &mut Printer<'_>) -> Result<Self, PrintFailure> {
+    async fn parse(args: &[String], context: &Context, work: &mut Work) -> Result<Self, i32> {
         let mut options = Self::default();
         for arg in args {
-            printer.scan(1).await?;
+            work.checkpoint(&context.cancel)
+                .await
+                .map_err(error_status)?;
             if !arg.starts_with('-') || arg.len() == 1 {
                 break;
             }
-            let Some(next) = options.option(arg.as_bytes(), printer).await? else {
+            let Some(next) = options.option(arg.as_bytes(), context, work).await? else {
                 break;
             };
             options = next;
@@ -267,14 +282,17 @@ impl EchoOptions {
     async fn option(
         &self,
         arg: &[u8],
-        printer: &mut Printer<'_>,
-    ) -> Result<Option<Self>, PrintFailure> {
+        context: &Context,
+        work: &mut Work,
+    ) -> Result<Option<Self>, i32> {
         let mut next = Self {
             operands: self.operands + 1,
             ..*self
         };
         for flag in &arg[1..] {
-            printer.scan(1).await?;
+            work.checkpoint(&context.cancel)
+                .await
+                .map_err(error_status)?;
             match flag {
                 b'n' => next.no_newline = true,
                 b'e' => next.escapes = true,
@@ -285,10 +303,13 @@ impl EchoOptions {
         Ok(Some(next))
     }
 }
-async fn echo_output(args: &[String], printer: &mut Printer<'_>) -> Result<(), PrintFailure> {
-    let options = EchoOptions::parse(args, printer).await?;
+async fn echo_output(
+    args: &[String],
+    options: EchoOptions,
+    printer: &mut Printer<'_>,
+) -> Result<(), PrintFailure> {
     let mode = options.escapes.then_some(Mode::Echo);
-    for (index, arg) in args[options.operands..].iter().enumerate() {
+    for (index, arg) in args.iter().enumerate() {
         printer.scan(1).await?;
         if index != 0 {
             printer.emit(1, b" ").await?;
@@ -308,7 +329,7 @@ struct Printer<'a> {
     fds: &'a FdTable,
     context: &'a Context,
     work: Option<&'a mut Work>,
-    budget: Budget,
+    quantum: WorkQuantum,
     remaining: usize,
     utf8: bool,
     output: [u8; WRITE_CHUNK],
@@ -322,7 +343,7 @@ impl<'a> Printer<'a> {
             fds,
             context,
             work: Some(work),
-            budget: Budget::default(),
+            quantum: WorkQuantum::default(),
             remaining: context.limits().expansion_bytes,
             utf8,
             output: [0; WRITE_CHUNK],
@@ -332,18 +353,16 @@ impl<'a> Printer<'a> {
         }
     }
     async fn scan(&mut self, bytes: usize) -> Result<(), PrintFailure> {
-        for _ in 0..bytes {
-            if let Some(work) = &mut self.work {
-                work.checkpoint(&self.context.cancel)
-                    .await
-                    .map_err(error_status)?;
-            } else {
-                self.budget
-                    .checkpoint(&self.context.cancel)
-                    .await
-                    .map_err(|_| 130)?;
-            }
-        }
+        let cancel = &self.context.cancel;
+        let result = if let Some(work) = &mut self.work {
+            work.checkpoint_steps(bytes, cancel).await
+        } else {
+            let mut remaining = bytes;
+            self.quantum
+                .checkpoint_steps(bytes, &mut remaining, cancel)
+                .await
+        };
+        result.map_err(error_status)?;
         Ok(())
     }
     async fn flush_output(&mut self) -> Result<(), PrintFailure> {
@@ -518,26 +537,33 @@ impl<'a> Printer<'a> {
     ) -> Result<bool, PrintFailure> {
         let mut offset = 0;
         while offset < input.len() {
-            if let Some(mode) = mode.filter(|_| input[offset] == b'\\') {
-                let escape = self.escape(&input[offset..], mode).await?;
-                offset += escape.consumed;
-                if escape.stop {
-                    return Ok(true);
-                }
-            } else {
-                let start = offset;
-                while offset < input.len()
-                    && offset - start < 4096
-                    && (mode.is_none() || input[offset] != b'\\')
-                {
-                    offset += 1;
-                }
-                self.scan(offset - start).await?;
-                self.emit(1, &input[start..offset]).await?;
+            let rest = &input[offset..];
+            let Some(escape_mode) = mode.filter(|_| rest[0] == b'\\') else {
+                let chunk = &rest[..rest.len().min(WRITE_CHUNK)];
+                let length = literal_operand_len(chunk, mode);
+                self.scan(length).await?;
+                self.emit(1, &chunk[..length]).await?;
+                offset += length;
+                continue;
+            };
+            let escape = self.escape(rest, escape_mode).await?;
+            offset += escape.consumed;
+            if escape.stop {
+                return Ok(true);
             }
         }
         Ok(false)
     }
+}
+
+fn literal_operand_len(chunk: &[u8], mode: Option<Mode>) -> usize {
+    if mode.is_none() {
+        return chunk.len();
+    }
+    chunk
+        .iter()
+        .position(|&byte| byte == b'\\')
+        .unwrap_or(chunk.len())
 }
 
 struct OperandOutput {

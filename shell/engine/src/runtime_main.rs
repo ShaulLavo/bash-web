@@ -19,7 +19,7 @@ mod guest {
     use shell_engine::{
         Limits, Session,
         executor::{Cancel, Executor},
-        io::{Endpoint, IoError},
+        io::{DescriptorKind, Endpoint, IoError},
         runtime::{Runtime, WasiAbi},
     };
     use std::{
@@ -30,7 +30,7 @@ mod guest {
     use waffle_program_support::runtime::poll_timeout;
     #[link(wasm_import_module = "shell_terminal")]
     unsafe extern "C" {
-        fn phase(value: i32, status: i32);
+        fn phase(value: i32, status: i32) -> i32;
         fn columns() -> i32;
         fn rows() -> i32;
         fn prompt_names(output: *mut u8, capacity: usize) -> i32;
@@ -44,10 +44,8 @@ mod guest {
         fn prompt_update(turn: u32, output: *mut u8, capacity: usize) -> i32;
         fn output_position() -> i32;
     }
-    fn set_phase(value: i32, status: i32) {
-        unsafe {
-            phase(value, status);
-        }
+    fn set_phase(value: i32, status: i32) -> bool {
+        unsafe { phase(value, status) != 0 }
     }
     fn geometry() -> Geometry {
         let (columns, rows) = unsafe { (columns(), rows()) };
@@ -177,6 +175,7 @@ mod guest {
         let input = Input {
             cancel: editor_cancel.clone(),
             wake: wake.clone(),
+            runtime: runtime.clone(),
         };
         let root = executor.spawn(async move {
             let result = run(shell.clone(), startup, input).await;
@@ -282,6 +281,7 @@ mod guest {
     struct Input {
         cancel: Rc<RefCell<Cancel>>,
         wake: Rc<Cell<Wake>>,
+        runtime: Runtime,
     }
     /// Writes `value` as a JSON string. serde_json already carries the escaping rules.
     fn json_string(json: &mut Vec<u8>, value: &str) {
@@ -394,10 +394,16 @@ mod guest {
         output: &'a Endpoint,
         cancel: &'a RefCell<Cancel>,
         wake: &'a Cell<Wake>,
+        runtime: &'a Runtime,
         host: Option<&'a mut PromptHost>,
         skip_lf: &'a mut bool,
     }
     impl PromptRead<'_> {
+        fn interrupted(&self, terminal_batches: bool) -> bool {
+            self.wake.get() == Wake::Interrupt
+                || self.runtime.take_interrupt()
+                || (terminal_batches && unsafe { phase(-2, 0) } != 0)
+        }
         async fn write(&mut self, bytes: &[u8]) -> Result<(), IoError> {
             let Some(host) = &self.host else {
                 return write(self.output, bytes).await;
@@ -414,22 +420,24 @@ mod guest {
                 self.editor.foreign_output();
             }
         }
-        async fn paint(&mut self, byte: u8) -> Result<Action, IoError> {
-            self.editor.resize(geometry());
-            self.check_output();
+        async fn paint(&mut self, byte: u8) -> Result<(Action, bool), IoError> {
             match self.editor.feed(byte) {
                 Action::Echo(byte) => {
                     self.write(&[byte]).await?;
                     self.editor.echoed(byte);
+                    Ok((Action::None, true))
                 }
                 Action::Redraw => {
                     let bytes = self.editor.redraw();
                     self.write(&bytes).await?;
+                    Ok((Action::None, true))
                 }
-                Action::Bell => self.write(b"\x07").await?,
-                action => return Ok(action),
+                Action::Bell => {
+                    self.write(b"\x07").await?;
+                    Ok((Action::None, true))
+                }
+                action => Ok((action, false)),
             }
-            Ok(Action::None)
         }
         /// Applies text the page pushed for this prompt, if any, and recounts a resize.
         async fn refresh(&mut self) -> Result<(), IoError> {
@@ -446,31 +454,80 @@ mod guest {
             };
             self.write(&bytes).await
         }
-        async fn read(&mut self) -> Result<Action, IoError> {
+        async fn resume_prompt(&mut self) -> Result<(), IoError> {
+            self.wake.set(Wake::None);
+            *self.cancel.borrow_mut() = Cancel::new();
+            self.refresh().await
+        }
+        async fn paint_chunk(
+            &mut self,
+            bytes: &[u8],
+            terminal_batches: bool,
+        ) -> Result<Action, IoError> {
+            let mut stale = true;
+            for &byte in bytes {
+                while self.wake.get() == Wake::Prompt {
+                    self.resume_prompt().await?;
+                    stale = true;
+                }
+                if self.wake.get() == Wake::Interrupt {
+                    return Ok(Action::Interrupt);
+                }
+                if std::mem::take(self.skip_lf) && byte == b'\n' {
+                    continue;
+                }
+                if stale {
+                    self.editor.resize(geometry());
+                    self.check_output();
+                    stale = false;
+                    if self.interrupted(terminal_batches) {
+                        return Ok(Action::Interrupt);
+                    }
+                } else if matches!(byte, b'\r' | b'\n') && self.interrupted(terminal_batches) {
+                    return Ok(Action::Interrupt);
+                }
+                let (action, wrote) = self.paint(byte).await?;
+                if wrote {
+                    stale = true;
+                }
+                if matches!(action, Action::Submit(_)) {
+                    *self.skip_lf = byte == b'\r';
+                }
+                if action != Action::None {
+                    return Ok(action);
+                }
+            }
+            Ok(Action::None)
+        }
+        async fn read(&mut self, terminal_batches: bool) -> Result<Action, IoError> {
             // The page may have pushed before this prompt was drawn.
             self.refresh().await?;
+            let mut bytes = [0; 256];
+            // Other descriptors can read past Enter into the next command's stdin.
+            let capacity = if terminal_batches
+                && self.input.descriptor_kind() == Ok(DescriptorKind::Terminal)
+            {
+                bytes.len()
+            } else {
+                1
+            };
             loop {
-                let mut byte = [0];
                 let cancel = self.cancel.borrow().clone();
-                match self.input.read_cancelled(&mut byte, &cancel).await {
+                let count = match self
+                    .input
+                    .read_cancelled(&mut bytes[..capacity], &cancel)
+                    .await
+                {
                     Ok(0) => return Ok(Action::Eof),
                     Err(IoError::Cancelled) if self.wake.get() == Wake::Prompt => {
-                        self.wake.set(Wake::None);
-                        *self.cancel.borrow_mut() = Cancel::new();
-                        self.refresh().await?;
+                        self.resume_prompt().await?;
                         continue;
                     }
                     Err(IoError::Cancelled) => return Ok(Action::Interrupt),
                     Err(error) => return Err(error),
-                    Ok(_) => {}
-                }
-                if std::mem::take(self.skip_lf) && byte[0] == b'\n' {
-                    continue;
-                }
-                let action = self.paint(byte[0]).await?;
-                if matches!(action, Action::Submit(_)) {
-                    *self.skip_lf = byte[0] == b'\r';
-                }
+                    Ok(count) => count,
+                };
+                let action = self.paint_chunk(&bytes[..count], terminal_batches).await?;
                 if action != Action::None {
                     return Ok(action);
                 }
@@ -544,17 +601,18 @@ mod guest {
                 let _ = write(&output, b"\x1b[?2004l").await;
                 return 1;
             }
-            set_phase(1, session.state().borrow().status());
+            let terminal_batches = set_phase(1, session.state().borrow().status());
             let action = PromptRead {
                 editor: &mut editor,
                 input: &stdin,
                 output: &output,
                 cancel: &input.cancel,
                 wake: &input.wake,
+                runtime: &input.runtime,
                 host: host.as_mut(),
                 skip_lf: &mut skip_lf,
             }
-            .read()
+            .read(terminal_batches)
             .await;
             let source = match finish_prompt(&session, &mut editor, &output, action).await {
                 Ok(source) => source,

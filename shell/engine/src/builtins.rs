@@ -20,8 +20,13 @@ use crate::{
     io::{Endpoint, FdTable, IoError},
     state::{DeclarationKind, SharedState, State},
 };
+use futures::future::{Either, LocalBoxFuture, Ready, ready};
 use shell_parser::parser::{Word, WordPart};
-use std::borrow::Cow;
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context as PollContext, Poll},
+};
 
 /// Bashkit's is_decl_keyword starts with the command's syntax, not the name
 /// produced by expansion. Quoting also prevents declaration-keyword syntax.
@@ -105,180 +110,259 @@ fn output_outcome(result: Result<(), printf::PrintFailure>) -> Result<Outcome, i
         Err(printf::PrintFailure::Status(code)) => Err(code),
     }
 }
-pub(crate) async fn run(
-    builtin: Builtin,
-    name: &str,
-    arguments: Cow<'_, [String]>,
-    state: &SharedState,
-    fds: &FdTable,
+type BuiltinResult = Result<Outcome, i32>;
+type BuiltinFuture<'a> = Either<Ready<BuiltinResult>, AdmittedBuiltin<'a>>;
+
+pub(crate) struct AdmittedBuiltin<'a> {
+    future: LocalBoxFuture<'a, BuiltinResult>,
+    _allocation: crate::exec::Allocation,
+}
+
+impl Future for AdmittedBuiltin<'_> {
+    type Output = BuiltinResult;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut PollContext<'_>) -> Poll<Self::Output> {
+        self.future.as_mut().poll(cx)
+    }
+}
+
+// Charge the boxed frame by its concrete size. The dispatch frame already
+// accounts for the handle and its storage ticket.
+#[inline(never)]
+fn admitted<'a>(
+    future: impl Future<Output = BuiltinResult> + 'a,
     context: &Context,
-    work: &mut Work,
-) -> Result<Outcome, i32> {
-    let args = arguments.as_ref();
+) -> BuiltinFuture<'a> {
+    match context.admit_builtin_buffer(std::mem::size_of_val(&future)) {
+        Ok(allocation) => Either::Right(AdmittedBuiltin {
+            future: Box::pin(future),
+            _allocation: allocation,
+        }),
+        Err(code) => Either::Left(ready(Err(code))),
+    }
+}
+
+#[inline(never)]
+pub(crate) fn run<'a>(
+    builtin: Builtin,
+    name: &'a str,
+    args: &'a [String],
+    state: &'a SharedState,
+    fds: &'a FdTable,
+    context: &'a Context,
+    work: &'a mut Work,
+) -> BuiltinFuture<'a> {
     match builtin {
+        Builtin::Noop => Either::Left(ready(Ok(Outcome::status(0)))),
+        Builtin::False => Either::Left(ready(Err(1))),
         Builtin::Completion => {
             let kind = match name {
                 "compgen" => completion::Kind::Generate,
                 "complete" => completion::Kind::Complete,
                 _ => completion::Kind::Options,
             };
-            return completion::run(kind, args, state, fds, context, work).await;
+            admitted(
+                completion::run(kind, args, state, fds, context, work),
+                context,
+            )
         }
-        Builtin::Enable => {
-            return enable::run(args, state, fds, context, work)
-                .await
-                .map(Outcome::status);
-        }
-        Builtin::Help => return help::run(args, state, fds, context, work).await,
-        Builtin::Noop => {}
-        Builtin::False => return Err(1),
-        Builtin::Test => return test::run(name, args, state, fds, context, work).await,
-        Builtin::Trap => return trap::run(args, state, fds, context, work).await,
-        Builtin::Getopts => return getopts::run(args, state, fds, context, work).await,
-        Builtin::Alias => {
-            return alias::run(name, args, state, fds, context, work)
-                .await
-                .map(Outcome::status);
-        }
-        Builtin::Caller => return caller::run(args, state, fds, context, work).await,
-        Builtin::Shopt => return shopt(args, state, fds, context, work).await,
+        Builtin::Enable => admitted(
+            async move {
+                enable::run(args, state, fds, context, work)
+                    .await
+                    .map(Outcome::status)
+            },
+            context,
+        ),
+        Builtin::Help => admitted(help::run(args, state, fds, context, work), context),
+        Builtin::Test => admitted(test::run(name, args, state, fds, context, work), context),
+        Builtin::Trap => admitted(trap::run(args, state, fds, context, work), context),
+        Builtin::Getopts => admitted(getopts::run(args, state, fds, context, work), context),
+        Builtin::Alias => admitted(
+            async move {
+                alias::run(name, args, state, fds, context, work)
+                    .await
+                    .map(Outcome::status)
+            },
+            context,
+        ),
+        Builtin::Caller => admitted(caller::run(args, state, fds, context, work), context),
+        Builtin::Shopt => admitted(shopt(args, state, fds, context, work), context),
         Builtin::LoopControl => {
-            return loop_control(name, args, state, fds, context, work).await;
+            admitted(loop_control(name, args, state, fds, context, work), context)
         }
-        Builtin::ExitReturn => {
-            let args = if args.first().is_some_and(|arg| arg == "--") {
-                &args[1..]
-            } else {
-                args
-            };
-            if name == "return"
-                && state.borrow().function_calls == 0
-                && state.borrow().source_calls == 0
-            {
-                return Err(2);
-            }
-            let code = match args.first() {
-                Some(s) => match s.trim_matches([' ', '\t', '\n']).parse::<i64>() {
-                    Ok(code) => code.rem_euclid(256) as i32,
-                    Err(_) => {
-                        return Ok(Outcome {
-                            code: 2,
-                            flow: if name == "return" {
-                                Flow::Return
-                            } else {
-                                Flow::Exit
-                            },
-                        });
-                    }
-                },
-                None => state.borrow().status(),
-            };
-            if args.len() > 1 {
-                return too_many_arguments(name, state, fds, context).await;
-            }
-            return Ok(Outcome {
-                code,
-                flow: if name == "exit" {
-                    Flow::Exit
-                } else {
-                    Flow::Return
-                },
-            });
-        }
-        Builtin::Echo => {
-            return output_outcome(printf::echo(args, state, fds, context, work).await);
-        }
-        Builtin::Printf => {
-            return output_outcome(printf::run(args, state, fds, context, work).await);
-        }
-        Builtin::Read => return read::run(args, state, fds, context, work).await,
-        Builtin::Mapfile => {
-            return mapfile::run((name, args), state, fds, context, work)
-                .await
-                .map(Outcome::status);
-        }
+        Builtin::ExitReturn => exit_return(name, args, state, fds, context),
+        Builtin::Echo => admitted(
+            async move { output_outcome(printf::echo(args, state, fds, context, work).await) },
+            context,
+        ),
+        Builtin::Printf => admitted(
+            async move { output_outcome(printf::run(args, state, fds, context, work).await) },
+            context,
+        ),
+        Builtin::Read => admitted(read::run(args, state, fds, context, work), context),
+        Builtin::Mapfile => admitted(
+            async move {
+                mapfile::run((name, args), state, fds, context, work)
+                    .await
+                    .map(Outcome::status)
+            },
+            context,
+        ),
         Builtin::Declaration => {
-            return declarations(name, args, state, fds, context, work).await;
+            admitted(declarations(name, args, state, fds, context, work), context)
         }
-        Builtin::Unset => return unset(args, state, fds, context, work).await,
-        Builtin::Cd => return directories::cd(args, state, fds, context, work).await,
-        Builtin::Pushd => return directories::pushd(args, state, fds, context, work).await,
-        Builtin::Popd => return directories::popd(args, state, fds, context, work).await,
-        Builtin::Dirs => return directories::dirs(args, state, fds, context, work).await,
-        Builtin::Pwd => {
-            let cwd = state.borrow().cwd.clone();
-            write(fds, format!("{cwd}\n").as_bytes(), context).await?;
-        }
-        Builtin::Set => return set(arguments.into_owned(), state, context, work).await,
-        Builtin::Shift => {
-            let args = if args.first().is_some_and(|arg| arg == "--") {
-                &args[1..]
-            } else {
-                args
-            };
-            let count = match args.first() {
-                None => 1,
-                Some(value) => value
-                    .trim_matches([' ', '\t', '\n'])
-                    .parse::<i64>()
-                    .map_err(|_| 2)?,
-            };
-            if args.len() > 1 {
-                return too_many_arguments(name, state, fds, context).await;
-            }
-            let count = usize::try_from(count).map_err(|_| 1)?;
-            state.borrow_mut().shift_positional(count)?;
-        }
+        Builtin::Unset => admitted(unset(args, state, fds, context, work), context),
+        Builtin::Cd => admitted(directories::cd(args, state, fds, context, work), context),
+        Builtin::Pushd => admitted(directories::pushd(args, state, fds, context, work), context),
+        Builtin::Popd => admitted(directories::popd(args, state, fds, context, work), context),
+        Builtin::Dirs => admitted(directories::dirs(args, state, fds, context, work), context),
+        Builtin::Pwd => admitted(
+            async move {
+                let cwd = state.borrow().cwd.clone();
+                write(fds, format!("{cwd}\n").as_bytes(), context).await?;
+                Ok(Outcome::status(0))
+            },
+            context,
+        ),
+        Builtin::Set => unreachable!("set consumes its arguments"),
+        Builtin::Shift => shift(name, args, state, fds, context),
         Builtin::Jobs => {
             if !args.is_empty() {
-                return Err(2);
+                return Either::Left(ready(Err(2)));
             }
-            context.list_jobs(fds).await?;
+            admitted(
+                async move {
+                    context.list_jobs(fds).await?;
+                    Ok(Outcome::status(0))
+                },
+                context,
+            )
         }
         Builtin::Wait => {
             if args.len() > 1 {
-                return Err(2);
+                return Either::Left(ready(Err(2)));
             }
-            let id = args.first().map(|s| JobSelector::parse(s)).transpose()?;
-            return Ok(Outcome::status(context.wait_job(id).await?));
-        }
-        Builtin::Kill => {
-            let (action, selector) = match kill_arguments(args) {
-                Ok(value) => value,
-                Err(error) => {
-                    if let Some(stderr) = fds.get(2) {
-                        stderr
-                            .write_all(b"kill: ", &context.cancel)
-                            .await
-                            .map_err(|error| error.status())?;
-                        stderr
-                            .write_all(error.message().as_bytes(), &context.cancel)
-                            .await
-                            .map_err(|error| error.status())?;
-                        stderr
-                            .write_all(b"\n", &context.cancel)
-                            .await
-                            .map_err(|error| error.status())?;
-                    }
-                    return Err(error.status());
-                }
+            let id = match args.first().map(|s| JobSelector::parse(s)).transpose() {
+                Ok(id) => id,
+                Err(code) => return Either::Left(ready(Err(code))),
             };
-            let signal = match action {
-                SignalAction::Exists => None,
-                SignalAction::Terminate(signal) => Some(signal),
-            };
-            if let Some(result) = context.signal_shell(selector, signal) {
-                result?;
-                return Ok(Outcome::status(0));
-            }
-            let selector = JobSelector::parse(selector)?;
-            match action {
-                SignalAction::Exists => context.check_job(selector)?,
-                SignalAction::Terminate(signal) => context.kill_job(selector, signal)?,
-            }
+            admitted(
+                async move { Ok(Outcome::status(context.wait_job(id).await?)) },
+                context,
+            )
         }
+        Builtin::Kill => admitted(kill(args, fds, context), context),
+    }
+}
+
+#[inline(never)]
+pub(crate) fn run_set<'a>(
+    args: Vec<String>,
+    state: &'a SharedState,
+    context: &'a Context,
+    work: &'a mut Work,
+) -> BuiltinFuture<'a> {
+    admitted(set(args, state, context, work), context)
+}
+
+fn strip_double_dash(args: &[String]) -> &[String] {
+    if args.first().is_some_and(|arg| arg == "--") {
+        &args[1..]
+    } else {
+        args
+    }
+}
+
+fn exit_return<'a>(
+    name: &'a str,
+    args: &[String],
+    state: &'a SharedState,
+    fds: &'a FdTable,
+    context: &'a Context,
+) -> BuiltinFuture<'a> {
+    let args = strip_double_dash(args);
+    let flow = if name == "return" {
+        Flow::Return
+    } else {
+        Flow::Exit
+    };
+    if flow == Flow::Return
+        && state.borrow().function_calls == 0
+        && state.borrow().source_calls == 0
+    {
+        return Either::Left(ready(Err(2)));
+    }
+    let code = match args.first() {
+        Some(s) => match s.trim_matches([' ', '\t', '\n']).parse::<i64>() {
+            Ok(code) => code.rem_euclid(256) as i32,
+            Err(_) => return Either::Left(ready(Ok(Outcome { code: 2, flow }))),
+        },
+        None => state.borrow().status(),
+    };
+    if args.len() > 1 {
+        return admitted(too_many_arguments(name, state, fds, context), context);
+    }
+    Either::Left(ready(Ok(Outcome { code, flow })))
+}
+
+fn shift<'a>(
+    name: &'a str,
+    args: &[String],
+    state: &'a SharedState,
+    fds: &'a FdTable,
+    context: &'a Context,
+) -> BuiltinFuture<'a> {
+    let args = strip_double_dash(args);
+    let count = match args.first() {
+        None => 1,
+        Some(value) => match value.trim_matches([' ', '\t', '\n']).parse::<i64>() {
+            Ok(count) => count,
+            Err(_) => return Either::Left(ready(Err(2))),
+        },
+    };
+    if args.len() > 1 {
+        return admitted(too_many_arguments(name, state, fds, context), context);
+    }
+    let result = usize::try_from(count)
+        .map_err(|_| 1)
+        .and_then(|count| state.borrow_mut().shift_positional(count));
+    Either::Left(ready(result.map(|()| Outcome::status(0))))
+}
+
+async fn kill(args: &[String], fds: &FdTable, context: &Context) -> Result<Outcome, i32> {
+    let (action, selector) = match kill_arguments(args) {
+        Ok(value) => value,
+        Err(error) => {
+            return Err(kill_diagnostic(error, fds, context).await);
+        }
+    };
+    let signal = match action {
+        SignalAction::Exists => None,
+        SignalAction::Terminate(signal) => Some(signal),
+    };
+    if let Some(result) = context.signal_shell(selector, signal) {
+        result?;
+        return Ok(Outcome::status(0));
+    }
+    let selector = JobSelector::parse(selector)?;
+    match action {
+        SignalAction::Exists => context.check_job(selector)?,
+        SignalAction::Terminate(signal) => context.kill_job(selector, signal)?,
     }
     Ok(Outcome::status(0))
+}
+
+async fn kill_diagnostic(error: SignalError, fds: &FdTable, context: &Context) -> i32 {
+    let Some(stderr) = fds.get(2) else {
+        return error.status();
+    };
+    for bytes in [b"kill: ".as_slice(), error.message().as_bytes(), b"\n"] {
+        if let Err(error) = stderr.write_all(bytes, &context.cancel).await {
+            return error.status();
+        }
+    }
+    error.status()
 }
 
 #[derive(Clone, Copy)]

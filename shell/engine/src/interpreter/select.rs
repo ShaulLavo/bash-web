@@ -3,7 +3,7 @@ use super::*;
 
 #[inline(never)]
 pub(super) fn run<'a>(
-    command: SelectCommand,
+    command: &'a SelectCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -14,16 +14,16 @@ pub(super) fn run<'a>(
 }
 
 async fn body(
-    command: SelectCommand,
+    command: &SelectCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
     work: &mut expand::Work,
 ) -> Outcome {
-    if let Err(code) = validate_name(&command, &fds, &context, work).await {
+    if let Err(code) = validate_name(command, &fds, &context, work).await {
         return Outcome::status(code);
     }
-    let choices = match choices(&command, &state, &context, work).await {
+    let choices = match choices(command, &state, &context, work).await {
         Ok(choices) => choices,
         Err(error) => return expansion_failure(error.into(), &fds, &context).await,
     };

@@ -197,14 +197,19 @@ actual normal exit, including 0, 7 or 130, and may keep running instead of
 producing a prompt. Each call delivers a new interrupt. A noninteractive `script` has no prompt;
 use `shell.done` for its result. Negative `after` rejects with `RangeError`.
 
-The guest import is `shell_terminal.phase(value: i32, status: i32)`. Only the
-interactive root owns publication. A ready call stores the legacy `control.status`
-and phase 1, then atomically publishes a 64-bit receipt at byte offset 64 and
-signals the bridge. Its low eight bits hold status and the remaining bits hold
-generation. Use the public methods to read receipts. The header is 72 bytes;
-ship the rebuilt guest and worker together. Other phase calls retain the last
-prompt status. Phase 3 still carries final process status and phase 4 terminal
-failure in `control.status`.
+The guest import is `shell_terminal.phase(value: i32, status: i32) -> i32`. Only the
+interactive root owns publication. A ready call (`value = 1`) stores the legacy
+`control.status` and phase 1, then atomically publishes a 64-bit receipt at byte
+offset 64 and signals the bridge. Its low eight bits hold status and the remaining
+bits hold generation. Use the public methods to read receipts. The header is 72
+bytes; ship the rebuilt guest and worker together. Other phase calls retain the
+last prompt status. Phase 3 still carries final process status and phase 4 terminal
+failure in `control.status`. For ordinary phase updates, the return value is `1`
+when the root terminal endpoint bounds multi-byte prompt reads at editor control
+bytes and `0` otherwise. Special negative values are root control queries: `-1`
+forwards a delegated interrupt and returns `0`; `-2` checks whether the bridge
+cancel flag is set and returns `1` if cancelled or `0` otherwise without changing
+phase.
 
 ## `TerminalNewlines`
 

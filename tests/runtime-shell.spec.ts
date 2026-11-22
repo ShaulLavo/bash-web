@@ -37,6 +37,18 @@ test("own shell is the default engine", async ({ page }) => {
   expect(await page.evaluate(() => window.bashWeb?.snapshot().engine)).toBe("own-shell");
 });
 
+test("the editor leaves input queued after Enter for the command it submits", async ({ page }) => {
+  await open(page);
+  await page.evaluate(async () => {
+    await window.bashWeb!.terminal!.sendGeneratedInput({
+      type: "text",
+      data: 'IFS= read -r value; printf "QUEUED:<%s>\\n" "$value"\rdata for read\n',
+    });
+  });
+  await output(page, "QUEUED:<data for read>");
+  await ready(page);
+});
+
 test("descriptor paths reopen actual shared terminals without owning their lifetime", async ({
   page,
 }) => {

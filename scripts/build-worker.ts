@@ -13,6 +13,7 @@ await build({
   },
   outdir: resolve(root, ".build/browser"),
   bundle: true,
+  minify: true,
   format: "esm",
   platform: "browser",
   target: "es2024",

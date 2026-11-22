@@ -1,18 +1,18 @@
 //! Original shared execution ownership and admission, extracted from the
 //! interpreter and expansion adapters. Feature orchestration stays above this layer.
-use crate::executor::{Budget, Cancel};
+use crate::executor::{Budget, Cancel, yield_now};
 use futures::{
     FutureExt,
     future::{Either, LocalBoxFuture, Ready, ready},
 };
 use shell_parser::limits::{ExecutionBudget, ExecutionLimits};
 use std::{
-    cell::{Cell, OnceCell},
+    cell::{Cell, OnceCell, RefCell},
     future::Future,
     mem::{size_of, size_of_val},
     ops::Deref,
     pin::Pin,
-    rc::Rc,
+    rc::{Rc, Weak},
     sync::{Arc, atomic::AtomicBool},
     task::{Context as TaskContext, Poll},
     time::Duration,
@@ -63,8 +63,31 @@ struct Shared {
     execution: StorageBudget,
 }
 
+pub(crate) trait Evictable {
+    /// Release cached reservations when ordinary admission needs headroom.
+    /// Returns `false` if the entry is actively in use and must stay registered.
+    fn evict(&self) -> bool;
+}
+
+const MAX_EVICTABLE_CACHES: usize = 64;
+
+struct BudgetInner {
+    remaining: Cell<usize>,
+    caches: RefCell<Vec<Weak<dyn Evictable>>>,
+    #[cfg(test)]
+    observation: MemoryObservation,
+}
+
+impl std::fmt::Debug for BudgetInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BudgetInner")
+            .field("remaining", &self.remaining.get())
+            .finish()
+    }
+}
+
 #[derive(Clone, Debug)]
-pub(crate) struct StorageBudget(Rc<Cell<usize>>, #[cfg(test)] Rc<MemoryObservation>);
+pub(crate) struct StorageBudget(Rc<BudgetInner>);
 #[cfg(test)]
 #[derive(Debug)]
 struct MemoryObservation {
@@ -74,20 +97,63 @@ struct MemoryObservation {
 
 impl StorageBudget {
     pub(crate) fn new(bytes: usize) -> Self {
-        Self(
-            Rc::new(Cell::new(bytes)),
+        Self(Rc::new(BudgetInner {
+            remaining: Cell::new(bytes),
+            caches: RefCell::new(Vec::new()),
             #[cfg(test)]
-            Rc::new(MemoryObservation {
+            observation: MemoryObservation {
                 limit: bytes,
                 peak: Cell::new(0),
-            }),
-        )
+            },
+        }))
+    }
+
+    pub(crate) fn available(&self) -> usize {
+        self.0.remaining.get()
+    }
+
+    pub(crate) fn register_cache(&self, cache: Weak<dyn Evictable>) -> bool {
+        let mut caches = self.0.caches.borrow_mut();
+        if caches.len() >= MAX_EVICTABLE_CACHES {
+            caches.retain(|entry| entry.strong_count() > 0);
+            if caches.len() >= MAX_EVICTABLE_CACHES {
+                return false;
+            }
+        }
+        caches.push(cache);
+        true
+    }
+
+    fn evict_caches(&self, needed: usize) {
+        let mut kept = Vec::new();
+        while self.0.remaining.get() < needed {
+            let next = self.0.caches.borrow_mut().pop();
+            let Some(weak) = next else {
+                break;
+            };
+            if let Some(cache) = weak.upgrade()
+                && !cache.evict()
+            {
+                kept.push(weak);
+            }
+        }
+        if !kept.is_empty() {
+            self.0.caches.borrow_mut().extend(kept);
+        }
+    }
+
+    fn reserve(&self, bytes: usize) -> Result<(), i32> {
+        if self.0.remaining.get() < bytes {
+            self.evict_caches(bytes);
+        }
+        let remaining = self.0.remaining.get().checked_sub(bytes).ok_or(2)?;
+        self.0.remaining.set(remaining);
+        self.record_peak();
+        Ok(())
     }
 
     pub(crate) fn admit(&self, bytes: usize) -> Result<StorageAllocation, i32> {
-        let remaining = self.0.get().checked_sub(bytes).ok_or(2)?;
-        self.0.set(remaining);
-        self.record_peak();
+        self.reserve(bytes)?;
         Ok(StorageAllocation {
             budget: self.clone(),
             bytes,
@@ -95,13 +161,20 @@ impl StorageBudget {
     }
     fn record_peak(&self) {
         #[cfg(test)]
-        self.1
-            .peak
-            .set(self.1.peak.get().max(self.1.limit - self.0.get()));
+        self.0.observation.peak.set(
+            self.0
+                .observation
+                .peak
+                .get()
+                .max(self.0.observation.limit - self.0.remaining.get()),
+        );
     }
     #[cfg(test)]
     pub(crate) fn observation(&self) -> (usize, usize) {
-        (self.1.limit - self.0.get(), self.1.peak.get())
+        (
+            self.0.observation.limit - self.0.remaining.get(),
+            self.0.observation.peak.get(),
+        )
     }
 }
 
@@ -117,9 +190,7 @@ impl StorageAllocation {
     }
     pub(crate) fn grow(&mut self, bytes: usize) -> Result<(), i32> {
         let total = self.bytes.checked_add(bytes).ok_or(2)?;
-        let remaining = self.budget.0.get().checked_sub(bytes).ok_or(2)?;
-        self.budget.0.set(remaining);
-        self.budget.record_peak();
+        self.budget.reserve(bytes)?;
         self.bytes = total;
         Ok(())
     }
@@ -127,7 +198,10 @@ impl StorageAllocation {
         if bytes > self.bytes {
             self.grow(bytes - self.bytes)?;
         } else {
-            self.budget.0.set(self.budget.0.get() + self.bytes - bytes);
+            self.budget
+                .0
+                .remaining
+                .set(self.budget.0.remaining.get() + self.bytes - bytes);
             self.bytes = bytes;
         }
         Ok(())
@@ -147,7 +221,10 @@ impl StorageAllocation {
 
 impl Drop for StorageAllocation {
     fn drop(&mut self) {
-        self.budget.0.set(self.budget.0.get() + self.bytes);
+        self.budget
+            .0
+            .remaining
+            .set(self.budget.0.remaining.get() + self.bytes);
     }
 }
 
@@ -262,6 +339,12 @@ pub(crate) struct Allocation {
     _storage: StorageAllocation,
 }
 
+impl Allocation {
+    pub(crate) fn resize(&mut self, bytes: usize) -> Result<(), i32> {
+        self._storage.resize(bytes)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct Scope {
     shared: Rc<Shared>,
@@ -306,7 +389,11 @@ impl Scope {
     }
 
     pub(crate) fn execution_available(&self) -> usize {
-        self.shared.execution.0.get()
+        self.shared.execution.available()
+    }
+
+    pub(crate) fn register_execution_cache(&self, cache: Weak<dyn Evictable>) -> bool {
+        self.shared.execution.register_cache(cache)
     }
 
     pub(crate) fn retained(&self) -> Option<RetainedStorage> {
@@ -540,7 +627,7 @@ impl From<i32> for Error {
 /// Temporary storage is returned only after its consumer has dropped it.
 pub(crate) struct Work {
     pub(crate) remaining: usize,
-    budget: Budget,
+    quantum: WorkQuantum,
     parse_remaining: usize,
     pub(crate) storage_remaining: usize,
     pub(crate) fields_remaining: usize,
@@ -549,7 +636,7 @@ impl Work {
     pub(crate) fn new(steps: usize, storage: usize, fields: usize) -> Self {
         Self {
             remaining: steps,
-            budget: Budget::default(),
+            quantum: WorkQuantum::default(),
             parse_remaining: steps,
             storage_remaining: storage,
             fields_remaining: fields,
@@ -580,23 +667,79 @@ impl Work {
         self.parse_remaining -= bytes;
         // Reserve cumulative parser work before its synchronous, nonrecursive
         // scalar-token call. No parser fuel/fallback is relied on for admission.
-        for _ in 0..bytes.saturating_mul(8) {
-            self.checkpoint(cancel).await?;
-        }
-        Ok(())
+        self.checkpoint_steps(bytes.saturating_mul(8), cancel).await
     }
     pub(crate) async fn checkpoint(&mut self, cancel: &Cancel) -> Result<(), Error> {
         if cancel.is_cancelled() {
             return Err(130.into());
         }
         if self.remaining == 0 {
-            return Err(2.into());
+            return Err(if cancel.probe_now() { 130 } else { 2 }.into());
         }
         self.remaining -= 1;
-        self.budget
-            .checkpoint(cancel)
-            .await
-            .map_err(|_| Error::Status(130))
+        if self.quantum.charge(1) {
+            yield_now().await;
+            if cancel.probe_now() {
+                return Err(130.into());
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn checkpoint_steps<'a>(
+        &'a mut self,
+        steps: usize,
+        cancel: &'a Cancel,
+    ) -> impl Future<Output = Result<(), Error>> + 'a {
+        self.quantum
+            .checkpoint_steps(steps, &mut self.remaining, cancel)
+    }
+}
+
+const WORK_QUANTUM: usize = 64;
+
+pub(crate) struct WorkQuantum(usize);
+
+impl Default for WorkQuantum {
+    fn default() -> Self {
+        Self(WORK_QUANTUM)
+    }
+}
+
+impl WorkQuantum {
+    fn charge(&mut self, steps: usize) -> bool {
+        self.0 -= steps;
+        if self.0 != 0 {
+            return false;
+        }
+        self.0 = WORK_QUANTUM;
+        true
+    }
+
+    pub(crate) async fn checkpoint_steps(
+        &mut self,
+        mut steps: usize,
+        remaining: &mut usize,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
+        while steps != 0 {
+            if cancel.is_cancelled() {
+                return Err(130.into());
+            }
+            let count = steps.min(*remaining).min(self.0);
+            if count == 0 {
+                return Err(if cancel.probe_now() { 130 } else { 2 }.into());
+            }
+            steps -= count;
+            *remaining -= count;
+            if !self.charge(count) {
+                continue;
+            }
+            yield_now().await;
+            if cancel.probe_now() {
+                return Err(130.into());
+            }
+        }
+        Ok(())
     }
 }
 pub(crate) fn fault<T>(message: &'static str, work: &mut Work) -> Result<T, Error> {
@@ -611,6 +754,77 @@ pub(crate) fn fault<T>(message: &'static str, work: &mut Work) -> Result<T, Erro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batched_work_shares_the_single_step_quantum_and_charges_to_exhaustion() {
+        let cancel = Cancel::new();
+        let mut work = Work::new(WORK_QUANTUM + 2, 0, 0);
+        assert!(matches!(
+            work.checkpoint(&cancel).now_or_never(),
+            Some(Ok(()))
+        ));
+        {
+            let mut batch = std::pin::pin!(work.checkpoint_steps(WORK_QUANTUM - 1, &cancel));
+            assert!(batch.as_mut().now_or_never().is_none());
+            assert!(matches!(batch.now_or_never(), Some(Ok(()))));
+        }
+        assert_eq!(work.remaining, 2);
+        assert!(matches!(
+            work.checkpoint_steps(3, &cancel).now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+        assert_eq!(work.remaining, 0);
+    }
+
+    #[test]
+    fn batched_work_observes_cancellation_after_the_first_yield() {
+        let cancel = Cancel::new();
+        let mut work = Work::new(3 * WORK_QUANTUM, 0, 0);
+        {
+            let mut batch = std::pin::pin!(work.checkpoint_steps(2 * WORK_QUANTUM, &cancel));
+            assert!(batch.as_mut().now_or_never().is_none());
+            cancel.cancel();
+            assert!(matches!(
+                batch.now_or_never(),
+                Some(Err(Error::Status(130)))
+            ));
+        }
+        assert_eq!(work.remaining, 2 * WORK_QUANTUM);
+        assert!(matches!(
+            work.checkpoint_steps(0, &cancel).now_or_never(),
+            Some(Ok(()))
+        ));
+    }
+
+    fn run_scalar_checkpoints(work: &mut Work, steps: usize, cancel: &Cancel) -> Result<(), Error> {
+        for _ in 0..steps {
+            work.checkpoint(cancel).now_or_never().unwrap()?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn host_interrupt_beats_work_exhaustion_in_scalar_and_batched_checkpoints() {
+        for batched in [false, true] {
+            let probes = Rc::new(Cell::new(0usize));
+            let count = probes.clone();
+            let cancel = Cancel::with_probe(Rc::new(move || {
+                let next = count.get() + 1;
+                count.set(next);
+                next >= 2
+            }));
+            let mut work = Work::new(8, 0, 0);
+            let result = if batched {
+                work.checkpoint_steps(9, &cancel).now_or_never().unwrap()
+            } else {
+                run_scalar_checkpoints(&mut work, 9, &cancel)
+            };
+            assert!(
+                matches!(result, Err(Error::Status(130))),
+                "batched={batched}"
+            );
+        }
+    }
 
     #[test]
     fn fault_keeps_exact_message_admission_and_error_metadata() {

@@ -29,15 +29,6 @@ export interface ShellWorkerRequest extends RuntimeWorkerRequest {
 export type ShellWorkerMessage =
   | RuntimeWorkerMessage
   | { type: "interrupt-delegated"; generation: bigint };
-function wrapNamespace(namespace: WebAssembly.ModuleImports, before: () => void) {
-  for (const [name, value] of Object.entries(namespace)) {
-    if (typeof value !== "function") continue;
-    namespace[name] = (...args: number[]) => {
-      before();
-      return value(...args);
-    };
-  }
-}
 export function shellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellWorkerRequest> {
   try {
     return createShellExecutor(request);
@@ -63,9 +54,12 @@ function createShellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellW
   let memory: WebAssembly.Memory | undefined;
   const bridge = request.terminal ? new SharedBridge(request.terminal) : undefined;
   const sample = request.memoryUsage ? new BigInt64Array(request.memoryUsage) : undefined;
+  let lastSampledBytes = -1;
   const sampleMemory = () => {
-    if (!memory) return;
+    if (!memory || (!sample && !bridge)) return;
     const bytes = memory.buffer.byteLength;
+    if (bytes === lastSampledBytes) return;
+    lastSampledBytes = bytes;
     if (sample) Atomics.store(sample, 0, BigInt(bytes));
     if (bridge) Atomics.store(bridge.state, control.memory, bytes);
   };
@@ -112,17 +106,21 @@ function createShellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellW
           },
           phase(phase: number, status: number) {
             checkActive();
+            sampleMemory();
             if (phase === -1) {
               if (bridge && !bridge.closed())
                 globalThis.postMessage({
                   type: "interrupt-delegated",
                   generation: bridge.readPrompt()?.generation ?? 0n,
                 } satisfies ShellWorkerMessage);
-              return;
+              return 0;
             }
+            if (phase === -2) return bridge?.cancelled() ? 1 : 0;
             shell.phase(phase, status);
             terminals?.phase(phase);
             prompt.phase(phase);
+            // Only the root's prompt endpoint bounds reads at editor control bytes.
+            return bridge && terminals ? 1 : 0;
           },
           prompt_names(pointer: number, capacity: number) {
             checkActive();
@@ -154,14 +152,16 @@ function createShellExecutor(request: ShellWorkerRequest): WorkerExecutor<ShellW
     },
     imports(imports, { wasi }) {
       if (imports.bash_web_executable) executableQuery.bind(wasi);
-      // Sample the guest's allocation at host boundaries without retaining any guest
-      // memory view across memory.grow. This telemetry is not an allocation quota.
-      if (!sample && !bridge && !terminals) return;
-      const before = () => {
-        sampleMemory();
-        terminals?.prepare();
-      };
-      for (const namespace of Object.values(imports)) wrapNamespace(namespace, before);
+      const process = imports.runtime_proc;
+      const poll = process?.poll;
+      // The shell reactor polls between executor turns and before blocking.
+      if (process && typeof poll === "function" && (sample || bridge || terminals)) {
+        process.poll = (pointer: number, count: number, timeout: number, output: number) => {
+          sampleMemory();
+          terminals?.prepare();
+          return poll(pointer, count, timeout, output);
+        };
+      }
     },
     instantiated({ instance }) {
       memory =

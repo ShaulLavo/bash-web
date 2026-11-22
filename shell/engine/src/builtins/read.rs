@@ -1,14 +1,18 @@
 mod fields;
 mod timeout;
 
-use std::time::Instant;
+use std::{
+    future::{Future, poll_fn},
+    task::Poll,
+    time::Instant,
+};
 use timeout::Timeout;
 
 use super::{diagnose, endpoint, error_status, printf};
 use crate::{
     expand::{Ifs, Work},
     interpreter::{Context, Outcome},
-    io::{DescriptorKind, Endpoint, FdTable},
+    io::{DescriptorKind, Endpoint, FdTable, IoError},
     state::{SharedState, State},
 };
 
@@ -402,12 +406,10 @@ async fn read_record(
         bytes: Vec::new(),
         ceiling,
     };
-    reader.bytes.try_reserve_exact(ceiling).map_err(|_| 2)?;
     reader
-        .protected
-        .try_reserve_exact(protection_bytes)
+        .bytes
+        .try_reserve_exact(ceiling.min(256))
         .map_err(|_| 2)?;
-    reader.protected.resize(protection_bytes, 0);
     let mut chunk = Vec::new();
     chunk.try_reserve_exact(chunk_bytes).map_err(|_| 2)?;
     chunk.resize(chunk_bytes, 0);
@@ -448,6 +450,38 @@ fn read_timer(
     Ok(Some(context.sleep_until(deadline)))
 }
 
+async fn read_chunk(
+    input: &Endpoint,
+    chunk: &mut [u8],
+    cancel: &crate::executor::Cancel,
+    timer: Option<&mut crate::executor::Sleep>,
+) -> Result<Option<usize>, IoError> {
+    if timer.is_some() {
+        return timeout::read(input, chunk, cancel, timer).await;
+    }
+    if cancel.probe_now() {
+        return Err(IoError::Cancelled);
+    }
+    // Subscribe to cancellation only if the endpoint needs to wait.
+    let mut read = std::pin::pin!(input.read(chunk));
+    let ready = poll_fn(|cx| Poll::Ready(read.as_mut().poll(cx))).await;
+    let result = match ready {
+        Poll::Ready(result) => result,
+        Poll::Pending => cancel.run(read).await.map_err(|_| IoError::Cancelled)?,
+    };
+    result.map(Some)
+}
+
+fn reserve(buffer: &mut Vec<u8>, needed: usize, ceiling: usize) -> Result<(), i32> {
+    if needed <= buffer.capacity() {
+        return Ok(());
+    }
+    let capacity = needed.max(buffer.capacity().saturating_mul(2)).min(ceiling);
+    buffer
+        .try_reserve_exact(capacity - buffer.len())
+        .map_err(|_| 2)
+}
+
 impl Reader {
     async fn read(
         &mut self,
@@ -461,14 +495,14 @@ impl Reader {
             work.checkpoint(&context.cancel)
                 .await
                 .map_err(error_status)?;
-            // Raw C exact reads emit at most one character per input byte.
-            // Stop at the first excess byte on a record-limit error, too.
-            let length = chunk.len().min(self.remaining).min(
-                self.ceiling
-                    .saturating_sub(self.bytes.len())
-                    .saturating_add(1),
-            );
-            let Some(read) = timeout::read(
+            // Only raw C exact reads use a multi-byte buffer. Stop at the
+            // requested count or the first byte that can exceed a limit.
+            let length = chunk
+                .len()
+                .min(self.remaining)
+                .min(work.remaining.saturating_add(1))
+                .min((self.ceiling - self.bytes.len()).saturating_add(1));
+            let Some(read) = read_chunk(
                 input,
                 &mut chunk[..length],
                 &context.cancel,
@@ -495,13 +529,13 @@ impl Reader {
         context: &Context,
         work: &mut Work,
     ) -> Result<bool, i32> {
-        for (index, byte) in bytes.iter().enumerate() {
-            if index != 0 {
-                work.checkpoint(&context.cancel)
-                    .await
-                    .map_err(error_status)?;
-            }
-            if self.byte(*byte)? {
+        if bytes.len() > 1 {
+            work.checkpoint_steps(bytes.len() - 1, &context.cancel)
+                .await
+                .map_err(error_status)?;
+        }
+        for &byte in bytes {
+            if self.byte(byte)? {
                 return Ok(true);
             }
         }
@@ -554,12 +588,19 @@ impl Reader {
         if whitespace && self.bytes.is_empty() {
             return Ok(());
         }
-        if self.bytes.len().saturating_add(self.pending_len) > self.ceiling {
+        let end = self.bytes.len() + self.pending_len;
+        if end > self.ceiling {
             return Err(2);
         }
+        reserve(&mut self.bytes, end, self.ceiling)?;
         if self.escaped {
             let index = self.bytes.len();
-            self.protected[index / 8] |= 1 << (index % 8);
+            let bucket = index / 8;
+            if bucket >= self.protected.len() {
+                reserve(&mut self.protected, bucket + 1, self.ceiling.div_ceil(8))?;
+                self.protected.resize(bucket + 1, 0);
+            }
+            self.protected[bucket] |= 1 << (index % 8);
         }
         self.bytes
             .extend_from_slice(&self.pending[..self.pending_len]);
@@ -585,5 +626,71 @@ fn complete_character(bytes: &[u8]) -> Result<bool, i32> {
         Ok(_) => Ok(true),
         Err(error) if error.error_len().is_none() && bytes.len() < 4 => Ok(false),
         Err(_) => Err(2),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn record_buffers_grow_and_keep_only_the_escaped_positions() {
+        let mut reader = Reader {
+            remaining: 1024,
+            delimiter: Some(b'\n'),
+            raw: false,
+            escaped: false,
+            utf8: false,
+            pending: [0; 4],
+            pending_len: 0,
+            ifs: Ifs::default(),
+            trim: [false; 3],
+            protected: Vec::new(),
+            trailing: 0,
+            bytes: Vec::with_capacity(256),
+            ceiling: 515,
+        };
+        for _ in 0..510 {
+            assert!(!reader.byte(b'a').unwrap());
+        }
+        assert_eq!(reader.protected.capacity(), 0);
+        for &byte in b"\\:bcd\\:" {
+            assert!(!reader.byte(byte).unwrap());
+        }
+        assert!(reader.byte(b'\n').unwrap());
+        assert_eq!(&reader.bytes[510..], b":bcd:");
+        assert_eq!(reader.bytes.capacity(), 515);
+        assert_eq!(reader.protected[63], 1 << 6);
+        assert_eq!(reader.protected[64], 1 << 2);
+        assert_eq!(reader.byte(b'z'), Err(2));
+    }
+
+    #[test]
+    fn untimed_read_checks_parent_host_interrupt_before_consuming_ready_input() {
+        use crate::executor::Cancel;
+        use crate::io::pipe;
+        use futures::FutureExt;
+        use std::{cell::Cell, rc::Rc};
+
+        let (reader, writer) = pipe();
+        writer.write(b"x").now_or_never().unwrap().unwrap();
+        let probes = Rc::new(Cell::new(0usize));
+        let count = probes.clone();
+        let parent = Cancel::with_probe(Rc::new(move || {
+            let next = count.get() + 1;
+            count.set(next);
+            next >= 2
+        }));
+        for _ in 0..15 {
+            assert!(!parent.is_cancelled());
+        }
+        let child = parent.child();
+        let mut buf = [0u8; 1];
+        let result = read_chunk(&reader, &mut buf, &child, None)
+            .now_or_never()
+            .unwrap();
+        assert_eq!(result, Err(IoError::Cancelled));
+        assert_eq!(reader.read(&mut buf).now_or_never().unwrap().unwrap(), 1);
+        assert_eq!(buf, *b"x");
     }
 }

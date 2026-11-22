@@ -166,6 +166,34 @@ fn admit_string_growth(value: &mut String, bytes: usize, work: &mut Work) -> Res
         .map_err(|_| Error::Status(2))
 }
 
+fn can_admit_bulk_string_growth(value: &String, bytes: usize, work: &Work) -> bool {
+    let Some(needed) = value.len().checked_add(bytes) else {
+        return false;
+    };
+    if needed <= value.capacity() {
+        return true;
+    }
+    let Some(pow2) = needed.checked_next_power_of_two() else {
+        return false;
+    };
+    let capacity = pow2.max(value.capacity().saturating_mul(2)).max(8);
+    capacity.saturating_sub(value.capacity()) <= work.storage_left()
+}
+
+fn admit_bulk_string_growth(
+    value: &mut String,
+    bytes: usize,
+    work: &mut Work,
+) -> Result<(), Error> {
+    let needed = value.len().checked_add(bytes).ok_or(2)?;
+    if needed <= value.capacity() {
+        return Ok(());
+    }
+    // Match the capacity reached by appending individual UTF-8 characters.
+    let capacity = needed.checked_next_power_of_two().ok_or(2)?;
+    admit_string_growth(value, capacity - value.len(), work)
+}
+
 /// Admit and reserve room for exactly `total` elements when the count is
 /// known, instead of doubling (which can charge almost twice the need).
 fn admit_vec_exact<T>(value: &mut Vec<T>, total: usize, work: &mut Work) -> Result<(), Error> {
@@ -391,6 +419,63 @@ impl Segments {
         });
         Ok(())
     }
+    fn can_bulk_protected(&self, text: &str, work: &Work) -> bool {
+        if !self.account_storage {
+            return true;
+        }
+        if let Some(Segment::Text {
+            value,
+            protected: true,
+            glob_protected: true,
+        }) = self.parts.last()
+        {
+            return can_admit_bulk_string_growth(value, text.len(), work);
+        }
+        let slot_bytes = if self.parts.len() == self.parts.capacity() {
+            let capacity = self.parts.capacity().saturating_mul(2).max(1);
+            let Some(bytes) =
+                (capacity - self.parts.capacity()).checked_mul(std::mem::size_of::<Segment>())
+            else {
+                return false;
+            };
+            bytes
+        } else {
+            0
+        };
+        let Some(pow2) = text.len().checked_next_power_of_two() else {
+            return false;
+        };
+        let string_bytes = pow2.max(8);
+        slot_bytes
+            .checked_add(string_bytes)
+            .is_some_and(|need| need <= work.storage_left())
+    }
+    fn protected_text(&mut self, text: &str, work: &mut Work) -> Result<(), Error> {
+        if let Some(Segment::Text {
+            value,
+            protected: true,
+            glob_protected: true,
+        }) = self.parts.last_mut()
+        {
+            if self.account_storage {
+                admit_bulk_string_growth(value, text.len(), work)?;
+            }
+            value.push_str(text);
+            return Ok(());
+        }
+        self.admit_slot(work)?;
+        let mut value = String::new();
+        if self.account_storage {
+            admit_bulk_string_growth(&mut value, text.len(), work)?;
+        }
+        value.push_str(text);
+        self.parts.push(Segment::Text {
+            value,
+            protected: true,
+            glob_protected: true,
+        });
+        Ok(())
+    }
     fn empty(&mut self, work: &mut Work) -> Result<(), Error> {
         if !matches!(self.parts.last(), Some(Segment::Empty)) {
             self.admit_slot(work)?;
@@ -567,6 +652,14 @@ impl Fields {
                 glob_protected,
             } => (value, protected, glob_protected),
         };
+        if protected
+            && (!self.pathname || glob_protected || !has_glob_meta(&value))
+            && self.can_bulk_protected(&value, glob_protected, work)
+        {
+            return self
+                .protected_text(&value, glob_protected, work, cancel)
+                .await;
+        }
         // Text segments are nonempty; their first character pays for entry.
         for ch in value.chars() {
             work.checkpoint(cancel).await?;
@@ -581,10 +674,71 @@ impl Fields {
         Ok(())
     }
     async fn join_checkpoints(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
-        for _ in 0..std::mem::take(&mut self.join_work) {
-            work.checkpoint(cancel).await?;
+        work.checkpoint_steps(std::mem::take(&mut self.join_work), cancel)
+            .await
+    }
+    fn can_bulk_protected(&self, value: &str, glob_protected: bool, work: &Work) -> bool {
+        if self.whitespace && self.present {
+            if self.account_storage
+                || self.current_magic
+                || self.count.saturating_add(1) >= self.max_fields
+            {
+                return false;
+            }
+        } else if self.count >= self.max_fields {
+            return false;
         }
-        Ok(())
+        let separator = usize::from(self.joined && !self.present && self.count != 0);
+        let Some(total) = value.len().checked_add(separator) else {
+            return false;
+        };
+        if total > self.max_bytes.saturating_sub(self.bytes) {
+            return false;
+        }
+        if (self.joined || self.account_storage)
+            && !can_admit_bulk_string_growth(&self.current, total, work)
+        {
+            return false;
+        }
+        if self.pathname
+            && self.account_storage
+            && self
+                .current_runs
+                .last()
+                .is_none_or(|(_, last)| *last != glob_protected)
+            && self.current_runs.len() == self.current_runs.capacity()
+        {
+            return false;
+        }
+        true
+    }
+    async fn protected_text(
+        &mut self,
+        value: &str,
+        glob_protected: bool,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<(), Error> {
+        let chars = value.chars().count();
+        work.checkpoint_steps(chars, cancel).await?;
+        self.text_boundary(work)?;
+        if value.len() > self.max_bytes.saturating_sub(self.bytes) {
+            return Err(2.into());
+        }
+        if self.joined || self.account_storage {
+            admit_bulk_string_growth(&mut self.current, value.len(), work)?;
+        }
+        self.current.push_str(value);
+        self.bytes += value.len();
+        if self.pathname {
+            self.protect(value.len(), glob_protected, work)?;
+            self.group_prefix =
+                self.extglob_groups && !glob_protected && value.ends_with(['@', '+', '!']);
+        }
+        if self.joined {
+            self.join_work += chars;
+        }
+        self.join_checkpoints(work, cancel).await
     }
     fn text_boundary(&mut self, work: &mut Work) -> Result<(), Error> {
         if self.whitespace && self.present {
@@ -662,6 +816,10 @@ impl Fields {
         self.whitespace = false;
         Ok(())
     }
+}
+
+fn has_glob_meta(value: &str) -> bool {
+    value.contains(['*', '?', '[', '('])
 }
 
 /// Selected assignment operands are captured before field splitting.
@@ -836,10 +994,7 @@ impl Expansion<'_> {
         self.scan_value(value).await
     }
     async fn scan_value(&mut self, value: &str) -> Result<(), Error> {
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
-        Ok(())
+        self.work.checkpoint_steps(value.len(), self.cancel).await
     }
     async fn empty_expansion(&mut self, protected: bool, state: &SharedState) -> Result<(), Error> {
         self.segment("", Protection::expansion(protected, state), protected)
@@ -942,6 +1097,14 @@ impl Expansion<'_> {
                 self.segments.empty(self.work)?;
             }
             return Ok(());
+        }
+        if matches!(protection, Protection::All)
+            && self.segments.can_bulk_protected(value, self.work)
+        {
+            self.work
+                .checkpoint_steps(value.chars().count(), self.cancel)
+                .await?;
+            return self.segments.protected_text(value, self.work);
         }
         for ch in value.chars() {
             self.work.checkpoint(self.cancel).await?;
@@ -3490,6 +3653,88 @@ mod tests {
             .now_or_never()
             .expect("the tiny join uses fewer than 64 checkpoints")?;
         Ok((fields, work.storage_remaining))
+    }
+
+    fn protected_text_segment(value: String) -> Segment {
+        Segment::Text {
+            value,
+            protected: true,
+            glob_protected: true,
+        }
+    }
+
+    #[test]
+    fn protected_text_keeps_ifs_boundaries_glob_masks_and_unicode_work() {
+        let mut fields = Fields::new(64, 2);
+        fields.pathname = true;
+        let ifs = Ifs::single(' ');
+        let mut work = Work::new(3, 64, 2);
+        assert!(
+            fields
+                .character('a', Delimiter::Text, false, &mut work)
+                .is_ok()
+        );
+        assert!(
+            fields
+                .character(' ', Delimiter::Whitespace, false, &mut work)
+                .is_ok()
+        );
+        let segment = protected_text_segment("é *".to_owned());
+        let cancel = Cancel::new();
+        assert!(matches!(
+            fields
+                .segment(segment, &ifs, &mut work, &cancel)
+                .now_or_never(),
+            Some(Ok(()))
+        ));
+        assert_eq!(work.remaining, 0);
+        assert!(
+            fields
+                .character('?', Delimiter::Text, false, &mut work)
+                .is_ok()
+        );
+        assert!(fields.end_group(&mut work).is_ok());
+        assert_eq!(fields.out, ["a", "é *?"]);
+        assert_eq!(
+            fields.protections,
+            [(1, vec![true, true, true, true, false])]
+        );
+    }
+
+    #[test]
+    fn protected_text_rejects_byte_limit_before_yielding() {
+        let mut fields = Fields::new(0, 2);
+        let ifs = Ifs::single(' ');
+        let mut work = Work::new(1024, 1024, 2);
+        let result = fields
+            .segment(
+                protected_text_segment("a".repeat(128)),
+                &ifs,
+                &mut work,
+                &Cancel::new(),
+            )
+            .now_or_never();
+        assert!(matches!(result, Some(Err(Error::Status(2)))));
+    }
+
+    #[test]
+    fn quoted_for_list_word_rejects_storage_limit_before_yielding() {
+        let state = State::default().shared();
+        let word = Word::quoted_literal("a".repeat(128));
+        let cancel = Cancel::new();
+        let mut work = Work::new(1024, 0, 2);
+        let mut expand = std::pin::pin!(fields(
+            &word,
+            &state,
+            &cancel,
+            FieldContext::ForList,
+            (1024, 16, 1024),
+            &mut work,
+        ));
+        assert!(matches!(
+            expand.as_mut().now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
     }
 
     #[test]

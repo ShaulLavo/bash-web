@@ -45,12 +45,25 @@ enum Token<'a> {
     Unsupported,
     End,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CachedToken {
+    Number(usize, usize),
+    Ident(usize, usize),
+    Op(&'static str),
+    Open,
+    Close,
+    Invalid,
+    Unsupported,
+    End,
+}
+
 struct Parser<'a> {
     source: &'a str,
     cursor: usize,
     current: Token<'a>,
     next: Token<'a>,
-    cached: Option<Rc<[Token<'a>]>>,
+    cached: Option<Rc<[CachedToken]>>,
     cached_index: usize,
 }
 impl<'a> Parser<'a> {
@@ -130,6 +143,18 @@ impl<'a> Parser<'a> {
             }
         }
     }
+    fn resolve(source: &'a str, token: CachedToken) -> Token<'a> {
+        match token {
+            CachedToken::Number(start, end) => Token::Number(&source[start..end]),
+            CachedToken::Ident(start, end) => Token::Ident(&source[start..end]),
+            CachedToken::Op(op) => Token::Op(op),
+            CachedToken::Open => Token::Open,
+            CachedToken::Close => Token::Close,
+            CachedToken::Invalid => Token::Invalid,
+            CachedToken::Unsupported => Token::Unsupported,
+            CachedToken::End => Token::End,
+        }
+    }
     async fn advance(&mut self, work: &mut Work, cancel: &Cancel) -> Result<(), Error> {
         if let Some(tokens) = &self.cached {
             self.current = self.next;
@@ -137,7 +162,7 @@ impl<'a> Parser<'a> {
             self.next = tokens
                 .get(self.cached_index.saturating_add(1))
                 .copied()
-                .unwrap_or(Token::End);
+                .map_or(Token::End, |token| Self::resolve(self.source, token));
             return Ok(());
         }
         self.current = self.next;
@@ -146,12 +171,12 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub(crate) struct Program<'a> {
-    source: &'a str,
-    tokens: Rc<[Token<'a>]>,
+#[derive(Clone)]
+pub(crate) struct Program {
+    tokens: Rc<[CachedToken]>,
 }
 
-impl<'a> Program<'a> {
+impl Program {
     pub(crate) fn is_static(source: &str) -> bool {
         !source.contains(['$', '"', '\\', '`'])
     }
@@ -160,12 +185,20 @@ impl<'a> Program<'a> {
         source
             .len()
             .saturating_add(1)
-            .saturating_mul(std::mem::size_of::<Token<'static>>())
+            .saturating_mul(std::mem::size_of::<CachedToken>())
+            .saturating_add(std::mem::size_of::<Self>())
+    }
+
+    pub(crate) fn exact_bytes(&self) -> usize {
+        self.tokens
+            .len()
+            .saturating_mul(std::mem::size_of::<CachedToken>())
+            .saturating_add(2 * std::mem::size_of::<usize>())
             .saturating_add(std::mem::size_of::<Self>())
     }
 
     pub(crate) async fn compile(
-        source: &'a str,
+        source: &str,
         work: &mut Work,
         cancel: &Cancel,
     ) -> Result<Self, Error> {
@@ -177,25 +210,49 @@ impl<'a> Program<'a> {
             cached: None,
             cached_index: 0,
         };
+        let base = source.as_ptr() as usize;
         let mut tokens = Vec::new();
         loop {
             let token = lexer.lex(work, cancel).await?;
-            tokens.push(token);
+            let cached = match token {
+                Token::Number(slice) => {
+                    let start = slice.as_ptr() as usize - base;
+                    CachedToken::Number(start, start + slice.len())
+                }
+                Token::Ident(slice) => {
+                    let start = slice.as_ptr() as usize - base;
+                    CachedToken::Ident(start, start + slice.len())
+                }
+                Token::Op(op) => CachedToken::Op(op),
+                Token::Open => CachedToken::Open,
+                Token::Close => CachedToken::Close,
+                Token::Invalid => CachedToken::Invalid,
+                Token::Unsupported => CachedToken::Unsupported,
+                Token::End => CachedToken::End,
+            };
+            tokens.push(cached);
             if token == Token::End {
                 break;
             }
         }
         Ok(Self {
-            source,
             tokens: Rc::from(tokens),
         })
     }
 
-    fn parser(&self) -> Parser<'a> {
-        let current = self.tokens.first().copied().unwrap_or(Token::End);
-        let next = self.tokens.get(1).copied().unwrap_or(Token::End);
+    fn parser<'a>(&self, source: &'a str) -> Parser<'a> {
+        let current = self
+            .tokens
+            .first()
+            .copied()
+            .map_or(Token::End, |token| Parser::resolve(source, token));
+        let next = self
+            .tokens
+            .get(1)
+            .copied()
+            .map_or(Token::End, |token| Parser::resolve(source, token));
         Parser {
-            source: self.source,
+            source,
             cursor: 0,
             current,
             next,
@@ -205,8 +262,9 @@ impl<'a> Program<'a> {
     }
 }
 
-pub(crate) fn evaluate<'a>(
+fn evaluate_inner<'a>(
     source: &'a str,
+    program: Option<&'a Program>,
     state: &'a SharedState,
     cancel: &'a Cancel,
     max: usize,
@@ -218,6 +276,10 @@ pub(crate) fn evaluate<'a>(
             work.checkpoint(cancel).await?;
             if source.len() > max {
                 return Err(2.into());
+            }
+            if let Some(program) = program {
+                let mut parser = program.parser(source);
+                return finish_parse(&mut parser, state, cancel, max, work, 1).await;
             }
             let expanded;
             let source = if source.contains(['$', '"', '\\', '`']) {
@@ -242,37 +304,46 @@ pub(crate) fn evaluate<'a>(
     })
 }
 
-pub(crate) fn evaluate_program<'a>(
-    program: &'a Program<'a>,
+pub(crate) fn evaluate<'a>(
+    source: &'a str,
     state: &'a SharedState,
     cancel: &'a Cancel,
     max: usize,
     work: &'a mut Work,
 ) -> ResultFuture<'a, i64> {
-    admitted(work, move |work| async move {
-        work.enter_arithmetic()?;
-        let result = async {
-            work.checkpoint(cancel).await?;
-            if program.source.len() > max {
-                return Err(2.into());
-            }
-            let mut parser = program.parser();
-            if parser.current == Token::End {
-                return Ok(0);
-            }
-            let result = parse(&mut parser, (0, true), state, cancel, max, work, 1).await?;
-            if parser.current == Token::Unsupported {
-                return Err(2.into());
-            }
-            if parser.current != Token::End {
-                return fault("syntax error in expression", work);
-            }
-            Ok(result)
-        }
-        .await;
-        work.leave_arithmetic();
-        result
-    })
+    evaluate_inner(source, None, state, cancel, max, work)
+}
+
+async fn finish_parse(
+    parser: &mut Parser<'_>,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+    depth: usize,
+) -> Result<i64, Error> {
+    if parser.current == Token::End {
+        return Ok(0);
+    }
+    let result = parse(parser, (0, true), state, cancel, max, work, depth).await?;
+    if parser.current == Token::Unsupported {
+        return Err(2.into());
+    }
+    if parser.current != Token::End {
+        return fault("syntax error in expression", work);
+    }
+    Ok(result)
+}
+
+pub(crate) fn evaluate_program<'a>(
+    source: &'a str,
+    program: &'a Program,
+    state: &'a SharedState,
+    cancel: &'a Cancel,
+    max: usize,
+    work: &'a mut Work,
+) -> ResultFuture<'a, i64> {
+    evaluate_inner(source, Some(program), state, cancel, max, work)
 }
 
 /// let arguments have already undergone shell expansion as ordinary words.
@@ -303,17 +374,7 @@ fn expression<'a>(
             return Err(2.into());
         }
         let mut parser = Parser::new(source, work, cancel).await?;
-        if parser.current == Token::End {
-            return Ok(0);
-        }
-        let result = parse(&mut parser, (0, true), state, cancel, max, work, depth + 1).await?;
-        if parser.current == Token::Unsupported {
-            return Err(2.into());
-        }
-        if parser.current != Token::End {
-            return fault("syntax error in expression", work);
-        }
-        Ok(result)
+        finish_parse(&mut parser, state, cancel, max, work, depth + 1).await
     })
 }
 

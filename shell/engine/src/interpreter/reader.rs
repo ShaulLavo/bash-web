@@ -1,4 +1,4 @@
-use super::{Context, Descriptors, Flow, Outcome, abort_diagnostic, execute, parse_failure};
+use super::{Context, Descriptors, Flow, Outcome, abort_diagnostic, parse_failure};
 use crate::{
     parse::{self, ParseFailure, ParsedScript},
     state::{Aliases, SharedState},
@@ -142,16 +142,11 @@ pub(super) async fn run(
             && reader.failure.is_none()
             && reader.next_position.is_none()
             && super::replacement::eligible(&command);
-        result = execute(
-            command,
-            state.clone(),
-            fds.clone(),
-            Context {
-                tail_exec,
-                ..context.clone()
-            },
-        )
-        .await;
+        let next_context = Context {
+            tail_exec,
+            ..context.clone()
+        };
+        result = super::execute_owned_item(command, state.clone(), fds.clone(), next_context).await;
         if result.flow == Flow::SpawnFailed {
             return result;
         }
