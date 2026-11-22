@@ -3,6 +3,7 @@ import { installBase } from "waffle-base";
 import { createRuntime, type Runtime, type SharedFilesystemOptions } from "waffle";
 import { withVfsImplementation } from "../node_modules/waffle/fs/vfs-internal.ts";
 import { mountBrowser, type BrowserRuntimeLease } from "../src/browser/main";
+import { DEFAULT_WORKSPACE } from "../src/browser/start-fresh";
 import { genericProgramLauncher } from "../src/runtime/program-launcher";
 import { installShellCommands } from "../src/shell-commands";
 import { registerTestPrograms } from "./helpers/test-programs";
@@ -72,7 +73,8 @@ function filesystemOptions(): SharedFilesystemOptions {
 
 mountBrowser({
   acquireRuntime(onStartupStage): BrowserRuntimeLease {
-    const runtime = createRuntime({ filesystem: filesystemOptions(), onStartupStage });
+    const filesystem = filesystemOptions();
+    const runtime = createRuntime({ filesystem, onStartupStage });
     const query = new URLSearchParams(location.search);
     if (query.get("test") === "1") window.readSortUniqOutput = () => readSortUniqOutput(runtime);
     if (
@@ -94,6 +96,7 @@ mountBrowser({
     return {
       runtime,
       ready,
+      workspace: filesystem.mode === "fast" ? (filesystem.name ?? DEFAULT_WORKSPACE) : undefined,
       dispose() {
         registration.abort(new Error("Test program registration was cancelled."));
         // The owner fences admitted filesystem work itself. Do not wait for a fetch

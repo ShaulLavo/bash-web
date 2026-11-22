@@ -267,7 +267,7 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
   }
 });
 
-async function foreignWorkspace(page: Page, name: string) {
+async function seedOrigin(page: Page) {
   await page.route("**/storage-seed", (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -275,7 +275,48 @@ async function foreignWorkspace(page: Page, name: string) {
     }),
   );
   await navigateTestPage(page, "/storage-seed");
+}
+
+async function foreignWorkspace(page: Page, name: string) {
+  await seedOrigin(page);
   await preservedWorkspace(page, name, "seed");
+}
+
+/** A Waffle workspace saved with a format identity this Waffle does not know. */
+async function oldFormatWorkspace(page: Page, name: string) {
+  await seedOrigin(page);
+  await page.evaluate(
+    (workspace) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open(workspace, 1);
+        request.onupgradeneeded = () => {
+          for (const store of ["metadata", "journal", "data"])
+            request.result.createObjectStore(store);
+        };
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction("metadata", "readwrite");
+          transaction.objectStore("metadata").put("waffle-indexeddb-v0", "format");
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+          transaction.onabort = () => {
+            database.close();
+            reject(transaction.error);
+          };
+        };
+      }),
+    name,
+  );
+}
+
+function storedName(page: Page, name: string) {
+  return page.evaluate(
+    async (workspace) => (await indexedDB.databases()).some((db) => db.name === workspace),
+    name,
+  );
 }
 
 async function preservedWorkspace(page: Page, name: string, action: "seed" | "read" = "read") {
@@ -333,6 +374,67 @@ test("foreign IndexedDB shows INVALID_VFS_FORMAT and Restart never wipes owner d
     stores: ["foreign"],
     value: "owner-data",
   });
+});
+
+test("Start fresh deletes a workspace Waffle cannot open and reloads into a working shell", async ({
+  context,
+  page,
+}) => {
+  const name = `bash-web-start-fresh-${randomUUID()}`;
+  await oldFormatWorkspace(page, name);
+  const query = new URLSearchParams({ test: "1", renderer: "canvas", workspace: name });
+  await navigateTestPage(page, `/?${query}`);
+  await expect(page.getByRole("alert")).toContainText("INVALID_VFS_FORMAT");
+  await expect(page.getByRole("alert")).toContainText("cannot be opened");
+  // Declining the confirmation keeps the stored data.
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await page.getByRole("button", { name: "Start fresh" }).click();
+  expect(await storedName(page, name)).toBe(true);
+  // Another tab holding the workspace's writer lock makes Start fresh delete nothing.
+  const other = await context.newPage();
+  try {
+    await seedOrigin(other);
+    await other.evaluate(
+      (workspace) =>
+        new Promise<void>((held) => {
+          void navigator.locks.request(`bun-wasm:filesystem:indexeddb:${workspace}`, () => {
+            held();
+            return new Promise<void>(() => {});
+          });
+        }),
+      name,
+    );
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Start fresh" }).click();
+    await expect(page.getByRole("alert")).toContainText("open in another tab");
+    expect(await storedName(page, name)).toBe(true);
+  } finally {
+    await other.close();
+  }
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Start fresh" }).click();
+  await startupReady(page);
+  expect(await page.evaluate(() => window.bashWeb?.snapshot().state)).toBe("ready");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.locator("textarea").focus();
+  await page.keyboard.insertText("printf 'started-fresh\\n'");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim())))
+    .toContain("started-fresh");
+  expect(await storedName(page, name)).toBe(true);
+});
+
+test("a startup failure a retry can fix offers no Start fresh", async ({ page }) => {
+  const query = new URLSearchParams({
+    test: "1",
+    renderer: "canvas",
+    storage: "safe",
+    workspace: `bash-web-no-start-fresh-${randomUUID()}`,
+  });
+  await navigateTestPage(page, `/?${query}`);
+  await expect(page.getByRole("alert")).toContainText("UNSUPPORTED_VFS");
+  await expect(page.getByRole("button", { name: "Start fresh" })).toHaveCount(0);
 });
 
 test("SAFE fails with its typed unsupported error without falling back to FAST", async ({
