@@ -14,7 +14,7 @@ the immutable source SHA and do not cancel another main source.
 | `own-shell-compatibility` | Sealed raw score publication after both `own-shell-scoreboard` and `own-shell-observation` succeed                                                                                                                     |
 | `score-floor`             | Completed-producer admission, cumulative main floor and gained/lost IDs; no build or replay                                                                                                                            |
 | `browser`                 | Frontend assets, terminal/iOS/Python controls and the complete Chromium/Firefox/WebKit suite across two shards using the checked-in Playwright worker count                                                            |
-| `shell`                   | Always-running aggregate; any failed, skipped or cancelled dependency fails                                                                                                                                            |
+| `shell`                   | Always-running aggregate; any failed, cancelled or unexpected skipped dependency fails (docs-only PRs skip code jobs)                                                                                                  |
 
 The path-filtered `printf-darwin` workflow remains a separate blocking macOS
 gate. Linux results do not replace it. Its quoting selection and locale setup
@@ -79,7 +79,7 @@ Dependency keys hash the complete npm lock after removing only the root package
 version in its two locations. Dependency changes invalidate both installed
 packages and npm downloads; root patch bumps do not. If either exact cache is
 missing, the one install also fills downloads. Other caches cover the pinned
-Rust toolchain, both Cargo target directories, patched libc, SDK 34.0,
+Rust toolchain, Cargo target directories, patched libc, SDK 34.0,
 cargo-machete 0.9.2 and Playwright browsers. SDK keys include the archive checksum.
 
 Native input receipts cover the entire shell, guest and scripts trees, CI

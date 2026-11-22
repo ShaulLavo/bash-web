@@ -244,7 +244,7 @@ test("A07 current scheduling and extra or duplicate jobs cannot expand historica
   );
   assert.throws(
     () => assertHistoricalJobs(run, jobs, currentWorkflow, mergedAt),
-    /reviewed historical Shell job set/,
+    /reviewed historical Shell job set|missing\/extra historical job/,
   );
   for (const name of ["own-shell-scoreboard", "own-shell-observation", "prepare"])
     assert.throws(

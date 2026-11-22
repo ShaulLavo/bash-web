@@ -181,6 +181,21 @@ test("the actual aggregate shell command rejects each non-success result in ever
   assert.equal(evaluate(docs, "false"), 0);
   assert.notEqual(evaluate(docs, "true"), 0);
   assert.notEqual(evaluate(docs, ""), 0);
+  const prepareSteps = object(workflowJobs.prepare).steps;
+  assert.ok(Array.isArray(prepareSteps));
+  const guarded = prepareSteps.map(object);
+  const uploadJs = guarded.findIndex(
+    (step) =>
+      step.uses === "actions/upload-artifact@v4" &&
+      object(step.with).name === "javascript-${{ github.sha }}",
+  );
+  assert.ok(uploadJs >= 0);
+  for (const step of guarded.slice(uploadJs + 1)) {
+    assert.equal(
+      step.if,
+      "github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'",
+    );
+  }
 });
 
 test("each moved current-main gate has one owner", () => {
