@@ -1,23 +1,27 @@
 //! Validate literal function declaration names when they execute.
 use super::*;
 
-pub(super) async fn declare(
-    mut function: FunctionDef,
-    state: SharedState,
-    fds: Descriptors,
-    context: Context,
-) -> Outcome {
-    let line = match declaration_line(&function, &context.cancel).await {
+enum PreparedFunction {
+    Ready { name: String, line: usize },
+    Done(Outcome),
+}
+
+async fn prepare(
+    function: &FunctionDef,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+) -> PreparedFunction {
+    let line = match declaration_line(function, &context.cancel).await {
         Ok(line) => line,
-        Err(_) => return Outcome::status(context.cancel_status()),
+        Err(_) => return PreparedFunction::Done(Outcome::status(context.cancel_status())),
     };
-    let (name, valid) = match normalize(function.name, &context.cancel).await {
+    let (name, valid) = match normalize(function.name.clone(), &context.cancel).await {
         Ok(result) => result,
-        Err(_) => return Outcome::status(context.cancel_status()),
+        Err(_) => return PreparedFunction::Done(Outcome::status(context.cancel_status())),
     };
-    function.name = name;
     if !valid {
-        let code = invalid_name(&function.name, line, &fds, &context)
+        let code = invalid_name(&name, line, fds, context)
             .await
             .err()
             .unwrap_or(1);
@@ -25,28 +29,89 @@ pub(super) async fn declare(
         if result.flow == Flow::Normal && !context.ignore_errexit && state.borrow().errexit {
             result.flow = Flow::Abort;
         }
-        return result;
+        return PreparedFunction::Done(result);
     }
     if context
         .source
         .retain_root(&context.core.execution_storage)
         .is_err()
     {
-        return abort_diagnostic(
-            &fds,
-            &context,
-            b"function source live-memory limit exceeded",
-            2,
-        )
-        .await;
+        return PreparedFunction::Done(
+            abort_diagnostic(
+                fds,
+                context,
+                b"function source live-memory limit exceeded",
+                2,
+            )
+            .await,
+        );
     }
+    PreparedFunction::Ready { name, line }
+}
+
+/// Move a top-level parsed function body without cloning or charging an extra AST copy.
+pub(super) async fn declare_owned(
+    function: FunctionDef,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let (name, line) = match prepare(&function, &state, &fds, &context).await {
+        PreparedFunction::Ready { name, line } => (name, line),
+        PreparedFunction::Done(outcome) => return outcome,
+    };
     state.borrow_mut().define_function(
-        function.name,
+        name,
         StoredFunction {
             body: Rc::new(*function.body),
             source: context.source.clone(),
             line,
             storage: context.evaluation.retained(),
+            reader: context.reader.clone(),
+        },
+    );
+    Outcome::status(0)
+}
+
+pub(super) async fn declare(
+    function: &FunctionDef,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let (name, line) = match prepare(function, &state, &fds, &context).await {
+        PreparedFunction::Ready { name, line } => (name, line),
+        PreparedFunction::Done(outcome) => return outcome,
+    };
+    // Borrowed definitions (inside loops or other functions) allocate a fresh
+    // AST copy. Admit it against the shared live-memory pool and keep that
+    // ticket with the stored function until its final owner drops it.
+    let bytes = shell_parser::limits::ExecutionLimits::default().max_work_units as usize;
+    let mut copy_work = crate::exec::Work::new(bytes, bytes, 0);
+    if let Err(error) =
+        crate::ast_copy::command(&function.body, &context.cancel, &mut copy_work).await
+    {
+        return expansion_failure(error.into(), &fds, &context).await;
+    }
+    let body_bytes = (bytes - copy_work.storage_left())
+        .saturating_add(std::mem::size_of::<Command>())
+        .saturating_add(2 * std::mem::size_of::<usize>());
+    let Ok(body_storage) = context.core.execution_storage.admit(body_bytes) else {
+        return abort_diagnostic(
+            &fds,
+            &context,
+            b"function body live-memory limit exceeded",
+            2,
+        )
+        .await;
+    };
+    state.borrow_mut().define_function(
+        name,
+        StoredFunction {
+            body: Rc::new(function.body.as_ref().clone()),
+            source: context.source.clone(),
+            line,
+            storage: Some(Rc::new(body_storage)),
             reader: context.reader.clone(),
         },
     );

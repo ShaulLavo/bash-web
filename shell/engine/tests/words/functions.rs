@@ -569,6 +569,23 @@ fn call_frames_retain_definition_sources_across_submissions_and_eval() {
 }
 
 #[test]
+fn function_redefinition_keeps_the_running_body_available_to_pipeline_stages() {
+    check_output(
+        r#"
+        outer() {
+            local item="a b"
+            outer() { printf 'new\n'; }
+            { printf 'old=<%s>\n' "$item"; } |
+                { IFS= read -r line; printf '%s\n' "$line"; }
+        }
+        outer
+        outer
+        "#,
+        "old=<a b>\nnew\n",
+    );
+}
+
+#[test]
 fn oversized_stored_definition_source_refuses_admission_and_session_recovers() {
     let rig = Rig::new(Limits {
         execution_bytes: 64 * 1024,

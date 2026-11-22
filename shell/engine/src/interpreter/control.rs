@@ -29,17 +29,24 @@ pub(super) fn loop_step(outcome: Outcome, depth: usize) -> LoopStep {
 // assignment futures outside the recursive poll frames below. Boxing only the
 // outer command still leaves all of its direct await frames on every level.
 #[inline(never)]
-pub(super) fn run_if(
-    command: IfCommand,
+pub(super) fn run_if<'a>(
+    command: Syntax<'a, IfCommand>,
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> eval::Frame<'static> {
+) -> eval::Frame<'a> {
     let evaluation = context.evaluation.clone();
-    evaluation.frame(if_body(command, state, fds, context), Outcome::status)
+    match command {
+        Syntax::Owned(command) => {
+            evaluation.frame(if_owned_body(command, state, fds, context), Outcome::status)
+        }
+        Syntax::Borrowed(command) => {
+            evaluation.frame(if_body(command, state, fds, context), Outcome::status)
+        }
+    }
 }
 
-async fn if_body(
+async fn if_owned_body(
     command: IfCommand,
     state: SharedState,
     fds: Descriptors,
@@ -47,6 +54,34 @@ async fn if_body(
 ) -> Outcome {
     let branches =
         std::iter::once((command.condition, command.then_branch)).chain(command.elif_branches);
+    for (condition, body) in branches {
+        let result =
+            sequence_owned(condition, state.clone(), fds.clone(), context.condition()).await;
+        if result.flow != Flow::Normal {
+            return result;
+        }
+        if result.code == 0 {
+            return sequence_owned(body, state, fds, context).await;
+        }
+    }
+    match command.else_branch {
+        Some(body) => sequence_owned(body, state, fds, context).await,
+        None => Outcome::status(0),
+    }
+}
+
+async fn if_body(
+    command: &IfCommand,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    let branches = std::iter::once((&command.condition, &command.then_branch)).chain(
+        command
+            .elif_branches
+            .iter()
+            .map(|branch| (&branch.0, &branch.1)),
+    );
     for (condition, body) in branches {
         let result = sequence(condition, state.clone(), fds.clone(), context.condition()).await;
         if result.flow != Flow::Normal {
@@ -56,7 +91,7 @@ async fn if_body(
             return sequence(body, state, fds, context).await;
         }
     }
-    match command.else_branch {
+    match &command.else_branch {
         Some(body) => sequence(body, state, fds, context).await,
         None => Outcome::status(0),
     }
@@ -64,7 +99,7 @@ async fn if_body(
 
 #[inline(never)]
 pub(super) fn run_for<'a>(
-    command: ForCommand,
+    command: &'a ForCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
@@ -77,14 +112,31 @@ pub(super) fn run_for<'a>(
     )
 }
 
+async fn run_loop_body(
+    body: &[Command],
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+    cache: Option<&CachedArithmetic>,
+    result: &mut Outcome,
+) -> Option<Outcome> {
+    let outcome = loop_sequence(body, state, fds, context, cache).await;
+    match loop_step(outcome, context.loop_depth) {
+        LoopStep::Normal(outcome) => *result = outcome,
+        LoopStep::Continue => *result = Outcome::status(0),
+        LoopStep::Stop(outcome) => return Some(outcome),
+    }
+    None
+}
+
 async fn for_body(
-    mut command: ForCommand,
+    command: &ForCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
     work: &mut expand::Work,
 ) -> Outcome {
-    let values = match for_values(&command, &state, &fds, &context, work).await {
+    let values = match for_values(command, &state, &fds, &context, work).await {
         Ok(values) => values,
         Err(outcome) => return outcome,
     };
@@ -93,14 +145,13 @@ async fn for_body(
     let context = context.loop_body();
     let mut result = Outcome::status(0);
     for value in values {
-        if let Err(outcome) = for_assignment(&mut command, value, &state, &fds, &context).await {
+        if let Err(outcome) = for_assignment(command, value, &state, &fds, &context).await {
             return outcome;
         }
-        let outcome = loop_sequence(&command.body, &state, &fds, &context, None).await;
-        match loop_step(outcome, context.loop_depth) {
-            LoopStep::Normal(outcome) => result = outcome,
-            LoopStep::Continue => result = Outcome::status(0),
-            LoopStep::Stop(outcome) => return outcome,
+        if let Some(stop) =
+            run_loop_body(&command.body, &state, &fds, &context, None, &mut result).await
+        {
+            return stop;
         }
     }
     result
@@ -218,7 +269,7 @@ async fn for_values_body(
 
 #[inline(never)]
 fn for_assignment<'a>(
-    command: &'a mut ForCommand,
+    command: &'a ForCommand,
     value: String,
     state: &'a SharedState,
     fds: &'a Descriptors,
@@ -231,7 +282,7 @@ fn for_assignment<'a>(
 }
 
 async fn for_assignment_body(
-    command: &mut ForCommand,
+    command: &ForCommand,
     value: String,
     state: &SharedState,
     fds: &Descriptors,
@@ -267,7 +318,7 @@ async fn for_assignment_body(
         .is_err()
     {
         let error = expand::Error::Readonly {
-            name: std::mem::take(&mut command.variable),
+            name: command.variable.clone(),
             line: Some(command.span.start.line),
             expansion: false,
         };
@@ -285,18 +336,20 @@ async fn for_assignment_body(
 #[inline(never)]
 fn arithmetic_clause<'a>(
     source: &'a str,
+    cache: Option<&'a CachedArithmetic>,
     state: &'a SharedState,
     fds: &'a Descriptors,
     context: &'a Context,
 ) -> eval::Frame<'a, Result<i64, Outcome>> {
     context.evaluation.frame(
-        arithmetic_clause_body(source, state, fds, context),
+        arithmetic_clause_body(source, cache, state, fds, context),
         |code| Err(Outcome::status(code)),
     )
 }
 
 async fn arithmetic_clause_body(
     source: &str,
+    cache: Option<&CachedArithmetic>,
     state: &SharedState,
     fds: &Descriptors,
     context: &Context,
@@ -305,15 +358,22 @@ async fn arithmetic_clause_body(
         return Ok(0);
     }
     let mut work = substitution_work(context, fds, None);
-    match arithmetic::evaluate(
-        source,
-        state,
-        &context.cancel,
-        context.limits().expansion_bytes,
-        &mut work,
-    )
-    .await
-    {
+    let max = context.limits().expansion_bytes;
+    let result = match cache.and_then(CachedArithmetic::acquire) {
+        Some(active) => {
+            arithmetic::evaluate_program(
+                source,
+                &active.program,
+                state,
+                &context.cancel,
+                max,
+                &mut work,
+            )
+            .await
+        }
+        None => arithmetic::evaluate(source, state, &context.cancel, max, &mut work).await,
+    };
+    match result {
         Ok(value) => Ok(value),
         Err(error) => {
             let ordinary = matches!(
@@ -350,11 +410,11 @@ async fn arithmetic_clause_body(
 
 #[inline(never)]
 pub(super) fn run_arithmetic_for(
-    command: ArithmeticForCommand,
+    command: &ArithmeticForCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
-) -> eval::Frame<'static> {
+) -> eval::Frame<'_> {
     let evaluation = context.evaluation.clone();
     evaluation.frame(
         arithmetic_for_body(command, state, fds, context),
@@ -363,35 +423,55 @@ pub(super) fn run_arithmetic_for(
 }
 
 async fn arithmetic_for_body(
-    command: ArithmeticForCommand,
+    command: &ArithmeticForCommand,
     state: SharedState,
     fds: Descriptors,
     context: Context,
 ) -> Outcome {
-    if let Err(outcome) = arithmetic_clause(&command.init, &state, &fds, &context).await {
+    if let Err(outcome) = arithmetic_clause(&command.init, None, &state, &fds, &context).await {
         return outcome;
     }
     let context = context.loop_body();
+    let condition = &command.condition;
+    let has_condition = !condition.trim().is_empty();
+    let condition_cache = cache_arithmetic(condition, &context).await;
+    let mut step_cache: Option<Option<CachedArithmetic>> = None;
+    let body_cache = cache_loop_arithmetic(&command.body, &context).await;
     let mut result = Outcome::status(0);
     let mut budget = Budget::default();
     loop {
         if let Err(outcome) = loop_checkpoint(&mut budget, &context).await {
             return outcome;
         }
-        if !command.condition.trim().is_empty() {
-            match arithmetic_clause(&command.condition, &state, &fds, &context).await {
-                Ok(0) => return result,
-                Ok(_) => {}
-                Err(outcome) => return outcome,
-            }
+        let test = if has_condition {
+            arithmetic_clause(condition, condition_cache.as_ref(), &state, &fds, &context).await
+        } else {
+            Ok(1)
+        };
+        match test {
+            Ok(0) => return result,
+            Ok(_) => {}
+            Err(outcome) => return outcome,
         }
-        let outcome = loop_sequence(&command.body, &state, &fds, &context, None).await;
-        match loop_step(outcome, context.loop_depth) {
-            LoopStep::Normal(outcome) => result = outcome,
-            LoopStep::Continue => result = Outcome::status(0),
-            LoopStep::Stop(outcome) => return outcome,
+        if let Some(stop) = run_loop_body(
+            &command.body,
+            &state,
+            &fds,
+            &context,
+            body_cache.as_ref(),
+            &mut result,
+        )
+        .await
+        {
+            return stop;
         }
-        if let Err(outcome) = arithmetic_clause(&command.step, &state, &fds, &context).await {
+        let step = match &mut step_cache {
+            Some(cached) => cached.as_ref(),
+            None => step_cache
+                .insert(cache_arithmetic(&command.step, &context).await)
+                .as_ref(),
+        };
+        if let Err(outcome) = arithmetic_clause(&command.step, step, &state, &fds, &context).await {
             return outcome;
         }
     }

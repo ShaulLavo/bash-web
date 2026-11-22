@@ -62,7 +62,7 @@ pub(crate) async fn builtin_assignment(
     if !state.borrow().xtrace || context.trace.prompt {
         return Ok(());
     }
-    let descriptors = std::rc::Rc::new(std::cell::RefCell::new(fds.clone()));
+    let descriptors = std::rc::Rc::new(super::DescriptorTable::new(fds.clone()));
     match trace_assignment(
         name,
         AssignmentValue::Expanded(value),

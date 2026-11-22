@@ -34,6 +34,29 @@ fn c_style_for_handles_empty_clauses_and_arithmetic_updates() {
 }
 
 #[test]
+fn c_style_for_reexpands_dynamic_clauses_and_skips_unreached_arithmetic() {
+    let rig = Rig::new(Limits::default());
+    assert_eq!(
+        rig.run(
+            r#"
+            limit='i < 3'; next='i += 1'; total=0
+            for ((i=0; $limit; $next)); do
+                ((total+=i))
+                next='i += 2'
+                limit='i < 4'
+            done
+            printf '%s %s\n' "$total" "$i"
+            for ((i=0; i<0; 1/0)); do ((1/0)); done
+            echo "unused:$?"
+            "#
+        ),
+        0
+    );
+    assert_eq!(rig.output.bytes(), b"2 4\nunused:0\n");
+    assert!(rig.errors.bytes().is_empty());
+}
+
+#[test]
 fn case_preserves_quoted_patterns_and_supports_case_fallthrough() {
     check_output(
         "x=foo; case \"$x\" in \"f\"*) echo first;;& *o) echo second;;& foo) echo third;; esac; x=bar; case \"$x\" in \"b*\") echo quoted;;& b*) echo unquoted;; esac",
