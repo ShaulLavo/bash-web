@@ -166,6 +166,20 @@ fn admit_string_growth(value: &mut String, bytes: usize, work: &mut Work) -> Res
         .map_err(|_| Error::Status(2))
 }
 
+fn can_admit_bulk_string_growth(value: &String, bytes: usize, work: &Work) -> bool {
+    let Some(needed) = value.len().checked_add(bytes) else {
+        return false;
+    };
+    if needed <= value.capacity() {
+        return true;
+    }
+    let Some(pow2) = needed.checked_next_power_of_two() else {
+        return false;
+    };
+    let capacity = pow2.max(value.capacity().saturating_mul(2)).max(8);
+    capacity.saturating_sub(value.capacity()) <= work.storage_left()
+}
+
 fn admit_bulk_string_growth(
     value: &mut String,
     bytes: usize,
@@ -404,6 +418,37 @@ impl Segments {
             glob_protected,
         });
         Ok(())
+    }
+    fn can_bulk_protected(&self, text: &str, work: &Work) -> bool {
+        if !self.account_storage {
+            return true;
+        }
+        if let Some(Segment::Text {
+            value,
+            protected: true,
+            glob_protected: true,
+        }) = self.parts.last()
+        {
+            return can_admit_bulk_string_growth(value, text.len(), work);
+        }
+        let slot_bytes = if self.parts.len() == self.parts.capacity() {
+            let capacity = self.parts.capacity().saturating_mul(2).max(1);
+            let Some(bytes) =
+                (capacity - self.parts.capacity()).checked_mul(std::mem::size_of::<Segment>())
+            else {
+                return false;
+            };
+            bytes
+        } else {
+            0
+        };
+        let Some(pow2) = text.len().checked_next_power_of_two() else {
+            return false;
+        };
+        let string_bytes = pow2.max(8);
+        slot_bytes
+            .checked_add(string_bytes)
+            .is_some_and(|need| need <= work.storage_left())
     }
     fn protected_text(&mut self, text: &str, work: &mut Work) -> Result<(), Error> {
         if let Some(Segment::Text {
@@ -650,19 +695,10 @@ impl Fields {
         if total > self.max_bytes.saturating_sub(self.bytes) {
             return false;
         }
-        if self.joined || self.account_storage {
-            let Some(needed) = self.current.len().checked_add(total) else {
-                return false;
-            };
-            if needed > self.current.capacity() {
-                let Some(pow2) = needed.checked_next_power_of_two() else {
-                    return false;
-                };
-                let capacity = pow2.max(self.current.capacity().saturating_mul(2)).max(8);
-                if capacity.saturating_sub(self.current.capacity()) > work.storage_left() {
-                    return false;
-                }
-            }
+        if (self.joined || self.account_storage)
+            && !can_admit_bulk_string_growth(&self.current, total, work)
+        {
+            return false;
         }
         if self.pathname
             && self.account_storage
@@ -1062,7 +1098,9 @@ impl Expansion<'_> {
             }
             return Ok(());
         }
-        if matches!(protection, Protection::All) {
+        if matches!(protection, Protection::All)
+            && self.segments.can_bulk_protected(value, self.work)
+        {
             self.work
                 .checkpoint_steps(value.chars().count(), self.cancel)
                 .await?;
@@ -3673,6 +3711,26 @@ mod tests {
             fields
                 .segment(segment, &ifs, &mut work, &cancel)
                 .now_or_never(),
+            Some(Err(Error::Status(2)))
+        ));
+    }
+
+    #[test]
+    fn quoted_for_list_word_rejects_storage_limit_before_yielding() {
+        let state = State::default().shared();
+        let word = Word::quoted_literal("a".repeat(128));
+        let cancel = Cancel::new();
+        let mut work = Work::new(1024, 0, 2);
+        let mut expand = std::pin::pin!(fields(
+            &word,
+            &state,
+            &cancel,
+            FieldContext::ForList,
+            (1024, 16, 1024),
+            &mut work,
+        ));
+        assert!(matches!(
+            expand.as_mut().now_or_never(),
             Some(Err(Error::Status(2)))
         ));
     }

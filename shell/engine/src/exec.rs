@@ -709,6 +709,13 @@ mod tests {
         ));
     }
 
+    fn run_scalar_checkpoints(work: &mut Work, steps: usize, cancel: &Cancel) -> Result<(), Error> {
+        for _ in 0..steps {
+            work.checkpoint(cancel).now_or_never().unwrap()?;
+        }
+        Ok(())
+    }
+
     #[test]
     fn host_interrupt_beats_work_exhaustion_in_scalar_and_batched_checkpoints() {
         for batched in [false, true] {
@@ -723,14 +730,7 @@ mod tests {
             let result = if batched {
                 work.checkpoint_steps(9, &cancel).now_or_never().unwrap()
             } else {
-                let mut outcome = Ok(());
-                for _ in 0..9 {
-                    outcome = work.checkpoint(&cancel).now_or_never().unwrap();
-                    if outcome.is_err() {
-                        break;
-                    }
-                }
-                outcome
+                run_scalar_checkpoints(&mut work, 9, &cancel)
             };
             assert!(
                 matches!(result, Err(Error::Status(130))),

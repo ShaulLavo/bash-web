@@ -681,7 +681,9 @@ mod tests {
             count.set(next);
             next >= 2
         }));
-        assert!(!parent.probe_now());
+        for _ in 0..15 {
+            assert!(!parent.is_cancelled());
+        }
         let child = parent.child();
         let mut buf = [0u8; 1];
         let result = read_chunk(&reader, &mut buf, &child, None)
