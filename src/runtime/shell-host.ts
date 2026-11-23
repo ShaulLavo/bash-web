@@ -174,6 +174,21 @@ function shellArguments(options: ShellOptions, promptHost: PromptHost | undefine
   );
 }
 
+function startEarlyWorker(url: string, failed: (message: string) => void): Worker | undefined {
+  if (typeof Worker !== "function") return undefined;
+  let worker: Worker;
+  try {
+    worker = new Worker(url, { type: "module" });
+  } catch {
+    return undefined;
+  }
+  worker.onerror = (event) => {
+    event.preventDefault();
+    failed(event.message || "the worker script failed to load");
+  };
+  return worker;
+}
+
 export async function startShell(
   options: ShellOptions,
   terminal: SharedBridge,
@@ -225,7 +240,14 @@ export async function startShell(
     service.outputDrained(state.pid);
   });
   let worker: Worker | undefined;
+  // Created before the process service is ready; until handoff no request has been posted to
+  // it and nothing else owns it, so every unwinding path terminates it here.
   let early: Worker | undefined;
+  let earlyFailure: string | undefined;
+  const dropEarly = () => {
+    early?.terminate();
+    early = undefined;
+  };
   let acknowledged = false;
   let finished = false;
   let accepted = false;
@@ -253,6 +275,8 @@ export async function startShell(
   });
   void aborted.catch(() => {});
   const abort = () => {
+    // Root admission is joined without pending(); do not leave the unposted worker to it.
+    dropEarly();
     rejectAbort(options.signal!.reason);
   };
   const pending = async <T>(task: () => Promise<T>): Promise<T> => {
@@ -285,6 +309,7 @@ export async function startShell(
   const physicallyStop = () =>
     (physicallyStopped ??= (async () => {
       unobserveExit();
+      dropEarly();
       await terminalController?.quiesce();
       await quiesceTerminal(admission);
       await stopWorker(worker);
@@ -334,6 +359,7 @@ export async function startShell(
     void clean().catch((error) => console.error("Shell root cleanup failed", error));
   };
   const revoke = () => {
+    dropEarly();
     revokeTerminal(admission);
     rejectAbort(new Error("Runtime is disposed"));
     finish({ code: 137, error: "Runtime was disposed" }, false, 9);
@@ -366,8 +392,13 @@ export async function startShell(
     transport.data = { ...workerData, ...terminalController.metadata };
     // A fresh module worker, as ProcessService.takeWorker makes. Creating it now loads
     // and evaluates its script while the guest downloads and the process service
-    // starts. It stays inert until the request below.
-    early = new Worker(registration.workerUrl, { type: "module" });
+    // starts. It stays inert until the request below. A script failure fires before the
+    // real handlers exist, so keep it for the handoff. A host without Worker, or one that
+    // refuses construction, gets its worker from the service at handoff, which fails there
+    // as it always has.
+    early = startEarlyWorker(registration.workerUrl, (message) => {
+      earlyFailure ??= message;
+    });
     const [, [loaded, promptHosting], processes] = await pending(() =>
       Promise.all([
         startupTask("registration", () => registration.initialize(options.onStartupStage)),
@@ -443,7 +474,8 @@ export async function startShell(
       env,
       wake: wakePrompt,
     });
-    worker = early;
+    if (earlyFailure !== undefined) throw new Error(`Shell worker failed: ${earlyFailure}`);
+    worker = early ?? service.takeWorker(registration.workerUrl);
     early = undefined;
     worker.onmessage = ({ data: message }: MessageEvent<ShellWorkerMessage>) => {
       if (runtime.disposed) return;

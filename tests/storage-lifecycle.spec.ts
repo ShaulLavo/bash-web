@@ -133,7 +133,10 @@ for (const whenBusy of ["takeover", "wait"]) {
     if (whenBusy === "wait") query.set("whenBusy", "wait");
     await navigateTestPage(page, `/?${query}`);
     await expect.poll(() => heldOpens).toBe(1);
-    expect(await page.evaluate(() => window.bashWeb?.snapshot().storage?.status)).toBe("opening");
+    // Storage can reach the held open before the terminal has opened and storage is observed.
+    await expect
+      .poll(() => page.evaluate(() => window.bashWeb?.snapshot().storage?.status))
+      .toBe("opening");
     expect(await page.evaluate(() => window.bashWeb?.metrics())).toBeUndefined();
     await expect(page.getByRole("alert")).toHaveCount(0);
 

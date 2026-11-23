@@ -347,6 +347,9 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         disposeRuntime = () => lease.dispose();
         workspace = lease.workspace;
         leasedRuntime = lease.runtime;
+        // Its failure is reported through the Promise.all below; a stop during terminal
+        // opening never reaches that, so observe it now.
+        void lease.ready.catch(() => {});
         markStartup(onStartupStage, "terminal-open-requested");
         const current = await openTerminal(host);
         markStartup(onStartupStage, "terminal-open-resolved");

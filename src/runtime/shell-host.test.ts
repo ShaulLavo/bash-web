@@ -960,6 +960,25 @@ test("worker construction failure retires the fork without disposing its owner",
   assert.ok(host.events.includes("port-closed"));
 });
 
+test("a worker script failure before the request is posted fails startup", async (context) => {
+  const host = await fixture(context);
+  const Fixture = globalThis.Worker as unknown as new () => {
+    onerror?: (event: { message: string; preventDefault(): void }) => void;
+  };
+  // The worker starts loading while the guest downloads; its error fires before handoff.
+  globalThis.Worker = class extends Fixture {
+    constructor() {
+      super();
+      queueMicrotask(() => this.onerror?.({ message: "404 Not Found", preventDefault() {} }));
+    }
+  } as unknown as typeof Worker;
+  await assert.rejects(createShell(host.options), /Shell worker failed: 404 Not Found/);
+  assert.equal(host.requests.length, 0);
+  assert.equal(host.terminated, 1);
+  assert.equal(host.runtime.disposed, false);
+  assert.equal(host.consumers.size, 0);
+});
+
 test("page disposal retains a lazy shell consumer until its owner fences and stops it", async (context) => {
   const host = await fixture(context);
   let entered!: () => void;
