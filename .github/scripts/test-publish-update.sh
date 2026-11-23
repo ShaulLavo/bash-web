@@ -154,7 +154,8 @@ git restore -- package.json
 if bash .github/scripts/publish-update.sh; then echo 'Manifest code change was accepted' >&2; exit 1; fi
 git restore -- package.json
 # Only an exact runtime release passes as a pin: no ranges, no other package behind the alias.
-for spec in 'npm:@waffle-os/runtime@^0.0.4' 'npm:@waffle-os/relay@0.0.4' 'npm:left-pad@1.3.0'; do
+for spec in 'npm:@waffle-os/runtime@^0.0.4' 'npm:@waffle-os/relay@0.0.4' 'npm:left-pad@1.3.0' \
+  'npm:@waffle-os/runtime@00.0.4' 'npm:@waffle-os/runtime@0.0.4\n'; do
   git switch -q --detach "$base"
   printf '{"dependencies":{"waffle":"%s"}}\n' "$spec" > package.json
   git diff > "$scratch/artifact/update.patch"

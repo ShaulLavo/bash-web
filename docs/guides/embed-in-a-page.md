@@ -24,7 +24,7 @@ bash-web is not on npm. Use it from a checkout of the repository.
 Waffle is published to npm as `@waffle-os/runtime`. bash-web imports it as `waffle`, so install it under that name with an npm alias, at the version `sources.lock.json` selects (`waffle.version`, currently `0.0.147`):
 
 ```sh
-npm install waffle@npm:@waffle-os/runtime@0.0.147
+npm install --save-exact waffle@npm:@waffle-os/runtime@0.0.147
 # or
 bun add waffle@npm:@waffle-os/runtime@0.0.147
 ```
