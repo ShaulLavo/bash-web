@@ -150,7 +150,7 @@ pub(super) async fn run(
         if result.flow == Flow::SpawnFailed {
             return result;
         }
-        if context.interrupted_now() {
+        if context.cancel.is_cancelled() {
             return Outcome::status(130);
         }
         if result.flow == Flow::Resource {
