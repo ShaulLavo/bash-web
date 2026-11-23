@@ -447,6 +447,22 @@ impl Context {
             cancel.probe_now()
         })))
     }
+    /// Ask the host for a pending Ctrl+C now, as bash does after each command. The ordinary
+    /// cancellation check consults the host only every few hundred calls, and several short
+    /// commands can finish in between. Consume it through the foreground owner, which holds
+    /// the host probe, then test this context's own token without canceling background.
+    pub(crate) fn interrupted_now(&self) -> bool {
+        let foreground = self
+            .core
+            .foreground
+            .borrow()
+            .as_ref()
+            .map(|job| job.cancel.clone());
+        if let Some(foreground) = foreground {
+            foreground.probe_now();
+        }
+        self.cancel.probe_now()
+    }
     pub(crate) fn loop_depth(&self) -> usize {
         self.loop_depth
     }
@@ -1542,7 +1558,7 @@ async fn execute_owned_list(
             Some((ListOperator::Semicolon, next)) => {
                 let result =
                     execute_owned_and_or(first, links, state.clone(), fds.clone(), &context).await;
-                if result.flow != Flow::Normal || context.cancel.is_cancelled() {
+                if result.flow != Flow::Normal || context.interrupted_now() {
                     return result;
                 }
                 first = next;
@@ -2904,7 +2920,7 @@ async fn list_command(
         } else {
             execute_and_or(first, links, state.clone(), fds.clone(), &context).await
         };
-        if result.flow != Flow::Normal || context.cancel.is_cancelled() {
+        if result.flow != Flow::Normal || context.interrupted_now() {
             return result;
         }
         first = next;
@@ -5745,6 +5761,17 @@ mod residual_review_tests {
         fn interrupted(&self) -> bool {
             self.interrupt.replace(false)
         }
+        fn shell_pid(&self) -> Option<ProcessId> {
+            Some(1)
+        }
+        /// Like the browser host: SIGINT to the shell becomes its pending interrupt.
+        fn signal_self(&self, signal: i32) -> Result<(), ProcessError> {
+            if signal != 2 {
+                return Err(ProcessError::Runtime(58));
+            }
+            self.interrupt.set(true);
+            Ok(())
+        }
         fn check_stop(&self) {
             self.stop_checks.set(self.stop_checks.get() + 1);
         }
@@ -6081,6 +6108,15 @@ mod residual_review_tests {
             "a residual monitor must only observe explicit lifetime cancellation"
         );
         drop(context);
+        rig.shutdown();
+    }
+    #[test]
+    fn an_interrupt_during_a_builtin_stops_the_rest_of_the_list_and_its_exit() {
+        let rig = Harness::new();
+        // The host's SIGINT lands while a builtin runs; the list must stop before the next
+        // command and before `exit` commits a different status.
+        assert_eq!(rig.run("kill -INT $$; echo unwanted; exit 7"), 130);
+        assert_eq!(rig.output.bytes(), b"");
         rig.shutdown();
     }
     #[test]
