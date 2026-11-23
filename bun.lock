@@ -29,7 +29,7 @@
         "remix": "3.0.0",
         "typescript": "7.0.2",
         "vite": "8.3.3",
-        "waffle": "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.145/waffle-0.0.145.tgz",
+        "waffle": "npm:@waffle-os/runtime@0.0.147",
         "yaml": "2.9.1",
       },
       "peerDependencies": {
@@ -955,7 +955,7 @@
 
     "vite": ["vite@8.3.3", "", { "dependencies": { "lightningcss": "^1.33.0", "picomatch": "^4.0.7", "postcss": "^8.5.28", "rolldown": "~1.2.11", "tinyglobby": "^0.2.17" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "@vitejs/devtools": "^0.7.1", "esbuild": "^0.27.0 || ^0.28.0", "jiti": ">=1.21.0", "less": "^4.0.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "@vitejs/devtools", "esbuild", "jiti", "less", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": "bin/vite.js" }, "sha512-cTAldKPImjg6c+gk48U19POPn3GCBzZwpdsN8ZMEEcbpes+6/wvfqUd0C2y3qYY4wsj8PwgFwrZ/1jBPVttMSg=="],
 
-    "waffle": ["waffle@https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.145/waffle-0.0.145.tgz", { "hasInstallScript": true }, "sha512-5TsawiWM3EskzH6NtV+OdT5YxWMPuY/6JQEod69fd41xbD9iC0vIAUEiVrYZ2I2lTmamI1FBXyPTm0j7aEynQw=="],
+    "waffle": ["@waffle-os/runtime@0.0.147", "", {}, "sha512-SXj3r8FwiQS8JTU1iuvihewLLsjHeHacqpD+sw6U3zqGf6MHarBR9CKCFvQ2dbfbqkdJRYZzwHfn20SDmG9tPA=="],
 
     "waffle-base": ["waffle-base@https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-base-0.0.23.tgz", { "dependencies": { "waffle-coreutils": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-coreutils-0.0.23.tgz", "waffle-findutils": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-findutils-0.0.23.tgz", "waffle-grep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-grep-0.0.23.tgz", "waffle-ripgrep": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-ripgrep-0.0.23.tgz", "waffle-sed": "https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.23/waffle-sed-0.0.23.tgz" }, "peerDependencies": { "waffle": "*" } }, "sha512-eF2Wlxo8ulWkqPAoS6NFSpim2GW85Dg2cekKJGrgGHRa84z0N/F25tGHUG+Wcz6aogGAPyBOoAG/k6C9E8Enjw=="],
 

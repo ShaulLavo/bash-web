@@ -36,18 +36,20 @@ release_source_revision() {
   printf '%s\n' "$direct"
 }
 
+# The runtime is published to npm as @waffle-os/runtime and installed under the `waffle` alias.
 update_runtime() {
-  local tag version current_version revision specifier archive_sha archive_bytes builder_sha patch_sha tmp
-  tag=$(latest_release_tag ShaulLavo/waffle waffle-v)
-  version=${tag#waffle-v}
+  local tag version current_version revision specifier tarball archive_sha archive_bytes builder_sha patch_sha tmp
+  tag=$(latest_release_tag ShaulLavo/waffle '@waffle-os/runtime@')
+  version=${tag#@waffle-os/runtime@}
   current_version=$(jq -r '.waffle.version' sources.lock.json)
   if [[ "$version" == "$current_version" ]]; then
     return
   fi
 
   revision=$(release_source_revision https://github.com/ShaulLavo/waffle.git "$tag") || return
-  specifier="https://github.com/ShaulLavo/waffle/releases/download/${tag}/waffle-${version}.tgz"
-  curl --fail --location --silent --show-error "$specifier" > "$scratch/runtime.tgz"
+  specifier="npm:@waffle-os/runtime@${version}"
+  tarball="https://registry.npmjs.org/@waffle-os/runtime/-/runtime-${version}.tgz"
+  curl --fail --location --silent --show-error "$tarball" > "$scratch/runtime.tgz"
   node scripts/check-waffle-release.ts runtime "$scratch/runtime.tgz" "$version"
   archive_sha=$(sha256sum "$scratch/runtime.tgz" | cut -d ' ' -f 1)
   archive_bytes=$(wc -c < "$scratch/runtime.tgz")
@@ -61,12 +63,13 @@ update_runtime() {
   sed -i "s|$(jq -r '.waffle.specifier' sources.lock.json)|${specifier}|g" package.json
   tmp=$(mktemp)
   jq --arg version "$version" --arg tag "$tag" --arg revision "$revision" \
-    --arg specifier "$specifier" --arg archive_sha "$archive_sha" --arg builder_sha "$builder_sha" \
-    --arg patch_sha "$patch_sha" --argjson archive_bytes "$archive_bytes" \
+    --arg specifier "$specifier" --arg tarball "$tarball" --arg archive_sha "$archive_sha" \
+    --arg builder_sha "$builder_sha" --arg patch_sha "$patch_sha" --argjson archive_bytes "$archive_bytes" \
     '.waffle.version = $version
      | .waffle.tag = $tag
      | .waffle.revision = $revision
      | .waffle.specifier = $specifier
+     | .waffle.tarball = $tarball
      | .waffle.archiveSha256 = $archive_sha
      | .waffle.archiveBytes = $archive_bytes
      | .waffle.buildInputs.builderSha256 = $builder_sha
@@ -89,8 +92,13 @@ update_programs() {
   [[ "$version" == "$current_version" ]] && return 0
   local manifest_url manifest_sha manifest_bytes tmp
   manifest_url="https://github.com/ShaulLavo/waffle/releases/download/${tag}/program-release.json"
-  curl --fail --location --silent --show-error "$manifest_url" > "$scratch/program-release.json"
-  node scripts/check-waffle-release.ts programs "$scratch/program-release.json" "$version"
+  # A program release without a receipt for the pinned runtime must not block a runtime update
+  # in the same run. Leave the program pins as they are and say so; nothing is written before this.
+  if ! curl --fail --location --silent --show-error "$manifest_url" > "$scratch/program-release.json" ||
+    ! node scripts/check-waffle-release.ts programs "$scratch/program-release.json" "$version"; then
+    echo "::warning::Skipped Waffle programs ${tag}: its program-release.json is missing or does not match the pinned runtime."
+    return 0
+  fi
   manifest_sha=$(sha256sum "$scratch/program-release.json" | cut -d ' ' -f 1)
   manifest_bytes=$(wc -c < "$scratch/program-release.json")
   tmp=$(mktemp)

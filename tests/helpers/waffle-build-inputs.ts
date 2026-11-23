@@ -16,8 +16,8 @@ export function waffleBuildFixture(root: string, builder: string, patch: string)
     hostInterface: 1,
     revision: hash(builder + patch).slice(0, 40),
     version: "0.0.91",
-    specifier:
-      "https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.91/waffle-0.0.91.tgz",
+    specifier: "npm:@waffle-os/runtime@0.0.91",
+    tarball: "https://registry.npmjs.org/@waffle-os/runtime/-/runtime-0.0.91.tgz",
     buildInputs: {
       packagePath: "packages/waffle",
       builderSha256: hash(builder),
@@ -41,7 +41,7 @@ export function waffleBuildFixture(root: string, builder: string, patch: string)
   put(
     "node_modules/waffle/package.json",
     JSON.stringify({
-      name: "waffle",
+      name: "@waffle-os/runtime",
       waffleHostInterface: waffle.hostInterface,
       version: waffle.version,
       exports: { "./program-build-tools": "./program-build-tools.mjs" },

@@ -27,12 +27,7 @@ export function nativeInputs(
   scripts: unknown = {},
   dependencies = "",
 ) {
-  if (
-    typeof waffle !== "string" ||
-    !/^https:\/\/github\.com\/ShaulLavo\/waffle\/releases\/download\/waffle-v(\d+\.\d+\.\d+)\/waffle-\1\.tgz$/.test(
-      waffle,
-    )
-  )
+  if (typeof waffle !== "string" || !/^npm:@waffle-os\/runtime@\d+\.\d+\.\d+$/.test(waffle))
     throw new Error("Expected the pinned Waffle build dependency");
   return JSON.stringify([
     entries.filter((entry) => nativePaths.test(entry.split("\t")[1])),
