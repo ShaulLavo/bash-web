@@ -335,6 +335,18 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         markStartup(onStartupStage, "previous-stop-resolved");
         if (generation !== expectedGeneration || handle.signal.aborted) return;
         checkCapabilities();
+        // The filesystem worker starts and storage opens while the terminal loads its
+        // renderer. stop() and fail() dispose the lease, so an early return leaks nothing.
+        markStartup(onStartupStage, "runtime-lease-requested");
+        const lease = acquireBrowserRuntime(options, {
+          workerURL: filesystemWorkerUrl,
+          search: location.search,
+          onStartupStage,
+        });
+        // The owner must make lease disposal idempotent, including during preparation.
+        disposeRuntime = () => lease.dispose();
+        workspace = lease.workspace;
+        leasedRuntime = lease.runtime;
         markStartup(onStartupStage, "terminal-open-requested");
         const current = await openTerminal(host);
         markStartup(onStartupStage, "terminal-open-resolved");
@@ -346,16 +358,6 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         performance.mark("bash:terminal-opened");
         if (current.textarea) current.textarea.disabled = true;
         wireTerminal(current, expectedGeneration);
-        markStartup(onStartupStage, "runtime-lease-requested");
-        const lease = acquireBrowserRuntime(options, {
-          workerURL: filesystemWorkerUrl,
-          search: location.search,
-          onStartupStage,
-        });
-        // The owner must make lease disposal idempotent, including during preparation.
-        disposeRuntime = () => lease.dispose();
-        workspace = lease.workspace;
-        leasedRuntime = lease.runtime;
         const controller = new AbortController();
         startup = controller;
         await Promise.all([

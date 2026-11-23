@@ -15,6 +15,19 @@ async function waiting(page: Page) {
   await expect(page.getByText("Waiting for another tab to release storage…")).toBeVisible();
 }
 
+/** Serializes `hook` into only the first filesystem worker response. One-shot by hand, not
+ * `times: 1`: the filesystem worker can load while navigateTestPage's WebKit document route is
+ * still installed, and an expiring route beside it rejects with "Route is already handled!". */
+async function prefixFirstFilesystemWorker(page: Page, hook: () => void) {
+  let used = false;
+  await page.route("**/fs-worker*.js", async (route) => {
+    if (used) return route.fallback();
+    used = true;
+    const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
+    await route.fulfill({ response, body: `(${hook.toString()})();\n${await response.text()}` });
+  });
+}
+
 for (const storage of ["opfs", "indexeddb"]) {
   const storageTest = storage === "opfs" ? opfsTest : test;
   storageTest(
@@ -108,17 +121,7 @@ for (const whenBusy of ["takeover", "wait"]) {
     page.on("console", (message) => {
       if (message.text() === "bash-web:test:indexeddb-open-held") heldOpens++;
     });
-    await page.route(
-      "**/fs-worker*.js",
-      async (route) => {
-        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
-        await route.fulfill({
-          response,
-          body: `(${holdIndexedDBOpen.toString()})();\n${await response.text()}`,
-        });
-      },
-      { times: 1 },
-    );
+    await prefixFirstFilesystemWorker(page, holdIndexedDBOpen);
     await page.clock.install();
     const query = new URLSearchParams({
       test: "1",
@@ -205,17 +208,7 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
     second.on("console", (message) => {
       if (message.text() === "bash-web:test:indexeddb-epoch-held") heldEpochs++;
     });
-    await second.route(
-      "**/fs-worker*.js",
-      async (route) => {
-        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
-        await route.fulfill({
-          response,
-          body: `(${holdIndexedDBEpoch.toString()})();\n${await response.text()}`,
-        });
-      },
-      { times: 1 },
-    );
+    await prefixFirstFilesystemWorker(second, holdIndexedDBEpoch);
     await second.clock.install();
     await navigateTestPage(second, `/?${query}`);
     await waiting(second);

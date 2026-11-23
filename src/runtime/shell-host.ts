@@ -225,6 +225,7 @@ export async function startShell(
     service.outputDrained(state.pid);
   });
   let worker: Worker | undefined;
+  let early: Worker | undefined;
   let acknowledged = false;
   let finished = false;
   let accepted = false;
@@ -363,6 +364,10 @@ export async function startShell(
     release = runtime.retainConsumer({ filesystem: identity, revoke, stop: physicallyStop });
     terminalController = createTerminalController(runtime, transport, terminal, signalFailure);
     transport.data = { ...workerData, ...terminalController.metadata };
+    // A fresh module worker, as ProcessService.takeWorker makes. Creating it now loads
+    // and evaluates its script while the guest downloads and the process service
+    // starts. It stays inert until the request below.
+    early = new Worker(registration.workerUrl, { type: "module" });
     const [, [loaded, promptHosting], processes] = await pending(() =>
       Promise.all([
         startupTask("registration", () => registration.initialize(options.onStartupStage)),
@@ -438,7 +443,8 @@ export async function startShell(
       env,
       wake: wakePrompt,
     });
-    worker = service.takeWorker(registration.workerUrl);
+    worker = early;
+    early = undefined;
     worker.onmessage = ({ data: message }: MessageEvent<ShellWorkerMessage>) => {
       if (runtime.disposed) return;
       if (message.type === "shared-control-allocation") {
@@ -513,6 +519,9 @@ export async function startShell(
       },
     };
   } catch (error) {
+    // The early worker never received a request; nothing else owns it.
+    early?.terminate();
+    early = undefined;
     // No worker received a constructor-failed fork, so reap it without an unneeded
     // worker acknowledgement. A posted worker failure still goes through rootExit.
     if (!worker && !runtime.disposed) acknowledged = true;

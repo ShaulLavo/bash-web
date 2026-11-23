@@ -20,6 +20,10 @@ test("startup diagnostics expose a stalled shell fetch before session assignment
   try {
     await page.goto("/?test=1&renderer=canvas");
     await requested;
+    // The page's preload is the first held request; the shell's own fetch joins it later.
+    await expect
+      .poll(() => page.evaluate(() => window.bashWeb!.snapshot().startup.pending))
+      .toContain("shell-wasm-fetch-requested");
     const snapshot = await page.evaluate(() => window.bashWeb!.snapshot());
     expect(snapshot.state).toBe("starting");
     expect(snapshot.startup.pending).toContain("shell-wasm-fetch-requested");
