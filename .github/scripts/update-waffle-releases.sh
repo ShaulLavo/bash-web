@@ -92,8 +92,13 @@ update_programs() {
   [[ "$version" == "$current_version" ]] && return 0
   local manifest_url manifest_sha manifest_bytes tmp
   manifest_url="https://github.com/ShaulLavo/waffle/releases/download/${tag}/program-release.json"
-  curl --fail --location --silent --show-error "$manifest_url" > "$scratch/program-release.json"
-  node scripts/check-waffle-release.ts programs "$scratch/program-release.json" "$version"
+  # A program release without a receipt for the pinned runtime must not block a runtime update
+  # in the same run. Leave the program pins as they are and say so; nothing is written before this.
+  if ! curl --fail --location --silent --show-error "$manifest_url" > "$scratch/program-release.json" ||
+    ! node scripts/check-waffle-release.ts programs "$scratch/program-release.json" "$version"; then
+    echo "::warning::Skipped Waffle programs ${tag}: its program-release.json is missing or does not match the pinned runtime."
+    return 0
+  fi
   manifest_sha=$(sha256sum "$scratch/program-release.json" | cut -d ' ' -f 1)
   manifest_bytes=$(wc -c < "$scratch/program-release.json")
   tmp=$(mktemp)

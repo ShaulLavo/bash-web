@@ -6,7 +6,7 @@ normalize() {
     def pins:
       with_entries(
         if (.value | type) == "string" and
-          (.value | test("^(github:ShaulLavo/(tree-sitter-x|tree-sitter-md)#|git\\+https://github.com/ShaulLavo/(bash-web|waffle)\\.git#|https://github.com/ShaulLavo/(waffle|bash-web|ghostty-webgpu|singapore|hotkeys|fregat|bubli)/releases/download/)[^[:space:]]+$"))
+          (.value | test("^((github:ShaulLavo/(tree-sitter-x|tree-sitter-md)#|git\\+https://github.com/ShaulLavo/(bash-web|waffle)\\.git#|https://github.com/ShaulLavo/(waffle|bash-web|ghostty-webgpu|singapore|hotkeys|fregat|bubli)/releases/download/)[^[:space:]]+|npm:@waffle-os/runtime@[0-9]+\\.[0-9]+\\.[0-9]+)$"))
         then .value = "<owned-package-pin>" else . end);
     def section($name): if has($name) then .[$name] |= pins else . end;
     section("dependencies") | section("devDependencies") | section("peerDependencies") |

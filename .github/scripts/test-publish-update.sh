@@ -14,7 +14,7 @@ git config core.hooksPath /dev/null
 git config core.filemode true
 mkdir -p .github/scripts
 cp "$script_root/publish-update.sh" "$script_root/check-update-paths.sh" "$script_root/check-manifests.sh" .github/scripts/
-printf '{"dependencies":{"waffle":"https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.1/waffle-0.0.1.tgz"}}\n' > package.json
+printf '{"dependencies":{"waffle":"npm:@waffle-os/runtime@0.0.1"}}\n' > package.json
 cp package.json manifest-fixture.json
 printf '{}\n' > bun.lock
 git add .
@@ -22,7 +22,7 @@ git commit -qm base
 base=$(git rev-parse HEAD)
 git remote add origin "$scratch/remote.git"
 git push -q origin main
-printf '{"dependencies":{"waffle":"https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.2/waffle-0.0.2.tgz"}}\n' > package.json
+printf '{"dependencies":{"waffle":"npm:@waffle-os/runtime@0.0.2"}}\n' > package.json
 git diff > "$scratch/artifact/update.patch"
 git restore -- package.json
 cat > "$scratch/bin/gh" <<'MOCK'
@@ -70,7 +70,7 @@ bash .github/scripts/publish-update.sh
 second=$(git --git-dir="$scratch/remote.git" rev-parse refs/heads/automation/test)
 test "$first" = "$second"
 git restore --staged --worktree -- package.json
-printf '{"dependencies":{"waffle":"https://github.com/ShaulLavo/waffle/releases/download/waffle-v0.0.3/waffle-0.0.3.tgz"}}\n' > package.json
+printf '{"dependencies":{"waffle":"npm:@waffle-os/runtime@0.0.3"}}\n' > package.json
 git diff > "$scratch/artifact/update.patch"
 git restore -- package.json
 bash .github/scripts/publish-update.sh
@@ -153,6 +153,15 @@ git diff > "$scratch/artifact/update.patch"
 git restore -- package.json
 if bash .github/scripts/publish-update.sh; then echo 'Manifest code change was accepted' >&2; exit 1; fi
 git restore -- package.json
+# Only an exact runtime release passes as a pin: no ranges, no other package behind the alias.
+for spec in 'npm:@waffle-os/runtime@^0.0.4' 'npm:@waffle-os/relay@0.0.4' 'npm:left-pad@1.3.0'; do
+  git switch -q --detach "$base"
+  printf '{"dependencies":{"waffle":"%s"}}\n' "$spec" > package.json
+  git diff > "$scratch/artifact/update.patch"
+  git restore -- package.json
+  if bash .github/scripts/publish-update.sh; then echo "Alias $spec was accepted" >&2; exit 1; fi
+  git restore -- package.json
+done
 # An allowed manifest filename must still exist on the trusted base.
 git switch -q --detach "$base"
 mkdir -p packages/new-workspace

@@ -166,7 +166,7 @@ case "$url" in
       --slurpfile selected "$TEST_ROOT/sources.lock.json" \
       '{schema:"waffle-program-release/2", version:$version, sourceCommit:$source,
         tagState:"tagged", dirty:false,
-        runtime:{waffleHostInterface:1, url:$selected[0].waffle.tarball,
+        runtime:{waffleHostInterface:1, url:($ENV.PROGRAM_RUNTIME_URL // $selected[0].waffle.tarball),
           bytes:$selected[0].waffle.archiveBytes, sha256:$selected[0].waffle.archiveSha256},
         packages:[{waffleHostInterface:1}]}'
     ;;
@@ -335,6 +335,19 @@ run_incompatible_runtime_fixture() {
   "$real_git" -C "$root" diff --exit-code
 }
 run_incompatible_runtime_fixture
+run_unmatched_programs_fixture() {
+  local root="$scratch/unmatched-programs"
+  write_fixture "$root" 0.0.107 0.0.15
+  write_stubs "$root"
+  PROGRAM_RUNTIME_URL=https://github.com/ShaulLavo/waffle/releases/download/old/runtime.tgz \
+    RELEASE_RUNTIME=0.0.108 RELEASE_PROGRAM=0.0.16 GIT_REF_MODE=annotated run_updater "$root" > "$root/updater.log" 2>&1
+  grep -q 'Skipped Waffle programs programs-v0.0.16' "$root/updater.log"
+  test "$(jq -r '.waffle.version' "$root/sources.lock.json")" = 0.0.108
+  test "$(jq -r '.devDependencies.waffle' "$root/package.json")" = 'npm:@waffle-os/runtime@0.0.108'
+  test "$(jq -r '.wafflePrograms.version' "$root/sources.lock.json")" = 0.0.15
+  test "$(jq -r '.dependencies["waffle-base"]' "$root/package.json")" = 'https://github.com/ShaulLavo/waffle/releases/download/programs-v0.0.15/waffle-base-0.0.15.tgz'
+}
+run_unmatched_programs_fixture
 run_no_runtime_fixture
 run_guard_negative_fixture
 printf '%s\n' 'Waffle updater fixtures passed: unordered release selection, peeled and lightweight refs, runtime-owned support, no-runtime preservation, repeat stability, narrow manifest guards, and rejected failed/missing/invalid refs.'
