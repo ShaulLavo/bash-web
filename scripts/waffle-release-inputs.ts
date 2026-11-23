@@ -89,7 +89,8 @@ export function prepareWaffleBuildInputs(root: string, download: Download = down
   const installed = resolve(root, "node_modules/waffle");
   const metadata = json(resolve(installed, "package.json"));
   assertPackageHostInterface(metadata, release.hostInterface, "installed Waffle");
-  assert.equal(metadata.name, "waffle");
+  // Installed under the `waffle` alias; the package keeps its published name.
+  assert.equal(metadata.name, "@waffle-os/runtime");
   assert.equal(metadata.version, release.version, "Installed Waffle release mismatch");
   assert.equal(
     digest(readFileSync(resolve(installed, "scripts/build-wasi-libc.sh"))),

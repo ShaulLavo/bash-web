@@ -48,10 +48,7 @@ test("browser entry uses a placement-only Waffle peer and an exact development i
   const version = text(sourceWaffle.version);
   assert.equal(peer, "*");
   const pin = text(devDependencies.waffle);
-  assert.equal(
-    pin,
-    `https://github.com/ShaulLavo/waffle/releases/download/waffle-v${version}/waffle-${version}.tgz`,
-  );
+  assert.equal(pin, `npm:@waffle-os/runtime@${version}`);
   assert.equal(sourceWaffle.specifier, pin);
   assertPackageHostInterface(
     pkg,
@@ -69,7 +66,8 @@ test("browser entry uses a placement-only Waffle peer and an exact development i
   assert.equal(record(rootPackage.devDependencies).waffle, pin);
   const lockedWaffle = record(packages["node_modules/waffle"]);
   const resolved = lockedWaffle.resolved;
-  assert.equal(resolved, pin);
+  assert.equal(resolved, sourceWaffle.tarball);
+  assert.equal(lockedWaffle.name, "@waffle-os/runtime");
   const integrity = text(lockedWaffle.integrity);
   assert.match(integrity, /^sha512-/);
   assert.ok(bunLock.includes(integrity));

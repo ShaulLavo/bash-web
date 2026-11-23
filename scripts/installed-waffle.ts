@@ -36,17 +36,24 @@ function packageDirectory(entry: string, name: string): string {
   }
 }
 
-function runtimeLockEntries(root: string, specifier: unknown): void {
+/** `waffle` is an npm alias of `@waffle-os/runtime`; both lockfiles must select its pinned release. */
+function runtimeLockEntries(root: string, selected: Record<string, unknown>): void {
   const packages = metadataRecord(readMetadata(resolve(root, "package-lock.json")).packages);
   const entries = Object.entries(packages).filter(([path]) =>
     /(?:^|\/)node_modules\/waffle$/.test(path),
   );
   assert.equal(entries.length, 1, "Expected exactly one npm runtime lock entry");
-  assert.equal(metadataRecord(entries[0][1]).resolved, specifier, "Unselected npm runtime archive");
+  assert.equal(
+    metadataRecord(entries[0][1]).resolved,
+    selected.tarball,
+    "Unselected npm runtime archive",
+  );
   const bun = readFileSync(resolve(root, "bun.lock"), "utf8");
-  const matches = Array.from(bun.matchAll(/^\s*"(?:[^"\n]+\/)?waffle":\s*\["waffle@([^"\n]+)"/gm));
+  const matches = Array.from(
+    bun.matchAll(/^\s*"(?:[^"\n]+\/)?waffle":\s*\["@waffle-os\/runtime@([^"\n]+)"/gm),
+  );
   assert.equal(matches.length, 1, "Expected exactly one Bun runtime lock entry");
-  assert.equal(matches[0][1], specifier, "Unselected Bun runtime archive");
+  assert.equal(matches[0][1], selected.version, "Unselected Bun runtime release");
 }
 
 export function verifyInstalledWaffle(
@@ -63,10 +70,11 @@ export function verifyInstalledWaffle(
     selected.specifier,
     "Unselected build runtime",
   );
-  runtimeLockEntries(root, selected.specifier);
+  runtimeLockEntries(root, selected);
   const require = createRequire(resolve(root, "package.json"));
   const runtimeEntry = realpathSync(require.resolve("waffle"));
-  const runtimeDirectory = packageDirectory(runtimeEntry, "waffle");
+  // `waffle` is an alias; the installed package keeps its published name.
+  const runtimeDirectory = packageDirectory(runtimeEntry, "@waffle-os/runtime");
   const runtime = readMetadata(resolve(runtimeDirectory, "package.json"));
   assertPackageHostInterface(runtime, required, "installed Waffle");
   assert.equal(runtime.version, selected.version, "Installed Waffle release mismatch");

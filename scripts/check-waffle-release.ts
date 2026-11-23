@@ -40,7 +40,7 @@ export function checkReleaseMetadata(
   const release = metadataRecord(value);
   assert.equal(release.version, version, "Release version mismatch");
   if (kind === "runtime") {
-    assert.equal(release.name, "waffle");
+    assert.equal(release.name, "@waffle-os/runtime");
     assertPackageHostInterface(release, required, "candidate runtime");
     return;
   }
@@ -52,7 +52,7 @@ export function checkReleaseMetadata(
   assertPackageHostInterface(release.runtime, required, "candidate family runtime");
   const runtime = metadataRecord(selected);
   assertProgramRuntimeIdentity(release.runtime, {
-    url: runtime.specifier,
+    url: runtime.tarball,
     bytes: runtime.archiveBytes,
     sha256: runtime.archiveSha256,
   });

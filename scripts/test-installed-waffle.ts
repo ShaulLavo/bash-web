@@ -32,7 +32,7 @@ test("Bun-prepared Waffle resolves and shares its real Node exports", async () =
   };
   const closure = verifyInstalledPrograms(root, download(programs.releaseManifest.url));
   assert.ok(isRecord(selected.waffle));
-  const runtimeArchive = download(selected.waffle.specifier);
+  const runtimeArchive = download(selected.waffle.tarball);
   assertBytesIdentity(
     runtimeArchive,
     { bytes: selected.waffle.archiveBytes, sha256: selected.waffle.archiveSha256 },

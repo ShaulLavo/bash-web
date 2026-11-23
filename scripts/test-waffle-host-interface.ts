@@ -28,7 +28,8 @@ function fixture(context: TestContext) {
     update(value);
     put(path, value);
   };
-  const runtimeUrl = "https://example.test/waffle-107.tgz";
+  const runtimeUrl = "https://registry.example.test/@waffle-os/runtime/-/runtime-107.tgz";
+  const runtimeSpecifier = "npm:@waffle-os/runtime@107";
   const runtimeIdentity = { url: runtimeUrl, ...identity(Buffer.from("runtime")) };
   const gitDependency =
     "git+https://github.com/example/unrelated.git#0123456789012345678901234567890123456789";
@@ -74,7 +75,8 @@ function fixture(context: TestContext) {
     waffle: {
       version: "107",
       hostInterface: 1,
-      specifier: runtimeUrl,
+      specifier: runtimeSpecifier,
+      tarball: runtimeUrl,
       archiveBytes: runtimeIdentity.bytes,
       archiveSha256: runtimeIdentity.sha256,
     },
@@ -88,10 +90,10 @@ function fixture(context: TestContext) {
   put("package.json", {
     waffleHostInterface: 1,
     peerDependencies: { waffle: "*" },
-    devDependencies: { waffle: runtimeUrl },
+    devDependencies: { waffle: runtimeSpecifier },
   });
   put("node_modules/waffle/package.json", {
-    name: "waffle",
+    name: "@waffle-os/runtime",
     version: "107",
     main: "index.js",
     waffleHostInterface: 1,
@@ -104,7 +106,7 @@ function fixture(context: TestContext) {
       ),
     ),
   });
-  put("bun.lock", `"waffle": ["waffle@${runtimeUrl}", "", {}, "sha512-fixture"]`);
+  put("bun.lock", `"waffle": ["@waffle-os/runtime@107", "", {}, "sha512-fixture"]`);
   return { root, put, change, bytes, runtimeUrl, gitDependency, release };
 }
 
@@ -154,7 +156,7 @@ for (const name of ["waffle", "waffle-base", "@waffle/python", "waffle-git"]) {
 test("a nested runtime fails even with matching metadata and one claimed lock entry", (context) => {
   const f = fixture(context);
   f.put("node_modules/waffle-base/node_modules/waffle/package.json", {
-    name: "waffle",
+    name: "@waffle-os/runtime",
     main: "index.js",
     waffleHostInterface: 1,
   });
@@ -175,7 +177,7 @@ test("both package locks reject extra runtime entries", (context) => {
   });
   f.put(
     "bun.lock",
-    `"waffle": ["waffle@${f.runtimeUrl}"]\n"waffle-base/waffle": ["waffle@${f.runtimeUrl}"]`,
+    `"waffle": ["@waffle-os/runtime@107"]\n"waffle-base/waffle": ["@waffle-os/runtime@107"]`,
   );
   assert.throws(() => verifyInstalledWaffle(f.root), /one Bun runtime/);
 });
@@ -225,7 +227,8 @@ test("a same-interface runtime update does not require a family rebind", (contex
   f.change("sources.lock.json", (sources) => {
     Object.assign(Object(sources.waffle), {
       version: "108",
-      specifier: "https://example.test/waffle-108.tgz",
+      specifier: "npm:@waffle-os/runtime@108",
+      tarball: "https://registry.example.test/@waffle-os/runtime/-/runtime-108.tgz",
       archiveBytes: 8,
       archiveSha256: "c".repeat(64),
     });
@@ -234,14 +237,16 @@ test("a same-interface runtime update does not require a family rebind", (contex
     pkg.version = "108";
   });
   f.change("package.json", (pkg) => {
-    pkg.devDependencies = { waffle: "https://example.test/waffle-108.tgz" };
+    pkg.devDependencies = { waffle: "npm:@waffle-os/runtime@108" };
   });
   f.change("package-lock.json", (lock) => {
     Object.assign(Object(lock.packages), {
-      "node_modules/waffle": { resolved: "https://example.test/waffle-108.tgz" },
+      "node_modules/waffle": {
+        resolved: "https://registry.example.test/@waffle-os/runtime/-/runtime-108.tgz",
+      },
     });
   });
-  f.put("bun.lock", '"waffle": ["waffle@https://example.test/waffle-108.tgz"]');
+  f.put("bun.lock", '"waffle": ["@waffle-os/runtime@108"]');
   assert.equal(verifyInstalledPrograms(f.root, f.bytes).artifactCount, 16);
   assert.equal(
     readFileSync(resolve(f.root, "node_modules/waffle-base/package.json"), "utf8").includes(
@@ -255,7 +260,7 @@ test("release metadata cannot infer compatibility from an older schema or a runt
   assert.throws(
     () =>
       checkReleaseMetadata(
-        { name: "waffle", version: "107" },
+        { name: "@waffle-os/runtime", version: "107" },
         { hostInterface: 1 },
         "runtime",
         "107",

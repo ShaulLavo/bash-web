@@ -1665,7 +1665,7 @@ dependencies = [
 [[package]]
 name = "uu_env"
 version = "0.13.0"
-source = "git+https://github.com/ShaulLavo/waffle?rev=21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea#21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea"
+source = "git+https://github.com/ShaulLavo/waffle?rev=4151b800bf27e8211403d0da3e32358cd9fd4c9a#4151b800bf27e8211403d0da3e32358cd9fd4c9a"
 dependencies = [
  "clap",
  "fluent",
@@ -1899,7 +1899,7 @@ dependencies = [
 [[package]]
 name = "waffle-coreutils"
 version = "0.0.2"
-source = "git+https://github.com/ShaulLavo/waffle?rev=21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea#21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea"
+source = "git+https://github.com/ShaulLavo/waffle?rev=4151b800bf27e8211403d0da3e32358cd9fd4c9a#4151b800bf27e8211403d0da3e32358cd9fd4c9a"
 dependencies = [
  "clap",
  "futures",
@@ -1922,7 +1922,7 @@ dependencies = [
 [[package]]
 name = "waffle-grep"
 version = "0.0.2"
-source = "git+https://github.com/ShaulLavo/waffle?rev=21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea#21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea"
+source = "git+https://github.com/ShaulLavo/waffle?rev=4151b800bf27e8211403d0da3e32358cd9fd4c9a#4151b800bf27e8211403d0da3e32358cd9fd4c9a"
 dependencies = [
  "futures",
  "regex",
@@ -1932,7 +1932,7 @@ dependencies = [
 [[package]]
 name = "waffle-process-consumer"
 version = "0.0.1"
-source = "git+https://github.com/ShaulLavo/waffle?rev=21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea#21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea"
+source = "git+https://github.com/ShaulLavo/waffle?rev=4151b800bf27e8211403d0da3e32358cd9fd4c9a#4151b800bf27e8211403d0da3e32358cd9fd4c9a"
 dependencies = [
  "serde",
  "serde_json",
@@ -1941,7 +1941,7 @@ dependencies = [
 [[package]]
 name = "waffle-program-support"
 version = "0.0.0"
-source = "git+https://github.com/ShaulLavo/waffle?rev=21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea#21f5ad1f38dd3c3d3b346a7cfaf955e8139831ea"
+source = "git+https://github.com/ShaulLavo/waffle?rev=4151b800bf27e8211403d0da3e32358cd9fd4c9a#4151b800bf27e8211403d0da3e32358cd9fd4c9a"
 dependencies = [
  "futures",
 ]
