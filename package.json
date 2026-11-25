@@ -1,6 +1,6 @@
 {
   "name": "bash-web",
-  "version": "0.0.113",
+  "version": "0.0.114",
   "description": "WASM-first bash-compatible shell",
   "license": "MIT",
   "repository": {
