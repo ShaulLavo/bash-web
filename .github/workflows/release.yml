@@ -53,3 +53,63 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+
+      - name: Push canonical bash-web@<version> tag at verified npm gitHead
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version=$(jq -er .version package.json)
+          prev_version=$(git show HEAD~1:package.json 2>/dev/null | jq -r '.version // ""' || true)
+          is_version_bump=false
+          if [[ "$version" != "$prev_version" ]]; then
+            is_version_bump=true
+          fi
+          sha=$(git rev-parse HEAD)
+          tag="bash-web@${version}"
+          max_attempts=1
+          if [[ "$is_version_bump" == "true" || "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]]; then
+            max_attempts=12
+          fi
+          metadata_file=$(mktemp)
+          trap 'rm -f "$metadata_file"' EXIT
+          npm_git_head=""
+          npm_ok=false
+          for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+            http_status=$(curl -sS --max-time 30 -o "$metadata_file" -w '%{http_code}' "https://registry.npmjs.org/bash-web/${version}" || echo "000")
+            if [[ "$http_status" == "200" ]]; then
+              parsed_head=$(jq -r --arg version "$version" 'select(.name == "bash-web" and .version == $version) | .gitHead // ""' "$metadata_file" 2>/dev/null || true)
+              if [[ "$parsed_head" =~ ^[0-9a-f]{40}$ ]]; then
+                npm_git_head="$parsed_head"
+                npm_ok=true
+                if [[ "$npm_git_head" == "$sha" || "$is_version_bump" == "false" ]]; then
+                  break
+                fi
+              fi
+            fi
+            if (( attempt < max_attempts )); then
+              sleep 5
+            fi
+          done
+          if [[ "$npm_ok" == "true" && "$npm_git_head" == "$sha" ]]; then
+            remote_tags=$(git ls-remote --tags origin "refs/tags/${tag}" "refs/tags/${tag}^{}")
+            remote_sha=$(awk -v t="refs/tags/${tag}" '$2 == t { plain = $1 } $2 == t "^{}" { peeled = $1 } END { print (peeled ? peeled : plain) }' <<< "$remote_tags")
+            if [[ -n "$remote_sha" ]]; then
+              if [[ "$remote_sha" != "$sha" ]]; then
+                echo "error: remote tag ${tag} points to ${remote_sha}, expected ${sha}" >&2
+                exit 1
+              fi
+              echo "Canonical tag ${tag} already points to ${sha}"
+              exit 0
+            fi
+            git tag -f "$tag" "$sha"
+            git push origin "refs/tags/${tag}"
+            echo "Pushed canonical tag ${tag} at ${sha}"
+            exit 0
+          fi
+          if [[ "$npm_ok" == "true" && "$is_version_bump" == "false" ]]; then
+            echo "No release published at ${sha} (npm bash-web@${version} gitHead is ${npm_git_head}); skipping tag push."
+            exit 0
+          fi
+          echo "error: failed to verify npm metadata for bash-web@${version} at ${sha} (npm_ok=${npm_ok}, gitHead=${npm_git_head:-missing}, is_version_bump=${is_version_bump})" >&2
+          exit 1
