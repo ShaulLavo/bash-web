@@ -38,15 +38,28 @@ export async function installShellCommands(
       );
     }
   } catch (error) {
-    await Promise.all(installed.map((installation) => installation.dispose()));
+    const results = await Promise.allSettled(
+      installed.map((installation) => installation.dispose()),
+    );
+    const errors = [
+      error,
+      ...results.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
+    ];
+    if (errors.length > 1) throw new AggregateError(errors, "Shell command rollback failed");
     throw error;
   }
   let disposal: Promise<void> | undefined;
   return {
     executables: installed.map((installation) => installation.executable),
     dispose() {
-      disposal ??= Promise.all(installed.map((installation) => installation.dispose())).then(
-        () => {},
+      disposal ??= Promise.allSettled(installed.map((installation) => installation.dispose())).then(
+        (results) => {
+          const errors = results.flatMap((result) =>
+            result.status === "rejected" ? [result.reason] : [],
+          );
+          if (errors.length === 1) throw errors[0];
+          if (errors.length > 1) throw new AggregateError(errors, "Shell command disposal failed");
+        },
       );
       return disposal;
     },

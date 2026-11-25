@@ -144,9 +144,7 @@ function cooperativeDefinition(
 
 async function removeOwnedMarker(runtime: Runtime, path: string, marker: Uint8Array) {
   if (runtime.disposed) return;
-  if ((await runtime.filesystem.lookup(path))?.kind !== "file") return;
-  if (sameBytes(await runtime.filesystem.readFile(path), marker))
-    await runtime.filesystem.remove(path);
+  await runtime.filesystem.remove(path, { ifContent: marker });
   await runtime.filesystem.drain();
 }
 
