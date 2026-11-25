@@ -163,7 +163,7 @@
     "remix": "3.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.3",
-    "waffle": "npm:@waffle-os/runtime@0.0.148",
+    "waffle": "npm:@waffle-os/runtime@0.0.149",
     "yaml": "2.9.1"
   },
   "peerDependencies": {
