@@ -271,11 +271,17 @@ kbd {
   margin: 5px 0 10px;
   overflow-wrap: anywhere;
 }
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .error-banner button {
   background: #563935;
   border: 1px solid #805652;
   border-radius: 5px;
-  padding: 5px 10px;
+  min-height: 36px;
+  padding: 6px 12px;
 }
 .warning-banner {
   display: flex;

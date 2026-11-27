@@ -9,6 +9,7 @@ import type {
 import terminalWasmUrl from "ghostty-webgpu/ghostty-vt.wasm?url";
 import terminalBridgeUrl from "ghostty-webgpu/bridge.wasm?url";
 import { BrowserSession } from "bash-web/session";
+import { registerShell } from "../runtime/shell-host";
 import {
   createStartupDiagnostics,
   markStartup,
@@ -73,11 +74,13 @@ function followViewport(node: Element, signal: AbortSignal) {
   const viewport = window.visualViewport;
   if (!(node instanceof HTMLElement) || !viewport) return;
   const resize = () => {
-    if (viewport.scale !== 1) return;
+    // Tolerate fractional mobile scale drift around 1 when unzoomed.
+    if (Math.abs(viewport.scale - 1) > 0.01) return;
     node.style.setProperty("--workbench-height", `${viewport.height}px`);
     node.toggleAttribute("data-compact", viewport.height <= 540);
   };
   viewport.addEventListener("resize", resize, { signal });
+  window.addEventListener("orientationchange", resize, { signal });
   resize();
 }
 
@@ -100,7 +103,11 @@ function checkCapabilities(): void {
       "This page needs cross-origin isolation. Serve it with Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp, then reload.",
     );
   }
-  if (typeof SharedArrayBuffer === "undefined" || typeof Atomics.wait !== "function") {
+  if (
+    typeof SharedArrayBuffer === "undefined" ||
+    typeof Atomics.wait !== "function" ||
+    typeof Atomics.waitAsync !== "function"
+  ) {
     throw new Error(
       "This browser cannot provide shared worker I/O. Open the demo in a current Chrome, Edge, Firefox, or Safari browser on HTTPS or localhost.",
     );
@@ -191,6 +198,24 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       if (!handle.signal.aborted) void handle.update();
     };
 
+    function enqueueDisposal(
+      previousPending: Promise<BrowserSession> | undefined,
+      previousSession: BrowserSession | undefined,
+      previousDispose: (() => Promise<void>) | undefined,
+    ) {
+      stopping = stopping
+        .catch(() => {})
+        .then(async () => {
+          try {
+            await previousPending?.catch(() => undefined);
+            await previousSession?.dispose();
+          } finally {
+            await previousDispose?.();
+          }
+        });
+      return stopping;
+    }
+
     function stop() {
       diagnostics.stop();
       generation++;
@@ -210,17 +235,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       session = undefined;
       terminal?.dispose();
       terminal = undefined;
-      stopping = stopping
-        .catch(() => {})
-        .then(async () => {
-          try {
-            await previousPending?.catch(() => undefined);
-            await previousSession?.dispose();
-          } finally {
-            await previousDispose?.();
-          }
-        });
-      return stopping;
+      return enqueueDisposal(previousPending, previousSession, previousDispose);
     }
 
     function fail(cause: unknown, expectedGeneration: number) {
@@ -233,15 +248,14 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       const failedSession = session;
       const failedPending = pendingSession;
       startup?.abort(new Error(error));
+      startup = undefined;
+      pendingSession = undefined;
       const failedDispose = disposeRuntime;
-      void (async () => {
-        try {
-          await failedPending?.catch(() => undefined);
-          await failedSession?.dispose();
-        } finally {
-          await failedDispose?.();
-        }
-      })().catch((cleanupError: unknown) => console.error("Shell cleanup failed", cleanupError));
+      disposeRuntime = undefined;
+      session = undefined;
+      void enqueueDisposal(failedPending, failedSession, failedDispose).catch(
+        (cleanupError: unknown) => console.error("Shell cleanup failed", cleanupError),
+      );
       if (terminal?.textarea) terminal.textarea.disabled = true;
       render();
     }
@@ -336,16 +350,19 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         if (generation !== expectedGeneration || handle.signal.aborted) return;
         checkCapabilities();
         markStartup(onStartupStage, "terminal-open-requested");
-        const current = await openTerminal(host);
-        markStartup(onStartupStage, "terminal-open-resolved");
-        if (generation !== expectedGeneration || handle.signal.aborted) {
-          current.dispose();
-          return;
-        }
-        terminal = current;
-        performance.mark("bash:terminal-opened");
-        if (current.textarea) current.textarea.disabled = true;
-        wireTerminal(current, expectedGeneration);
+        const terminalReady = openTerminal(host).then((opened) => {
+          markStartup(onStartupStage, "terminal-open-resolved");
+          if (generation !== expectedGeneration || handle.signal.aborted) {
+            opened.dispose();
+            return undefined;
+          }
+          terminal = opened;
+          performance.mark("bash:terminal-opened");
+          if (opened.textarea) opened.textarea.disabled = true;
+          if (state !== "failed") wireTerminal(opened, expectedGeneration);
+          return opened;
+        });
+        void terminalReady.catch(() => {});
         markStartup(onStartupStage, "runtime-lease-requested");
         const lease = acquireBrowserRuntime(options, {
           workerURL: filesystemWorkerUrl,
@@ -358,7 +375,11 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         leasedRuntime = lease.runtime;
         const controller = new AbortController();
         startup = controller;
-        await Promise.all([
+        // Pre-warm shell WASM fetch and compilation alongside terminal and storage startup.
+        void registerShell(lease.runtime, { runtime: lease.runtime, onStartupStage })
+          .module(onStartupStage)
+          .catch(() => {});
+        const storageAndLease = Promise.all([
           lease.ready,
           waitForStorage(lease.runtime, controller.signal, {
             startup: storageStartup,
@@ -375,9 +396,11 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
               render();
             },
           }),
-        ]);
-        markStartup(onStartupStage, "runtime-lease-resolved");
-        if (generation !== expectedGeneration || handle.signal.aborted) {
+        ]).then(() => {
+          markStartup(onStartupStage, "runtime-lease-resolved");
+        });
+        const [current] = await Promise.all([terminalReady, storageAndLease]);
+        if (!current || generation !== expectedGeneration || handle.signal.aborted) {
           await lease.dispose();
           return;
         }
@@ -656,20 +679,22 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
                 </p>
               )}
               {recovery && <p>{recovery}</p>}
-              <button type="button" disabled={startingFresh} mix={on("click", () => start())}>
-                Restart session
-              </button>
-              {unreadable && (
-                <button
-                  type="button"
-                  data-testid="start-fresh"
-                  title="Delete the workspace that cannot be opened and start a new one"
-                  disabled={startingFresh}
-                  mix={on("click", startFreshWorkspace)}
-                >
-                  Start fresh
+              <div class="error-actions">
+                <button type="button" disabled={startingFresh} mix={on("click", () => start())}>
+                  Restart session
                 </button>
-              )}
+                {unreadable && (
+                  <button
+                    type="button"
+                    data-testid="start-fresh"
+                    title="Delete the workspace that cannot be opened and start a new one"
+                    disabled={startingFresh}
+                    mix={on("click", startFreshWorkspace)}
+                  >
+                    Start fresh
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {warning && (

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { workspaceLockNames } from "./indexeddb-workspace.ts";
+import { deleteUnreadableWorkspace, workspaceLockNames } from "./indexeddb-workspace.ts";
 import { startFresh, unreadableWorkspace, type WorkspaceStorage } from "./start-fresh.ts";
 
 const vfsError = (code: string) =>
@@ -108,4 +108,49 @@ test("Start fresh still claims the workspace when disposal fails", async (contex
   );
   assert.equal(result, "deleted");
   assert.deepEqual(calls, ["dispose", "remove waffle-workspace"]);
+});
+
+test("deleteUnreadableWorkspace falls back to openExisting when indexedDB.databases is unavailable", async (context) => {
+  const prevIdb = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  const prevNav = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  let opened = 0;
+  const fakeIdb = {
+    open() {
+      opened++;
+      const req: {
+        error?: DOMException;
+        transaction?: { abort(): void };
+        onupgradeneeded?: () => void;
+        onerror?: () => void;
+        onsuccess?: () => void;
+      } = {
+        transaction: {
+          abort() {
+            req.error = new DOMException("Aborted", "AbortError");
+            queueMicrotask(() => req.onerror?.());
+          },
+        },
+      };
+      queueMicrotask(() => req.onupgradeneeded?.());
+      return req;
+    },
+  };
+  const fakeLocks = {
+    request(_name: string, _opts: unknown, cb: (lock: object) => Promise<boolean>) {
+      return cb({});
+    },
+  };
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: fakeIdb });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { locks: fakeLocks },
+  });
+  context.after(() => {
+    if (prevIdb) Object.defineProperty(globalThis, "indexedDB", prevIdb);
+    else Reflect.deleteProperty(globalThis, "indexedDB");
+    if (prevNav) Object.defineProperty(globalThis, "navigator", prevNav);
+    else Reflect.deleteProperty(globalThis, "navigator");
+  });
+  assert.equal(await deleteUnreadableWorkspace({ name: "missing-workspace" }), "missing");
+  assert.equal(opened, 1);
 });
