@@ -235,6 +235,14 @@ test("lint baseline rejects new violations in baselined files, stale entries, an
   assert.equal(lintBaseRef({}), "origin/main");
   assert.equal(lintBaseRef({ GITHUB_ACTIONS: "true" }), "HEAD^");
   assert.equal(
+    lintBaseRef({
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      LAYERS_BASE_REF: "a".repeat(40),
+    }),
+    "HEAD^",
+  );
+  assert.equal(
     lintBaseRef({ GITHUB_ACTIONS: "true", LINT_BASE_REF: "a-tested-base" }),
     "a-tested-base",
   );

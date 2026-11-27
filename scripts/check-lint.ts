@@ -91,7 +91,7 @@ export function lintBaseRef(environment: NodeJS.ProcessEnv): string {
   if (environment.LINT_BASE_REF) return environment.LINT_BASE_REF;
   if (environment.GITHUB_ACTIONS !== "true") return "origin/main";
   if (environment.GITHUB_EVENT_NAME === "push") return pushBeforeSha(environment);
-  return environment.LAYERS_BASE_REF ?? "HEAD^";
+  return "HEAD^";
 }
 
 export function assertLintBaselineShrinks(

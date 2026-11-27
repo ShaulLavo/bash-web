@@ -30,9 +30,9 @@ existing server.
   17 pre-existing diagnostics in the 7 frozen-fingerprint fuzzer drivers are baselined
   by exact location in `quality/lint-baseline.json` (`scripts/check-lint.ts`), verified
   shrink-only against the immutable comparison commit (`LINT_BASE_REF`, or in GitHub
-  Actions `LAYERS_BASE_REF` / push event `before` SHA / PR first parent `HEAD^`, and
-  `origin/main` locally), so any added violation fails even inside those files and
-  stale entries fail until removed.
+  Actions the push event `before` SHA / `LAYERS_BASE_REF` on pushes and `HEAD^` on PRs
+  and manual dispatches, and `origin/main` locally), so any added violation fails even
+  inside those files and stale entries fail until removed.
   These are lint limits, not a Rust parser or a proof of every language's nesting depth.
 - TypeScript 7.0.2 uses `strict` for application code, tests, configs, and every
   authored TypeScript script. Imported JavaScript supplies inferred API types;
