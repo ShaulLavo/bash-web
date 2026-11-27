@@ -24,17 +24,19 @@ export async function registerTestPrograms(
     return bytes;
   };
   markStartup(onStartupStage, "test-guests-fetch-requested");
-  const [guest, spinBytes] = await Promise.all([
-    load("test-guest").then(async (guestBytes) => {
-      signal?.throwIfAborted();
-      markStartup(onStartupStage, "test-guest-compile-requested");
-      const compiled = await WebAssembly.compile(guestBytes);
-      markStartup(onStartupStage, "test-guest-compile-resolved");
-      return compiled;
-    }),
-    load("test-spin"),
-  ]);
+  const guestFetch = load("test-guest");
+  const spinFetch = load("test-spin");
+  const guestCompile = guestFetch.then(async (guestBytes) => {
+    signal?.throwIfAborted();
+    markStartup(onStartupStage, "test-guest-compile-requested");
+    const compiled = await WebAssembly.compile(guestBytes);
+    markStartup(onStartupStage, "test-guest-compile-resolved");
+    return compiled;
+  });
+  void guestCompile.catch(() => {});
+  const [, spinBytes] = await Promise.all([guestFetch, spinFetch]);
   markStartup(onStartupStage, "test-guests-fetch-resolved");
+  const guest = await guestCompile;
   signal?.throwIfAborted();
   markStartup(onStartupStage, "test-bin-mkdir-requested");
   await runtime.filesystem.mkdirp("/bin");

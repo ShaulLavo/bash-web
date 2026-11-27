@@ -178,6 +178,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     let busy = true;
     let host: HTMLElement | undefined;
     let terminal: Terminal | undefined;
+    let pendingTerminal: Promise<Terminal | undefined> | undefined;
     let session: BrowserSession | undefined;
     let pendingSession: Promise<BrowserSession> | undefined;
     let startup: AbortController | undefined;
@@ -199,6 +200,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     };
 
     function enqueueDisposal(
+      previousTerminal: Promise<Terminal | undefined> | undefined,
       previousPending: Promise<BrowserSession> | undefined,
       previousSession: BrowserSession | undefined,
       previousDispose: (() => Promise<void>) | undefined,
@@ -207,6 +209,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         .catch(() => {})
         .then(async () => {
           try {
+            await previousTerminal?.catch(() => undefined);
             await previousPending?.catch(() => undefined);
             await previousSession?.dispose();
           } finally {
@@ -225,6 +228,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       subscriptions.forEach((subscription) => subscription.dispose());
       subscriptions = [];
       outputTimings = [];
+      const previousTerminal = pendingTerminal;
+      pendingTerminal = undefined;
       const previousSession = session;
       const previousPending = pendingSession;
       startup?.abort(new Error("Shell startup was cancelled."));
@@ -235,7 +240,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       session = undefined;
       terminal?.dispose();
       terminal = undefined;
-      return enqueueDisposal(previousPending, previousSession, previousDispose);
+      return enqueueDisposal(previousTerminal, previousPending, previousSession, previousDispose);
     }
 
     function fail(cause: unknown, expectedGeneration: number) {
@@ -245,6 +250,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         workspace !== undefined && unreadableWorkspace(cause, leasedRuntime?.filesystem.state);
       state = "failed";
       busy = false;
+      const failedTerminal = pendingTerminal;
+      pendingTerminal = undefined;
       const failedSession = session;
       const failedPending = pendingSession;
       startup?.abort(new Error(error));
@@ -253,7 +260,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       const failedDispose = disposeRuntime;
       disposeRuntime = undefined;
       session = undefined;
-      void enqueueDisposal(failedPending, failedSession, failedDispose).catch(
+      void enqueueDisposal(failedTerminal, failedPending, failedSession, failedDispose).catch(
         (cleanupError: unknown) => console.error("Shell cleanup failed", cleanupError),
       );
       if (terminal?.textarea) terminal.textarea.disabled = true;
@@ -318,6 +325,31 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         );
     }
 
+    function adoptTerminal(
+      opened: Terminal,
+      expectedGeneration: number,
+      onStartupStage: StartupObserver,
+    ): Terminal | undefined {
+      markStartup(onStartupStage, "terminal-open-resolved");
+      if (generation !== expectedGeneration || handle.signal.aborted || state === "failed") {
+        opened.dispose();
+        return undefined;
+      }
+      terminal = opened;
+      performance.mark("bash:terminal-opened");
+      if (opened.textarea) opened.textarea.disabled = true;
+      wireTerminal(opened, expectedGeneration);
+      return opened;
+    }
+
+    function prewarmShell(pageRuntime: Runtime, onStartupStage: StartupObserver) {
+      try {
+        void registerShell(pageRuntime, { runtime: pageRuntime, onStartupStage })
+          .module(onStartupStage)
+          .catch(() => {});
+      } catch {}
+    }
+
     async function start() {
       if (!host || handle.signal.aborted || startingFresh) return;
       const stopped = stop();
@@ -351,18 +383,13 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         checkCapabilities();
         markStartup(onStartupStage, "terminal-open-requested");
         const terminalReady = openTerminal(host).then((opened) => {
-          markStartup(onStartupStage, "terminal-open-resolved");
-          if (generation !== expectedGeneration || handle.signal.aborted) {
-            opened.dispose();
-            return undefined;
-          }
-          terminal = opened;
-          performance.mark("bash:terminal-opened");
-          if (opened.textarea) opened.textarea.disabled = true;
-          if (state !== "failed") wireTerminal(opened, expectedGeneration);
-          return opened;
+          if (pendingTerminal === terminalReady) pendingTerminal = undefined;
+          return adoptTerminal(opened, expectedGeneration, onStartupStage);
         });
-        void terminalReady.catch(() => {});
+        pendingTerminal = terminalReady;
+        void terminalReady.catch(() => {
+          if (pendingTerminal === terminalReady) pendingTerminal = undefined;
+        });
         markStartup(onStartupStage, "runtime-lease-requested");
         const lease = acquireBrowserRuntime(options, {
           workerURL: filesystemWorkerUrl,
@@ -375,10 +402,6 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         leasedRuntime = lease.runtime;
         const controller = new AbortController();
         startup = controller;
-        // Pre-warm shell WASM fetch and compilation alongside terminal and storage startup.
-        void registerShell(lease.runtime, { runtime: lease.runtime, onStartupStage })
-          .module(onStartupStage)
-          .catch(() => {});
         const storageAndLease = Promise.all([
           lease.ready,
           waitForStorage(lease.runtime, controller.signal, {
@@ -399,11 +422,12 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         ]).then(() => {
           markStartup(onStartupStage, "runtime-lease-resolved");
         });
-        const [current] = await Promise.all([terminalReady, storageAndLease]);
-        if (!current || generation !== expectedGeneration || handle.signal.aborted) {
-          await lease.dispose();
-          return;
-        }
+        // Pre-warm shell WASM fetch and compilation alongside terminal and storage startup.
+        prewarmShell(lease.runtime, onStartupStage);
+        // Await storage before terminal so INVALID_VFS_FORMAT recovery (Start fresh) always surfaces.
+        await storageAndLease;
+        const current = await terminalReady;
+        if (!current || generation !== expectedGeneration || handle.signal.aborted) return;
         markStartup(onStartupStage, "session-create-requested");
         await createSession(current, lease.runtime, expectedGeneration, controller, onStartupStage);
         markStartup(onStartupStage, "session-create-resolved");
