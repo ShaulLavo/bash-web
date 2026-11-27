@@ -15,7 +15,13 @@ import {
   validateDuplicatePlans,
 } from "./check-duplicates.ts";
 import { checkJavaScript, type JavaScriptException } from "./check-javascript.ts";
-import { checkLintDiagnostics, parseLintBaseline } from "./check-lint.ts";
+import {
+  assertLintBaselineShrinks,
+  checkLintDiagnostics,
+  lintBaseRef,
+  parseLintBaseline,
+  verifyLintBaselineAgainstBase,
+} from "./check-lint.ts";
 import { compatibilityPrograms } from "./compat-programs.ts";
 import { selectBasePackages } from "./waffle-compat.ts";
 
@@ -225,7 +231,69 @@ test("lint baseline rejects new violations in baselined files, stale entries, an
     () => parseLintBaseline({ version: 1, entries: [baseline[0], baseline[0]] }),
     /Duplicate/,
   );
+  assert.throws(() => assertLintBaselineShrinks([baseline[0]], []), /cannot grow/);
+  assert.equal(lintBaseRef({}), "origin/main");
+  assert.equal(lintBaseRef({ GITHUB_ACTIONS: "true" }), "HEAD^");
+  assert.equal(
+    lintBaseRef({ GITHUB_ACTIONS: "true", LINT_BASE_REF: "a-tested-base" }),
+    "a-tested-base",
+  );
 });
+
+test("lint baseline comparison against immutable git base rejects growth and modified seed files", () =>
+  fixture((directory) => {
+    const commit = (message: string) =>
+      runGit(directory, [
+        "-c",
+        "user.name=Quality probe",
+        "-c",
+        "user.email=quality@example.invalid",
+        "commit",
+        "-qm",
+        message,
+      ]);
+    const entry = {
+      file: "scripts/fuzz-shell-path.ts",
+      rule: "eslint(no-else-return)",
+      line: 448,
+      column: 5,
+      reason: "Frozen fuzzer driver.",
+    };
+    const extra = {
+      file: "scripts/fuzz-shell-path.ts",
+      rule: "eslint(no-else-return)",
+      line: 888,
+      column: 14,
+      reason: "Attempted new violation.",
+    };
+    runGit(directory, ["init", "-q"]);
+    writeRepoFile(directory, entry.file, "export const original = 1;\n");
+    runGit(directory, ["add", entry.file]);
+    commit("Base commit before lint baseline");
+    // Seeding accepts untouched base files and rejects a modified file with a new violation.
+    verifyLintBaselineAgainstBase(directory, [entry], "HEAD");
+    writeRepoFile(directory, entry.file, "export const original = 1;\nexport const added = 2;\n");
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, extra], "HEAD"),
+      /cannot seed modified file/,
+    );
+    // Once committed on base, adding a new exception fails closed while shrinking passes.
+    writeRepoFile(directory, entry.file, "export const original = 1;\n");
+    writeRepoFile(
+      directory,
+      "quality/lint-baseline.json",
+      JSON.stringify({ version: 1, entries: [entry] }),
+    );
+    runGit(directory, ["add", "quality/lint-baseline.json"]);
+    commit("Seed lint baseline");
+    verifyLintBaselineAgainstBase(directory, [entry], "HEAD");
+    verifyLintBaselineAgainstBase(directory, [], "HEAD");
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, extra], "HEAD"),
+      /cannot grow/,
+    );
+    assert.throws(() => verifyLintBaselineAgainstBase(directory, [entry], "missing-base-ref"));
+  }));
 
 test("strict types reject an incompatible value", () =>
   fixture((directory) => {

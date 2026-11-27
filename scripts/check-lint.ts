@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -33,6 +33,7 @@ interface RawOxlintDiagnostic {
 }
 
 const lintTargets = ["src", "scripts", "tests", "vite.config.ts", "playwright.config.ts"];
+const baselineRelativePath = "quality/lint-baseline.json";
 const root = resolve(import.meta.dirname, "..");
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -70,6 +71,70 @@ export function parseLintBaseline(raw: unknown): LintBaselineEntry[] {
     seen.add(key);
   }
   return entries;
+}
+
+export function lintBaseRef(environment: NodeJS.ProcessEnv): string {
+  return (
+    environment.LINT_BASE_REF ?? (environment.GITHUB_ACTIONS === "true" ? "HEAD^" : "origin/main")
+  );
+}
+
+export function assertLintBaselineShrinks(
+  candidate: readonly LintBaselineEntry[],
+  base: readonly LintBaselineEntry[],
+): void {
+  const allowed = new Set(base.map(diagnosticKey));
+  for (const entry of candidate) {
+    const key = diagnosticKey(entry);
+    if (!allowed.has(key)) throw new Error(`Lint baseline cannot grow: ${key}`);
+  }
+}
+
+function runGitOutput(directory: string, args: readonly string[]): string {
+  return execFileSync("git", args, {
+    cwd: directory,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function gitFileExistsAtRef(directory: string, ref: string, path: string): boolean {
+  const result = spawnSync("git", ["cat-file", "-e", `${ref}:${path}`], {
+    cwd: directory,
+    stdio: "ignore",
+  });
+  if (result.error) throw result.error;
+  return result.status === 0;
+}
+
+export function verifyLintBaselineAgainstBase(
+  directory: string,
+  candidate: readonly LintBaselineEntry[],
+  ref: string,
+  path = baselineRelativePath,
+): void {
+  runGitOutput(directory, ["rev-parse", "--verify", `${ref}^{commit}`]);
+  if (gitFileExistsAtRef(directory, ref, path)) {
+    const baseText = runGitOutput(directory, ["show", `${ref}:${path}`]);
+    assertLintBaselineShrinks(candidate, parseLintBaseline(JSON.parse(baseText)));
+    return;
+  }
+  const priorHistory = runGitOutput(directory, ["log", "-n", "1", "--format=%H", ref, "--", path]);
+  if (priorHistory.trim()) {
+    assertLintBaselineShrinks(candidate, []);
+    return;
+  }
+  // Initial baseline seeding: every baselined file must be byte-identical to the immutable base.
+  const baselinedFiles = Array.from(new Set(candidate.map((entry) => entry.file)));
+  for (const file of baselinedFiles) {
+    const diff = spawnSync("git", ["diff", "--quiet", ref, "--", file], {
+      cwd: directory,
+      stdio: "ignore",
+    });
+    if (diff.error) throw diff.error;
+    if (diff.status !== 0)
+      throw new Error(`Lint baseline cannot seed modified file relative to ${ref}: ${file}`);
+  }
 }
 
 function parseDiagnostic(raw: RawOxlintDiagnostic): LintDiagnostic {
@@ -113,8 +178,9 @@ function parseOxlintJson(stdout: string): {
 }
 
 function runMain(): void {
-  const baselinePath = resolve(root, "quality/lint-baseline.json");
+  const baselinePath = resolve(root, baselineRelativePath);
   const baseline = parseLintBaseline(JSON.parse(readFileSync(baselinePath, "utf8")));
+  verifyLintBaselineAgainstBase(root, baseline, lintBaseRef(process.env));
   const bin = resolve(root, "node_modules/.bin/oxlint");
   const args = [
     "--config",

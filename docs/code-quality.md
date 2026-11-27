@@ -28,8 +28,10 @@ existing server.
   `else` / `else if` after `return`, and unqualified browser-global `name` are errors.
   Maximum control-block depth is 3 and modified cyclomatic complexity is 30. Only the
   17 pre-existing diagnostics in the 7 frozen-fingerprint fuzzer drivers are baselined
-  by exact location in `quality/lint-baseline.json` (`scripts/check-lint.ts`), so any
-  added violation fails even inside those files and stale entries fail until removed.
+  by exact location in `quality/lint-baseline.json` (`scripts/check-lint.ts`), verified
+  shrink-only against the immutable comparison commit (`LINT_BASE_REF`, default
+  `origin/main` locally and `HEAD^` in GitHub Actions), so any added violation fails
+  even inside those files and stale entries fail until removed.
   These are lint limits, not a Rust parser or a proof of every language's nesting depth.
 - TypeScript 7.0.2 uses `strict` for application code, tests, configs, and every
   authored TypeScript script. Imported JavaScript supplies inferred API types;
