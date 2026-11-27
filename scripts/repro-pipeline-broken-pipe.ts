@@ -4,11 +4,9 @@ import { createWaffleRunner } from "./waffle-compat.ts";
 import { liveNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
 
 const input: unknown = JSON.parse(readFileSync(process.argv[2], "utf8"));
-const cases = Array.isArray(input)
-  ? input
-  : input && typeof input === "object" && "cases" in input
-    ? input.cases
-    : undefined;
+let cases: unknown;
+if (Array.isArray(input)) cases = input;
+else if (input && typeof input === "object" && "cases" in input) cases = input.cases;
 if (!Array.isArray(cases)) throw new Error("Case array required");
 const entry: unknown = cases.find(
   (item: unknown) =>

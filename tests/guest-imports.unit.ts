@@ -255,27 +255,24 @@ test("production worker keeps terminal stdio for an empty root transport but not
         },
       ).finally(finished.resolve);
       assert.equal(observed.length, 1, `${mode}: guest must instantiate and run`);
-      assert.deepEqual(
-        observed[0],
-        mode === "root"
-          ? {
-              inherited: [0, 1, 2, -1],
-              stdio: ["terminal", "terminal", "terminal"],
-              wrote: true,
-            }
-          : mode === "child"
-            ? {
-                inherited: [-1, -1, -1, -1],
-                stdio: [null, null, null],
-                wrote: false,
-              }
-            : {
-                inherited: [1, 3, MAX_DESCRIPTOR, -1],
-                stdio: [null, "terminal", null],
-                wrote: true,
-              },
-        mode,
-      );
+      const expectedByMode = {
+        root: {
+          inherited: [0, 1, 2, -1],
+          stdio: ["terminal", "terminal", "terminal"],
+          wrote: true,
+        },
+        child: {
+          inherited: [-1, -1, -1, -1],
+          stdio: [null, null, null],
+          wrote: false,
+        },
+        redirected: {
+          inherited: [1, 3, MAX_DESCRIPTOR, -1],
+          stdio: [null, "terminal", null],
+          wrote: true,
+        },
+      };
+      assert.deepEqual(observed[0], expectedByMode[mode], mode);
       assert.deepEqual(bridge.drain(), mode === "child" ? new Uint8Array() : output, mode);
       assert.deepEqual(
         messages.filter((message) => message.type === "exit"),

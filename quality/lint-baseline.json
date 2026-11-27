@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "file": "scripts/fuzz-shell-braces.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 299,
+      "column": 8,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-braces.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 348,
+      "column": 16,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-braces.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 938,
+      "column": 13,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-control-flow.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 592,
+      "column": 8,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-control-flow.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 594,
+      "column": 11,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-control-flow.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 1319,
+      "column": 13,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-control-flow.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 1321,
+      "column": 11,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-functions.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 788,
+      "column": 13,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-functions.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 790,
+      "column": 11,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-job-lifetime.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 440,
+      "column": 13,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-job-lifetime.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 442,
+      "column": 11,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-path.ts",
+      "rule": "eslint(no-else-return)",
+      "line": 448,
+      "column": 5,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-path.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 857,
+      "column": 13,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-path.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 859,
+      "column": 11,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-printf.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 620,
+      "column": 13,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-printf.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 622,
+      "column": 11,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    },
+    {
+      "file": "scripts/fuzz-shell-substitution-boundaries.ts",
+      "rule": "eslint(no-nested-ternary)",
+      "line": 845,
+      "column": 13,
+      "reason": "Frozen-fingerprint fuzzer driver deferred to plans/008-duplicate-baseline.md#fuzz-execution."
+    }
+  ]
+}

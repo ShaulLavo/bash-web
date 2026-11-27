@@ -255,7 +255,14 @@ for (const stop of ["input", "cancel", "close", "revoke", "inactive"] as const) 
         bridge.signal();
       }
       const [result] = await reply;
-      const errno = stop === "cancel" ? 27 : stop === "revoke" || stop === "inactive" ? 29 : 0;
+      const errnos: Record<typeof stop, number> = {
+        input: 0,
+        close: 0,
+        cancel: 27,
+        revoke: 29,
+        inactive: 29,
+      };
+      const errno = errnos[stop];
       assert.deepEqual(result, {
         errno,
         count: stop === "input" ? 1 : 0,

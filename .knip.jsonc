@@ -43,8 +43,8 @@
   },
   // Ghostty is a pinned source alias outside our graph. It consumes the hotkeys tarball.
   // Singapore core consumes the exact public textbuffer archive through its override.
-  // The duplicate-check driver spawns the pinned jscpd executable by path.
-  "ignoreDependencies": ["ghostty-webgpu", "@singapore-editor/textbuffer", "jscpd"],
+  // The duplicate-check and lint drivers spawn the pinned jscpd and oxlint executables by path.
+  "ignoreDependencies": ["ghostty-webgpu", "@singapore-editor/textbuffer", "jscpd", "oxlint"],
   // WASI qualification and CPython's native build require these system tools.
   "ignoreBinaries": ["wasmtime"],
 }

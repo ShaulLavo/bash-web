@@ -131,7 +131,11 @@ type Issue = {
 type Declaration = { name: string; testOnly: boolean; location: Location };
 type FileScan = { edges: Edge[]; issues: Issue[]; declarations: Declaration[] };
 const identifier = /^[_\p{ID_Start}][_\p{ID_Continue}]*$/u;
-const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const compare = (a: string, b: string) => {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+};
 const edgeKey = (edge: Edge) => `${edge.scope}:${edge.source}->${edge.target}`;
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -257,9 +261,12 @@ function cfgWithoutTest(tokens: readonly Token[]): Truth {
   if (group.length) groups.push(group);
   const values = groups.map(cfgWithoutTest);
   if (op === "not") return values.length === 1 && values[0] !== "unknown" ? !values[0] : "unknown";
-  if (op === "all")
-    return values.includes(false) ? false : values.includes("unknown") ? "unknown" : true;
-  return values.includes(true) ? true : values.includes("unknown") ? "unknown" : false;
+  if (op === "all") {
+    if (values.includes(false)) return false;
+    return values.includes("unknown") ? "unknown" : true;
+  }
+  if (values.includes(true)) return true;
+  return values.includes("unknown") ? "unknown" : false;
 }
 
 function modulePath(path: string): string[] {

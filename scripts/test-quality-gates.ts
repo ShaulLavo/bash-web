@@ -15,6 +15,13 @@ import {
   validateDuplicatePlans,
 } from "./check-duplicates.ts";
 import { checkJavaScript, type JavaScriptException } from "./check-javascript.ts";
+import {
+  assertLintBaselineShrinks,
+  checkLintDiagnostics,
+  lintBaseRef,
+  parseLintBaseline,
+  verifyLintBaselineAgainstBase,
+} from "./check-lint.ts";
 import { compatibilityPrograms } from "./compat-programs.ts";
 import { selectBasePackages } from "./waffle-compat.ts";
 
@@ -144,6 +151,21 @@ test("compatibility admits exactly the historical ten published programs", () =>
 const lintCases: [string, string, RegExp][] = [
   ["debugger", "debugger;\n", /no-debugger/],
   ["ambient browser name", "console.log(name);\n", /no-restricted-globals/],
+  [
+    "nested ternary",
+    "export const pick = (a: boolean, b: boolean) => (a ? 1 : b ? 2 : 3);\n",
+    /no-nested-ternary/,
+  ],
+  [
+    "else after return",
+    "export function sign(n: number) {\n  if (n > 0) return 1;\n  else return -1;\n}\n",
+    /no-else-return/,
+  ],
+  [
+    "else if after return",
+    "export function sign(n: number) {\n  if (n > 0) return 1;\n  else if (n < 0) return -1;\n  return 0;\n}\n",
+    /no-else-return/,
+  ],
 ];
 for (const [label, source, diagnostic] of lintCases) {
   test(`lint rejects ${label}`, () =>
@@ -162,6 +184,163 @@ for (const [label, source, diagnostic] of lintCases) {
       rejected(tool("oxlint", args), diagnostic);
     }));
 }
+
+test("lint baseline rejects new violations in baselined files, stale entries, and blank reasons", () => {
+  const baseline = parseLintBaseline({
+    version: 1,
+    entries: [
+      {
+        file: "scripts/fuzz-shell-path.ts",
+        rule: "eslint(no-else-return)",
+        line: 448,
+        column: 5,
+        reason: "Frozen fuzzer driver.",
+      },
+    ],
+  });
+  const existing = {
+    file: "scripts/fuzz-shell-path.ts",
+    rule: "eslint(no-else-return)",
+    line: 448,
+    column: 5,
+    severity: "error",
+    message: "Unnecessary else after return.",
+  };
+  assert.deepEqual(checkLintDiagnostics([existing], baseline), { unexpected: [], stale: [] });
+  const added = {
+    ...existing,
+    line: 900,
+    column: 1,
+    rule: "eslint(no-nested-ternary)",
+    message: "Do not nest ternary expressions.",
+  };
+  assert.deepEqual(checkLintDiagnostics([existing, added], baseline), {
+    unexpected: [added],
+    stale: [],
+  });
+  assert.deepEqual(checkLintDiagnostics([], baseline), { unexpected: [], stale: baseline });
+  assert.throws(
+    () =>
+      parseLintBaseline({
+        version: 1,
+        entries: [{ ...baseline[0], reason: "line one\nline two" }],
+      }),
+    /one-line reason/,
+  );
+  assert.throws(
+    () => parseLintBaseline({ version: 1, entries: [baseline[0], baseline[0]] }),
+    /Duplicate/,
+  );
+  assert.throws(() => assertLintBaselineShrinks([baseline[0]], []), /cannot grow/);
+  assert.equal(lintBaseRef({}), "origin/main");
+  assert.equal(lintBaseRef({ GITHUB_ACTIONS: "true" }), "HEAD^");
+  assert.equal(
+    lintBaseRef({
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      LAYERS_BASE_REF: "a".repeat(40),
+    }),
+    "HEAD^",
+  );
+  assert.equal(
+    lintBaseRef({ GITHUB_ACTIONS: "true", LINT_BASE_REF: "a-tested-base" }),
+    "a-tested-base",
+  );
+});
+
+test("lint baseline comparison against immutable git base rejects growth and modified seed files", () =>
+  fixture((directory) => {
+    const commit = (message: string) =>
+      runGit(directory, [
+        "-c",
+        "user.name=Quality probe",
+        "-c",
+        "user.email=quality@example.invalid",
+        "commit",
+        "-qm",
+        message,
+      ]);
+    const entry = {
+      file: "scripts/fuzz-shell-path.ts",
+      rule: "eslint(no-else-return)",
+      line: 448,
+      column: 5,
+      reason: "Frozen fuzzer driver.",
+    };
+    const extra = {
+      file: "scripts/fuzz-shell-path.ts",
+      rule: "eslint(no-else-return)",
+      line: 888,
+      column: 14,
+      reason: "Attempted new violation.",
+    };
+    runGit(directory, ["init", "-q"]);
+    writeRepoFile(directory, entry.file, "export const original = 1;\n");
+    runGit(directory, ["add", entry.file]);
+    commit("Base commit before lint baseline");
+    // Seeding accepts untouched base files and rejects modified or untracked files.
+    verifyLintBaselineAgainstBase(directory, [entry], "HEAD");
+    const untracked = {
+      file: "scripts/untracked.ts",
+      rule: "eslint(no-else-return)",
+      line: 1,
+      column: 1,
+      reason: "Attempted untracked seed.",
+    };
+    writeRepoFile(directory, untracked.file, "export const x = 1;\n");
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, untracked], "HEAD"),
+      /cannot seed file absent from/,
+    );
+    writeRepoFile(directory, entry.file, "export const original = 1;\nexport const added = 2;\n");
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, extra], "HEAD"),
+      /cannot seed modified file/,
+    );
+    // Once committed on base, adding a new exception fails closed while shrinking passes.
+    writeRepoFile(directory, entry.file, "export const original = 1;\n");
+    writeRepoFile(
+      directory,
+      "quality/lint-baseline.json",
+      JSON.stringify({ version: 1, entries: [entry] }),
+    );
+    runGit(directory, ["add", "quality/lint-baseline.json"]);
+    commit("Seed lint baseline");
+    const beforeSha = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: directory,
+      encoding: "utf8",
+    }).stdout.trim();
+    verifyLintBaselineAgainstBase(directory, [entry], "HEAD");
+    verifyLintBaselineAgainstBase(directory, [], "HEAD");
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, extra], "HEAD"),
+      /cannot grow/,
+    );
+    assert.throws(() => verifyLintBaselineAgainstBase(directory, [entry], "missing-base-ref"));
+    // Multi-commit push: expansion in an earlier commit of the push is caught via push before SHA.
+    writeRepoFile(
+      directory,
+      "quality/lint-baseline.json",
+      JSON.stringify({ version: 1, entries: [entry, extra] }),
+    );
+    runGit(directory, ["add", "quality/lint-baseline.json"]);
+    commit("Expand baseline in first push commit");
+    writeRepoFile(directory, "scripts/other.ts", "export const y = 2;\n");
+    runGit(directory, ["add", "scripts/other.ts"]);
+    commit("Follow-up push commit");
+    const eventPath = resolve(directory, "push-event.json");
+    writeFileSync(eventPath, JSON.stringify({ before: beforeSha }));
+    const pushBase = lintBaseRef({
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_EVENT_PATH: eventPath,
+    });
+    assert.equal(pushBase, beforeSha);
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, extra], pushBase),
+      /cannot grow/,
+    );
+  }));
 
 test("strict types reject an incompatible value", () =>
   fixture((directory) => {

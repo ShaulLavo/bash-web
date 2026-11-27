@@ -304,13 +304,10 @@ async function fixture(
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       }).trim();
-    const old = makeOracle(
-      entrypoint
-        ? currentOracleEnvironment()
-        : targetRunner
-          ? { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
-          : undefined,
-    );
+    const targetEnvironment = targetRunner
+      ? { nodeVersion: "v26.12.1", stdin: "empty", timeoutMs: 10000, runner: targetRunner }
+      : undefined;
+    const old = makeOracle(entrypoint ? currentOracleEnvironment() : targetEnvironment);
     const sourcePins = {
       oils: { revision: "fixture" },
       brush: { revision: "fixture" },

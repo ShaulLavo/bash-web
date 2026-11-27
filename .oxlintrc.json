@@ -16,6 +16,13 @@
     "eqeqeq": ["error", "always"],
     "typescript/no-explicit-any": "error",
     "max-depth": ["error", 3],
+    "no-else-return": [
+      "error",
+      {
+        "allowElseIf": false
+      }
+    ],
+    "no-nested-ternary": "error",
     "complexity": [
       "error",
       {

@@ -114,7 +114,11 @@ function tokens(pattern: string): Token[] {
       index = bracket.end;
       continue;
     }
-    result.push(char === "*" ? 0 : char === "?" ? 1 : char);
+    if (char === "*") {
+      result.push(0);
+      continue;
+    }
+    result.push(char === "?" ? 1 : char);
   }
   return result;
 }
