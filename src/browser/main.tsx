@@ -70,6 +70,17 @@ function preserveInputFocus(event: Event) {
   event.preventDefault();
 }
 
+function awaitStartupReady(
+  storageAndLease: Promise<void>,
+  terminalReady: Promise<Terminal | undefined>,
+  onStorageWaiting: (listener: () => void) => void,
+): Promise<Terminal | undefined> {
+  const terminalFailedWhileWaiting = new Promise<never>((_, reject) => {
+    void terminalReady.catch((terminalError) => onStorageWaiting(() => reject(terminalError)));
+  });
+  return Promise.race([storageAndLease, terminalFailedWhileWaiting]).then(() => terminalReady);
+}
+
 function followViewport(node: Element, signal: AbortSignal) {
   const viewport = window.visualViewport;
   if (!(node instanceof HTMLElement) || !viewport) return;
@@ -402,6 +413,12 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         leasedRuntime = lease.runtime;
         const controller = new AbortController();
         startup = controller;
+        let storageIsWaiting = false;
+        let notifyStorageWaiting: (() => void) | undefined;
+        const onStorageWaiting = (listener: () => void) => {
+          if (storageIsWaiting) listener();
+          else notifyStorageWaiting = listener;
+        };
         const storageAndLease = Promise.all([
           lease.ready,
           waitForStorage(lease.runtime, controller.signal, {
@@ -410,6 +427,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
             onState(nextStorage) {
               if (generation !== expectedGeneration || handle.signal.aborted) return;
               storage = nextStorage;
+              storageIsWaiting = nextStorage.status === "waiting";
+              if (storageIsWaiting) notifyStorageWaiting?.();
               if (nextStorage.status === "opening" || nextStorage.status === "waiting")
                 receiveState(
                   nextStorage.status === "waiting" ? "waiting" : "starting",
@@ -424,9 +443,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         });
         // Pre-warm shell WASM fetch and compilation alongside terminal and storage startup.
         prewarmShell(lease.runtime, onStartupStage);
-        // Await storage before terminal so INVALID_VFS_FORMAT recovery (Start fresh) always surfaces.
-        await storageAndLease;
-        const current = await terminalReady;
+        // Surface INVALID_VFS_FORMAT recovery first, unless storage is waiting on another tab's lock.
+        const current = await awaitStartupReady(storageAndLease, terminalReady, onStorageWaiting);
         if (!current || generation !== expectedGeneration || handle.signal.aborted) return;
         markStartup(onStartupStage, "session-create-requested");
         await createSession(current, lease.runtime, expectedGeneration, controller, onStartupStage);
