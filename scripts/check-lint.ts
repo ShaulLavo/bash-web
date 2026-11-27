@@ -73,10 +73,25 @@ export function parseLintBaseline(raw: unknown): LintBaselineEntry[] {
   return entries;
 }
 
+function pushBeforeSha(environment: NodeJS.ProcessEnv): string {
+  if (environment.LAYERS_BASE_REF) return environment.LAYERS_BASE_REF;
+  const eventPath = environment.GITHUB_EVENT_PATH;
+  if (!eventPath)
+    throw new Error(
+      "Push lint baseline requires LINT_BASE_REF, LAYERS_BASE_REF, or GITHUB_EVENT_PATH",
+    );
+  const parsed: unknown = JSON.parse(readFileSync(eventPath, "utf8"));
+  const before = isRecord(parsed) ? parsed.before : undefined;
+  if (typeof before !== "string" || !/^[a-f0-9]{40}$/.test(before) || before === "0".repeat(40))
+    throw new Error("Invalid push event before SHA for lint baseline");
+  return before;
+}
+
 export function lintBaseRef(environment: NodeJS.ProcessEnv): string {
-  return (
-    environment.LINT_BASE_REF ?? (environment.GITHUB_ACTIONS === "true" ? "HEAD^" : "origin/main")
-  );
+  if (environment.LINT_BASE_REF) return environment.LINT_BASE_REF;
+  if (environment.GITHUB_ACTIONS !== "true") return "origin/main";
+  if (environment.GITHUB_EVENT_NAME === "push") return pushBeforeSha(environment);
+  return environment.LAYERS_BASE_REF ?? "HEAD^";
 }
 
 export function assertLintBaselineShrinks(
@@ -124,9 +139,11 @@ export function verifyLintBaselineAgainstBase(
     assertLintBaselineShrinks(candidate, []);
     return;
   }
-  // Initial baseline seeding: every baselined file must be byte-identical to the immutable base.
+  // Initial baseline seeding: every baselined file must exist in base and be byte-identical.
   const baselinedFiles = Array.from(new Set(candidate.map((entry) => entry.file)));
   for (const file of baselinedFiles) {
+    if (!gitFileExistsAtRef(directory, ref, file))
+      throw new Error(`Lint baseline cannot seed file absent from ${ref}: ${file}`);
     const diff = spawnSync("git", ["diff", "--quiet", ref, "--", file], {
       cwd: directory,
       stdio: "ignore",

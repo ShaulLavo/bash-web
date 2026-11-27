@@ -270,8 +270,20 @@ test("lint baseline comparison against immutable git base rejects growth and mod
     writeRepoFile(directory, entry.file, "export const original = 1;\n");
     runGit(directory, ["add", entry.file]);
     commit("Base commit before lint baseline");
-    // Seeding accepts untouched base files and rejects a modified file with a new violation.
+    // Seeding accepts untouched base files and rejects modified or untracked files.
     verifyLintBaselineAgainstBase(directory, [entry], "HEAD");
+    const untracked = {
+      file: "scripts/untracked.ts",
+      rule: "eslint(no-else-return)",
+      line: 1,
+      column: 1,
+      reason: "Attempted untracked seed.",
+    };
+    writeRepoFile(directory, untracked.file, "export const x = 1;\n");
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, untracked], "HEAD"),
+      /cannot seed file absent from/,
+    );
     writeRepoFile(directory, entry.file, "export const original = 1;\nexport const added = 2;\n");
     assert.throws(
       () => verifyLintBaselineAgainstBase(directory, [entry, extra], "HEAD"),
@@ -286,6 +298,10 @@ test("lint baseline comparison against immutable git base rejects growth and mod
     );
     runGit(directory, ["add", "quality/lint-baseline.json"]);
     commit("Seed lint baseline");
+    const beforeSha = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: directory,
+      encoding: "utf8",
+    }).stdout.trim();
     verifyLintBaselineAgainstBase(directory, [entry], "HEAD");
     verifyLintBaselineAgainstBase(directory, [], "HEAD");
     assert.throws(
@@ -293,6 +309,29 @@ test("lint baseline comparison against immutable git base rejects growth and mod
       /cannot grow/,
     );
     assert.throws(() => verifyLintBaselineAgainstBase(directory, [entry], "missing-base-ref"));
+    // Multi-commit push: expansion in an earlier commit of the push is caught via push before SHA.
+    writeRepoFile(
+      directory,
+      "quality/lint-baseline.json",
+      JSON.stringify({ version: 1, entries: [entry, extra] }),
+    );
+    runGit(directory, ["add", "quality/lint-baseline.json"]);
+    commit("Expand baseline in first push commit");
+    writeRepoFile(directory, "scripts/other.ts", "export const y = 2;\n");
+    runGit(directory, ["add", "scripts/other.ts"]);
+    commit("Follow-up push commit");
+    const eventPath = resolve(directory, "push-event.json");
+    writeFileSync(eventPath, JSON.stringify({ before: beforeSha }));
+    const pushBase = lintBaseRef({
+      GITHUB_ACTIONS: "true",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_EVENT_PATH: eventPath,
+    });
+    assert.equal(pushBase, beforeSha);
+    assert.throws(
+      () => verifyLintBaselineAgainstBase(directory, [entry, extra], pushBase),
+      /cannot grow/,
+    );
   }));
 
 test("strict types reject an incompatible value", () =>
