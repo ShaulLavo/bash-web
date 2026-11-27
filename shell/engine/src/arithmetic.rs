@@ -194,17 +194,16 @@ impl<'a> Parser<'a> {
         }
         self.cursor += 1;
         match ch {
-            b'(' => Ok(Token::Open),
-            b')' => Ok(Token::Close),
-            b'[' | b']' | b'`' => Ok(Token::Unsupported),
-            _ => match match_operator(&self.source.as_bytes()[start..]) {
-                Some(op) => {
-                    self.cursor = start + op.len();
-                    Ok(Token::Op(op))
-                }
-                None => Ok(Token::Invalid),
-            },
+            b'(' => return Ok(Token::Open),
+            b')' => return Ok(Token::Close),
+            b'[' | b']' | b'`' => return Ok(Token::Unsupported),
+            _ => {}
         }
+        let Some(op) = match_operator(&self.source.as_bytes()[start..]) else {
+            return Ok(Token::Invalid);
+        };
+        self.cursor = start + op.len();
+        Ok(Token::Op(op))
     }
     async fn lex(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Token<'a>, Error> {
         let bytes = self.source.as_bytes();
