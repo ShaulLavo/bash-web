@@ -97,7 +97,7 @@
     "test:check-layers": "node --test scripts/test-check-layers.ts",
     "typecheck:layers": "tsc --ignoreConfig --noEmit --strict --target ESNext --module NodeNext --moduleResolution NodeNext --types node --allowImportingTsExtensions scripts/check-layers.ts scripts/test-check-layers.ts",
     "compat": "npm run compat:shell",
-    "lint": "oxlint --config .oxlintrc.json --deny-warnings src scripts tests vite.config.ts playwright.config.ts",
+    "lint": "node scripts/check-lint.ts",
     "typecheck": "node scripts/typecheck-projects.ts",
     "typecheck:prompt-consumer": "tsc -p tests/types/prompt-consumer/tsconfig.json",
     "check:unused": "knip --config .knip.jsonc --treat-config-hints-as-errors",

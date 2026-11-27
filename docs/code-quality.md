@@ -25,9 +25,12 @@ existing server.
 - Oxlint 1.88.0 checks all authored JS/TS in `src`, `scripts`, and `tests`, plus the
   Vite and Playwright configs. Correctness diagnostics and warnings fail the gate.
   Explicit `any`, unused variables, debugger, eval, loose equality, nested ternaries,
-  `else` after `return`, and unqualified browser-global `name` are errors. Maximum
-  control-block depth is 3 and modified cyclomatic complexity is 30. These are lint
-  limits, not a Rust parser or a proof of every language's nesting depth.
+  `else` / `else if` after `return`, and unqualified browser-global `name` are errors.
+  Maximum control-block depth is 3 and modified cyclomatic complexity is 30. Only the
+  17 pre-existing diagnostics in the 7 frozen-fingerprint fuzzer drivers are baselined
+  by exact location in `quality/lint-baseline.json` (`scripts/check-lint.ts`), so any
+  added violation fails even inside those files and stale entries fail until removed.
+  These are lint limits, not a Rust parser or a proof of every language's nesting depth.
 - TypeScript 7.0.2 uses `strict` for application code, tests, configs, and every
   authored TypeScript script. Imported JavaScript supplies inferred API types;
   JavaScript bodies are linted rather than migrated wholesale to checked JS.
@@ -35,8 +38,8 @@ existing server.
   config plugins, and package scripts supply real roots. The runtime test driver's
   discovered test patterns and compatibility worker are explicit dynamic roots.
   The pinned Ghostty alias and its Hotkeys dependency live outside this graph.
-  The duplicate driver launches jscpd by executable path. These three dependency
-  exceptions are documented in `.knip.jsonc`; configuration hints fail the gate.
+  The duplicate and lint drivers launch jscpd and oxlint by executable path. These
+  dependency exceptions are documented in `.knip.jsonc`; configuration hints fail the gate.
 - Rust uses `shell/Cargo.toml`, including the owned, patched Bashkit-derived parser.
   Its local changes remain recorded in `sources.lock.json`. `cargo fmt --all`,
   locked host and `wasm32-wasip1` workspace/all-target Clippy with `-D warnings`, locked workspace tests,

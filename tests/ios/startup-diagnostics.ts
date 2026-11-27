@@ -69,11 +69,11 @@ export class StartupPage {
     private readonly demo: StartupDemo,
   ) {}
   async route(pattern: string, callback: (request: HeldAssetRequest) => Promise<void>) {
-    const assetPaths: Record<string, string> = {
-      "**/programs/shell-engine.wasm": "/programs/shell-engine.wasm",
-      "**/programs/test-guest.wasm": "/programs/test-guest.wasm",
-    };
-    const path = assetPaths[pattern];
+    const assetPaths = new Map([
+      ["**/programs/shell-engine.wasm", "/programs/shell-engine.wasm"],
+      ["**/programs/test-guest.wasm", "/programs/test-guest.wasm"],
+    ]);
+    const path = assetPaths.get(pattern);
     if (!path || this.navigated) throw new Error("Unexpected original startup route");
     this.host.holdAsset(path, callback);
   }

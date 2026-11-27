@@ -15,6 +15,7 @@ import {
   validateDuplicatePlans,
 } from "./check-duplicates.ts";
 import { checkJavaScript, type JavaScriptException } from "./check-javascript.ts";
+import { checkLintDiagnostics, parseLintBaseline } from "./check-lint.ts";
 import { compatibilityPrograms } from "./compat-programs.ts";
 import { selectBasePackages } from "./waffle-compat.ts";
 
@@ -154,6 +155,11 @@ const lintCases: [string, string, RegExp][] = [
     "export function sign(n: number) {\n  if (n > 0) return 1;\n  else return -1;\n}\n",
     /no-else-return/,
   ],
+  [
+    "else if after return",
+    "export function sign(n: number) {\n  if (n > 0) return 1;\n  else if (n < 0) return -1;\n  return 0;\n}\n",
+    /no-else-return/,
+  ],
 ];
 for (const [label, source, diagnostic] of lintCases) {
   test(`lint rejects ${label}`, () =>
@@ -172,6 +178,54 @@ for (const [label, source, diagnostic] of lintCases) {
       rejected(tool("oxlint", args), diagnostic);
     }));
 }
+
+test("lint baseline rejects new violations in baselined files, stale entries, and blank reasons", () => {
+  const baseline = parseLintBaseline({
+    version: 1,
+    entries: [
+      {
+        file: "scripts/fuzz-shell-path.ts",
+        rule: "eslint(no-else-return)",
+        line: 448,
+        column: 5,
+        reason: "Frozen fuzzer driver.",
+      },
+    ],
+  });
+  const existing = {
+    file: "scripts/fuzz-shell-path.ts",
+    rule: "eslint(no-else-return)",
+    line: 448,
+    column: 5,
+    severity: "error",
+    message: "Unnecessary else after return.",
+  };
+  assert.deepEqual(checkLintDiagnostics([existing], baseline), { unexpected: [], stale: [] });
+  const added = {
+    ...existing,
+    line: 900,
+    column: 1,
+    rule: "eslint(no-nested-ternary)",
+    message: "Do not nest ternary expressions.",
+  };
+  assert.deepEqual(checkLintDiagnostics([existing, added], baseline), {
+    unexpected: [added],
+    stale: [],
+  });
+  assert.deepEqual(checkLintDiagnostics([], baseline), { unexpected: [], stale: baseline });
+  assert.throws(
+    () =>
+      parseLintBaseline({
+        version: 1,
+        entries: [{ ...baseline[0], reason: "line one\nline two" }],
+      }),
+    /one-line reason/,
+  );
+  assert.throws(
+    () => parseLintBaseline({ version: 1, entries: [baseline[0], baseline[0]] }),
+    /Duplicate/,
+  );
+});
 
 test("strict types reject an incompatible value", () =>
   fixture((directory) => {

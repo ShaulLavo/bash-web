@@ -121,14 +121,14 @@ function unquote(text: string): string {
       continue;
     }
     const escaped = text[++position];
-    const escapeMap: Record<string, string> = {
-      n: "\n",
-      t: "\t",
-      b: "\b",
-      '"': '"',
-      "\\": "\\",
-    };
-    const replacement = escaped !== undefined ? escapeMap[escaped] : undefined;
+    const escapeMap = new Map([
+      ["n", "\n"],
+      ["t", "\t"],
+      ["b", "\b"],
+      ['"', '"'],
+      ["\\", "\\"],
+    ]);
+    const replacement = escaped !== undefined ? escapeMap.get(escaped) : undefined;
     requireObject(replacement !== undefined);
     value += replacement;
   }

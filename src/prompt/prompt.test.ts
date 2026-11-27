@@ -602,13 +602,13 @@ test("all retained native captures keep their hash and all 24 non-git cases matc
     if (capture.caseName.startsWith("git-")) continue;
     const cwd = `/home/user/workspace/${capture.caseName}`;
     const files: Record<string, string> = {};
-    const versionsByCase: Record<string, string> = {
-      bun: "2.3.4",
-      "package-private": "9.8.7",
-    };
+    const versionsByCase = new Map([
+      ["bun", "2.3.4"],
+      ["package-private", "9.8.7"],
+    ]);
     if (capture.caseName !== "empty")
       files[`${cwd}/package.json`] = JSON.stringify({
-        version: versionsByCase[capture.caseName] ?? "1.2.3",
+        version: versionsByCase.get(capture.caseName) ?? "1.2.3",
         private: capture.caseName === "package-private",
       });
     if (capture.caseName === "bun") files[`${cwd}/bun.lock`] = "lock";

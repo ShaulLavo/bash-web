@@ -16,7 +16,12 @@
     "eqeqeq": ["error", "always"],
     "typescript/no-explicit-any": "error",
     "max-depth": ["error", 3],
-    "no-else-return": "error",
+    "no-else-return": [
+      "error",
+      {
+        "allowElseIf": false
+      }
+    ],
     "no-nested-ternary": "error",
     "complexity": [
       "error",
@@ -33,30 +38,6 @@
       }
     ]
   },
-  "overrides": [
-    // Frozen-fingerprint fuzzer drivers deferred to plans/008-duplicate-baseline.md — shrink when refactored together with fixture hashes.
-    {
-      "files": [
-        "scripts/fuzz-shell-braces.ts",
-        "scripts/fuzz-shell-control-flow.ts",
-        "scripts/fuzz-shell-functions.ts",
-        "scripts/fuzz-shell-job-lifetime.ts",
-        "scripts/fuzz-shell-path.ts",
-        "scripts/fuzz-shell-printf.ts",
-        "scripts/fuzz-shell-substitution-boundaries.ts"
-      ],
-      "rules": {
-        "no-nested-ternary": "off"
-      }
-    },
-    // Legacy else-after-return in frozen-fingerprint PATH fuzzer driver deferred to plans/008-duplicate-baseline.md.
-    {
-      "files": ["scripts/fuzz-shell-path.ts"],
-      "rules": {
-        "no-else-return": "off"
-      }
-    }
-  ],
   "env": {
     "builtin": true
   }
