@@ -487,6 +487,9 @@ impl State {
     pub fn pipeline_status(&self) -> &[i32] {
         self.pipestatus.as_slice()
     }
+    pub(crate) fn publish_single_pipeline_status(&mut self, code: i32) {
+        self.pipestatus = PipeStatus::Single(code);
+    }
     pub(crate) fn publish_pipeline_status(&mut self, statuses: Vec<i32>) {
         self.pipestatus = match statuses.as_slice() {
             [] => PipeStatus::Empty,

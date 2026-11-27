@@ -14,7 +14,9 @@ thiserror = "2"
 futures = { version = "0.3.31", default-features = false, features = ["std", "async-await"] }
 
 [profile.release]
-opt-level = "s"
+# The browser guest is most of what a page downloads. "z" makes it ~12% smaller than "s"
+# after brotli; fat LTO and wasm-opt both make the compressed guest larger.
+opt-level = "z"
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"

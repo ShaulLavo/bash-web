@@ -53,13 +53,24 @@ async function sendBytes(
   }
 }
 
+function captureOutput(context: TestContext, shell: Awaited<ReturnType<typeof api.createShell>>) {
+  const decoder = new TextDecoder();
+  let captured = "";
+  const output = () => {
+    captured += decoder.decode(shell.terminal.drain(), { stream: true });
+    return captured;
+  };
+  const drain = setInterval(output, 1);
+  context.after(() => clearInterval(drain));
+  return output;
+}
+
 test(
   "public prompt API waits for guest startup, commands, interrupts and disposal",
   { timeout: 30000 },
   async (context) => {
     const { runtime, shell } = await fixture(context);
-    const drain = setInterval(() => shell.terminal.drain(), 1);
-    context.after(() => clearInterval(drain));
+    const output = captureOutput(context, shell);
     let receipt = await shell.waitForPrompt();
     assert.deepEqual(receipt, { generation: 1n, status: 0 });
     const submit = async (source: string, status: number) => {
@@ -90,12 +101,24 @@ test(
       ],
       { launcher: api.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory)) },
     );
+    await api.installPrograms(
+      runtime,
+      [
+        {
+          name: "prompt-tty-wait",
+          programs: [
+            { path: "/bin/tty-wait", source: async () => api.signalStatusGuest("default") },
+          ],
+        },
+      ],
+      { launcher: api.guestLauncher(runtime, new URL("shell.mjs", nodeDirectory).href) },
+    );
     await submit("printf data >value; cat value", 0);
     await submit("cat /missing", 1);
     await submit("true", 0);
-    await send(shell, "cat");
-    while (!shell.diagnostics().roots.some((root) => root.liveProcesses > 1))
-      await new Promise((resolve) => setTimeout(resolve, 1));
+    // Generic preview1 workers have immediate-EOF stdin; wait for a real terminal guest to block.
+    await send(shell, "tty-wait", context.signal);
+    await until(context, () => output().includes("SIGNAL_READY\n"));
     const foreground = receipt.generation;
     shell.interrupt();
     receipt = await shell.waitForPrompt({ after: foreground });
@@ -149,14 +172,7 @@ async function signalFixture(
   status = 0,
 ) {
   const { runtime, shell } = await fixture(context);
-  const decoder = new TextDecoder();
-  let captured = "";
-  const output = () => {
-    captured += decoder.decode(shell.terminal.drain(), { stream: true });
-    return captured;
-  };
-  const drain = setInterval(output, 1);
-  context.after(() => clearInterval(drain));
+  const output = captureOutput(context, shell);
   const initial = await shell.waitForPrompt({ signal: context.signal });
   await api.installPrograms(
     runtime,
