@@ -187,6 +187,25 @@ impl<'a> Parser<'a> {
         parser.next = parser.lex(work, cancel).await?;
         Ok(parser)
     }
+    fn lex_non_word(&mut self, start: usize, ch: u8) -> Result<Token<'a>, Error> {
+        if !ch.is_ascii() {
+            self.cursor += self.source[start..].chars().next().ok_or(2)?.len_utf8();
+            return Ok(Token::Invalid);
+        }
+        self.cursor += 1;
+        match ch {
+            b'(' => Ok(Token::Open),
+            b')' => Ok(Token::Close),
+            b'[' | b']' | b'`' => Ok(Token::Unsupported),
+            _ => match match_operator(&self.source.as_bytes()[start..]) {
+                Some(op) => {
+                    self.cursor = start + op.len();
+                    Ok(Token::Op(op))
+                }
+                None => Ok(Token::Invalid),
+            },
+        }
+    }
     async fn lex(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Token<'a>, Error> {
         let bytes = self.source.as_bytes();
         loop {
@@ -203,48 +222,32 @@ impl<'a> Parser<'a> {
         let Some(&ch) = bytes.get(start) else {
             return Ok(Token::End);
         };
-        if ch.is_ascii_alphanumeric() || ch == b'_' {
-            let number = ch.is_ascii_digit();
-            self.cursor += 1;
-            loop {
-                let (next_cursor, steps, done) = scan_word_chunk(bytes, self.cursor, number);
-                self.cursor = next_cursor;
-                if steps != 0 {
-                    work.checkpoint_steps(steps, cancel).await?;
-                }
-                if done {
-                    break;
-                }
-            }
-            if !number && bytes.get(self.cursor) == Some(&b'[') {
-                let end = Reference::end(self.source, self.cursor).ok_or(2)?;
-                work.checkpoint_steps(end - self.cursor, cancel).await?;
-                self.cursor = end;
-            }
-            let text = &self.source[start..self.cursor];
-            return Ok(if number {
-                Token::Number(text)
-            } else {
-                Token::Ident(text)
-            });
+        if !ch.is_ascii_alphanumeric() && ch != b'_' {
+            return self.lex_non_word(start, ch);
         }
-        if !ch.is_ascii() {
-            self.cursor += self.source[start..].chars().next().ok_or(2)?.len_utf8();
-            return Ok(Token::Invalid);
-        }
+        let number = ch.is_ascii_digit();
         self.cursor += 1;
-        match ch {
-            b'(' => Ok(Token::Open),
-            b')' => Ok(Token::Close),
-            b'[' | b']' | b'`' => Ok(Token::Unsupported),
-            _ => match match_operator(&bytes[start..]) {
-                Some(op) => {
-                    self.cursor = start + op.len();
-                    Ok(Token::Op(op))
-                }
-                None => Ok(Token::Invalid),
-            },
+        loop {
+            let (next_cursor, steps, done) = scan_word_chunk(bytes, self.cursor, number);
+            self.cursor = next_cursor;
+            if steps != 0 {
+                work.checkpoint_steps(steps, cancel).await?;
+            }
+            if done {
+                break;
+            }
         }
+        if !number && bytes.get(self.cursor) == Some(&b'[') {
+            let end = Reference::end(self.source, self.cursor).ok_or(2)?;
+            work.checkpoint_steps(end - self.cursor, cancel).await?;
+            self.cursor = end;
+        }
+        let text = &self.source[start..self.cursor];
+        Ok(if number {
+            Token::Number(text)
+        } else {
+            Token::Ident(text)
+        })
     }
     fn resolve(source: &'a str, token: CachedToken) -> Token<'a> {
         match token {
