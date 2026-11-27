@@ -74,11 +74,14 @@ function awaitStartupReady(
   storageAndLease: Promise<void>,
   terminalReady: Promise<Terminal | undefined>,
   onStorageWaiting: (listener: () => void) => void,
+  onStorageSettled: () => void,
 ): Promise<Terminal | undefined> {
   const terminalFailedWhileWaiting = new Promise<never>((_, reject) => {
     void terminalReady.catch((terminalError) => onStorageWaiting(() => reject(terminalError)));
   });
-  return Promise.race([storageAndLease, terminalFailedWhileWaiting]).then(() => terminalReady);
+  return Promise.race([storageAndLease, terminalFailedWhileWaiting])
+    .finally(onStorageSettled)
+    .then(() => terminalReady);
 }
 
 function followViewport(node: Element, signal: AbortSignal) {
@@ -453,7 +456,11 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
           storageAndLease,
           terminalReady,
           onStorageWaiting,
-        ).finally(unobserveLock);
+          () => {
+            unobserveLock();
+            notifyStorageWaiting = undefined;
+          },
+        );
         if (!current || generation !== expectedGeneration || handle.signal.aborted) return;
         markStartup(onStartupStage, "session-create-requested");
         await createSession(current, lease.runtime, expectedGeneration, controller, onStartupStage);
