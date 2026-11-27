@@ -142,6 +142,7 @@ impl StorageBudget {
         }
     }
 
+    #[inline]
     fn reserve(&self, bytes: usize) -> Result<(), i32> {
         if self.0.remaining.get() < bytes {
             self.evict_caches(bytes);
@@ -220,6 +221,7 @@ impl StorageAllocation {
 }
 
 impl Drop for StorageAllocation {
+    #[inline]
     fn drop(&mut self) {
         self.budget
             .0
@@ -642,6 +644,7 @@ impl Work {
             fields_remaining: fields,
         }
     }
+    #[inline]
     pub(crate) fn admit_storage(&mut self, bytes: usize) -> Result<(), Error> {
         if bytes > self.storage_remaining {
             return Err(2.into());
@@ -649,14 +652,17 @@ impl Work {
         self.storage_remaining -= bytes;
         Ok(())
     }
+    #[inline]
     pub(crate) fn storage_left(&self) -> usize {
         self.storage_remaining
     }
     /// Return storage admitted for a temporary once it has been dropped. Only
     /// freed memory: retained values stay charged for the whole command.
+    #[inline]
     pub(crate) fn release_storage(&mut self, bytes: usize) {
         self.storage_remaining = self.storage_remaining.saturating_add(bytes);
     }
+    #[inline]
     pub(crate) fn consume_scalar_field(&mut self) {
         self.fields_remaining = self.fields_remaining.saturating_sub(1);
     }
@@ -706,6 +712,7 @@ impl Default for WorkQuantum {
 }
 
 impl WorkQuantum {
+    #[inline]
     fn charge(&mut self, steps: usize) -> bool {
         self.0 -= steps;
         if self.0 != 0 {

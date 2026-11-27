@@ -28,11 +28,123 @@ pub(crate) fn admitted<'a, T: 'a, F: Future<Output = Result<T, Error>> + 'a>(
 }
 
 const MAX_DEPTH: usize = 64;
-const OPS: &[&str] = &[
-    "<<=", ">>=", "**", "++", "--", "<<", ">>", "<=", ">=", "==", "!=", "&&", "||", "+=", "-=",
-    "*=", "/=", "%=", "&=", "^=", "|=", "+", "-", "*", "/", "%", "<", ">", "!", "~", "&", "^", "|",
-    "?", ":", "=", ",",
-];
+
+fn match_operator(bytes: &[u8]) -> Option<&'static str> {
+    let first = *bytes.first()?;
+    let second = bytes.get(1).copied();
+    let third = bytes.get(2).copied();
+    Some(match first {
+        b'<' => match (second, third) {
+            (Some(b'<'), Some(b'=')) => "<<=",
+            (Some(b'<'), _) => "<<",
+            (Some(b'='), _) => "<=",
+            _ => "<",
+        },
+        b'>' => match (second, third) {
+            (Some(b'>'), Some(b'=')) => ">>=",
+            (Some(b'>'), _) => ">>",
+            (Some(b'='), _) => ">=",
+            _ => ">",
+        },
+        b'*' => match second {
+            Some(b'*') => "**",
+            Some(b'=') => "*=",
+            _ => "*",
+        },
+        b'+' => match second {
+            Some(b'+') => "++",
+            Some(b'=') => "+=",
+            _ => "+",
+        },
+        b'-' => match second {
+            Some(b'-') => "--",
+            Some(b'=') => "-=",
+            _ => "-",
+        },
+        b'=' => {
+            if second == Some(b'=') {
+                "=="
+            } else {
+                "="
+            }
+        }
+        b'!' => {
+            if second == Some(b'=') {
+                "!="
+            } else {
+                "!"
+            }
+        }
+        b'&' => match second {
+            Some(b'&') => "&&",
+            Some(b'=') => "&=",
+            _ => "&",
+        },
+        b'|' => match second {
+            Some(b'|') => "||",
+            Some(b'=') => "|=",
+            _ => "|",
+        },
+        b'/' => {
+            if second == Some(b'=') {
+                "/="
+            } else {
+                "/"
+            }
+        }
+        b'%' => {
+            if second == Some(b'=') {
+                "%="
+            } else {
+                "%"
+            }
+        }
+        b'^' => {
+            if second == Some(b'=') {
+                "^="
+            } else {
+                "^"
+            }
+        }
+        b'~' => "~",
+        b'?' => "?",
+        b':' => ":",
+        b',' => ",",
+        _ => return None,
+    })
+}
+
+fn plain_decimal(text: &str) -> Option<i64> {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    while start < bytes.len() && bytes[start].is_ascii_whitespace() {
+        start += 1;
+    }
+    let mut end = bytes.len();
+    while end > start && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let slice = &bytes[start..end];
+    if slice.is_empty() {
+        return Some(0);
+    }
+    let (neg, digits) = match slice[0] {
+        b'-' => (true, &slice[1..]),
+        b'+' => (false, &slice[1..]),
+        _ => (false, slice),
+    };
+    if digits.is_empty() || (digits.len() > 1 && digits[0] == b'0') {
+        return None;
+    }
+    let mut value = 0i64;
+    for &byte in digits {
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+        value = value.wrapping_mul(10).wrapping_add(i64::from(byte - b'0'));
+    }
+    Some(if neg { value.wrapping_neg() } else { value })
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Token<'a> {
@@ -82,8 +194,9 @@ impl<'a> Parser<'a> {
     }
     async fn lex(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Token<'a>, Error> {
         let bytes = self.source.as_bytes();
+        let mut ws_steps = 0usize;
         while self.cursor < bytes.len() {
-            work.checkpoint(cancel).await?;
+            ws_steps += 1;
             if bytes[self.cursor].is_ascii_whitespace() {
                 self.cursor += 1;
             } else if bytes[self.cursor..].starts_with(b"\\\n") {
@@ -92,6 +205,9 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
+        if ws_steps != 0 {
+            work.checkpoint_steps(ws_steps, cancel).await?;
+        }
         let start = self.cursor;
         let Some(&ch) = bytes.get(start) else {
             return Ok(Token::End);
@@ -99,8 +215,9 @@ impl<'a> Parser<'a> {
         if ch.is_ascii_alphanumeric() || ch == b'_' {
             let number = ch.is_ascii_digit();
             self.cursor += 1;
+            let mut steps = 0usize;
             while let Some(&ch) = bytes.get(self.cursor) {
-                work.checkpoint(cancel).await?;
+                steps += 1;
                 if !(ch.is_ascii_alphanumeric()
                     || ch == b'_'
                     || number && matches!(ch, b'#' | b'@'))
@@ -109,11 +226,12 @@ impl<'a> Parser<'a> {
                 }
                 self.cursor += 1;
             }
+            if steps != 0 {
+                work.checkpoint_steps(steps, cancel).await?;
+            }
             if !number && bytes.get(self.cursor) == Some(&b'[') {
                 let end = Reference::end(self.source, self.cursor).ok_or(2)?;
-                for _ in self.cursor..end {
-                    work.checkpoint(cancel).await?;
-                }
+                work.checkpoint_steps(end - self.cursor, cancel).await?;
                 self.cursor = end;
             }
             let text = &self.source[start..self.cursor];
@@ -132,15 +250,13 @@ impl<'a> Parser<'a> {
             b'(' => Ok(Token::Open),
             b')' => Ok(Token::Close),
             b'[' | b']' | b'`' => Ok(Token::Unsupported),
-            _ => {
-                for &op in OPS {
-                    if self.source[start..].starts_with(op) {
-                        self.cursor = start + op.len();
-                        return Ok(Token::Op(op));
-                    }
+            _ => match match_operator(&bytes[start..]) {
+                Some(op) => {
+                    self.cursor = start + op.len();
+                    Ok(Token::Op(op))
                 }
-                Ok(Token::Invalid)
-            }
+                None => Ok(Token::Invalid),
+            },
         }
     }
     fn resolve(source: &'a str, token: CachedToken) -> Token<'a> {
@@ -296,7 +412,7 @@ fn evaluate_inner<'a>(
             } else {
                 source
             };
-            expression(source, state, cancel, max, work, 0).await
+            expression_body(source, state, cancel, max, work, 0).await
         }
         .await;
         work.leave_arithmetic();
@@ -325,7 +441,7 @@ async fn finish_parse(
     if parser.current == Token::End {
         return Ok(0);
     }
-    let result = parse(parser, (0, true), state, cancel, max, work, depth).await?;
+    let result = parse_body(parser, (0, true), state, cancel, max, work, depth).await?;
     if parser.current == Token::Unsupported {
         return Err(2.into());
     }
@@ -358,6 +474,24 @@ pub(crate) async fn evaluate_literal(
     expression(source, state, cancel, max, work, 0).await
 }
 
+async fn expression_body(
+    source: &str,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+    depth: usize,
+) -> Result<i64, Error> {
+    if depth >= MAX_DEPTH {
+        return Err(2.into());
+    }
+    if source.len() > max {
+        return Err(2.into());
+    }
+    let mut parser = Parser::new(source, work, cancel).await?;
+    finish_parse(&mut parser, state, cancel, max, work, depth + 1).await
+}
+
 fn expression<'a>(
     source: &'a str,
     state: &'a SharedState,
@@ -366,15 +500,8 @@ fn expression<'a>(
     work: &'a mut Work,
     depth: usize,
 ) -> ResultFuture<'a, i64> {
-    admitted(work, move |work| async move {
-        if depth >= MAX_DEPTH {
-            return Err(2.into());
-        }
-        if source.len() > max {
-            return Err(2.into());
-        }
-        let mut parser = Parser::new(source, work, cancel).await?;
-        finish_parse(&mut parser, state, cancel, max, work, depth + 1).await
+    admitted(work, move |work| {
+        expression_body(source, state, cancel, max, work, depth)
     })
 }
 
@@ -413,91 +540,110 @@ fn parse<'a, 's: 'a>(
     work: &'a mut Work,
     depth: usize,
 ) -> ResultFuture<'a, i64> {
-    let (min, active) = mode;
-    admitted(work, move |work| async move {
-        if depth >= MAX_DEPTH {
-            return Err(2.into());
-        }
-        work.checkpoint(cancel).await?;
-        // Capture compound-assignment's old value before the RHS mutates it.
-        // Plain '=' never recursively evaluates its unused old value.
-        let mut value = if min <= 1
-            && let (Token::Ident(name), Token::Op(op)) = (p.current, p.next)
-            && assignment(op)
-        {
+    admitted(work, move |work| {
+        parse_body(p, mode, state, cancel, max, work, depth)
+    })
+}
+
+async fn leaf_operand(
+    p: &mut Parser<'_>,
+    active: bool,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+    depth: usize,
+) -> Result<Option<i64>, Error> {
+    if depth >= MAX_DEPTH {
+        return Err(2.into());
+    }
+    match p.current {
+        Token::Number(text) => {
+            work.checkpoint(cancel).await?;
+            let value = number(text, work, cancel).await?;
             p.advance(work, cancel).await?;
+            Ok(Some(value))
+        }
+        Token::Ident(name) => {
+            work.checkpoint(cancel).await?;
             p.advance(work, cancel).await?;
             let place = place(name, active, state, cancel, max, work).await?;
-            let old = if op == "=" {
-                0
-            } else {
-                read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?
-            };
-            let rhs = parse(p, (1, active), state, cancel, max, work, depth + 1).await?;
-            let result = if op == "=" {
-                rhs
-            } else {
-                binary(&op[..op.len() - 1], old, rhs, active, work)?
-            };
-            store_place(place.as_ref(), result, state, cancel, max, work).await?;
-            result
+            let value = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
+            if let Token::Op(op @ ("++" | "--")) = p.current {
+                p.advance(work, cancel).await?;
+                let next = if op == "++" {
+                    value.wrapping_add(1)
+                } else {
+                    value.wrapping_sub(1)
+                };
+                store_place(place.as_ref(), next, state, cancel, max, work).await?;
+            }
+            Ok(Some(value))
+        }
+        _ => Ok(None),
+    }
+}
+
+async fn parse_body(
+    p: &mut Parser<'_>,
+    mode: (u8, bool),
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+    depth: usize,
+) -> Result<i64, Error> {
+    let (min, active) = mode;
+    if depth >= MAX_DEPTH {
+        return Err(2.into());
+    }
+    work.checkpoint(cancel).await?;
+    // Capture compound-assignment's old value before the RHS mutates it.
+    // Plain '=' never recursively evaluates its unused old value.
+    let mut value = if min <= 1
+        && let (Token::Ident(name), Token::Op(op)) = (p.current, p.next)
+        && assignment(op)
+    {
+        p.advance(work, cancel).await?;
+        p.advance(work, cancel).await?;
+        let place = place(name, active, state, cancel, max, work).await?;
+        let old = if op == "=" {
+            0
         } else {
-            unary(p, active, state, cancel, max, work, depth + 1).await?
+            read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?
         };
-        loop {
-            work.checkpoint(cancel).await?;
-            let Token::Op(mut op) = p.current else {
-                break;
-            };
-            let Some(prec) = precedence(op) else {
-                break;
-            };
-            if prec < min {
-                break;
-            }
-            if assignment(op) {
-                return fault("attempted assignment to non-variable", work);
-            }
-            if op == "?" {
-                p.advance(work, cancel).await?;
-                let yes = parse(
-                    p,
-                    (0, active && value != 0),
-                    state,
-                    cancel,
-                    max,
-                    work,
-                    depth + 1,
-                )
-                .await?;
-                if p.current != Token::Op(":") {
-                    return fault("`:' expected for conditional expression", work);
-                }
-                p.advance(work, cancel).await?;
-                let no = parse(
-                    p,
-                    (2, active && value == 0),
-                    state,
-                    cancel,
-                    max,
-                    work,
-                    depth + 1,
-                )
-                .await?;
-                value = if value != 0 { yes } else { no };
-                continue;
-            }
-            // On a non-lvalue, 5++1 and 5--1 mean binary sign + unary sign.
-            if matches!(op, "++" | "--") {
-                op = if op == "++" { "+" } else { "-" };
-                p.current = Token::Op(op);
-            } else {
-                p.advance(work, cancel).await?;
-            }
-            let rhs_active = active && !(op == "&&" && value == 0 || op == "||" && value != 0);
-            let rhs = parse(
+        let rhs = parse(p, (1, active), state, cancel, max, work, depth + 1).await?;
+        let result = if op == "=" {
+            rhs
+        } else {
+            binary(&op[..op.len() - 1], old, rhs, active, work)?
+        };
+        store_place(place.as_ref(), result, state, cancel, max, work).await?;
+        result
+    } else if let Some(leaf) = leaf_operand(p, active, state, cancel, max, work, depth + 1).await? {
+        leaf
+    } else {
+        unary(p, active, state, cancel, max, work, depth + 1).await?
+    };
+    loop {
+        work.checkpoint(cancel).await?;
+        let Token::Op(mut op) = p.current else {
+            break;
+        };
+        let Some(prec) = precedence(op) else {
+            break;
+        };
+        if prec < min {
+            break;
+        }
+        if assignment(op) {
+            return fault("attempted assignment to non-variable", work);
+        }
+        if op == "?" {
+            p.advance(work, cancel).await?;
+            let yes = parse(
                 p,
-                (if op == "**" { prec } else { prec + 1 }, rhs_active),
+                (0, active && value != 0),
                 state,
                 cancel,
                 max,
@@ -505,10 +651,56 @@ fn parse<'a, 's: 'a>(
                 depth + 1,
             )
             .await?;
-            value = binary(op, value, rhs, active, work)?;
+            if p.current != Token::Op(":") {
+                return fault("`:' expected for conditional expression", work);
+            }
+            p.advance(work, cancel).await?;
+            let no = parse(
+                p,
+                (2, active && value == 0),
+                state,
+                cancel,
+                max,
+                work,
+                depth + 1,
+            )
+            .await?;
+            value = if value != 0 { yes } else { no };
+            continue;
         }
-        Ok(value)
-    })
+        // On a non-lvalue, 5++1 and 5--1 mean binary sign + unary sign.
+        if matches!(op, "++" | "--") {
+            op = if op == "++" { "+" } else { "-" };
+            p.current = Token::Op(op);
+        } else {
+            p.advance(work, cancel).await?;
+        }
+        let rhs_active = active && !(op == "&&" && value == 0 || op == "||" && value != 0);
+        let next_min = if op == "**" { prec } else { prec + 1 };
+        // Inline a single-token leaf RHS when no postfix or higher-precedence operator follows.
+        let is_plain_leaf = matches!(p.current, Token::Number(_))
+            || (matches!(p.current, Token::Ident(_)) && !matches!(p.next, Token::Op("++" | "--")));
+        let rhs = if is_plain_leaf
+            && !matches!(p.next, Token::Op(next_op) if precedence(next_op).is_some_and(|p| p >= next_min))
+        {
+            leaf_operand(p, rhs_active, state, cancel, max, work, depth + 2)
+                .await?
+                .expect("checked number or ident")
+        } else {
+            parse(
+                p,
+                (next_min, rhs_active),
+                state,
+                cancel,
+                max,
+                work,
+                depth + 1,
+            )
+            .await?
+        };
+        value = binary(op, value, rhs, active, work)?;
+    }
+    Ok(value)
 }
 
 fn unary<'a, 's: 'a>(
@@ -558,34 +750,10 @@ fn unary<'a, 's: 'a>(
                 _ => value,
             });
         }
+        if let Some(leaf) = leaf_operand(p, active, state, cancel, max, work, depth).await? {
+            return Ok(leaf);
+        }
         match p.current {
-            Token::Number(text) => {
-                let value = number(text, work, cancel).await?;
-                p.advance(work, cancel).await?;
-                Ok(value)
-            }
-            Token::Ident(name) => {
-                p.advance(work, cancel).await?;
-                let place = place(name, active, state, cancel, max, work).await?;
-                let value = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
-                if let Token::Op(op @ ("++" | "--")) = p.current {
-                    p.advance(work, cancel).await?;
-                    store_place(
-                        place.as_ref(),
-                        if op == "++" {
-                            value.wrapping_add(1)
-                        } else {
-                            value.wrapping_sub(1)
-                        },
-                        state,
-                        cancel,
-                        max,
-                        work,
-                    )
-                    .await?;
-                }
-                Ok(value)
-            }
             Token::Open => {
                 p.advance(work, cancel).await?;
                 let value = parse(p, (0, active), state, cancel, max, work, depth + 1).await?;
@@ -633,6 +801,15 @@ async fn read_place(
             .await?
             .unwrap_or_default()
     };
+    if depth >= MAX_DEPTH || value.len() > max {
+        return Err(2.into());
+    }
+    if depth + 3 < MAX_DEPTH
+        && let Some(parsed) = plain_decimal(&value)
+    {
+        work.checkpoint_steps(value.len().max(1), cancel).await?;
+        return Ok(parsed);
+    }
     work.enter_scalar_arithmetic(&place.name, place.index.unwrap_or(0), cancel)
         .await?;
     let result = expression(&value, state, cancel, max, work, depth).await;
@@ -672,9 +849,9 @@ async fn number(text: &str, work: &mut Work, cancel: &Cancel) -> Result<i64, Err
             if prefix.starts_with('0') {
                 return fault("invalid number", work);
             }
+            work.checkpoint_steps(prefix.len(), cancel).await?;
             let mut base = 0u32;
             for byte in prefix.bytes() {
-                work.checkpoint(cancel).await?;
                 if !byte.is_ascii_digit() {
                     return fault("invalid arithmetic base", work);
                 }
@@ -698,9 +875,9 @@ async fn number(text: &str, work: &mut Work, cancel: &Cancel) -> Result<i64, Err
             fault("invalid integer constant", work)
         };
     }
+    work.checkpoint_steps(digits.len(), cancel).await?;
     let mut value = 0i64;
     for byte in digits.bytes() {
-        work.checkpoint(cancel).await?;
         let digit = match byte {
             b'0'..=b'9' => u32::from(byte - b'0'),
             b'a'..=b'z' => u32::from(byte - b'a') + 10,
@@ -898,6 +1075,46 @@ mod tests {
                 evaluate(&source, &state, &cancel, 4096, &mut work).await,
                 Err(Error::Status(2))
             ));
+        });
+        finish(&ex, job);
+    }
+
+    #[test]
+    fn rhs_leaf_inlining_preserves_postfix_precedence_and_scalar_bases() {
+        let ex = Executor::new();
+        let job = ex.spawn(async {
+            let state = State::default().shared();
+            state
+                .borrow_mut()
+                .assign_parameter("a".into(), "3".into())
+                .unwrap();
+            state
+                .borrow_mut()
+                .assign_parameter("oct".into(), "010".into())
+                .unwrap();
+            state
+                .borrow_mut()
+                .assign_parameter("min".into(), "-9223372036854775808".into())
+                .unwrap();
+            let cancel = Cancel::new();
+            let mut work = Work::new(1_000_000, 1_000_000, 1);
+            assert_eq!(
+                evaluate("1 + a++ ** 2", &state, &cancel, 4096, &mut work)
+                    .await
+                    .ok(),
+                Some(10)
+            );
+            assert_eq!(state.borrow().bindings()["a"], "4");
+            assert_eq!(
+                evaluate("oct + 1", &state, &cancel, 4096, &mut work)
+                    .await
+                    .ok(),
+                Some(9)
+            );
+            assert_eq!(
+                evaluate("min", &state, &cancel, 4096, &mut work).await.ok(),
+                Some(i64::MIN)
+            );
         });
         finish(&ex, job);
     }

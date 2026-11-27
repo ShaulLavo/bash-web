@@ -274,6 +274,8 @@ struct Residual {
     // Retries still belong to the invocation that created the descendants.
     lifetime: (Cancel, Rc<Cell<Option<i32>>>),
 }
+const COMMAND_YIELD_QUANTUM: u8 = 16;
+
 struct Core {
     executor: Executor,
     host: Rc<dyn ProcessHost>,
@@ -290,6 +292,7 @@ struct Core {
     next: Cell<u64>,
     foreground: RefCell<Option<Job>>,
     exit_requested: Cell<bool>,
+    command_quantum: Cell<u8>,
 }
 #[derive(Clone)]
 pub(crate) struct Context {
@@ -367,6 +370,24 @@ impl Context {
     }
     fn cancel_status(&self) -> i32 {
         128 + self.stop_signal()
+    }
+    async fn command_checkpoint(&self) -> bool {
+        if self.cancel.is_cancelled() {
+            return false;
+        }
+        let batching = self.core.jobs.borrow().is_empty();
+        if batching {
+            let left = self.core.command_quantum.get().saturating_sub(1);
+            if left != 0 {
+                self.core.command_quantum.set(left);
+                return true;
+            }
+            self.core.command_quantum.set(COMMAND_YIELD_QUANTUM);
+        } else {
+            self.core.command_quantum.set(1);
+        }
+        yield_now().await;
+        !self.cancel.probe_now()
     }
     /// Runtime executable registration is authoritative; never infer X_OK from open.
     pub(crate) async fn executable_path(&self, path: String, cwd: String) -> Result<bool, i32> {
@@ -845,6 +866,7 @@ impl Session {
                 next: Cell::new(1),
                 foreground: RefCell::new(None),
                 exit_requested: Cell::new(false),
+                command_quantum: Cell::new(1),
             }),
             state,
         }
@@ -1611,8 +1633,7 @@ fn execute_command<'a>(
     let evaluation = context.evaluation.clone();
     evaluation.frame(
         async move {
-            yield_now().await;
-            if context.cancel.is_cancelled() {
+            if !context.command_checkpoint().await {
                 return Outcome::status(130);
             }
             let preserve = match view_target(&command) {
@@ -1674,7 +1695,7 @@ fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool)
     let mut state = state.borrow_mut();
     state.publish_status(result.code);
     if !preserve_pipeline {
-        state.publish_pipeline_status(vec![result.code]);
+        state.publish_single_pipeline_status(result.code);
     }
     result
 }
@@ -2376,8 +2397,7 @@ fn loop_arithmetic<'a>(
     // every evaluation still owns fresh Work and command-local descriptors.
     evaluation.frame(
         async move {
-            yield_now().await;
-            if context.cancel.is_cancelled() {
+            if !context.command_checkpoint().await {
                 return Outcome::status(130);
             }
             let fds = fds.fork();
@@ -2998,7 +3018,7 @@ async fn background_body(
     let result = launch_background(syntax, span, state, fds, context).await;
     let mut state = state.borrow_mut();
     state.publish_status(result.code);
-    state.publish_pipeline_status(vec![result.code]);
+    state.publish_single_pipeline_status(result.code);
     result
 }
 
@@ -3215,9 +3235,7 @@ async fn async_identity(
 ) -> Result<String, expand::Error> {
     let bytes = id.0.checked_ilog10().unwrap_or(0) as usize + 1;
     work.admit_storage(bytes)?;
-    for _ in 0..bytes {
-        work.checkpoint(cancel).await?;
-    }
+    work.checkpoint_steps(bytes, cancel).await?;
     let mut identity = String::new();
     identity.try_reserve_exact(bytes).map_err(|_| 2)?;
     std::fmt::Write::write_fmt(&mut identity, format_args!("{}", id.0)).map_err(|_| 2)?;

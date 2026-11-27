@@ -147,9 +147,7 @@ impl Expansion<'_> {
                 .segment("", Protection::expansion(protected, state), protected)
                 .await;
         };
-        for _ in value.bytes() {
-            self.work.checkpoint(self.cancel).await?;
-        }
+        self.work.checkpoint_steps(value.len(), self.cancel).await?;
         let capacity = self.raw_remaining;
         let mut child = Expansion {
             segments: Segments::default(),

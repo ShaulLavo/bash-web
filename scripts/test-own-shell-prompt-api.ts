@@ -90,10 +90,21 @@ test(
       ],
       { launcher: api.genericProgramLauncher(new URL("preview1.mjs", nodeDirectory)) },
     );
+    await api.installPrograms(
+      runtime,
+      [
+        {
+          name: "prompt-tty-cat",
+          programs: [{ path: "/bin/tty-cat", source: () => readFile(familyWasmPath("cat")) }],
+        },
+      ],
+      { launcher: api.guestLauncher(runtime, new URL("shell.mjs", nodeDirectory).href) },
+    );
     await submit("printf data >value; cat value", 0);
     await submit("cat /missing", 1);
     await submit("true", 0);
-    await send(shell, "cat");
+    // Generic preview1 workers have immediate-EOF stdin; attach a real terminal guest so it blocks.
+    await send(shell, "tty-cat");
     while (!shell.diagnostics().roots.some((root) => root.liveProcesses > 1))
       await new Promise((resolve) => setTimeout(resolve, 1));
     const foreground = receipt.generation;

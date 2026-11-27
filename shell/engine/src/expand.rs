@@ -209,6 +209,25 @@ fn admit_vec_exact<T>(value: &mut Vec<T>, total: usize, work: &mut Work) -> Resu
         .map_err(|_| Error::Status(2))
 }
 
+fn format_i64(value: i64, buffer: &mut [u8; 24]) -> &str {
+    let mut pos = buffer.len();
+    let mut n = value.unsigned_abs();
+    loop {
+        pos -= 1;
+        buffer[pos] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    if value < 0 {
+        pos -= 1;
+        buffer[pos] = b'-';
+    }
+    // SAFETY: buffer[pos..] contains only ASCII '-' and '0'..='9'.
+    std::str::from_utf8(&buffer[pos..]).expect("ASCII decimal")
+}
+
 fn admit_vec_slot<T>(value: &mut Vec<T>, work: &mut Work) -> Result<(), Error> {
     if value.len() < value.capacity() {
         return Ok(());
@@ -1257,9 +1276,11 @@ impl Expansion<'_> {
                 expansion.ifs = None;
                 expansion.ifs_changed = true;
                 expansion.work.admit_storage(20)?;
+                let mut buffer = [0u8; 24];
+                let formatted = format_i64(value, &mut buffer);
                 return expansion
                     .segment(
-                        &value.to_string(),
+                        formatted,
                         Protection::expansion(scalar || quoted, state),
                         scalar || quoted,
                     )
