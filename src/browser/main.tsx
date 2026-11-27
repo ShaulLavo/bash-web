@@ -413,10 +413,15 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         leasedRuntime = lease.runtime;
         const controller = new AbortController();
         startup = controller;
+        let lockAcquired = false;
         let storageIsWaiting = false;
         let notifyStorageWaiting: (() => void) | undefined;
+        const unobserveLock = storageStartup.onLockAcquired(() => {
+          lockAcquired = true;
+          storageIsWaiting = false;
+        });
         const onStorageWaiting = (listener: () => void) => {
-          if (storageIsWaiting) listener();
+          if (storageIsWaiting && !lockAcquired) listener();
           else notifyStorageWaiting = listener;
         };
         const storageAndLease = Promise.all([
@@ -427,7 +432,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
             onState(nextStorage) {
               if (generation !== expectedGeneration || handle.signal.aborted) return;
               storage = nextStorage;
-              storageIsWaiting = nextStorage.status === "waiting";
+              storageIsWaiting = nextStorage.status === "waiting" && !lockAcquired;
               if (storageIsWaiting) notifyStorageWaiting?.();
               if (nextStorage.status === "opening" || nextStorage.status === "waiting")
                 receiveState(
@@ -443,8 +448,12 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         });
         // Pre-warm shell WASM fetch and compilation alongside terminal and storage startup.
         prewarmShell(lease.runtime, onStartupStage);
-        // Surface INVALID_VFS_FORMAT recovery first, unless storage is waiting on another tab's lock.
-        const current = await awaitStartupReady(storageAndLease, terminalReady, onStorageWaiting);
+        // Surface INVALID_VFS_FORMAT recovery first, unless waiting for another tab's lock.
+        const current = await awaitStartupReady(
+          storageAndLease,
+          terminalReady,
+          onStorageWaiting,
+        ).finally(unobserveLock);
         if (!current || generation !== expectedGeneration || handle.signal.aborted) return;
         markStartup(onStartupStage, "session-create-requested");
         await createSession(current, lease.runtime, expectedGeneration, controller, onStartupStage);
