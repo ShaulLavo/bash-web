@@ -180,37 +180,9 @@ impl<'a> Parser<'a> {
             return Ok(Token::End);
         };
         if ch.is_ascii_alphanumeric() || ch == b'_' {
-            let number = ch.is_ascii_digit();
-            self.cursor += 1;
-            let mut steps = 0usize;
-            while let Some(&ch) = bytes.get(self.cursor) {
-                steps += 1;
-                if !(ch.is_ascii_alphanumeric()
-                    || ch == b'_'
-                    || number && matches!(ch, b'#' | b'@'))
-                {
-                    break;
-                }
-                self.cursor += 1;
-                if steps == LEX_CHECKPOINT_CHUNK {
-                    work.checkpoint_steps(steps, cancel).await?;
-                    steps = 0;
-                }
-            }
-            if steps != 0 {
-                work.checkpoint_steps(steps, cancel).await?;
-            }
-            if !number && bytes.get(self.cursor) == Some(&b'[') {
-                let end = Reference::end(self.source, self.cursor).ok_or(2)?;
-                work.checkpoint_steps(end - self.cursor, cancel).await?;
-                self.cursor = end;
-            }
-            let text = &self.source[start..self.cursor];
-            return Ok(if number {
-                Token::Number(text)
-            } else {
-                Token::Ident(text)
-            });
+            return self
+                .lex_word(start, ch.is_ascii_digit(), work, cancel)
+                .await;
         }
         if !ch.is_ascii() {
             self.cursor += self.source[start..].chars().next().ok_or(2)?.len_utf8();
@@ -229,6 +201,44 @@ impl<'a> Parser<'a> {
                 None => Ok(Token::Invalid),
             },
         }
+    }
+    async fn lex_word(
+        &mut self,
+        start: usize,
+        number: bool,
+        work: &mut Work,
+        cancel: &Cancel,
+    ) -> Result<Token<'a>, Error> {
+        let bytes = self.source.as_bytes();
+        self.cursor += 1;
+        let mut steps = 0usize;
+        while let Some(&ch) = bytes.get(self.cursor) {
+            steps += 1;
+            let allowed =
+                ch.is_ascii_alphanumeric() || ch == b'_' || (number && matches!(ch, b'#' | b'@'));
+            if !allowed {
+                break;
+            }
+            self.cursor += 1;
+            if steps == LEX_CHECKPOINT_CHUNK {
+                work.checkpoint_steps(steps, cancel).await?;
+                steps = 0;
+            }
+        }
+        if steps != 0 {
+            work.checkpoint_steps(steps, cancel).await?;
+        }
+        if !number && bytes.get(self.cursor) == Some(&b'[') {
+            let end = Reference::end(self.source, self.cursor).ok_or(2)?;
+            work.checkpoint_steps(end - self.cursor, cancel).await?;
+            self.cursor = end;
+        }
+        let text = &self.source[start..self.cursor];
+        Ok(if number {
+            Token::Number(text)
+        } else {
+            Token::Ident(text)
+        })
     }
     fn resolve(source: &'a str, token: CachedToken) -> Token<'a> {
         match token {
@@ -537,6 +547,32 @@ async fn apply_postfix(
     store_place(place, next, state, cancel, max, work).await
 }
 
+async fn eval_leaf_operand(
+    p: &mut Parser<'_>,
+    active: bool,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+    depth: usize,
+) -> Result<Option<i64>, Error> {
+    match p.current {
+        Token::Number(text) => {
+            let value = number(text, work, cancel).await?;
+            p.advance(work, cancel).await?;
+            Ok(Some(value))
+        }
+        Token::Ident(name) => {
+            p.advance(work, cancel).await?;
+            let place = place(name, active, state, cancel, max, work).await?;
+            let value = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
+            apply_postfix(p, place.as_ref(), value, state, cancel, max, work).await?;
+            Ok(Some(value))
+        }
+        _ => Ok(None),
+    }
+}
+
 async fn leaf_operand(
     p: &mut Parser<'_>,
     active: bool,
@@ -549,23 +585,11 @@ async fn leaf_operand(
     if depth >= MAX_DEPTH {
         return Err(2.into());
     }
-    match p.current {
-        Token::Number(text) => {
-            work.checkpoint(cancel).await?;
-            let value = number(text, work, cancel).await?;
-            p.advance(work, cancel).await?;
-            Ok(Some(value))
-        }
-        Token::Ident(name) => {
-            work.checkpoint(cancel).await?;
-            p.advance(work, cancel).await?;
-            let place = place(name, active, state, cancel, max, work).await?;
-            let value = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
-            apply_postfix(p, place.as_ref(), value, state, cancel, max, work).await?;
-            Ok(Some(value))
-        }
-        _ => Ok(None),
+    if !matches!(p.current, Token::Number(_) | Token::Ident(_)) {
+        return Ok(None);
     }
+    work.checkpoint(cancel).await?;
+    eval_leaf_operand(p, active, state, cancel, max, work, depth).await
 }
 
 async fn parse_body(
@@ -734,7 +758,7 @@ fn unary<'a, 's: 'a>(
                 _ => value,
             });
         }
-        if let Some(leaf) = leaf_operand(p, active, state, cancel, max, work, depth).await? {
+        if let Some(leaf) = eval_leaf_operand(p, active, state, cancel, max, work, depth).await? {
             return Ok(leaf);
         }
         match p.current {
@@ -1104,6 +1128,14 @@ mod tests {
             let mut tight = Work::new(11, 1_000_000, 1);
             assert!(matches!(
                 evaluate("8#9000", &state, &cancel, 4096, &mut tight).await,
+                Err(Error::Arithmetic {
+                    message: "value too great for base",
+                    ..
+                })
+            ));
+            let mut unary_tight = Work::new(13, 1_000_000, 1);
+            assert!(matches!(
+                evaluate("+8#9000", &state, &cancel, 4096, &mut unary_tight).await,
                 Err(Error::Arithmetic {
                     message: "value too great for base",
                     ..
