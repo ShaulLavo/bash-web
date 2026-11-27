@@ -30,6 +30,11 @@ function single(values: readonly string[] | undefined): string | undefined {
   return values?.[0];
 }
 
+function mapRefspec(source: string, target: string, merge: string): string | undefined {
+  if (source.includes("*")) return wildcardRef(source, target, merge);
+  return source === merge ? target : undefined;
+}
+
 function trackingRef(specs: readonly string[], merge: string): string {
   let result: string | undefined;
   for (const value of specs) {
@@ -40,9 +45,7 @@ function trackingRef(specs: readonly string[], merge: string): string {
       source !== undefined && target && extra === undefined,
       "Invalid Git fetch refspec",
     );
-    const position = source.indexOf("*");
-    const mapped =
-      position < 0 ? (source === merge ? target : undefined) : wildcardRef(source, target, merge);
+    const mapped = mapRefspec(source, target, merge);
     if (!mapped) continue;
     requireObject(!result || result === mapped, "Ambiguous Git fetch refspec");
     result = mapped;
@@ -118,11 +121,15 @@ function unquote(text: string): string {
       continue;
     }
     const escaped = text[++position];
-    const replacement =
-      escaped === "n" ? "\n" : escaped === "t" ? "\t" : escaped === "b" ? "\b" : escaped;
-    requireObject(
-      escaped === "n" || escaped === "t" || escaped === "b" || escaped === '"' || escaped === "\\",
-    );
+    const escapeMap: Record<string, string> = {
+      n: "\n",
+      t: "\t",
+      b: "\b",
+      '"': '"',
+      "\\": "\\",
+    };
+    const replacement = escaped !== undefined ? escapeMap[escaped] : undefined;
+    requireObject(replacement !== undefined);
     value += replacement;
   }
   requireObject(!quoted, "Unclosed Git config quote");

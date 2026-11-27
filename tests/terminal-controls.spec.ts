@@ -145,15 +145,16 @@ test.describe("touch terminal controls", () => {
     await open(page);
     await captureInput(page);
     await page.clock.install();
+    const notices = {
+      missing: "Clipboard access is unavailable. Use your keyboard or system Paste menu.",
+      denied: "Could not read the clipboard. Allow access or use the system Paste menu.",
+      empty: "The clipboard is empty.",
+    } as const;
     for (const outcome of ["missing", "denied", "empty"] as const) {
       await clipboard(page, outcome);
       await page.getByRole("button", { name: "Paste", exact: true }).tap();
       await expect(page.getByRole("status", { name: "Clipboard notice" })).toHaveText(
-        outcome === "missing"
-          ? "Clipboard access is unavailable. Use your keyboard or system Paste menu."
-          : outcome === "denied"
-            ? "Could not read the clipboard. Allow access or use the system Paste menu."
-            : "The clipboard is empty.",
+        notices[outcome],
       );
       await expect(page.locator("textarea")).toBeFocused();
       expect(await page.evaluate(() => window.controlInput)).toEqual([]);

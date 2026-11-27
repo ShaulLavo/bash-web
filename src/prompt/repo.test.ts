@@ -547,12 +547,12 @@ for (const delta of [-1, 0, 1]) {
 for (const kind of ["ordinary", "comments", "peeled"] as const) {
   test(`packed parsing checkpoints include every 64 ${kind} records`, async () => {
     const record = `${refCommit} refs/heads/other\n`;
-    const records =
-      kind === "comments"
-        ? "# comment\n".repeat(128)
-        : kind === "peeled"
-          ? `${record}^${refCommit}\n`.repeat(64)
-          : record.repeat(128);
+    const recordsByKind = {
+      comments: "# comment\n".repeat(128),
+      peeled: `${record}^${refCommit}\n`.repeat(64),
+      ordinary: record.repeat(128),
+    };
+    const records = recordsByKind[kind];
     const work = new RefParsingBudget(new AbortController().signal, 60_000);
     assert.deepEqual(
       await resolveRef(refFiles(records + packedMain, false, work), "/git", "refs/heads/main"),

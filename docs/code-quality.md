@@ -24,10 +24,10 @@ existing server.
 
 - Oxlint 1.88.0 checks all authored JS/TS in `src`, `scripts`, and `tests`, plus the
   Vite and Playwright configs. Correctness diagnostics and warnings fail the gate.
-  Explicit `any`, unused variables, debugger, eval, loose equality, and unqualified
-  browser-global `name` are errors. Maximum control-block depth is 3 and modified
-  cyclomatic complexity is 30. These are lint limits, not a Rust parser or a proof
-  of every language's nesting depth.
+  Explicit `any`, unused variables, debugger, eval, loose equality, nested ternaries,
+  `else` after `return`, and unqualified browser-global `name` are errors. Maximum
+  control-block depth is 3 and modified cyclomatic complexity is 30. These are lint
+  limits, not a Rust parser or a proof of every language's nesting depth.
 - TypeScript 7.0.2 uses `strict` for application code, tests, configs, and every
   authored TypeScript script. Imported JavaScript supplies inferred API types;
   JavaScript bodies are linted rather than migrated wholesale to checked JS.

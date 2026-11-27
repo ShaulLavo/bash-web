@@ -95,13 +95,11 @@ export async function tokens(source: string, bindings: Bindings = {}): Promise<s
     const text = match[0];
     index = pattern.lastIndex;
     if (/^\s|^\/\/|^\/\*/u.test(text) || text === ";") continue;
-    result.push(
-      Object.hasOwn(bindings, text)
-        ? JSON.stringify(bindings[text])
-        : /^\d/u.test(text)
-          ? String(Number(text))
-          : text,
-    );
+    if (Object.hasOwn(bindings, text)) {
+      result.push(JSON.stringify(bindings[text]));
+      continue;
+    }
+    result.push(/^\d/u.test(text) ? String(Number(text)) : text);
   }
   return result.join(" ").replace(/ , ([}\]])/gu, " $1");
 }

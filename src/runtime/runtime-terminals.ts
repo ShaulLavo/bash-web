@@ -73,13 +73,11 @@ export function createBridgeTerminal(
   };
   const tryWrite = (chunks: readonly Uint8Array[]) => {
     checkActive();
-    return terminalSection(admission, () =>
-      Atomics.load(bridge.state, control.phase) === 4
-        ? -29
-        : target === 0
-          ? -8
-          : bridge.tryWrite(chunks),
-    );
+    return terminalSection(admission, () => {
+      if (Atomics.load(bridge.state, control.phase) === 4) return -29;
+      if (target === 0) return -8;
+      return bridge.tryWrite(chunks);
+    });
   };
   const blocking = (
     operation: (chunks: readonly Uint8Array[]) => number,

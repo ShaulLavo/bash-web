@@ -20,17 +20,17 @@ export function scoreboardFixture(
     })),
   });
   function score(passes: string[], timeout = false): Score {
-    const cases: ScoreCase[] = oracle.cases.map(({ bash: _bash, ...item }) => ({
-      ...item,
-      outcome: passes.includes(item.id)
-        ? "pass"
-        : timeout && item.id.endsWith("until:8")
-          ? "timeout"
-          : "fail",
-      ...(timeout && item.id.endsWith("until:8")
-        ? { actual: { stdout: "", stderr: "", timeout: true } }
-        : {}),
-    }));
+    const cases: ScoreCase[] = oracle.cases.map(({ bash: _bash, ...item }) => {
+      const timedOut = timeout && item.id.endsWith("until:8");
+      let outcome: ScoreCase["outcome"] = "fail";
+      if (passes.includes(item.id)) outcome = "pass";
+      else if (timedOut) outcome = "timeout";
+      return {
+        ...item,
+        outcome,
+        ...(timedOut ? { actual: { stdout: "", stderr: "", timeout: true } } : {}),
+      };
+    });
     return { engine: "own-shell", identity: oracle.identity, cases, counts: summarize({ cases }) };
   }
   function floor(ids: string[], sourceSha = "a".repeat(40)): MainFloor {

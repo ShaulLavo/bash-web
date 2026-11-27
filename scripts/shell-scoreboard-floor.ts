@@ -199,10 +199,10 @@ export function compareFloor(oracle: Oracle, floor: MainFloor, score: Score): Sc
   validateFloor(oracle, floor);
   validateOwnScore(oracle, score);
   const required = new Set(floor.floorIds);
-  const cases = score.cases.map((item) => ({
-    ...item,
-    outcome: item.outcome === "skip" ? "skip" : required.has(item.id) ? "pass" : "fail",
-  }));
+  const cases = score.cases.map((item) => {
+    if (item.outcome === "skip") return { ...item, outcome: "skip" as const };
+    return { ...item, outcome: required.has(item.id) ? ("pass" as const) : ("fail" as const) };
+  });
   return compareScores({ identity: oracle.identity, engine: "own-shell", cases }, score);
 }
 function validSourceSha(value: unknown): string {

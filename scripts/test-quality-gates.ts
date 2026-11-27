@@ -144,6 +144,16 @@ test("compatibility admits exactly the historical ten published programs", () =>
 const lintCases: [string, string, RegExp][] = [
   ["debugger", "debugger;\n", /no-debugger/],
   ["ambient browser name", "console.log(name);\n", /no-restricted-globals/],
+  [
+    "nested ternary",
+    "export const pick = (a: boolean, b: boolean) => (a ? 1 : b ? 2 : 3);\n",
+    /no-nested-ternary/,
+  ],
+  [
+    "else after return",
+    "export function sign(n: number) {\n  if (n > 0) return 1;\n  else return -1;\n}\n",
+    /no-else-return/,
+  ],
 ];
 for (const [label, source, diagnostic] of lintCases) {
   test(`lint rejects ${label}`, () =>

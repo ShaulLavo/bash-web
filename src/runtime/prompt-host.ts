@@ -282,10 +282,16 @@ function within(text: string, at: number, low: number, high: number): boolean {
   return code >= low && code <= high;
 }
 
+function oscTerminatorLength(sequence: string): number {
+  if (sequence.endsWith("\x07")) return 1;
+  if (sequence.endsWith("\x1b\\")) return 2;
+  return 0;
+}
+
 function keptEscape(sequence: string): boolean {
   if (sequence[1] === "[") return /^\[[0-9;:]*m$/.test(sequence.slice(1));
   if (!sequence.startsWith("\x1b]8;") && !sequence.startsWith("\x1b]133;")) return false;
-  const terminator = sequence.endsWith("\x07") ? 1 : sequence.endsWith("\x1b\\") ? 2 : 0;
+  const terminator = oscTerminatorLength(sequence);
   if (!terminator) return false;
   const payload = sequence.slice(2, -terminator);
   return !Array.from(payload).some((character) => isControl(character.charCodeAt(0)));

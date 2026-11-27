@@ -202,7 +202,8 @@ export class ControlledDrainHost implements HostCase {
     this.state.output = bytes;
     if (this.corruptInterior) this.state.output[50000] = -1;
     this.state.terminalBytes = this.wrongTerminalBytes ? 99999 : bytes.length;
-    this.state.states.push(this.wrongPhase ? "ready" : kind === "exit" ? "exited" : "failed");
+    const finalState = kind === "exit" ? "exited" : "failed";
+    this.state.states.push(this.wrongPhase ? "ready" : finalState);
   }
   private write(bytes: number[]): void {
     this.state.output = this.state.output.concat(bytes);

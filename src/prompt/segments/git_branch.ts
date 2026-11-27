@@ -1,11 +1,21 @@
 import type { GitBranchConfig } from "../types";
 import type { SegmentRenderer } from "./types";
 
+function headLabel(
+  head: NonNullable<
+    NonNullable<Parameters<SegmentRenderer<GitBranchConfig>>[0]["repository"]>["head"]
+  >,
+): string {
+  if (head.kind === "attached") return head.branch;
+  if (head.kind === "detached") return "HEAD";
+  return "?";
+}
+
 export const renderGitBranch: SegmentRenderer<GitBranchConfig> = (input, config) => {
   const head = input.repository?.head;
   if (config.disabled || !head) return undefined;
   if (head.kind === "detached" && config.onlyAttached) return undefined;
-  const name = head.kind === "attached" ? head.branch : head.kind === "detached" ? "HEAD" : "?";
+  const name = headLabel(head);
   if (config.ignoreBranches.includes(name)) return undefined;
   const branch = truncate(name, config.truncateLength, config.truncationSymbol);
   return [
