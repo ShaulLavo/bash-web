@@ -63,12 +63,22 @@ function underLock(lock: string, body: () => Promise<boolean>): Promise<boolean>
   return navigator.locks.request(lock, options, (held) => (held ? body() : Promise.resolve(false)));
 }
 
+async function databaseExists(workspace: string): Promise<boolean | undefined> {
+  if (typeof indexedDB.databases !== "function") return undefined;
+  try {
+    const databases = await indexedDB.databases();
+    return databases.some((database) => database.name === workspace);
+  } catch {
+    return undefined;
+  }
+}
+
 async function removeUnreadable(
   workspace: string,
   report: (result: Removal) => void,
 ): Promise<boolean> {
-  const names = (await indexedDB.databases()).map((database) => database.name);
-  const state = names.includes(workspace) ? await inspect(workspace) : "missing";
+  const listed = await databaseExists(workspace);
+  const state = listed === false ? "missing" : await inspect(workspace);
   if (state === "unreadable") await deleteDatabase(workspace, report);
   else report(state);
   return true;

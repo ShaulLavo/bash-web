@@ -180,8 +180,9 @@ test.describe("touch terminal controls", () => {
   test("software keyboard space flows through the existing fit observer", async ({ page }) => {
     await open(page);
     const before = await page.evaluate(() => window.bashWeb!.snapshot());
-    // Emulation does not open an OS keyboard. Model its visual viewport change only.
+    // Emulation does not open an OS keyboard. Model its visual viewport change and fractional scale drift.
     await page.evaluate(() => {
+      Object.defineProperty(window.visualViewport!, "scale", { configurable: true, value: 1.0001 });
       Object.defineProperty(window.visualViewport!, "height", { configurable: true, value: 300 });
       window.visualViewport!.dispatchEvent(new Event("resize"));
     });
@@ -197,6 +198,7 @@ test.describe("touch terminal controls", () => {
     await page.getByRole("button", { name: "Move cursor left" }).tap();
     expect(await page.evaluate(() => window.bashWeb!.snapshot().rows)).toBe(fitted.rows);
     await page.evaluate(() => {
+      Reflect.deleteProperty(window.visualViewport!, "scale");
       Reflect.deleteProperty(window.visualViewport!, "height");
       window.visualViewport!.dispatchEvent(new Event("resize"));
     });

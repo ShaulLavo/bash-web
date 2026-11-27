@@ -100,6 +100,25 @@ function holdIndexedDBOpen() {
   };
 }
 
+async function injectFsWorkerOnce(page: Page, patch: () => void) {
+  let injected = false;
+  // Avoid `{ times: 1 }`: Playwright 1.64.1 drops the handler from `page._routes`
+  // before `route.fetch()` settles, so `navigateTestPage`'s `page.unroute` on WebKit
+  // can tear down interception mid-flight and reject `route.fulfill` as already handled.
+  await page.route("**/fs-worker*.js", async (route) => {
+    if (injected) {
+      await route.fallback();
+      return;
+    }
+    injected = true;
+    const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
+    await route.fulfill({
+      response,
+      body: `(${patch.toString()})();\n${await response.text()}`,
+    });
+  });
+}
+
 for (const whenBusy of ["takeover", "wait"]) {
   test(`IndexedDB ${whenBusy} storage opening timeout allows Restart to complete`, async ({
     page,
@@ -108,17 +127,7 @@ for (const whenBusy of ["takeover", "wait"]) {
     page.on("console", (message) => {
       if (message.text() === "bash-web:test:indexeddb-open-held") heldOpens++;
     });
-    await page.route(
-      "**/fs-worker*.js",
-      async (route) => {
-        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
-        await route.fulfill({
-          response,
-          body: `(${holdIndexedDBOpen.toString()})();\n${await response.text()}`,
-        });
-      },
-      { times: 1 },
-    );
+    await injectFsWorkerOnce(page, holdIndexedDBOpen);
     await page.clock.install();
     const query = new URLSearchParams({
       test: "1",
@@ -205,17 +214,7 @@ test("queued IndexedDB ownership is indefinite but stalled lock-acquired recover
     second.on("console", (message) => {
       if (message.text() === "bash-web:test:indexeddb-epoch-held") heldEpochs++;
     });
-    await second.route(
-      "**/fs-worker*.js",
-      async (route) => {
-        const response = await route.fetch({ timeout: OUTCOME_HANG_MS });
-        await route.fulfill({
-          response,
-          body: `(${holdIndexedDBEpoch.toString()})();\n${await response.text()}`,
-        });
-      },
-      { times: 1 },
-    );
+    await injectFsWorkerOnce(second, holdIndexedDBEpoch);
     await second.clock.install();
     await navigateTestPage(second, `/?${query}`);
     await waiting(second);

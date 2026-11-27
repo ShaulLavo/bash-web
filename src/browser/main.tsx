@@ -9,6 +9,7 @@ import type {
 import terminalWasmUrl from "ghostty-webgpu/ghostty-vt.wasm?url";
 import terminalBridgeUrl from "ghostty-webgpu/bridge.wasm?url";
 import { BrowserSession } from "bash-web/session";
+import { registerShell } from "../runtime/shell-host";
 import {
   createStartupDiagnostics,
   markStartup,
@@ -69,15 +70,31 @@ function preserveInputFocus(event: Event) {
   event.preventDefault();
 }
 
+function awaitStartupReady(
+  storageAndLease: Promise<void>,
+  terminalReady: Promise<Terminal | undefined>,
+  onStorageWaiting: (listener: () => void) => void,
+  onStorageSettled: () => void,
+): Promise<Terminal | undefined> {
+  const terminalFailedWhileWaiting = new Promise<never>((_, reject) => {
+    void terminalReady.catch((terminalError) => onStorageWaiting(() => reject(terminalError)));
+  });
+  return Promise.race([storageAndLease, terminalFailedWhileWaiting])
+    .finally(onStorageSettled)
+    .then(() => terminalReady);
+}
+
 function followViewport(node: Element, signal: AbortSignal) {
   const viewport = window.visualViewport;
   if (!(node instanceof HTMLElement) || !viewport) return;
   const resize = () => {
-    if (viewport.scale !== 1) return;
+    // Tolerate fractional mobile scale drift around 1 when unzoomed.
+    if (Math.abs(viewport.scale - 1) > 0.01) return;
     node.style.setProperty("--workbench-height", `${viewport.height}px`);
     node.toggleAttribute("data-compact", viewport.height <= 540);
   };
   viewport.addEventListener("resize", resize, { signal });
+  window.addEventListener("orientationchange", resize, { signal });
   resize();
 }
 
@@ -100,7 +117,11 @@ function checkCapabilities(): void {
       "This page needs cross-origin isolation. Serve it with Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp, then reload.",
     );
   }
-  if (typeof SharedArrayBuffer === "undefined" || typeof Atomics.wait !== "function") {
+  if (
+    typeof SharedArrayBuffer === "undefined" ||
+    typeof Atomics.wait !== "function" ||
+    typeof Atomics.waitAsync !== "function"
+  ) {
     throw new Error(
       "This browser cannot provide shared worker I/O. Open the demo in a current Chrome, Edge, Firefox, or Safari browser on HTTPS or localhost.",
     );
@@ -171,6 +192,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
     let busy = true;
     let host: HTMLElement | undefined;
     let terminal: Terminal | undefined;
+    let pendingTerminal: Promise<Terminal | undefined> | undefined;
     let session: BrowserSession | undefined;
     let pendingSession: Promise<BrowserSession> | undefined;
     let startup: AbortController | undefined;
@@ -191,6 +213,26 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       if (!handle.signal.aborted) void handle.update();
     };
 
+    function enqueueDisposal(
+      previousTerminal: Promise<Terminal | undefined> | undefined,
+      previousPending: Promise<BrowserSession> | undefined,
+      previousSession: BrowserSession | undefined,
+      previousDispose: (() => Promise<void>) | undefined,
+    ) {
+      stopping = stopping
+        .catch(() => {})
+        .then(async () => {
+          try {
+            await previousTerminal?.catch(() => undefined);
+            await previousPending?.catch(() => undefined);
+            await previousSession?.dispose();
+          } finally {
+            await previousDispose?.();
+          }
+        });
+      return stopping;
+    }
+
     function stop() {
       diagnostics.stop();
       generation++;
@@ -200,6 +242,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       subscriptions.forEach((subscription) => subscription.dispose());
       subscriptions = [];
       outputTimings = [];
+      const previousTerminal = pendingTerminal;
+      pendingTerminal = undefined;
       const previousSession = session;
       const previousPending = pendingSession;
       startup?.abort(new Error("Shell startup was cancelled."));
@@ -210,17 +254,7 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
       session = undefined;
       terminal?.dispose();
       terminal = undefined;
-      stopping = stopping
-        .catch(() => {})
-        .then(async () => {
-          try {
-            await previousPending?.catch(() => undefined);
-            await previousSession?.dispose();
-          } finally {
-            await previousDispose?.();
-          }
-        });
-      return stopping;
+      return enqueueDisposal(previousTerminal, previousPending, previousSession, previousDispose);
     }
 
     function fail(cause: unknown, expectedGeneration: number) {
@@ -230,18 +264,19 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         workspace !== undefined && unreadableWorkspace(cause, leasedRuntime?.filesystem.state);
       state = "failed";
       busy = false;
+      const failedTerminal = pendingTerminal;
+      pendingTerminal = undefined;
       const failedSession = session;
       const failedPending = pendingSession;
       startup?.abort(new Error(error));
+      startup = undefined;
+      pendingSession = undefined;
       const failedDispose = disposeRuntime;
-      void (async () => {
-        try {
-          await failedPending?.catch(() => undefined);
-          await failedSession?.dispose();
-        } finally {
-          await failedDispose?.();
-        }
-      })().catch((cleanupError: unknown) => console.error("Shell cleanup failed", cleanupError));
+      disposeRuntime = undefined;
+      session = undefined;
+      void enqueueDisposal(failedTerminal, failedPending, failedSession, failedDispose).catch(
+        (cleanupError: unknown) => console.error("Shell cleanup failed", cleanupError),
+      );
       if (terminal?.textarea) terminal.textarea.disabled = true;
       render();
     }
@@ -304,6 +339,31 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         );
     }
 
+    function adoptTerminal(
+      opened: Terminal,
+      expectedGeneration: number,
+      onStartupStage: StartupObserver,
+    ): Terminal | undefined {
+      markStartup(onStartupStage, "terminal-open-resolved");
+      if (generation !== expectedGeneration || handle.signal.aborted || state === "failed") {
+        opened.dispose();
+        return undefined;
+      }
+      terminal = opened;
+      performance.mark("bash:terminal-opened");
+      if (opened.textarea) opened.textarea.disabled = true;
+      wireTerminal(opened, expectedGeneration);
+      return opened;
+    }
+
+    function prewarmShell(pageRuntime: Runtime, onStartupStage: StartupObserver) {
+      try {
+        void registerShell(pageRuntime, { runtime: pageRuntime, onStartupStage })
+          .module(onStartupStage)
+          .catch(() => {});
+      } catch {}
+    }
+
     async function start() {
       if (!host || handle.signal.aborted || startingFresh) return;
       const stopped = stop();
@@ -336,16 +396,14 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         if (generation !== expectedGeneration || handle.signal.aborted) return;
         checkCapabilities();
         markStartup(onStartupStage, "terminal-open-requested");
-        const current = await openTerminal(host);
-        markStartup(onStartupStage, "terminal-open-resolved");
-        if (generation !== expectedGeneration || handle.signal.aborted) {
-          current.dispose();
-          return;
-        }
-        terminal = current;
-        performance.mark("bash:terminal-opened");
-        if (current.textarea) current.textarea.disabled = true;
-        wireTerminal(current, expectedGeneration);
+        const terminalReady = openTerminal(host).then((opened) => {
+          if (pendingTerminal === terminalReady) pendingTerminal = undefined;
+          return adoptTerminal(opened, expectedGeneration, onStartupStage);
+        });
+        pendingTerminal = terminalReady;
+        void terminalReady.catch(() => {
+          if (pendingTerminal === terminalReady) pendingTerminal = undefined;
+        });
         markStartup(onStartupStage, "runtime-lease-requested");
         const lease = acquireBrowserRuntime(options, {
           workerURL: filesystemWorkerUrl,
@@ -358,7 +416,18 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
         leasedRuntime = lease.runtime;
         const controller = new AbortController();
         startup = controller;
-        await Promise.all([
+        let lockAcquired = false;
+        let storageIsWaiting = false;
+        let notifyStorageWaiting: (() => void) | undefined;
+        const unobserveLock = storageStartup.onLockAcquired(() => {
+          lockAcquired = true;
+          storageIsWaiting = false;
+        });
+        const onStorageWaiting = (listener: () => void) => {
+          if (storageIsWaiting && !lockAcquired) listener();
+          else notifyStorageWaiting = listener;
+        };
+        const storageAndLease = Promise.all([
           lease.ready,
           waitForStorage(lease.runtime, controller.signal, {
             startup: storageStartup,
@@ -366,6 +435,8 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
             onState(nextStorage) {
               if (generation !== expectedGeneration || handle.signal.aborted) return;
               storage = nextStorage;
+              storageIsWaiting = nextStorage.status === "waiting" && !lockAcquired;
+              if (storageIsWaiting) notifyStorageWaiting?.();
               if (nextStorage.status === "opening" || nextStorage.status === "waiting")
                 receiveState(
                   nextStorage.status === "waiting" ? "waiting" : "starting",
@@ -375,12 +446,22 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
               render();
             },
           }),
-        ]);
-        markStartup(onStartupStage, "runtime-lease-resolved");
-        if (generation !== expectedGeneration || handle.signal.aborted) {
-          await lease.dispose();
-          return;
-        }
+        ]).then(() => {
+          markStartup(onStartupStage, "runtime-lease-resolved");
+        });
+        // Pre-warm shell WASM fetch and compilation alongside terminal and storage startup.
+        prewarmShell(lease.runtime, onStartupStage);
+        // Surface INVALID_VFS_FORMAT recovery first, unless waiting for another tab's lock.
+        const current = await awaitStartupReady(
+          storageAndLease,
+          terminalReady,
+          onStorageWaiting,
+          () => {
+            unobserveLock();
+            notifyStorageWaiting = undefined;
+          },
+        );
+        if (!current || generation !== expectedGeneration || handle.signal.aborted) return;
         markStartup(onStartupStage, "session-create-requested");
         await createSession(current, lease.runtime, expectedGeneration, controller, onStartupStage);
         markStartup(onStartupStage, "session-create-resolved");
@@ -656,20 +737,22 @@ export function mountBrowser(options: BrowserHostOptions = {}): void {
                 </p>
               )}
               {recovery && <p>{recovery}</p>}
-              <button type="button" disabled={startingFresh} mix={on("click", () => start())}>
-                Restart session
-              </button>
-              {unreadable && (
-                <button
-                  type="button"
-                  data-testid="start-fresh"
-                  title="Delete the workspace that cannot be opened and start a new one"
-                  disabled={startingFresh}
-                  mix={on("click", startFreshWorkspace)}
-                >
-                  Start fresh
+              <div class="error-actions">
+                <button type="button" disabled={startingFresh} mix={on("click", () => start())}>
+                  Restart session
                 </button>
-              )}
+                {unreadable && (
+                  <button
+                    type="button"
+                    data-testid="start-fresh"
+                    title="Delete the workspace that cannot be opened and start a new one"
+                    disabled={startingFresh}
+                    mix={on("click", startFreshWorkspace)}
+                  >
+                    Start fresh
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {warning && (

@@ -7,8 +7,6 @@ import { DEFAULT_WORKSPACE } from "../src/browser/start-fresh";
 import { genericProgramLauncher } from "../src/runtime/program-launcher";
 import { installShellCommands } from "../src/shell-commands";
 import { registerTestPrograms } from "./helpers/test-programs";
-import { registerExecSourceShell } from "./helpers/exec-source-shell";
-import { rgFiles } from "../node_modules/waffle-ripgrep/tests/helpers/rg-fixtures.ts";
 import filesystemWorkerUrl from "../.build/browser/fs-worker.js?url";
 import programWorkerUrl from "../node_modules/waffle/browser/preview1-worker.ts?worker&url";
 
@@ -30,6 +28,7 @@ async function readSortUniqOutput(runtime: Runtime) {
 }
 
 async function prepareRg(runtime: ReturnType<typeof createRuntime>): Promise<void> {
+  const { rgFiles } = await import("../node_modules/waffle-ripgrep/tests/helpers/rg-fixtures.ts");
   const directory = "/home/guest/rg-fixture";
   const encoder = new TextEncoder();
   for (const [name, text] of Object.entries(rgFiles)) {
@@ -87,7 +86,11 @@ mountBrowser({
     // Base registers every everyday family lazily on the caller's one runtime.
     const ready = Promise.all([
       registerTestPrograms(runtime, registration.signal, onStartupStage),
-      query.get("exec") === "source" ? registerExecSourceShell(runtime) : undefined,
+      query.get("exec") === "source"
+        ? import("./helpers/exec-source-shell").then(({ registerExecSourceShell }) =>
+            registerExecSourceShell(runtime),
+          )
+        : undefined,
       query.get("test") === "1" && query.get("rg") === "1" ? prepareRg(runtime) : undefined,
       installShellCommands(runtime),
       installBase(runtime, { launcher: genericProgramLauncher(programWorkerUrl) }),
