@@ -141,6 +141,38 @@ struct Parser<'a> {
     cached: Option<Rc<[CachedToken]>>,
     cached_index: usize,
 }
+fn scan_whitespace_chunk(bytes: &[u8], mut cursor: usize) -> (usize, usize, bool) {
+    let mut steps = 0usize;
+    while cursor < bytes.len() && steps < LEX_CHECKPOINT_CHUNK {
+        steps += 1;
+        if bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        } else if bytes[cursor..].starts_with(b"\\\n") {
+            cursor += 2;
+        } else {
+            return (cursor, steps, true);
+        }
+    }
+    (cursor, steps, cursor >= bytes.len())
+}
+
+fn scan_word_chunk(bytes: &[u8], mut cursor: usize, number: bool) -> (usize, usize, bool) {
+    let mut steps = 0usize;
+    while let Some(&ch) = bytes.get(cursor) {
+        if steps >= LEX_CHECKPOINT_CHUNK {
+            return (cursor, steps, false);
+        }
+        steps += 1;
+        let allowed =
+            ch.is_ascii_alphanumeric() || ch == b'_' || (number && matches!(ch, b'#' | b'@'));
+        if !allowed {
+            return (cursor, steps, true);
+        }
+        cursor += 1;
+    }
+    (cursor, steps, true)
+}
+
 impl<'a> Parser<'a> {
     async fn new(source: &'a str, work: &mut Work, cancel: &Cancel) -> Result<Self, Error> {
         let mut parser = Self {
@@ -157,32 +189,44 @@ impl<'a> Parser<'a> {
     }
     async fn lex(&mut self, work: &mut Work, cancel: &Cancel) -> Result<Token<'a>, Error> {
         let bytes = self.source.as_bytes();
-        let mut ws_steps = 0usize;
-        while self.cursor < bytes.len() {
-            ws_steps += 1;
-            if bytes[self.cursor].is_ascii_whitespace() {
-                self.cursor += 1;
-            } else if bytes[self.cursor..].starts_with(b"\\\n") {
-                self.cursor += 2;
-            } else {
+        loop {
+            let (next_cursor, steps, done) = scan_whitespace_chunk(bytes, self.cursor);
+            self.cursor = next_cursor;
+            if steps != 0 {
+                work.checkpoint_steps(steps, cancel).await?;
+            }
+            if done {
                 break;
             }
-            if ws_steps == LEX_CHECKPOINT_CHUNK {
-                work.checkpoint_steps(ws_steps, cancel).await?;
-                ws_steps = 0;
-            }
-        }
-        if ws_steps != 0 {
-            work.checkpoint_steps(ws_steps, cancel).await?;
         }
         let start = self.cursor;
         let Some(&ch) = bytes.get(start) else {
             return Ok(Token::End);
         };
         if ch.is_ascii_alphanumeric() || ch == b'_' {
-            return self
-                .lex_word(start, ch.is_ascii_digit(), work, cancel)
-                .await;
+            let number = ch.is_ascii_digit();
+            self.cursor += 1;
+            loop {
+                let (next_cursor, steps, done) = scan_word_chunk(bytes, self.cursor, number);
+                self.cursor = next_cursor;
+                if steps != 0 {
+                    work.checkpoint_steps(steps, cancel).await?;
+                }
+                if done {
+                    break;
+                }
+            }
+            if !number && bytes.get(self.cursor) == Some(&b'[') {
+                let end = Reference::end(self.source, self.cursor).ok_or(2)?;
+                work.checkpoint_steps(end - self.cursor, cancel).await?;
+                self.cursor = end;
+            }
+            let text = &self.source[start..self.cursor];
+            return Ok(if number {
+                Token::Number(text)
+            } else {
+                Token::Ident(text)
+            });
         }
         if !ch.is_ascii() {
             self.cursor += self.source[start..].chars().next().ok_or(2)?.len_utf8();
@@ -201,44 +245,6 @@ impl<'a> Parser<'a> {
                 None => Ok(Token::Invalid),
             },
         }
-    }
-    async fn lex_word(
-        &mut self,
-        start: usize,
-        number: bool,
-        work: &mut Work,
-        cancel: &Cancel,
-    ) -> Result<Token<'a>, Error> {
-        let bytes = self.source.as_bytes();
-        self.cursor += 1;
-        let mut steps = 0usize;
-        while let Some(&ch) = bytes.get(self.cursor) {
-            steps += 1;
-            let allowed =
-                ch.is_ascii_alphanumeric() || ch == b'_' || (number && matches!(ch, b'#' | b'@'));
-            if !allowed {
-                break;
-            }
-            self.cursor += 1;
-            if steps == LEX_CHECKPOINT_CHUNK {
-                work.checkpoint_steps(steps, cancel).await?;
-                steps = 0;
-            }
-        }
-        if steps != 0 {
-            work.checkpoint_steps(steps, cancel).await?;
-        }
-        if !number && bytes.get(self.cursor) == Some(&b'[') {
-            let end = Reference::end(self.source, self.cursor).ok_or(2)?;
-            work.checkpoint_steps(end - self.cursor, cancel).await?;
-            self.cursor = end;
-        }
-        let text = &self.source[start..self.cursor];
-        Ok(if number {
-            Token::Number(text)
-        } else {
-            Token::Ident(text)
-        })
     }
     fn resolve(source: &'a str, token: CachedToken) -> Token<'a> {
         match token {
@@ -547,22 +553,32 @@ async fn apply_postfix(
     store_place(place, next, state, cancel, max, work).await
 }
 
-async fn eval_leaf_operand(
+async fn leaf_operand(
     p: &mut Parser<'_>,
-    active: bool,
+    mode: (bool, bool),
     state: &SharedState,
     cancel: &Cancel,
     max: usize,
     work: &mut Work,
     depth: usize,
 ) -> Result<Option<i64>, Error> {
+    let (active, charge) = mode;
+    if depth >= MAX_DEPTH {
+        return Err(2.into());
+    }
     match p.current {
         Token::Number(text) => {
+            if charge {
+                work.checkpoint(cancel).await?;
+            }
             let value = number(text, work, cancel).await?;
             p.advance(work, cancel).await?;
             Ok(Some(value))
         }
         Token::Ident(name) => {
+            if charge {
+                work.checkpoint(cancel).await?;
+            }
             p.advance(work, cancel).await?;
             let place = place(name, active, state, cancel, max, work).await?;
             let value = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
@@ -571,25 +587,6 @@ async fn eval_leaf_operand(
         }
         _ => Ok(None),
     }
-}
-
-async fn leaf_operand(
-    p: &mut Parser<'_>,
-    active: bool,
-    state: &SharedState,
-    cancel: &Cancel,
-    max: usize,
-    work: &mut Work,
-    depth: usize,
-) -> Result<Option<i64>, Error> {
-    if depth >= MAX_DEPTH {
-        return Err(2.into());
-    }
-    if !matches!(p.current, Token::Number(_) | Token::Ident(_)) {
-        return Ok(None);
-    }
-    work.checkpoint(cancel).await?;
-    eval_leaf_operand(p, active, state, cancel, max, work, depth).await
 }
 
 async fn parse_body(
@@ -628,7 +625,9 @@ async fn parse_body(
         };
         store_place(place.as_ref(), result, state, cancel, max, work).await?;
         result
-    } else if let Some(leaf) = leaf_operand(p, active, state, cancel, max, work, depth + 1).await? {
+    } else if let Some(leaf) =
+        leaf_operand(p, (active, true), state, cancel, max, work, depth + 1).await?
+    {
         leaf
     } else {
         unary(p, active, state, cancel, max, work, depth + 1).await?
@@ -691,7 +690,7 @@ async fn parse_body(
         let rhs = if is_plain_leaf
             && !matches!(p.next, Token::Op(next_op) if precedence(next_op).is_some_and(|p| p >= next_min))
         {
-            leaf_operand(p, rhs_active, state, cancel, max, work, depth + 2)
+            leaf_operand(p, (rhs_active, true), state, cancel, max, work, depth + 2)
                 .await?
                 .expect("checked number or ident")
         } else {
@@ -758,7 +757,9 @@ fn unary<'a, 's: 'a>(
                 _ => value,
             });
         }
-        if let Some(leaf) = eval_leaf_operand(p, active, state, cancel, max, work, depth).await? {
+        if let Some(leaf) =
+            leaf_operand(p, (active, false), state, cancel, max, work, depth).await?
+        {
             return Ok(leaf);
         }
         match p.current {
