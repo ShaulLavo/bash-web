@@ -28,88 +28,51 @@ pub(crate) fn admitted<'a, T: 'a, F: Future<Output = Result<T, Error>> + 'a>(
 }
 
 const MAX_DEPTH: usize = 64;
+const LEX_CHECKPOINT_CHUNK: usize = 64;
+const PLAIN_DECIMAL_MAX_LEN: usize = 24;
 
 fn match_operator(bytes: &[u8]) -> Option<&'static str> {
     let first = *bytes.first()?;
     let second = bytes.get(1).copied();
     let third = bytes.get(2).copied();
-    Some(match first {
-        b'<' => match (second, third) {
-            (Some(b'<'), Some(b'=')) => "<<=",
-            (Some(b'<'), _) => "<<",
-            (Some(b'='), _) => "<=",
-            _ => "<",
-        },
-        b'>' => match (second, third) {
-            (Some(b'>'), Some(b'=')) => ">>=",
-            (Some(b'>'), _) => ">>",
-            (Some(b'='), _) => ">=",
-            _ => ">",
-        },
-        b'*' => match second {
-            Some(b'*') => "**",
-            Some(b'=') => "*=",
-            _ => "*",
-        },
-        b'+' => match second {
-            Some(b'+') => "++",
-            Some(b'=') => "+=",
-            _ => "+",
-        },
-        b'-' => match second {
-            Some(b'-') => "--",
-            Some(b'=') => "-=",
-            _ => "-",
-        },
-        b'=' => {
-            if second == Some(b'=') {
-                "=="
-            } else {
-                "="
-            }
-        }
-        b'!' => {
-            if second == Some(b'=') {
-                "!="
-            } else {
-                "!"
-            }
-        }
-        b'&' => match second {
-            Some(b'&') => "&&",
-            Some(b'=') => "&=",
-            _ => "&",
-        },
-        b'|' => match second {
-            Some(b'|') => "||",
-            Some(b'=') => "|=",
-            _ => "|",
-        },
-        b'/' => {
-            if second == Some(b'=') {
-                "/="
-            } else {
-                "/"
-            }
-        }
-        b'%' => {
-            if second == Some(b'=') {
-                "%="
-            } else {
-                "%"
-            }
-        }
-        b'^' => {
-            if second == Some(b'=') {
-                "^="
-            } else {
-                "^"
-            }
-        }
-        b'~' => "~",
-        b'?' => "?",
-        b':' => ":",
-        b',' => ",",
+    Some(match (first, second, third) {
+        (b'<', Some(b'<'), Some(b'=')) => "<<=",
+        (b'<', Some(b'<'), _) => "<<",
+        (b'<', Some(b'='), _) => "<=",
+        (b'<', _, _) => "<",
+        (b'>', Some(b'>'), Some(b'=')) => ">>=",
+        (b'>', Some(b'>'), _) => ">>",
+        (b'>', Some(b'='), _) => ">=",
+        (b'>', _, _) => ">",
+        (b'*', Some(b'*'), _) => "**",
+        (b'*', Some(b'='), _) => "*=",
+        (b'*', _, _) => "*",
+        (b'+', Some(b'+'), _) => "++",
+        (b'+', Some(b'='), _) => "+=",
+        (b'+', _, _) => "+",
+        (b'-', Some(b'-'), _) => "--",
+        (b'-', Some(b'='), _) => "-=",
+        (b'-', _, _) => "-",
+        (b'=', Some(b'='), _) => "==",
+        (b'=', _, _) => "=",
+        (b'!', Some(b'='), _) => "!=",
+        (b'!', _, _) => "!",
+        (b'&', Some(b'&'), _) => "&&",
+        (b'&', Some(b'='), _) => "&=",
+        (b'&', _, _) => "&",
+        (b'|', Some(b'|'), _) => "||",
+        (b'|', Some(b'='), _) => "|=",
+        (b'|', _, _) => "|",
+        (b'/', Some(b'='), _) => "/=",
+        (b'/', _, _) => "/",
+        (b'%', Some(b'='), _) => "%=",
+        (b'%', _, _) => "%",
+        (b'^', Some(b'='), _) => "^=",
+        (b'^', _, _) => "^",
+        (b'~', _, _) => "~",
+        (b'?', _, _) => "?",
+        (b':', _, _) => ":",
+        (b',', _, _) => ",",
         _ => return None,
     })
 }
@@ -204,6 +167,10 @@ impl<'a> Parser<'a> {
             } else {
                 break;
             }
+            if ws_steps == LEX_CHECKPOINT_CHUNK {
+                work.checkpoint_steps(ws_steps, cancel).await?;
+                ws_steps = 0;
+            }
         }
         if ws_steps != 0 {
             work.checkpoint_steps(ws_steps, cancel).await?;
@@ -225,6 +192,10 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 self.cursor += 1;
+                if steps == LEX_CHECKPOINT_CHUNK {
+                    work.checkpoint_steps(steps, cancel).await?;
+                    steps = 0;
+                }
             }
             if steps != 0 {
                 work.checkpoint_steps(steps, cancel).await?;
@@ -545,6 +516,27 @@ fn parse<'a, 's: 'a>(
     })
 }
 
+async fn apply_postfix(
+    p: &mut Parser<'_>,
+    place: Option<&Place>,
+    value: i64,
+    state: &SharedState,
+    cancel: &Cancel,
+    max: usize,
+    work: &mut Work,
+) -> Result<(), Error> {
+    let Token::Op(op @ ("++" | "--")) = p.current else {
+        return Ok(());
+    };
+    p.advance(work, cancel).await?;
+    let next = if op == "++" {
+        value.wrapping_add(1)
+    } else {
+        value.wrapping_sub(1)
+    };
+    store_place(place, next, state, cancel, max, work).await
+}
+
 async fn leaf_operand(
     p: &mut Parser<'_>,
     active: bool,
@@ -569,15 +561,7 @@ async fn leaf_operand(
             p.advance(work, cancel).await?;
             let place = place(name, active, state, cancel, max, work).await?;
             let value = read_place(place.as_ref(), state, cancel, max, work, depth + 1).await?;
-            if let Token::Op(op @ ("++" | "--")) = p.current {
-                p.advance(work, cancel).await?;
-                let next = if op == "++" {
-                    value.wrapping_add(1)
-                } else {
-                    value.wrapping_sub(1)
-                };
-                store_place(place.as_ref(), next, state, cancel, max, work).await?;
-            }
+            apply_postfix(p, place.as_ref(), value, state, cancel, max, work).await?;
             Ok(Some(value))
         }
         _ => Ok(None),
@@ -805,6 +789,8 @@ async fn read_place(
         return Err(2.into());
     }
     if depth + 3 < MAX_DEPTH
+        && value.len() <= PLAIN_DECIMAL_MAX_LEN
+        && work.remaining >= value.len().max(1)
         && let Some(parsed) = plain_decimal(&value)
     {
         work.checkpoint_steps(value.len().max(1), cancel).await?;
@@ -849,9 +835,9 @@ async fn number(text: &str, work: &mut Work, cancel: &Cancel) -> Result<i64, Err
             if prefix.starts_with('0') {
                 return fault("invalid number", work);
             }
-            work.checkpoint_steps(prefix.len(), cancel).await?;
             let mut base = 0u32;
             for byte in prefix.bytes() {
+                work.checkpoint(cancel).await?;
                 if !byte.is_ascii_digit() {
                     return fault("invalid arithmetic base", work);
                 }
@@ -875,9 +861,9 @@ async fn number(text: &str, work: &mut Work, cancel: &Cancel) -> Result<i64, Err
             fault("invalid integer constant", work)
         };
     }
-    work.checkpoint_steps(digits.len(), cancel).await?;
     let mut value = 0i64;
     for byte in digits.bytes() {
+        work.checkpoint(cancel).await?;
         let digit = match byte {
             b'0'..=b'9' => u32::from(byte - b'0'),
             b'a'..=b'z' => u32::from(byte - b'a') + 10,
@@ -1115,6 +1101,14 @@ mod tests {
                 evaluate("min", &state, &cancel, 4096, &mut work).await.ok(),
                 Some(i64::MIN)
             );
+            let mut tight = Work::new(11, 1_000_000, 1);
+            assert!(matches!(
+                evaluate("8#9000", &state, &cancel, 4096, &mut tight).await,
+                Err(Error::Arithmetic {
+                    message: "value too great for base",
+                    ..
+                })
+            ));
         });
         finish(&ex, job);
     }

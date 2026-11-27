@@ -1275,7 +1275,6 @@ impl Expansion<'_> {
                 .map_err(Error::in_expansion)?;
                 expansion.ifs = None;
                 expansion.ifs_changed = true;
-                expansion.work.admit_storage(20)?;
                 let mut buffer = [0u8; 24];
                 let formatted = format_i64(value, &mut buffer);
                 return expansion
