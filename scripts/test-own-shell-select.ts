@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import fixture from "./fixtures/shell-select.json" with { type: "json" };
-import { assertReaderOutput, recordedReaderCases } from "./recorded-bash.ts";
+import { assertReaderOutput, recordedReaderCases } from "./compat/recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const selection = 'select x in a b; do printf "<%s>|<%s>\\n" "$x" "$REPLY"; break; done';

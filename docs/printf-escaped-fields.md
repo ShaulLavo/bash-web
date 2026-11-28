@@ -31,7 +31,7 @@ and valid-UTF-8 storage boundary. This does not add array assignment, float/time
 formats or a new locale or runtime contract.
 
 Focused controls are in `shell/engine/tests/words/printf_escaped_fields.rs` and
-`scripts/test-own-shell-printf-assignment.ts`. Full frozen measurement and accepted
+`scripts/replay/test-own-shell-printf-assignment.ts`. Full frozen measurement and accepted
 passing memberships are separate from these targeted comparisons.
 
 ## Frozen measurement

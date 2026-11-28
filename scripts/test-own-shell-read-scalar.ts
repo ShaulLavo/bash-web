@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
-import { recordedBash } from "./recorded-bash.ts";
+import { recordedBash } from "./compat/recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const env = { PATH: "/usr/bin:/bin", HOME: "/home/user", TMP: "/tmp/spec", LC_ALL: "C.UTF-8" };

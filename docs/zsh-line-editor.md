@@ -33,12 +33,12 @@ Vertical movement counts Unicode scalars, including tabs and combining marks, as
 
 ## Verification
 
-`tests/terminal/zsh-navigation.json` records real `/bin/zsh` 5.9 in isolated macOS PTYs. It includes the binary hash, default Emacs bindings, Ghostty source revision, and the hash of the unchanged key-source reference. `scripts/zsh-reference.py` captures `BUFFER` and `CURSOR` from a redraw hook without binding a diagnostic key. Every event prefix is also replayed into a fresh PTY to detect observer interference. The harness never submits fixture text and reaps every child.
+`tests/terminal/zsh-navigation.json` records real `/bin/zsh` 5.9 in isolated macOS PTYs. It includes the binary hash, default Emacs bindings, Ghostty source revision, and the hash of the unchanged key-source reference. `scripts/compat/zsh-reference.py` captures `BUFFER` and `CURSOR` from a redraw hook without binding a diagnostic key. Every event prefix is also replayed into a fresh PTY to detect observer interference. The harness never submits fixture text and reaps every child.
 
 Regenerate on a Mac with zsh 5.9, using a writable scratch directory for the output:
 
 ```sh
-python3 scripts/zsh-reference.py /path/to/scratch/zsh-navigation.json \
+python3 scripts/compat/zsh-reference.py /path/to/scratch/zsh-navigation.json \
 	--key-reference tests/terminal/readline-navigation.json
 ```
 

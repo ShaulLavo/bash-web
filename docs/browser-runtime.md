@@ -487,7 +487,7 @@ The interactive editor borrows current stdin and stdout only while reading a
 command, then drops those references before execution. Diagnostics borrow current
 stderr only while writing. Closing or replacing the final inherited pipe binding
 therefore delivers EOF or EPIPE without waiting for shell exit. The standalone
-Node fixture in `scripts/test-own-shell-inherited-ownership.ts` runs the compiled
+Node fixture in `scripts/replay/runtime/test-own-shell-inherited-ownership.ts` runs the compiled
 guest against pinned Waffle descriptors, pipes and polling. It checks peers while
 the guest is paused and resumes it afterward. It does not replace worker or browser
 transport coverage.

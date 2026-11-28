@@ -393,7 +393,7 @@ test("public CLI without a native target exits before native allocation", async 
   const command = spawnSync(
     "bun",
     [
-      fileURLToPath(new URL("../../scripts/test-prompt-hook-ios.ts", import.meta.url)),
+      fileURLToPath(new URL("../../scripts/browser/test-prompt-hook-ios.ts", import.meta.url)),
       "--result",
       path,
     ],

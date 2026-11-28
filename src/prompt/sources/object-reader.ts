@@ -151,7 +151,7 @@ export class ObjectReader {
       requireObject(size <= objectLimit && Number.isSafeInteger(scale));
     }
     const base = await this.deltaBase(pack, offset, type, cursor, ancestors);
-    const data = await inflate(cursor.bytes.subarray(cursor.offset), this.work);
+    const data = await inflate(cursor.rest(), this.work);
     requireObject(data.length === size, "Git packed object size mismatch");
     if (!base) return this.retain({ type: packedType(type), bytes: data });
     return this.retain({ type: base.type, bytes: await applyDelta(base.bytes, data, this.work) });
@@ -182,12 +182,7 @@ export class ObjectReader {
     cursor: ObjectCursor,
     ancestors: readonly string[],
   ): Promise<GitObject | undefined> {
-    if (type === 7) {
-      const start = cursor.offset;
-      cursor.offset += 20;
-      requireObject(cursor.offset <= cursor.bytes.length);
-      return this.read(hex(cursor.bytes.subarray(start, cursor.offset)), ancestors);
-    }
+    if (type === 7) return this.read(hex(cursor.take(20)), ancestors);
     if (type !== 6) return undefined;
     let byte = cursor.byte();
     let distance = byte & 127;

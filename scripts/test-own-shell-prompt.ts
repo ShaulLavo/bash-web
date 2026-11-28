@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmdirSync } from "node:fs";
 import { after, test } from "node:test";
-import { recordedBash, recordingEnvironment, runRecordingBash } from "./recorded-bash.ts";
-import { releaseShellRunner } from "./release-shell-runner.ts";
+import { recordedBash, recordingEnvironment, runRecordingBash } from "./compat/recorded-bash.ts";
+import { releaseShellRunner } from "./build/release-shell-runner.ts";
 
 const env = recordingEnvironment();
 const runner = await releaseShellRunner(env);

@@ -30,7 +30,7 @@ SIGKILL always retains its default action. External signal disposition changes
 from trap registration remain unsupported.
 
 Native runtime controls check expansion, snapshot inheritance, signal dispatch,
-and distinct async handles. `scripts/test-own-shell-self-signal.ts` runs the real
+and distinct async handles. `scripts/replay/runtime/test-own-shell-self-signal.ts` runs the real
 installed launcher with ordinary exit controls, tagged INT and TERM outcomes,
 descendant cleanup, and a surviving sibling. GNU Bash 5.3.15 provides the direct
 noninteractive comparison for PID expansion and self-signals.

@@ -3,10 +3,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 export const wasiBuildScripts = [
-  "wasi-build.ts",
-  "verify-wasi-guests.ts",
-  "waffle-release-inputs.ts",
-  "waffle-host-interface.ts",
+  "scripts/wasi-build.ts",
+  "scripts/build/verify-wasi-guests.ts",
+  "scripts/build/waffle-release-inputs.ts",
+  "scripts/build/waffle-host-interface.ts",
 ];
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");

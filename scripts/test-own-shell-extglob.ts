@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
-import { liveNodeWorkers } from "./node-worker-host.ts";
-import { runRecordingBash } from "./recorded-bash.ts";
+import { liveNodeWorkers } from "./build/node-worker-host.ts";
+import { runRecordingBash } from "./compat/recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const directory = resolve(process.env.CARGO_TARGET_DIR ?? ".build/shell", "wasm32-wasip1/release");

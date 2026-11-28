@@ -10,8 +10,8 @@ import {
   wasiTarget,
   type WasiBuildRecipe,
 } from "waffle/program-build-tools";
-import { verifyWasiGuest } from "./verify-wasi-guests.ts";
-import { prepareWaffleBuildInputs } from "./waffle-release-inputs.ts";
+import { verifyWasiGuest } from "./build/verify-wasi-guests.ts";
+import { prepareWaffleBuildInputs } from "./build/waffle-release-inputs.ts";
 
 type Environment = NodeJS.ProcessEnv;
 const helper = fileURLToPath(import.meta.url);

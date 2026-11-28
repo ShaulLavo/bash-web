@@ -53,7 +53,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Bind exact main source
-        run: node scripts/shell-scoreboard-main-dispatch.ts prepare "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
+        run: node scripts/scoreboard/shell-scoreboard-main-dispatch.ts prepare "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: dtolnay/rust-toolchain@1.98.1
@@ -84,7 +84,7 @@ jobs:
           BASH_COMPAT_OUT: ${{ runner.temp }}/main-score/score.json
           BASH_COMPAT_SCRATCH: ${{ runner.temp }}
       - name: Seal exact main raw score
-        run: node scripts/shell-scoreboard-main-dispatch.ts seal "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
+        run: node scripts/scoreboard/shell-scoreboard-main-dispatch.ts seal "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
       - name: Upload exact main raw score
         uses: actions/upload-artifact@v4
         with:
@@ -93,7 +93,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
       - name: Fold exact main floor
-        run: node scripts/shell-scoreboard-main-dispatch.ts fold "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
+        run: node scripts/scoreboard/shell-scoreboard-main-dispatch.ts fold "$GITHUB_WORKSPACE/.measured-main" "$RUNNER_TEMP/main-score"
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Upload exact main floor
@@ -135,7 +135,7 @@ jobs:
         with:
           node-version: 26.12.1
       - id: inputs
-        run: node scripts/ci-inputs.ts
+        run: node scripts/ci/ci-inputs.ts
       - uses: actions/cache@v4
         id: downloads
         with:
@@ -217,7 +217,7 @@ jobs:
           sha256sum .build/shell/release/shell-engine .build/shell/release/shell-cli > .build/shell/cli-sha256.txt
           git rev-parse HEAD > .build/shell/cli-source.txt
           npm run notices:shell
-          node scripts/ci-artifacts.ts pack .build/ci-native
+          node scripts/ci/ci-artifacts.ts pack .build/ci-native
       - name: Core dependency proof
         if: github.event_name != 'pull_request' || steps.paths.outputs.code == 'true'
         run: npm run check:capabilities
@@ -251,7 +251,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select immutable layer baseline
-        run: node scripts/scoreboard-ci.ts baseline LAYERS_BASE_REF
+        run: node scripts/scoreboard/scoreboard-ci.ts baseline LAYERS_BASE_REF
       - run: npm run test:check-layers && npm run check:layers && npm run typecheck:layers
         env:
           LAYERS_OUTPUT: ${{ runner.temp }}/engine-layers.json
@@ -396,7 +396,7 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select compatibility baseline
-        run: node scripts/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
+        run: node scripts/scoreboard/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - uses: actions/cache@v4
         with:
@@ -442,20 +442,20 @@ jobs:
           node-version: 26.12.1
       - uses: ./.github/actions/javascript
       - name: Select compatibility baseline
-        run: node scripts/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
+        run: node scripts/scoreboard/scoreboard-ci.ts baseline BASH_COMPAT_BASE_REF
       - uses: ./.github/actions/native
       - name: Bind qualification and resolve PR main floor
-        run: node scripts/scoreboard-ci.ts prepare "${{ runner.temp }}/scoreboard-input.json"
+        run: node scripts/scoreboard/scoreboard-ci.ts prepare "${{ runner.temp }}/scoreboard-input.json"
         env:
           GH_TOKEN: ${{ github.token }}
-      - run: node --test scripts/test-diagnose-compat.ts
+      - run: node --test scripts/compat/test-diagnose-compat.ts
       - name: Observe bounded Waffle echo cases
-        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/echo-diagnostics" -- timeout --signal=TERM --kill-after=5s 5m npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
+        run: node scripts/compat/diagnose-compat.ts "${{ runner.temp }}/echo-diagnostics" -- timeout --signal=TERM --kill-after=5s 5m npm run fuzz:shell-echo:ci -- --waffle --shell "$GITHUB_WORKSPACE/.build/shell/wasm32-wasip1/release/shell-runtime.wasm"
         env:
           TMPDIR: ${{ runner.temp }}
           BASH_WEB_WAFFLE_TRACE: "1"
       - name: Observe compatibility with the shared node build
-        run: node scripts/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
+        run: node scripts/compat/diagnose-compat.ts "${{ runner.temp }}/own-shell-diagnostics" -- npm run compat:shell:prebuilt
         env:
           BASH_COMPAT_RAW: "1"
           BASH_COMPAT_OUT: ${{ runner.temp }}/own-shell-current.json
@@ -499,7 +499,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}
       - name: Seal complete raw score
-        run: node scripts/scoreboard-ci.ts raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
+        run: node scripts/scoreboard/scoreboard-ci.ts raw "${{ runner.temp }}/scoreboard-input.json" "${{ runner.temp }}/own-shell-current.json" "${{ runner.temp }}/scoreboard-raw"
       - name: Upload complete raw score
         id: raw-upload
         uses: actions/upload-artifact@v4
@@ -533,7 +533,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/scoreboard-raw
       - name: Fold main floor and qualification
-        run: node scripts/scoreboard-ci.ts fold "${{ runner.temp }}/scoreboard-raw/raw.json" "${{ runner.temp }}/scoreboard-floor"
+        run: node scripts/scoreboard/scoreboard-ci.ts fold "${{ runner.temp }}/scoreboard-raw/raw.json" "${{ runner.temp }}/scoreboard-floor"
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Upload cumulative main floor
@@ -552,7 +552,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
       - name: Enforce qualification
-        run: node scripts/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
+        run: node scripts/scoreboard/scoreboard-ci.ts enforce "${{ runner.temp }}/scoreboard-floor/qualification.json"
   # Playwright uses the checked-in worker count across two shards.
   browser:
     if: ${{ inputs.main_source == '' && needs.prepare.outputs.code == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
@@ -596,8 +596,8 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-chromium.json" chromium & p1=$!
-          bun scripts/test-python-local.ts "$RUNNER_TEMP/python-host-firefox.json" firefox & p2=$!
+          bun scripts/browser/test-python-local.ts "$RUNNER_TEMP/python-host-chromium.json" chromium & p1=$!
+          bun scripts/browser/test-python-local.ts "$RUNNER_TEMP/python-host-firefox.json" firefox & p2=$!
           status=0
           if ! wait "$p1"; then status=1; fi
           if ! wait "$p2"; then status=1; fi

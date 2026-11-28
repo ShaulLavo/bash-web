@@ -32,7 +32,7 @@ and cannot replace it independently. Functions and unredirected brace groups
 can use explicit exec in the calling shell.
 
 Rust tests cover options, lookup failures, persistent redirects and eligibility.
-The Node scoreboard discovers `scripts/test-own-shell-exec.ts`; the browser
+The Node scoreboard discovers `scripts/replay/runtime/test-own-shell-exec.ts`; the browser
 suite discovers `tests/exec.spec.ts`. Both exercise real Worker replacement
 with source bytes and prepared modules, including cancellation and final-only
 completion.

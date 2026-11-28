@@ -24,7 +24,16 @@ test("object byte cursor rejects exhaustion without advancing", () => {
   const cursor = new ObjectCursor(Uint8Array.of(0, 255));
   assert.equal(cursor.byte(), 0);
   assert.equal(cursor.byte(), 255);
-  assert.equal(cursor.offset, 2);
+  assert.equal(cursor.remaining, 0);
   assert.throws(() => cursor.byte(), /Invalid Git object/u);
-  assert.equal(cursor.offset, 2);
+  assert.equal(cursor.remaining, 0);
+});
+
+test("object cursor bounds slice reads before advancing", () => {
+  const cursor = new ObjectCursor(Uint8Array.of(1, 2, 3));
+  assert.deepEqual(cursor.take(2), Uint8Array.of(1, 2));
+  assert.throws(() => cursor.take(2), /Invalid Git object/u);
+  assert.deepEqual(cursor.rest(), Uint8Array.of(3));
+  assert.equal(cursor.byte(), 3);
+  assert.equal(cursor.remaining, 0);
 });

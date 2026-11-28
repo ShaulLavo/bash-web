@@ -28,7 +28,7 @@ existing server.
   `else` / `else if` after `return`, and unqualified browser-global `name` are errors.
   Maximum control-block depth is 3 and modified cyclomatic complexity is 30. Only the
   17 pre-existing diagnostics in the 7 frozen-fingerprint fuzzer drivers are baselined
-  by exact location in `quality/lint-baseline.json` (`scripts/check-lint.ts`), verified
+  by exact location in `quality/lint-baseline.json` (`scripts/ci/check-lint.ts`), verified
   shrink-only against the immutable comparison commit (`LINT_BASE_REF`, or in GitHub
   Actions the push event `before` SHA / `LAYERS_BASE_REF` on pushes and `HEAD^` on PRs
   and manual dispatches, and `origin/main` locally), so any added violation fails even
@@ -82,8 +82,8 @@ comparison commit when needed.
 To inspect every clone and then remove obsolete allowances:
 
 ```sh
-node scripts/check-duplicates.ts --report /work/tmp/bash-web-duplicates.json
-node scripts/check-duplicates.ts --record
+node scripts/ci/check-duplicates.ts --report /work/tmp/bash-web-duplicates.json
+node scripts/ci/check-duplicates.ts --record
 npm run check:duplicates
 ```
 
