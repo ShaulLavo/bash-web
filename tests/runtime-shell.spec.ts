@@ -84,6 +84,25 @@ test("the runtime provides /dev/null without creating a filesystem node", async 
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
+test("pwd uses the last mode option and rejects unavailable physical resolution", async ({
+  page,
+}) => {
+  await open(page);
+  await command(
+    page,
+    '[[ $(pwd -PL) == "$PWD" ]] && echo LOGICAL_OK; pwd -LP; echo "PHYSICAL:$?"; pwd -Z; echo "OPTION:$?"',
+  );
+  for (const line of [
+    "LOGICAL_OK",
+    "pwd: physical directory resolution unsupported",
+    "PHYSICAL:2",
+    "pwd: -Z: invalid option",
+    "OPTION:2",
+  ])
+    await output(page, line);
+  await ready(page);
+});
+
 test("an always-ready background shell loop cannot starve a foreground command", async ({
   page,
 }) => {

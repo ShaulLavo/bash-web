@@ -217,14 +217,7 @@ pub(crate) fn run<'a>(
         Builtin::Pushd => admitted(directories::pushd(args, state, fds, context, work), context),
         Builtin::Popd => admitted(directories::popd(args, state, fds, context, work), context),
         Builtin::Dirs => admitted(directories::dirs(args, state, fds, context, work), context),
-        Builtin::Pwd => admitted(
-            async move {
-                let cwd = state.borrow().cwd.clone();
-                write(fds, format!("{cwd}\n").as_bytes(), context).await?;
-                Ok(Outcome::status(0))
-            },
-            context,
-        ),
+        Builtin::Pwd => admitted(directories::pwd(args, state, fds, context, work), context),
         Builtin::Set => unreachable!("set consumes its arguments"),
         Builtin::Shift => shift(name, args, state, fds, context),
         Builtin::Jobs => {

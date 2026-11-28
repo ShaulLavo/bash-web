@@ -1,5 +1,13 @@
 # Status and limits
 
+> **Historical snapshot.** The sections below record bash-web at commit `a745a96` and stay here for historical reference. Several facts have changed since then:
+>
+> - **Publishing and Waffle pins.** `package.json` is not private. `.github/workflows/release.yml` publishes `bash-web` to npm and pushes `bash-web@<version>` tags. `package.json` sets `"waffle": "*"` in `peerDependencies`, declares `waffleHostInterface`, and pins the runtime in `devDependencies` alongside `sources.lock.json`. See [Waffle host compatibility](waffle-host-interface.md).
+> - **Browsers in CI.** `playwright.config.ts` and `.github/workflows/ci.yml` run Chromium, Firefox, and WebKit. See [CI inputs and job ownership](ci.md).
+> - **Compatibility floor.** `docs/evidence/own-shell-baseline.json` stays frozen at `a745a96`. CI enforces an accumulated current-main passing floor in workflow artifacts instead of committing static baseline snapshots. See [Landing checks](landing-infrastructure.md) or run `npm run compat:shell` locally.
+> - **Feature coverage.** Several items in the `a745a96` gap table now work, including `printf` floating-point conversions in [printf floating conversions](printf-float.md), runtime-backed `$$` and `BASHPID` in [Shell PID and self-signals](self-signals.md), `mapfile` and `readarray` without `-C` callbacks in [mapfile](mapfile.md), and `read -t` with `TMOUT` in [read](read.md#read-timeouts). Check the feature pages in [docs/README.md](README.md#builtin-and-feature-behavior) for current behavior.
+> - **External commands.** External programs ship in Waffle's `waffle-base` family packages declared in `package.json`, not in bash-web. See [Install program families](guides/install-utilities.md).
+
 bash-web is experimental and pre-1.0. The package version is `0.0.x`, `package.json` marks it `"private": true`, it is not on npm, and the repository has no releases or tags. Use it from a checkout. Any commit can change the API.
 
 ## Platforms
