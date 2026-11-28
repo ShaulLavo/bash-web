@@ -28,6 +28,7 @@ pub(crate) struct Traps {
     inactive: u128,
     running: u128,
     exit_status: Option<i32>,
+    return_status: Option<i32>,
 }
 impl Default for Traps {
     fn default() -> Self {
@@ -41,6 +42,7 @@ impl Default for Traps {
             inactive: 0,
             running: 0,
             exit_status: None,
+            return_status: None,
         }
     }
 }
@@ -52,8 +54,9 @@ impl Traps {
         traps.implicit_ignores = [false; 2];
         traps.traced = [false; 3];
         traps.inactive = u128::MAX;
-        traps.running &= !(1 << EXIT);
+        traps.running = 0;
         traps.exit_status = None;
+        traps.return_status = None;
         traps
     }
     pub(crate) fn get(&self, signal: usize) -> Option<&Binding> {
@@ -85,6 +88,12 @@ impl Traps {
     }
     pub(crate) fn exit_status(&self) -> Option<i32> {
         self.exit_status
+    }
+    pub(crate) fn defer_return(&mut self, status: i32) {
+        self.return_status = Some(status);
+    }
+    pub(crate) fn take_return_status(&mut self) -> Option<i32> {
+        self.return_status.take()
     }
     pub(crate) fn trace_inherited(&mut self, err: bool, functions: bool) {
         self.traced = [functions, err, functions];
@@ -145,8 +154,9 @@ impl Traps {
     pub(crate) fn process_substitution(&self) -> Self {
         let mut traps = self.clone();
         traps.inactive = u128::MAX;
-        traps.running &= !(1 << EXIT);
+        traps.running = 0;
         traps.exit_status = None;
+        traps.return_status = None;
         for (signal, binding) in traps
             .bindings
             .iter_mut()

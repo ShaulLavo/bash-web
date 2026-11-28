@@ -1722,14 +1722,17 @@ enum CommandRef<'a> {
 
 enum CommandView<'a> {
     Syntax(CommandRef<'a>),
+    PipelineStage(CommandRef<'a>),
     AndOr(&'a Command, &'a [(ListOperator, Command)]),
     OwnedAndOr(Box<(Command, Vec<(ListOperator, Command)>)>),
 }
 
 fn view_target<'a>(view: &'a CommandView<'a>) -> Option<&'a Command> {
     match view {
-        CommandView::Syntax(CommandRef::Owned(command)) => Some(command),
-        CommandView::Syntax(CommandRef::Borrowed(command)) => Some(command),
+        CommandView::Syntax(CommandRef::Owned(command))
+        | CommandView::PipelineStage(CommandRef::Owned(command)) => Some(command),
+        CommandView::Syntax(CommandRef::Borrowed(command))
+        | CommandView::PipelineStage(CommandRef::Borrowed(command)) => Some(command),
         CommandView::AndOr(..) | CommandView::OwnedAndOr(..) => None,
     }
 }
@@ -1782,6 +1785,21 @@ struct CommandChecks {
 
 fn command_checks(command: &CommandView<'_>, context: &Context) -> CommandChecks {
     let target = view_target(command);
+    let failure_boundary = !context.ignore_errexit
+        && matches!(
+            target,
+            Some(
+                Command::Simple(_)
+                    | Command::Pipeline(Pipeline { negated: false, .. })
+                    | Command::Compound(
+                        CompoundCommand::Arithmetic(_)
+                            | CompoundCommand::Test(_)
+                            | CompoundCommand::Subshell(_),
+                        _
+                    )
+            )
+        );
+    let pipeline_stage = matches!(command, CommandView::PipelineStage(_));
     CommandChecks {
         preserve_pipeline: target.is_none_or(|command| {
             matches!(
@@ -1797,20 +1815,7 @@ fn command_checks(command: &CommandView<'_>, context: &Context) -> CommandChecks
                     )
             )
         }),
-        errexit: !context.ignore_errexit
-            && matches!(
-                target,
-                Some(
-                    Command::Simple(_)
-                        | Command::Pipeline(Pipeline { negated: false, .. })
-                        | Command::Compound(
-                            CompoundCommand::Arithmetic(_)
-                                | CompoundCommand::Test(_)
-                                | CompoundCommand::Subshell(_),
-                            _
-                        )
-                )
-            ),
+        errexit: failure_boundary && !pipeline_stage,
     }
 }
 
@@ -1860,7 +1865,7 @@ fn command_body<'a>(
 ) -> eval::Frame<'a> {
     let evaluation = context.evaluation.clone();
     let command = match view {
-        CommandView::Syntax(command) => command,
+        CommandView::Syntax(command) | CommandView::PipelineStage(command) => command,
         CommandView::AndOr(first, links) => {
             return evaluation.frame(and_or(first, links, state, fds, context), Outcome::status);
         }
@@ -2040,11 +2045,7 @@ async fn pipeline_command(
             }
         } else {
             let child = context.isolated_command(&command);
-            if index + 1 < count || negated {
-                child.condition()
-            } else {
-                child
-            }
+            if negated { child.condition() } else { child }
         };
         if count > 1 {
             stage_context.strand = context.strand.fork();
@@ -2062,7 +2063,11 @@ async fn pipeline_command(
             stage_fds,
             stage_context,
             parent_scope,
-            !shared_stage,
+            match (count, shared_stage) {
+                (1, _) => StageBoundary::Single,
+                (_, true) => StageBoundary::Shared,
+                (_, false) => StageBoundary::Isolated,
+            },
         )));
     }
     drop(fds);
@@ -2146,6 +2151,12 @@ async fn pipeline_children_body(
     Ok(children)
 }
 
+enum StageBoundary {
+    Single,
+    Shared,
+    Isolated,
+}
+
 async fn pipeline_stage(
     command: Command,
     syntax: Option<Rc<crate::exec::Allocation>>,
@@ -2153,20 +2164,25 @@ async fn pipeline_stage(
     fds: Descriptors,
     context: Context,
     parent_scope: Scope,
-    isolated: bool,
+    boundary: StageBoundary,
 ) -> Outcome {
     let owned = syntax.is_none();
     let _syntax = syntax;
-    if isolated {
+    if matches!(boundary, StageBoundary::Isolated) {
         trap_action::trace_inherited(&state);
         trap_action::arm_exit(&command, &state, &fds, &context);
     }
-    let result = if owned {
-        execute_owned_item(command, state.clone(), fds, context.clone()).await
+    let command_ref = if owned && is_owned_transfer(&command) {
+        CommandRef::Owned(Box::new(command))
     } else {
-        execute(&command, state.clone(), fds, context.clone()).await
+        CommandRef::Borrowed(&command)
     };
-    if isolated {
+    let view = match boundary {
+        StageBoundary::Single => CommandView::Syntax(command_ref),
+        _ => CommandView::PipelineStage(command_ref),
+    };
+    let result = execute_command(view, state.clone(), fds, context.clone()).await;
+    if matches!(boundary, StageBoundary::Isolated) {
         let result = trap_action::finish_child(result, state, context.clone()).await;
         context.finish_scope(parent_scope).await;
         return result;

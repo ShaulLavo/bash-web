@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::{collections::BTreeSet, process::Command};
+use std::{collections::BTreeMap, process::Command};
 
 #[derive(Deserialize)]
 struct Fixture {
@@ -17,7 +17,12 @@ struct Case {
 #[derive(Deserialize)]
 struct Rejections {
     diagnostic: String,
-    cases: BTreeSet<String>,
+    cases: BTreeMap<String, RejectedCase>,
+}
+#[derive(Deserialize, Debug)]
+struct RejectedCase {
+    status: i32,
+    stdout: String,
 }
 
 #[test]
@@ -36,8 +41,15 @@ fn pinned_bash_trap_registration() {
             .args(["-c", &case.code])
             .output()
             .unwrap();
-        if rejected.cases.remove(&case.id) {
-            assert!(output.status.code().is_some(), "{} status", case.id);
+        let rejected_case = rejected.cases.remove(&case.id);
+        let (status, stdout) = rejected_case
+            .as_ref()
+            .map_or((case.status, case.stdout.as_str()), |row| {
+                (row.status, row.stdout.as_str())
+            });
+        assert_eq!(output.status.code(), Some(status), "{} status", case.id);
+        assert_eq!(output.stdout, stdout.as_bytes(), "{} stdout", case.id);
+        if rejected_case.is_some() {
             assert!(
                 String::from_utf8_lossy(&output.stderr).contains(&rejected.diagnostic),
                 "{} diagnostic: {:?}",
@@ -46,13 +58,6 @@ fn pinned_bash_trap_registration() {
             );
             continue;
         }
-        assert_eq!(
-            output.status.code(),
-            Some(case.status),
-            "{} status",
-            case.id
-        );
-        assert_eq!(output.stdout, case.stdout.as_bytes(), "{} stdout", case.id);
         if case.stderr.is_empty() {
             assert!(
                 output.stderr.is_empty(),

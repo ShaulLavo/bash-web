@@ -127,6 +127,39 @@ fn background_exit_inherits_the_compounds_redirected_output() {
     assert_eq!(complete(&executor, job), 0);
     assert_eq!(output.bytes(), b"body\ncleanup\n");
 }
+
+#[test]
+fn errtrace_handles_the_pipeline_once_and_traces_commands_within_it() {
+    let (shell, executor, output) = session();
+    let job = shell
+        .start("set -E; trap 'echo err:$?' ERR; { false; echo body; } | while read -r line; do echo \"$line\"; done; false | false")
+        .unwrap();
+    assert_eq!(complete(&executor, job), 1);
+    assert_eq!(output.bytes(), b"err:1\nbody\nerr:1\n");
+}
+
+#[test]
+fn return_exposes_the_preceding_status_for_functions_and_source() {
+    let (shell, executor, output) = session();
+    let job = shell
+        .start("set -T; trap 'echo return:$?' RETURN; f() { false; return 7; }; f; echo function:$?; echo 'false; return 8' >library; source library; echo source:$?")
+        .unwrap();
+    assert_eq!(complete(&executor, job), 0);
+    assert_eq!(
+        output.bytes(),
+        b"return:1\nfunction:7\nreturn:1\nsource:8\n"
+    );
+}
+
+#[test]
+fn a_child_can_install_its_own_err_handler_inside_a_parent_handler() {
+    let (shell, executor, output) = session();
+    let job = shell
+        .start("trap 'echo parent; (trap \"echo child\" ERR; false)' ERR; false")
+        .unwrap();
+    assert_eq!(complete(&executor, job), 1);
+    assert_eq!(output.bytes(), b"parent\nchild\n");
+}
 #[test]
 fn interrupted_submission_keeps_retained_action_until_reset_refunds_it() {
     let (shell, executor, output) = session();

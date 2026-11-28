@@ -2,6 +2,13 @@ use super::*;
 use crate::state::traps::{Action, Binding, ERR, EXIT, RETURN};
 use futures::future::{Either, ready};
 
+struct Invocation {
+    event: usize,
+    action: Rc<Action>,
+    outcome: Outcome,
+    status: i32,
+}
+
 pub(super) fn at_boundary(
     event: usize,
     result: Outcome,
@@ -12,15 +19,35 @@ pub(super) fn at_boundary(
     if context.cancel.is_cancelled() {
         return Either::Left(ready(result));
     }
-    let action = state.borrow().traps.executable(event).cloned();
-    let Some(action) = action else {
+    let Some(invocation) = prepare_invocation(event, result, &state) else {
         return Either::Left(ready(result));
     };
     let evaluation = context.evaluation.clone();
     evaluation.reader_frame(
-        |scope| dispatch(event, action, result, state, fds, context, scope),
+        |scope| dispatch(invocation, state, fds, context, scope),
         Outcome::status,
     )
+}
+
+fn prepare_invocation(event: usize, outcome: Outcome, state: &SharedState) -> Option<Invocation> {
+    let mut shell = state.borrow_mut();
+    let status = if event == RETURN {
+        let previous = shell.traps.take_return_status();
+        if outcome.flow == Flow::Return {
+            previous.unwrap_or(outcome.code)
+        } else {
+            outcome.code
+        }
+    } else {
+        outcome.code
+    };
+    let action = shell.traps.executable(event)?.clone();
+    Some(Invocation {
+        event,
+        action,
+        outcome,
+        status,
+    })
 }
 
 pub(super) fn complete(
@@ -240,8 +267,7 @@ struct SavedStatus {
 impl SavedStatus {
     fn capture(
         state: &SharedState,
-        event: usize,
-        code: i32,
+        invocation: &Invocation,
         scope: &crate::exec::Scope,
     ) -> Result<Self, i32> {
         let mut shell = state.borrow_mut();
@@ -253,12 +279,12 @@ impl SavedStatus {
             .try_reserve_exact(statuses.len())
             .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         pipeline.extend_from_slice(statuses);
-        shell.traps.enter(event, code);
-        shell.publish_status(code);
+        shell.traps.enter(invocation.event, invocation.status);
+        shell.publish_status(invocation.status);
         Ok(Self {
             state: state.clone(),
-            event,
-            code,
+            event: invocation.event,
+            code: invocation.outcome.code,
             pipeline,
             _storage: storage,
         })
@@ -275,19 +301,17 @@ impl Drop for SavedStatus {
 }
 
 async fn dispatch(
-    event: usize,
-    action: Rc<Action>,
-    result: Outcome,
+    invocation: Invocation,
     state: SharedState,
     fds: Descriptors,
     mut context: Context,
     scope: crate::exec::Scope,
 ) -> Outcome {
-    let source = match eval::join_text(&[action.text.as_str()], &scope, &context).await {
+    let source = match eval::join_text(&[invocation.action.text.as_str()], &scope, &context).await {
         Ok(source) => source,
         Err(code) => return Outcome::status(code),
     };
-    let _restore = match SavedStatus::capture(&state, event, result.code, &scope) {
+    let _restore = match SavedStatus::capture(&state, &invocation, &scope) {
         Ok(saved) => saved,
         Err(code) => return Outcome::status(code),
     };
@@ -303,10 +327,10 @@ async fn dispatch(
     .await;
     match outcome {
         Ok(handler) if handler.flow != Flow::Normal => handler,
-        Ok(_) => result,
+        Ok(_) => invocation.outcome,
         Err(message) => {
             abort_diagnostic(&fds, &context, message.as_bytes(), 2).await;
-            result
+            invocation.outcome
         }
     }
 }

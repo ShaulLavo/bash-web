@@ -293,10 +293,18 @@ fn exit_return<'a>(
     {
         return Either::Left(ready(Err(2)));
     }
+    let transfer = |code| {
+        if flow == Flow::Return {
+            let mut shell = state.borrow_mut();
+            let status = shell.status();
+            shell.traps.defer_return(status);
+        }
+        Either::Left(ready(Ok(Outcome { code, flow })))
+    };
     let code = match args.first() {
         Some(s) => match s.trim_matches([' ', '\t', '\n']).parse::<i64>() {
             Ok(code) => code.rem_euclid(256) as i32,
-            Err(_) => return Either::Left(ready(Ok(Outcome { code: 2, flow }))),
+            Err(_) => return transfer(2),
         },
         None if flow == Flow::Exit => {
             let shell = state.borrow();
@@ -307,7 +315,7 @@ fn exit_return<'a>(
     if args.len() > 1 {
         return admitted(too_many_arguments(name, state, fds, context), context);
     }
-    Either::Left(ready(Ok(Outcome { code, flow })))
+    transfer(code)
 }
 
 fn shift<'a>(

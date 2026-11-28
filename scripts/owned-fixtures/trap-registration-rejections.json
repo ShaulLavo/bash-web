@@ -1,68 +1,257 @@
 {
   "diagnostic": "trap execution is unsupported in this shell",
-  "cases": [
-    "special-names",
-    "inherited-ignore",
-    "process-substitution-special-mutation",
-    "process-substitution-ignored-exit",
-    "process-substitution-nested-mutation",
-    "ignored-debug-return-child-mutation",
-    "ignored-exit-signal-child-mutation",
-    "numeric-placeholder-names-rejected",
-    "process-ignored-exit-query-reset",
-    "nested-parent-deferred-sub-procsub-mutation",
-    "nested-parent-mutated-sub-inherited-exit-ignored",
-    "nested-parent-deferred-invalid-mutation",
-    "nested-parent-mutated-sub-exit-propagates",
-    "nested-parent-deferred-procsub-query-then-ordinary-mutation",
-    "nested-parent-deferred-handler-20",
-    "nested-parent-deferred-handler-21",
-    "nested-parent-deferred-handler-22",
-    "implicit-INT-mutated-ordinary-proc-new-ignore",
-    "implicit-QUIT-proc-new-ignore",
-    "implicit-QUIT-proc-handler-then-ignore",
-    "implicit-QUIT-root-ignore-proc-reignore",
-    "implicit-QUIT-root-handler-proc-reignore",
-    "implicit-QUIT-ordinary-new-ignore",
-    "implicit-QUIT-ordinary-proc-new-ignore",
-    "implicit-QUIT-mutated-ordinary-proc-new-ignore",
-    "implicit-HUP-proc-new-ignore",
-    "implicit-HUP-proc-handler-then-ignore",
-    "implicit-HUP-root-ignore-proc-reignore",
-    "implicit-HUP-root-handler-proc-reignore",
-    "implicit-HUP-ordinary-new-ignore",
-    "implicit-HUP-ordinary-proc-new-ignore",
-    "implicit-HUP-mutated-ordinary-proc-new-ignore",
-    "implicit-TERM-proc-new-ignore",
-    "implicit-TERM-proc-handler-then-ignore",
-    "implicit-TERM-root-ignore-proc-reignore",
-    "implicit-TERM-root-handler-proc-reignore",
-    "implicit-TERM-ordinary-new-ignore",
-    "implicit-TERM-ordinary-proc-new-ignore",
-    "implicit-TERM-mutated-ordinary-proc-new-ignore",
-    "implicit-CHLD-proc-new-ignore",
-    "implicit-CHLD-proc-handler-then-ignore",
-    "implicit-CHLD-root-ignore-proc-reignore",
-    "implicit-CHLD-root-handler-proc-reignore",
-    "implicit-CHLD-ordinary-new-ignore",
-    "implicit-CHLD-ordinary-proc-new-ignore",
-    "implicit-CHLD-mutated-ordinary-proc-new-ignore",
-    "implicit-EXIT-mutated-ordinary-proc-new-ignore",
-    "implicit-DEBUG-active-proc",
-    "implicit-DEBUG-deferred-proc",
-    "implicit-extended-INT-other-ignore",
-    "implicit-extended-INT-deferred-other-ignore",
-    "implicit-extended-QUIT-twice",
-    "implicit-extended-QUIT-deferred-twice",
-    "implicit-extended-QUIT-reset-ignore",
-    "implicit-extended-QUIT-deferred-reset-ignore",
-    "implicit-extended-QUIT-handler-reset-ignore",
-    "implicit-extended-QUIT-deferred-handler-reset-ignore",
-    "implicit-extended-QUIT-other-ignore",
-    "implicit-extended-QUIT-deferred-other-ignore",
-    "implicit-extended-QUIT-nested-ordinary",
-    "implicit-extended-QUIT-deferred-nested-ordinary",
-    "implicit-extended-QUIT-nested-process",
-    "implicit-extended-QUIT-deferred-nested-process"
-  ]
+  "cases": {
+    "special-names": {
+      "status": 0,
+      "stdout": "trap -- ':' ERR\ntrap -- ':' RETURN\n"
+    },
+    "inherited-ignore": {
+      "status": 0,
+      "stdout": "trap -- '' SIGINT\ntrap -- '' SIGINT\ntrap -- ':' SIGTERM\n"
+    },
+    "process-substitution-special-mutation": {
+      "status": 0,
+      "stdout": "got:trap -- 'echo e' ERR\ngot:trap -- '' RETURN\n"
+    },
+    "process-substitution-ignored-exit": {
+      "status": 0,
+      "stdout": "got:trap -- '' SIGINT\ngot:trap -- '' ERR\ngot:trap -- '' RETURN\n"
+    },
+    "process-substitution-nested-mutation": {
+      "status": 0,
+      "stdout": "got:trap -- '' SIGTERM\ngot:trap -- '' SIGTERM\ngot:trap -- 'echo e' ERR\ngot:trap -- '' RETURN\n"
+    },
+    "numeric-placeholder-names-rejected": {
+      "status": 0,
+      "stdout": "q:1\n"
+    },
+    "ignored-debug-return-child-mutation": {
+      "status": 0,
+      "stdout": "trap -- ':' SIGINT\nc\n"
+    },
+    "ignored-exit-signal-child-mutation": {
+      "status": 0,
+      "stdout": "trap -- '' EXIT\ntrap -- ':' SIGINT\ntrap -- '' SIGTERM\ntrap -- '' EXIT\ntrap -- '' SIGTERM\ntrap -- '' ERR\ntrap -- '' RETURN\n"
+    },
+    "process-ignored-exit-query-reset": {
+      "status": 0,
+      "stdout": "got:trap -- '' SIGINT\ngot:trap -- '' SIGINT\n"
+    },
+    "nested-parent-deferred-sub-procsub-mutation": {
+      "status": 0,
+      "stdout": ""
+    },
+    "nested-parent-mutated-sub-inherited-exit-ignored": {
+      "status": 0,
+      "stdout": "got:trap -- '' EXIT\n"
+    },
+    "nested-parent-deferred-handler-20": {
+      "status": 0,
+      "stdout": ""
+    },
+    "nested-parent-deferred-handler-21": {
+      "status": 0,
+      "stdout": ""
+    },
+    "nested-parent-deferred-handler-22": {
+      "status": 0,
+      "stdout": ""
+    },
+    "nested-parent-deferred-invalid-mutation": {
+      "status": 0,
+      "stdout": ""
+    },
+    "nested-parent-mutated-sub-exit-propagates": {
+      "status": 0,
+      "stdout": "got:got:trap -- '' EXIT\n"
+    },
+    "nested-parent-deferred-procsub-query-then-ordinary-mutation": {
+      "status": 0,
+      "stdout": "got:trap -- 'echo h' SIGHUP\ngot:trap -- ':' SIGINT\n"
+    },
+    "implicit-INT-mutated-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-QUIT-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-QUIT-proc-handler-then-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-QUIT-root-ignore-proc-reignore": {
+      "status": 0,
+      "stdout": "[trap -- '' SIGQUIT]\n"
+    },
+    "implicit-QUIT-root-handler-proc-reignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-QUIT-ordinary-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-QUIT-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-QUIT-mutated-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-HUP-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-HUP-proc-handler-then-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-HUP-root-ignore-proc-reignore": {
+      "status": 0,
+      "stdout": "[trap -- '' SIGHUP]\n"
+    },
+    "implicit-HUP-root-handler-proc-reignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-HUP-ordinary-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-HUP-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-HUP-mutated-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-TERM-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-TERM-proc-handler-then-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-TERM-root-ignore-proc-reignore": {
+      "status": 0,
+      "stdout": "[trap -- '' SIGTERM]\n"
+    },
+    "implicit-TERM-root-handler-proc-reignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-TERM-ordinary-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-TERM-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-TERM-mutated-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-CHLD-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-CHLD-proc-handler-then-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-CHLD-root-ignore-proc-reignore": {
+      "status": 0,
+      "stdout": "[trap -- '' SIGCHLD]\n"
+    },
+    "implicit-CHLD-root-handler-proc-reignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-CHLD-ordinary-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-CHLD-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-CHLD-mutated-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-EXIT-mutated-ordinary-proc-new-ignore": {
+      "status": 0,
+      "stdout": "[trap -- '' EXIT]\n"
+    },
+    "implicit-DEBUG-active-proc": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-DEBUG-deferred-proc": {
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n"
+    },
+    "implicit-extended-INT-other-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-INT-deferred-other-ignore": {
+      "status": 0,
+      "stdout": "[trap -- '' SIGINT]\n"
+    },
+    "implicit-extended-QUIT-twice": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-deferred-twice": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-reset-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-deferred-reset-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-handler-reset-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-deferred-handler-reset-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-other-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-deferred-other-ignore": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-nested-ordinary": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-deferred-nested-ordinary": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-nested-process": {
+      "status": 0,
+      "stdout": ""
+    },
+    "implicit-extended-QUIT-deferred-nested-process": {
+      "status": 0,
+      "stdout": ""
+    }
+  }
 }
