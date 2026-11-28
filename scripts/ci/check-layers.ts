@@ -690,7 +690,10 @@ function committedSources(root: string, ref: string): SourceFile[] {
 }
 
 function scanWithBase(root: string, ref: string, sources: readonly SourceFile[][]) {
-  const checker = git(root, ["show", `${ref}:scripts/ci/check-layers.ts`]);
+  const entries = git(root, ["ls-tree", "-r", "-z", "--name-only", ref, "--", "scripts"]);
+  const paths = entries.split("\0").filter((path) => path.endsWith("/check-layers.ts"));
+  assert.equal(paths.length, 1, "immutable base must have exactly one layer checker");
+  const checker = git(root, ["show", `${ref}:${paths[0]}`]);
   const directory = mkdtempSync(resolve(process.env.TMPDIR || tmpdir(), "layer-checker-"));
   try {
     const path = resolve(directory, "checker.ts");

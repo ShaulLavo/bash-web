@@ -494,7 +494,7 @@ function withRepo(
     git(["config", "user.name", "Layer fixture"]);
     git(["config", "user.email", "layer-fixture@example.invalid"]);
     put(
-      "scripts/ci/check-layers.ts",
+      "scripts/check-layers.ts",
       readFileSync(new URL("./check-layers.ts", import.meta.url), "utf8"),
     );
     put("shell/engine/src/state.rs", "use crate::exec::Frame;\n");
