@@ -84,6 +84,31 @@ test("the runtime provides /dev/null without creating a filesystem node", async 
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
+test("file opens follow symlinks before traversing dot dot and preserve trailing slashes", async ({
+  page,
+}) => {
+  await open(page);
+  await command(page, "mkdir -p real/sub && test-guest symlink real/sub link");
+  await ready(page);
+  await command(
+    page,
+    "printf '%s\\n' 'echo WRONG' >answer; printf '%s\\n' 'echo RIGHT' >real/answer",
+  );
+  await ready(page);
+  await command(
+    page,
+    'read -r line <link/../answer; echo "READ:$line"; source link/../answer; x=$(<link/../answer); echo "SUB:$x"',
+  );
+  for (const line of ["READ:echo RIGHT", "RIGHT", "SUB:echo RIGHT"]) await output(page, line);
+  await ready(page);
+  await command(
+    page,
+    'read -r line <answer/; echo "READ_STATUS:$?"; . answer/; echo "SOURCE_STATUS:$?"; x=$(<answer/); echo "SUB_STATUS:$?"',
+  );
+  for (const line of ["READ_STATUS:1", "SOURCE_STATUS:1", "SUB_STATUS:1"]) await output(page, line);
+  await ready(page);
+});
+
 test("an always-ready background shell loop cannot starve a foreground command", async ({
   page,
 }) => {

@@ -3061,23 +3061,12 @@ impl Drop for FunctionFrame {
     }
 }
 
-pub fn absolute(cwd: &str, path: &str) -> String {
-    let path = if path.starts_with('/') {
-        path.to_owned()
-    } else {
-        format!("{cwd}/{path}")
-    };
-    let mut components = Vec::new();
-    for part in path.split('/') {
-        match part {
-            "" | "." => {}
-            ".." => {
-                components.pop();
-            }
-            _ => components.push(part),
-        }
+pub(crate) fn filesystem_path<'a>(cwd: &str, path: &'a str) -> std::borrow::Cow<'a, str> {
+    if path.starts_with('/') || path.is_empty() {
+        return std::borrow::Cow::Borrowed(path);
     }
-    format!("/{}", components.join("/"))
+    let separator = if cwd.ends_with('/') { "" } else { "/" };
+    std::borrow::Cow::Owned(format!("{cwd}{separator}{path}"))
 }
 
 mod aliases;

@@ -16,7 +16,7 @@ impl Substitutions {
                 .saturating_add(target.len())
                 .saturating_add(1),
         )?;
-        let path = absolute(&state.borrow().cwd, target);
+        let path = filesystem_path(&state.borrow().cwd, target);
         let options = OpenOptions::default();
         let opening = io::open_path(&path, &self.fds.borrow(), &options);
         let result = match opening {
@@ -59,6 +59,7 @@ impl Substitutions {
 fn open_error_message(error: io::IoError) -> &'static str {
     match error {
         io::IoError::NotFound => "No such file or directory",
+        io::IoError::NotDirectory => "Not a directory",
         io::IoError::BadDescriptor => "Bad file descriptor",
         _ => "cannot open input file",
     }
