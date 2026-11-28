@@ -32,10 +32,7 @@ pub(super) async fn pwd(
         super::scan_bytes(arg.len(), context, work).await?;
         match pwd_options(&arg[1..], physical) {
             Ok(mode) => physical = mode,
-            Err(option) => {
-                let message = format!("pwd: -{option}: invalid option\npwd: usage: pwd [-LP]\n");
-                return pwd_refusal(&message, fds, context).await;
-            }
+            Err(option) => return pwd_invalid_option(option, fds, context).await,
         }
     }
     if physical {
@@ -63,10 +60,19 @@ fn pwd_options(options: &str, mut physical: bool) -> Result<bool, char> {
 }
 
 async fn pwd_refusal(message: &str, fds: &FdTable, context: &Context) -> Result<Outcome, i32> {
-    if diagnose(fds, message, context).await == Err(130) {
-        return Err(130);
-    }
-    Err(2)
+    Err(match diagnose(fds, message, context).await {
+        Err(status @ (130 | 141)) => status,
+        _ => 2,
+    })
+}
+
+async fn pwd_invalid_option(
+    option: char,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    let message = format!("pwd: -{option}: invalid option\npwd: usage: pwd [-LP]\n");
+    pwd_refusal(&message, fds, context).await
 }
 
 /// Why a directory change was refused: a host failure, or a local path-length
