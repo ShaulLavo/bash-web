@@ -48,7 +48,7 @@ The following are not supported:
 
 Native runtime tests in `shell/engine/src/runtime/tests.rs` check `$$` and `BASHPID` expansion, snapshot inheritance, ignored and caught self-signal dispatch, and non-aliasing async handles.
 
-`scripts/test-own-shell-self-signal.ts` runs the installed Waffle launcher and checks:
+`scripts/replay/runtime/test-own-shell-self-signal.ts` runs the installed Waffle launcher and checks:
 
 - Ordinary exits with codes `2`, `130`, and `143`.
 - Ignored self-signals, including from a subshell that resets its local copy, and caught self-signals running their handler before the next command.

@@ -59,7 +59,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const)
 async function observe(path: string, entry: Recording) {
   const child = spawn(
     process.execPath,
-    [resolve("scripts/repro-pipeline-broken-pipe.ts"), path, entry.id],
+    [resolve("scripts/replay/repro-pipeline-broken-pipe.ts"), path, entry.id],
     {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],

@@ -10,4 +10,4 @@ runs:
         path: .build/ci-native
     - uses: ./.github/actions/wasi-sdk
     - shell: bash
-      run: node scripts/ci-artifacts.ts stage .build/ci-native
+      run: node scripts/ci/ci-artifacts.ts stage .build/ci-native

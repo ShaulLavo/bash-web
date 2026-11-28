@@ -12,8 +12,8 @@ runtime_direct_revision=1234567890abcdef1234567890abcdef12345678
 
 write_fixture() {
   local root=$1 runtime_version=$2 program_version=$3
-  mkdir -p "$root/scripts" "$root/bin" "$root/.github/scripts" "$root/shell/engine" "$root/shell/compat-fixtures"
-  cp "$script_root/../../scripts/"{check-waffle-release,installed-waffle,waffle-host-interface}.ts "$root/scripts/"
+  mkdir -p "$root/scripts/build" "$root/bin" "$root/.github/scripts" "$root/shell/engine" "$root/shell/compat-fixtures"
+  cp "$script_root/../../scripts/build/"{check-waffle-release,installed-waffle,waffle-host-interface}.ts "$root/scripts/build/"
   cp "$script_root/update-waffle-releases.sh" "$root/.github/scripts/"
   cp "$script_root/check-update-paths.sh" "$root/.github/scripts/"
   printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$root/.github/scripts/update-hotkeys.sh"

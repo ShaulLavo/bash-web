@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test, type TestContext } from "node:test";
-import { api, directory, nodeDirectory, waffleFixture } from "./own-shell-waffle-fixture.ts";
-import { releaseShellRunner } from "./release-shell-runner.ts";
+import { api, directory, nodeDirectory, waffleFixture } from "./replay/own-shell-waffle-fixture.ts";
+import { releaseShellRunner } from "./build/release-shell-runner.ts";
 import fixture from "./fixtures/shell-read-timeout.json" with { type: "json" };
 
 assert.equal(fixture.bash, "GNU bash, version 5.3.15(1)-release (x86_64-pc-linux-gnu)");
@@ -134,7 +134,7 @@ test(
 );
 
 test("fallback interactive embedding honors timer-only idle read", { timeout: 15000 }, async () => {
-  const { api: fallbackApi, runInteractive } = await import("./own-shell-interactive.ts");
+  const { api: fallbackApi, runInteractive } = await import("./replay/own-shell-interactive.ts");
   let phase = 0;
   let step = 0;
   const finiteWaits: number[] = [];

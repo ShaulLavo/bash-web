@@ -73,12 +73,25 @@ export async function inflate(
 }
 
 export class ObjectCursor {
-  offset = 0;
-  constructor(readonly bytes: Uint8Array) {}
+  #offset = 0;
+  constructor(private readonly bytes: Uint8Array) {}
+  get remaining(): number {
+    return this.bytes.length - this.#offset;
+  }
+  rest(): Uint8Array {
+    return this.bytes.subarray(this.#offset);
+  }
+  take(length: number): Uint8Array {
+    const start = this.#offset;
+    const end = start + length;
+    requireObject(end <= this.bytes.length);
+    this.#offset = end;
+    return this.bytes.subarray(start, end);
+  }
   byte(): number {
-    const byte = this.bytes[this.offset];
+    const byte = this.bytes[this.#offset];
     requireObject(byte !== undefined);
-    this.offset++;
+    this.#offset++;
     return byte;
   }
   variable(): number {

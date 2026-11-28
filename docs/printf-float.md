@@ -40,7 +40,7 @@ The limits are unchanged.
 
 `scripts/fixtures/shell-printf-float.json` contains 132 local recordings, including
 17 selected frozen scored failures and two generated 3,000-operand cost controls. It identifies the exact Bash version and
-binary SHA-256. Native tests and `scripts/test-own-shell-printf-float.ts` compare
+binary SHA-256. Native tests and `scripts/replay/test-own-shell-printf-float.ts` compare
 status, stdout and stderr without running a live Bash oracle in CI. Native
 controls also cover admission, numeric work, chunking, pipe delivery and
 cancellation. The parent owns the hosted full-score comparison and review.

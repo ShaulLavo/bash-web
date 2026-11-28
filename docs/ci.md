@@ -30,7 +30,7 @@ Parser has four test executables, engine has five including capabilities, and
 utilities has one streaming executable. Stable package-qualified filenames
 prevent the two streaming tests from overwriting each other.
 
-`scripts/ci-artifacts.ts` packs and stages an explicit file inventory. A consumer
+`scripts/ci/ci-artifacts.ts` packs and stages an explicit file inventory. A consumer
 checks the exact current Git SHA, input fingerprint, all file hashes and exact
 WASI test selection before staging. The existing utility receipt additionally
 checks exact source, each guest hash and the patched-libc/memory contract. Missing,

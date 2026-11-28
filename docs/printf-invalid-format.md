@@ -23,7 +23,7 @@ The 70 recorded controls in
 `scripts/fixtures/shell-printf-invalid-format.json` contain the exact version,
 stdout, stderr, and status from GNU Bash 5.3.15. Native and WASI tests exercise
 status, output, diagnostic ordering, admission, cancellation, and pipe failure.
-Run `node --test scripts/test-own-shell-printf-invalid-format.ts` after the normal
+Run `node --test scripts/replay/test-own-shell-printf-invalid-format.ts` after the normal
 WASI guest and Node harness builds to check production Waffle. That test compares
 raw stdout and status, retains raw diagnostics, and removes only Bash's source-line
 annotation when comparing stderr. It never calls the host's Bash.

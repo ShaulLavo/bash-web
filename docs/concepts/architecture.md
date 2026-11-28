@@ -62,7 +62,7 @@ flowchart TD
   process -->|imports| io
 ```
 
-`npm run check:layers` enforces this graph and fails CI when a violation count grows. The graph is `allowedGraph` in `scripts/check-layers.ts`. The diagram leaves out a few allowed edges (the interpreter also imports `process`, for example). For who owns what inside each layer, see [Engine ownership notes](../reference/engine-ownership.md).
+`npm run check:layers` enforces this graph and fails CI when a violation count grows. The graph is `allowedGraph` in `scripts/ci/check-layers.ts`. The diagram leaves out a few allowed edges (the interpreter also imports `process`, for example). For who owns what inside each layer, see [Engine ownership notes](../reference/engine-ownership.md).
 
 ## How correctness is measured
 

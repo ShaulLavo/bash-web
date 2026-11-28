@@ -48,7 +48,7 @@ The shell pins Waffle 0.0.63, `c4111d15f28bd1db9e5c2ef5d08c6ff1e6477289`.
 
 The Rust translation, native MemoryFs extraction, WASI rights selection and browser error display are original bash-web adapters, not copied upstream implementations. Their external contract is Waffle's `docs/host-abi.md`, `docs/vfs.md` and `docs/permissions.md` at the exact pin above. No runtime source is vendored.
 
-Run `npm run build:shell`, `npm run build:node-harness`, then `node --test scripts/test-own-shell-descriptors.ts scripts/test-own-shell-permissions.ts`. The descriptor test is part of the blocking scoreboard recipe, and `scripts/test-ci-workflow.ts` asserts its exact selection. Storage tests cover the standalone entry in Chromium and Firefox.
+Run `npm run build:shell`, `npm run build:node-harness`, then `node --test scripts/replay/runtime/test-own-shell-descriptors.ts scripts/replay/runtime/test-own-shell-permissions.ts`. The descriptor test is part of the blocking scoreboard recipe, and `scripts/ci/test-ci-workflow.ts` asserts its exact selection. Storage tests cover the standalone entry in Chromium and Firefox.
 
 ## Measured effect
 
