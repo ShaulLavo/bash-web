@@ -192,6 +192,7 @@ pub(super) async fn run(
     let mut code = 0;
     for operand in operands {
         let Some(signal) = signal(operand) else {
+            state.borrow_mut().traps.prepare_mutation();
             signal_diagnostic(operand, ": invalid signal specification\n", fds, context).await?;
             code = 1;
             continue;

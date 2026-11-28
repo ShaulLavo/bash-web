@@ -55,3 +55,16 @@ test("a failed registration preserves inherited uncatchable bindings", async () 
     [1, "trap -- ':' SIGKILL\n", "trap: TERM: trap execution is unsupported\n"],
   );
 });
+
+for (const action of ["-", ":"]) {
+  test(`invalid signal names preserve the inherited reset for trap ${action}`, async () => {
+    const result = await run(`
+      trap : KILL
+      (trap ${action} BAD; code=$?; trap -p KILL; exit "$code")
+    `);
+    assert.deepEqual(
+      [result.status, result.stdout.toString(), result.stderr.toString()],
+      [1, "", "trap: BAD: invalid signal specification\n"],
+    );
+  });
+}
