@@ -33,6 +33,16 @@ options (status 2 with usage). If printing the directory fails with write status
 and returns 1. Other write failures and cancellation return before anything is
 published.
 
+## `pwd`
+
+`pwd` reports the shell's logical working directory from `state.cwd` followed by a newline and returns status `0`.
+
+- With no options or with `-L`, `pwd` prints the logical working directory.
+- Options can be grouped, such as `-PL` or `-LP`, and repeated. The last `-L` or `-P` option wins.
+- `--`, `-`, or the first argument that does not start with `-` ends option parsing, and extra operands are ignored.
+- When the effective option is `-P`, `pwd` writes `pwd: physical directory resolution unsupported` to stderr and returns status `2`.
+- Any other option writes `pwd: -<option>: invalid option` and `pwd: usage: pwd [-LP]` to stderr and returns status `2`.
+
 ## Directory stack
 
 The stack is private shell state (`State::directories`, bottom entry first).
@@ -69,7 +79,7 @@ internal cd does not parse options. Other details:
   canonicalization fails also needs this. Both require symlink resolution
   (readlink), which the filesystem contract does not offer. Both fail with
   status 1 and say so.
-- `~` inside `CDPATH` entries; the `DIRSTACK` array; `pwd -L`/`-P`.
+- `~` inside `CDPATH` entries; the `DIRSTACK` array.
 - `PWD` reads come from the working directory, so a readonly or user-assigned
   `PWD` does not hold a different value as it can in Bash.
 - `brush-suite:builtins/cd:1`: plain `cd` goes to `$HOME`, which the frozen

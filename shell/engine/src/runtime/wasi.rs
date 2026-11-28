@@ -51,7 +51,7 @@ fn result(value: i32) -> Result<u32, i32> {
         Ok(value as u32)
     }
 }
-pub struct WasiAbi(support::WasiAbi);
+pub struct WasiAbi(support::WasiAbi, Cell<u64>);
 impl WasiAbi {
     pub fn new() -> Result<Self, i32> {
         let mut inherited = Vec::new();
@@ -62,18 +62,26 @@ impl WasiAbi {
             }
             inherited.push(fd as u32);
         }
-        support::WasiAbi::with_inherited_fds(inherited).map(Self)
+        support::WasiAbi::with_inherited_fds(inherited).map(|abi| Self(abi, Cell::new(0)))
     }
     pub fn handle_interrupts(&self) -> Result<(), i32> {
         register_interrupt_handler(|signal, disposition| unsafe {
             proc_signal(signal, disposition)
-        })
+        })?;
+        self.mark_initial_handler(SIGINT);
+        Ok(())
     }
     /// Only a shell started with `--prompt-host` asks for SIGWINCH.
     pub fn handle_window_changes(&self) -> Result<(), i32> {
         register_handler(SIGWINCH, |signal, disposition| unsafe {
             proc_signal(signal, disposition)
-        })
+        })?;
+        self.mark_initial_handler(SIGWINCH);
+        Ok(())
+    }
+    fn mark_initial_handler(&self, signal: i32) {
+        let bit = signal_bit(signal).expect("initial handler is a supported signal");
+        self.1.set(self.1.get() | bit);
     }
 }
 impl support::Abi for WasiAbi {
@@ -132,6 +140,14 @@ impl Abi for WasiAbi {
     }
     fn signal_self(&self, signal: i32) -> Result<(), i32> {
         result(unsafe { proc_signal(signal, 3) }).map(|_| ())
+    }
+    fn signal_disposition(&self, signal: i32, mode: i32) -> Result<(), i32> {
+        let mode = if mode == 0 && signal_bit(signal).is_some_and(|bit| self.1.get() & bit != 0) {
+            SIGNAL_DISPOSITION_HANDLE
+        } else {
+            mode
+        };
+        result(unsafe { proc_signal(signal, mode) }).map(|_| ())
     }
     fn check_stop(&self) {
         // Mode 4 is Waffle's nonconsuming stop probe: the host unwinds this call

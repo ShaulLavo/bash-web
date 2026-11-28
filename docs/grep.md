@@ -1,5 +1,9 @@
 # Grep
 
+> **Historical note.** `bash-web` no longer owns or builds `grep`. Ownership moved to Waffle's `waffle-grep` package, which `bash-web` consumes through `waffle-base` in `package.json`. This page stays here as a historical summary and is not listed in [docs/README.md](README.md).
+>
+> For current installation on a shared runtime, see [Install program families](guides/install-utilities.md). Read `docs/grep.md` and `provenance/grep.source.json` in Waffle's `packages/grep` package for the current behavior contract and provenance. `bash-web` still runs native pipeline tests against the pinned `waffle-grep` crate in `shell/compat-fixtures/tests/streaming.rs` using `shell/compat-fixtures/tests/grep-usage-cases.json`.
+
 `grep` is a cooperative WASI program in Waffle's `waffle-grep` family. Install it through `waffle-base` on the same runtime passed to `createShell`; installation does not fetch or compile the guest. The first invocation loads it once, and disposal leaves the caller's runtime alive.
 
 Supported options are `-n` line numbers, `-i` ignore case, `-v` invert, `-F` fixed strings, `-E` extended regular expressions, `-c` counts, `-q` quiet, `-H` always print filenames and `-h` suppress filenames. The last `-H` or `-h` wins. Options can be grouped, and `--` ends option parsing.

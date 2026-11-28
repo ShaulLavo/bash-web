@@ -68,19 +68,19 @@ pub(super) fn join<'a>(
     scope: &'a Scope,
     context: &'a Context,
 ) -> Frame<'a, Result<JoinedSource, i32>> {
-    scope.frame(join_body(args, scope, context), Err)
+    scope.frame(async move { join_text(&args, scope, context).await }, Err)
 }
 
-async fn join_body(
-    args: Vec<String>,
+pub(super) async fn join_text<T: AsRef<str>>(
+    args: &[T],
     scope: &Scope,
     context: &Context,
 ) -> Result<JoinedSource, i32> {
     let mut budget = Budget::default();
     let mut bytes = args.len().saturating_sub(1);
-    for arg in &args {
+    for arg in args {
         scope.checkpoint(&mut budget, &context.cancel).await?;
-        bytes = bytes.checked_add(arg.len()).ok_or(2)?;
+        bytes = bytes.checked_add(arg.as_ref().len()).ok_or(2)?;
     }
     if bytes > context.limits().source_bytes {
         return Err(2);
@@ -98,13 +98,13 @@ async fn join_body(
         bytes: 0,
         syntax: 0,
     };
-    for (index, arg) in args.into_iter().enumerate() {
+    for (index, arg) in args.iter().enumerate() {
         if index != 0 {
             scope.checkpoint(&mut budget, &context.cancel).await?;
             shape.character(' ');
             source.push(' ');
         }
-        for ch in arg.chars() {
+        for ch in arg.as_ref().chars() {
             scope
                 .copy_bytes(ch.len_utf8(), &mut budget, &context.cancel)
                 .await?;

@@ -1,6 +1,6 @@
 # Plan: Bash-compatible `read -t`/`TMOUT` and streaming `mapfile`/`readarray`
 
-Status: **Approved** (owner decision, 2026-10-31, `plans/007-agent-shell-compatibility.md#follow-up-read-timeouts-and-mapfile`).
+Status: **Done** (owner decision, 2026-10-31, `plans/007-agent-shell-compatibility.md#follow-up-read-timeouts-and-mapfile`; landed in PR #214 and PR #217).
 Author: Opus design agent (big-plan rule: crosses the shell driver, canonical Waffle support APIs, cancellation and state publication).
 Gate: independent Sol plan review runs **before** implementation. R0 requested the publication redesign; Opus supplied that redesign and the parent applied ordinary fixes. R1 accepted the revised architecture with three ordinary wording/order corrections, now applied by the parent. `R1-RESOLUTION.json` binds the accepted revision and the exact checks. No additional Opus redesign or third review round is needed before B1/W1 starts. Code PRs still require independent Sol review.
 

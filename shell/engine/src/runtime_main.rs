@@ -189,6 +189,13 @@ mod guest {
                 wake.set(Wake::Interrupt);
                 editor_cancel.borrow().cancel();
             }
+            if runtime.has_pending_traps()
+                && !session.foreground_active()
+                && wake.get() != Wake::Interrupt
+            {
+                wake.set(Wake::Trap);
+                editor_cancel.borrow().cancel();
+            }
             let turn = executor.drive(64);
             if session.take_delegated_interrupt() {
                 set_phase(-1, 0);
@@ -253,7 +260,16 @@ mod guest {
     }
     async fn run(session: Rc<Session>, startup: Startup, input: Input) -> i32 {
         let job = match startup {
-            Startup::Interactive(options) => return interactive(session, input, options).await,
+            Startup::Interactive(options) => {
+                let status = interactive(session.clone(), input, options).await;
+                if session.exit_requested() {
+                    return status;
+                }
+                return match session.finish(status) {
+                    Ok(job) => job.await,
+                    Err(error) => error.status(),
+                };
+            }
             Startup::Command { source, name, args } => {
                 set_phase(2, session.state().borrow().status());
                 session
@@ -277,6 +293,7 @@ mod guest {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Wake {
         None,
+        Trap,
         /// SIGWINCH: the page pushed newer prompt text, or the terminal resized.
         Prompt,
         /// SIGINT wins over a pending prompt wake.
@@ -543,6 +560,7 @@ mod guest {
         editor: &mut Editor,
         output: &Endpoint,
         action: Result<Action, IoError>,
+        wake: Wake,
     ) -> Result<Option<Vec<u8>>, i32> {
         write(output, b"\x1b[?2004l").await.map_err(|_| 1)?;
         match action {
@@ -553,7 +571,9 @@ mod guest {
                 Ok(Some(source))
             }
             Ok(Action::Interrupt) => {
-                session.state().borrow_mut().publish_status(130);
+                if wake != Wake::Trap {
+                    session.state().borrow_mut().publish_status(130);
+                }
                 editor.clear();
                 write(output, &editor.finish(geometry(), true))
                     .await
@@ -618,10 +638,20 @@ mod guest {
             }
             .read(terminal_batches)
             .await;
-            let source = match finish_prompt(&session, &mut editor, &output, action).await {
+            let wake = input.wake.get();
+            let source = match finish_prompt(&session, &mut editor, &output, action, wake).await {
                 Ok(source) => source,
                 Err(code) => return code,
             };
+            if wake == Wake::Trap && input.runtime.has_pending_traps() {
+                let code = match session.dispatch_pending_traps() {
+                    Ok(job) => job.await,
+                    Err(error) => error.status(),
+                };
+                if session.exit_requested() {
+                    return code;
+                }
+            }
             drop(stdin);
             drop(output);
             let Some(source) = source else { continue };

@@ -1,4 +1,4 @@
-//! Original Bash-compatible registration and query. No event or signal runs an action.
+//! Bash-compatible registration and query for shell events and process signals.
 use super::{diagnose, error_status, scan_bytes, write};
 use crate::{
     expand::Work,
@@ -200,10 +200,29 @@ pub(super) async fn run(
         work.checkpoint(&context.cancel)
             .await
             .map_err(error_status)?;
+        if !available(signal, binding.as_ref(), context) {
+            signal_diagnostic(
+                operand,
+                ": trap execution is unsupported in this shell\n",
+                fds,
+                context,
+            )
+            .await?;
+            code = 1;
+            continue;
+        }
         state.borrow_mut().traps.set(signal, binding.clone());
     }
     Ok(Outcome::status(code))
 }
+fn available(signal: usize, binding: Option<&Binding>, context: &Context) -> bool {
+    match signal {
+        20..=22 | 32 | 33 | 65 => binding.is_none(),
+        1..=64 if !matches!(signal, 9 | 19) => context.set_trap_signal(signal, binding).is_ok(),
+        _ => true,
+    }
+}
+
 fn binding(text: &str, reset: bool, state: &SharedState) -> Result<Option<Binding>, i32> {
     if reset {
         return Ok(None);
@@ -222,9 +241,17 @@ fn binding(text: &str, reset: bool, state: &SharedState) -> Result<Option<Bindin
     }))))
 }
 async fn invalid_signal(name: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
+    signal_diagnostic(name, ": invalid signal specification\n", fds, context).await
+}
+async fn signal_diagnostic(
+    name: &str,
+    message: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<(), i32> {
     diagnose(fds, "trap: ", context).await?;
     diagnose(fds, name, context).await?;
-    diagnose(fds, ": invalid signal specification\n", context).await
+    diagnose(fds, message, context).await
 }
 async fn query(
     args: &[String],

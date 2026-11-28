@@ -17,6 +17,59 @@ const PUSHD_USAGE: &str = "pushd: usage: pushd [-n] [+N | -N | dir]\n";
 const POPD_USAGE: &str = "popd: usage: popd [-n] [+N | -N]\n";
 const DIRS_USAGE: &str = "dirs: usage: dirs [-clpv] [+N] [-N]\n";
 
+pub(super) async fn pwd(
+    args: &[String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    let mut physical = false;
+    for arg in args {
+        if arg == "--" || arg == "-" || !arg.starts_with('-') {
+            break;
+        }
+        super::scan_bytes(arg.len(), context, work).await?;
+        match pwd_options(&arg[1..], physical) {
+            Ok(mode) => physical = mode,
+            Err(option) => return invalid_pwd_option(option, fds, context).await,
+        }
+    }
+    if physical {
+        diagnose(
+            fds,
+            "pwd: physical directory resolution unsupported\n",
+            context,
+        )
+        .await?;
+        return Err(2);
+    }
+    let cwd = state.borrow().cwd.clone();
+    write(fds, format!("{cwd}\n").as_bytes(), context).await?;
+    Ok(Outcome::status(0))
+}
+
+fn pwd_options(options: &str, mut physical: bool) -> Result<bool, char> {
+    for option in options.chars() {
+        physical = match option {
+            'L' => false,
+            'P' => true,
+            _ => return Err(option),
+        };
+    }
+    Ok(physical)
+}
+
+async fn invalid_pwd_option(
+    option: char,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    let message = format!("pwd: -{option}: invalid option\npwd: usage: pwd [-LP]\n");
+    diagnose(fds, &message, context).await?;
+    Err(2)
+}
+
 /// Why a directory change was refused: a host failure, or a local path-length
 /// or capability refusal. Successful opens are never used as metadata.
 enum Refusal {

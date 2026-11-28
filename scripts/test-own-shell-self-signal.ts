@@ -42,15 +42,57 @@ for (const code of [2, 130, 143]) {
 }
 
 test(
-  "self targets honor root ignores and reject unsupported caught actions",
+  "self targets honor root ignores and dispatch a caught signal before the next command",
   { timeout: 60000 },
   async (context) => {
     const f = await fixture(context);
     const child = await f.spawn(
-      `trap '' INT; kill -INT $$; printf 'ignored:%s\\n' $?; trap 'printf forbidden' INT; kill -INT $$; printf 'caught:%s\\n' $?; trap '' TERM; (trap - TERM; kill -TERM $$; printf 'root:%s\\n' $?); [ "$BASHPID" = "$$" ] && printf pid-matches`,
+      `trap '' INT; kill -INT $$; printf 'ignored:%s\\n' $?; trap 'printf "handler:%s\\n" $?' INT; kill -INT $$; printf 'caught:%s\\n' $?; trap '' TERM; (trap - TERM; kill -TERM $$; printf 'root:%s\\n' $?); [ "$BASHPID" = "$$" ] && printf pid-matches`,
     );
     assert.deepEqual(await child.exit, { kind: "exited", code: 0, status: 0 });
-    assert.equal(f.parent.output.join(""), "ignored:0\ncaught:2\nroot:0\npid-matches");
+    assert.equal(
+      await outputIncluding(f.parent.output, "pid-matches"),
+      "ignored:0\nhandler:0\ncaught:0\nroot:0\npid-matches",
+    );
+  },
+);
+
+for (const [name, signal] of [
+  ["INT", 2],
+  ["TERM", 15],
+  ["HUP", 1],
+  ["QUIT", 3],
+] as const) {
+  test(`a delivered ${name} runs its handler before EXIT`, { timeout: 60000 }, async (context) => {
+    const f = await fixture(context);
+    const child = await f.spawn(
+      `trap 'printf "handled\\n"; exit 17' ${name}; trap 'printf "cleanup:%s\\n" $?' EXIT; printf 'ready\\n'; while :; do :; done`,
+    );
+    assert.match(await outputIncluding(f.parent.output, "ready\n"), /ready\n/);
+    await (await f.runtime.processes()).kill(child.pid, signal);
+    assert.deepEqual(await child.exit, { kind: "exited", code: 17, status: 17 });
+    assert.equal(
+      await outputIncluding(f.parent.output, "cleanup:17\n"),
+      "ready\nhandled\ncleanup:17\n",
+    );
+  });
+}
+
+test(
+  "a caught signal interrupts wait without terminating its child",
+  { timeout: 60000 },
+  async (context) => {
+    const f = await fixture(context);
+    const child = await f.spawn(
+      `trap 'printf "handler:%s\\n" $?' TERM; while :; do :; done & worker=$!; printf 'waiting\\n'; wait "$worker"; code=$?; kill "$worker"; wait "$worker"; printf 'wait:%s\\n' "$code"`,
+    );
+    assert.match(await outputIncluding(f.parent.output, "waiting\n"), /waiting\n/);
+    await (await f.runtime.processes()).kill(child.pid, 15);
+    assert.deepEqual(await child.exit, { kind: "exited", code: 0, status: 0 });
+    assert.equal(
+      await outputIncluding(f.parent.output, "wait:143\n"),
+      "waiting\nhandler:143\nwait:143\n",
+    );
   },
 );
 

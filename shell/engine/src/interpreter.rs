@@ -40,6 +40,7 @@ mod replacement;
 mod select;
 mod source;
 mod timing;
+mod trap_action;
 #[cfg(test)]
 mod trap_tests;
 mod type_builtin;
@@ -181,12 +182,14 @@ struct Scope(Rc<ScopeState>);
 struct ScopeState {
     id: u64,
     parent: RefCell<Option<Scope>>,
+    exit_descriptors: RefCell<Option<trap_action::ExitDescriptors>>,
 }
 impl Scope {
     fn new(id: u64) -> Self {
         Self(Rc::new(ScopeState {
             id,
             parent: RefCell::new(None),
+            exit_descriptors: RefCell::new(None),
         }))
     }
     fn resolved(&self) -> Self {
@@ -293,6 +296,7 @@ struct Core {
     foreground: RefCell<Option<Job>>,
     exit_requested: Cell<bool>,
     command_quantum: Cell<u8>,
+    signal_handlers: Cell<u64>,
 }
 #[derive(Clone)]
 pub(crate) struct Context {
@@ -367,6 +371,9 @@ impl Context {
 
     fn stop_signal(&self) -> i32 {
         self.signal.get().unwrap_or(2)
+    }
+    fn process_group(&self) -> ProcessGroup {
+        ProcessGroup::new(self.core.host.clone(), self.group).with_signal(self.signal.clone())
     }
     fn cancel_status(&self) -> i32 {
         128 + self.stop_signal()
@@ -470,6 +477,42 @@ impl Context {
     }
     pub(crate) fn loop_depth(&self) -> usize {
         self.loop_depth
+    }
+    pub(crate) fn set_trap_signal(
+        &self,
+        signal: usize,
+        binding: Option<&crate::state::traps::Binding>,
+    ) -> Result<(), i32> {
+        use crate::{process::SignalDisposition, state::traps::Binding};
+        if !self.root_environment() {
+            return if binding.is_none() || signal == 2 {
+                Ok(())
+            } else {
+                Err(1)
+            };
+        }
+        let mode = match binding {
+            None => SignalDisposition::Default,
+            Some(Binding::Ignored) => SignalDisposition::Ignore,
+            Some(Binding::Handler(_)) => SignalDisposition::Handle,
+        };
+        self.core
+            .host
+            .signal_disposition(signal as i32, mode)
+            .map_err(|_| 1)?;
+        let bit = 1u64 << (signal - 1);
+        let current = self.core.signal_handlers.get() & !bit;
+        self.core
+            .signal_handlers
+            .set(if matches!(mode, SignalDisposition::Handle) {
+                current | bit
+            } else {
+                current
+            });
+        Ok(())
+    }
+    fn root_environment(&self) -> bool {
+        self.scope.0.id == 0
     }
     fn loop_body(&self) -> Self {
         Self {
@@ -626,7 +669,7 @@ impl Context {
                     .retain(|_, job| job.owner != self.scope || job.kind != JobKind::Completed);
                 return Ok(code);
             };
-            code = self.cancel.run(job).await.map_err(|_| 130)?;
+            code = self.wait_child(job, !include_internal).await?;
             if selector.is_some() {
                 let mut jobs = self.core.jobs.borrow_mut();
                 let job = jobs
@@ -645,6 +688,35 @@ impl Context {
             // Exiting children may transfer their own descendants to this
             // scope. Supervisors drain those too, unlike the shell's `wait`.
         }
+    }
+    async fn wait_child(&self, job: JoinHandle<i32>, interruptible: bool) -> Result<i32, i32> {
+        let wait = self.cancel.run(job);
+        if interruptible {
+            return self.run_until_trap(wait).await?.map_err(|_| 130);
+        }
+        wait.await.map_err(|_| 130)
+    }
+    pub(crate) async fn run_until_trap<F: std::future::Future>(
+        &self,
+        future: F,
+    ) -> Result<F::Output, i32> {
+        if self.root_environment()
+            && self.core.signal_handlers.get() != 0
+            && self
+                .core
+                .shell_state
+                .upgrade()
+                .is_some_and(|state| !state.borrow().traps.dispatching())
+            && let Some(ready) = self.core.host.trap_signal_ready()
+        {
+            return ready.run(future).await.map_err(|_| {
+                self.core
+                    .host
+                    .pending_trap_signal()
+                    .map_or(130, |signal| 128 + signal)
+            });
+        }
+        Ok(future.await)
     }
     fn next_job(
         &self,
@@ -762,12 +834,13 @@ impl Context {
     fn signal_shell_process(&self, signal: i32) -> Result<(), i32> {
         let state = self.core.shell_state.upgrade().ok_or(1)?;
         let state = state.borrow();
-        if signal != 9 {
-            match state.traps.get(signal as usize) {
-                Some(crate::state::traps::Binding::Ignored) => return Ok(()),
-                Some(crate::state::traps::Binding::Handler(_)) => return Err(2),
-                None => {}
-            }
+        if !matches!(signal, 9 | 19)
+            && matches!(
+                state.traps.get(signal as usize),
+                Some(crate::state::traps::Binding::Ignored)
+            )
+        {
+            return Ok(());
         }
         self.core.host.signal_self(signal).map_err(|_| 1)
     }
@@ -867,6 +940,7 @@ impl Session {
                 foreground: RefCell::new(None),
                 exit_requested: Cell::new(false),
                 command_quantum: Cell::new(1),
+                signal_handlers: Cell::new(0),
             }),
             state,
         }
@@ -1023,7 +1097,8 @@ impl Session {
             self.core.descriptors.clone(),
             context.clone(),
         );
-        Ok(self.foreground(context, read, interrupts))
+        let finish_on_return = self.state.borrow().command_string;
+        Ok(self.foreground(context, read, interrupts, finish_on_return))
     }
     /// Start a named script in the current cwd, with its literal invocation arguments.
     /// Loading belongs to the foreground job and shares its interrupt/shutdown lifecycle.
@@ -1065,13 +1140,49 @@ impl Session {
             self.core.descriptors.clone(),
             context.clone(),
         );
-        Ok(self.foreground(context, read, interrupts))
+        Ok(self.foreground(context, read, interrupts, true))
+    }
+    /// Finish a persistent shell when its input ends.
+    pub fn finish(&self, status: i32) -> Result<JoinHandle<i32>, StartError> {
+        self.boundary(Outcome {
+            code: status,
+            flow: Flow::Exit,
+        })
+    }
+    pub fn dispatch_pending_traps(&self) -> Result<JoinHandle<i32>, StartError> {
+        self.boundary(Outcome::status(self.state.borrow().status()))
+    }
+    pub fn foreground_active(&self) -> bool {
+        self.core.foreground.borrow().is_some()
+    }
+    fn boundary(&self, result: Outcome) -> Result<JoinHandle<i32>, StartError> {
+        if self.core.foreground.borrow().is_some() {
+            return Err(StartError::Invalid(
+                "foreground job is already running".into(),
+            ));
+        }
+        let (interrupts, strand, cancel) = self.foreground_cancellation();
+        let evaluation = crate::exec::Scope::new(
+            self.core.limits.source_bytes,
+            self.core.eval_storage.clone(),
+            self.core.execution_storage.clone(),
+        );
+        let context = Context::root(
+            self.core.clone(),
+            crate::exec::Source::root(""),
+            evaluation,
+            cancel,
+            self.core.host.allocate_group(),
+            strand,
+        );
+        Ok(self.foreground(context, std::future::ready(result), interrupts, false))
     }
     fn foreground(
         &self,
         context: Context,
         run: impl std::future::Future<Output = Outcome> + 'static,
         interrupts: Rc<Interrupts>,
+        finish_on_return: bool,
     ) -> JoinHandle<i32> {
         let group = context.group;
         let foreground_cancel = context.cancel.clone();
@@ -1079,11 +1190,27 @@ impl Session {
         let state = self.state.clone();
         let join = self.core.executor.spawn(async move {
             let _foreground = ForegroundGuard(context.core.clone());
-            let mut processes = ProcessGroup::new(context.core.host.clone(), group)
-                .with_signal(context.signal.clone());
+            let mut processes = context.process_group();
             let result = run.await;
+            let mut result = trap_action::signals(
+                result,
+                state.clone(),
+                context.core.descriptors.clone(),
+                context.clone(),
+            )
+            .await;
             if result.flow == Flow::Exit {
                 context.core.exit_requested.set(true);
+            }
+            if finish_on_return || result.flow == Flow::Exit {
+                result = trap_action::at_boundary(
+                    crate::state::traps::EXIT,
+                    result,
+                    state.clone(),
+                    context.core.descriptors.clone(),
+                    context.clone(),
+                )
+                .await;
             }
             let code = context.finish_group(&mut processes, result).await;
             state.borrow_mut().publish_status(code);
@@ -1631,53 +1758,75 @@ fn execute_command<'a>(
         }
     };
     let evaluation = context.evaluation.clone();
+    let checks = command_checks(&command, &context);
+    if trap_action::needs_command_boundary(&state, &context, checks.errexit) {
+        return trap_action::execute_command(command, state, fds, context, checks);
+    }
     evaluation.frame(
         async move {
             if !context.command_checkpoint().await {
                 return Outcome::status(130);
             }
-            let preserve = match view_target(&command) {
-                None => true,
-                Some(command) => matches!(
-                    command,
-                    Command::Pipeline(_)
-                        | Command::List(_)
-                        | Command::Function(_)
-                        | Command::Compound(
-                            CompoundCommand::Time(_)
-                                | CompoundCommand::BraceGroup(_)
-                                | CompoundCommand::Case(_),
-                            _
-                        )
-                ),
-            };
-            let check_errexit = !context.ignore_errexit
-                && match view_target(&command) {
-                    None => false,
-                    Some(command) => matches!(
-                        command,
-                        Command::Simple(_)
-                            | Command::Pipeline(Pipeline { negated: false, .. })
-                            | Command::Compound(
-                                CompoundCommand::Arithmetic(_)
-                                    | CompoundCommand::Test(_)
-                                    | CompoundCommand::Subshell(_),
-                                _
-                            )
-                    ),
-                };
-            let mut result = command_body(command, state.clone(), fds, context).await;
-            result.flow = settle_reported_error(result.flow, &state);
-            if check_errexit
-                && result.flow == Flow::Normal
-                && result.code != 0
-                && state.borrow().errexit
-            {
-                result.flow = Flow::Abort;
-            }
-            finish_command(&state, result, preserve)
+            let result = command_body(command, state.clone(), fds, context).await;
+            settle_command(result, &state, checks).0
         },
         Outcome::status,
+    )
+}
+
+#[derive(Clone, Copy)]
+struct CommandChecks {
+    preserve_pipeline: bool,
+    errexit: bool,
+}
+
+fn command_checks(command: &CommandView<'_>, context: &Context) -> CommandChecks {
+    let target = view_target(command);
+    CommandChecks {
+        preserve_pipeline: target.is_none_or(|command| {
+            matches!(
+                command,
+                Command::Pipeline(_)
+                    | Command::List(_)
+                    | Command::Function(_)
+                    | Command::Compound(
+                        CompoundCommand::Time(_)
+                            | CompoundCommand::BraceGroup(_)
+                            | CompoundCommand::Case(_),
+                        _
+                    )
+            )
+        }),
+        errexit: !context.ignore_errexit
+            && matches!(
+                target,
+                Some(
+                    Command::Simple(_)
+                        | Command::Pipeline(Pipeline { negated: false, .. })
+                        | Command::Compound(
+                            CompoundCommand::Arithmetic(_)
+                                | CompoundCommand::Test(_)
+                                | CompoundCommand::Subshell(_),
+                            _
+                        )
+                )
+            ),
+    }
+}
+
+fn settle_command(
+    mut result: Outcome,
+    state: &SharedState,
+    checks: CommandChecks,
+) -> (Outcome, bool) {
+    result.flow = settle_reported_error(result.flow, state);
+    let failed = checks.errexit && result.flow == Flow::Normal && result.code != 0;
+    if failed && state.borrow().errexit {
+        result.flow = Flow::Abort;
+    }
+    (
+        finish_command(state, result, checks.preserve_pipeline),
+        failed,
     )
 }
 
@@ -2008,13 +2157,19 @@ async fn pipeline_stage(
 ) -> Outcome {
     let owned = syntax.is_none();
     let _syntax = syntax;
+    if isolated {
+        trap_action::trace_inherited(&state);
+        trap_action::arm_exit(&command, &state, &fds, &context);
+    }
     let result = if owned {
-        execute_owned_item(command, state, fds, context.clone()).await
+        execute_owned_item(command, state.clone(), fds, context.clone()).await
     } else {
-        execute(&command, state, fds, context.clone()).await
+        execute(&command, state.clone(), fds, context.clone()).await
     };
     if isolated {
+        let result = trap_action::finish_child(result, state, context.clone()).await;
         context.finish_scope(parent_scope).await;
+        return result;
     }
     result
 }
@@ -2048,6 +2203,7 @@ async fn compound_command(
         Err(outcome) => return outcome,
         Ok(fds) => fds,
     };
+    trap_action::effective_exit_descriptors(&fds, &context);
     let expands = matches!(
         compound_ref,
         CompoundCommand::Arithmetic(_)
@@ -2876,11 +3032,7 @@ async fn subshell(
                         compound_child: false,
                         ..child_context.clone()
                     };
-                    if owned {
-                        sequence_owned(commands, child, fds, body_context).await
-                    } else {
-                        sequence(&commands, child, fds, body_context).await
-                    }
+                    run_isolated_sequence(commands, owned, child, fds, body_context).await
                 }
                 Err(outcome) => outcome,
             };
@@ -2897,6 +3049,22 @@ async fn subshell(
         }
     };
     Outcome::status(result.code)
+}
+
+async fn run_isolated_sequence(
+    commands: Vec<Command>,
+    owned: bool,
+    state: SharedState,
+    fds: Descriptors,
+    context: Context,
+) -> Outcome {
+    trap_action::trace_inherited(&state);
+    let result = if owned {
+        sequence_owned(commands, state.clone(), fds.clone(), context.clone()).await
+    } else {
+        sequence(&commands, state.clone(), fds.clone(), context.clone()).await
+    };
+    trap_action::complete(result, state, fds, context).await
 }
 
 async fn list_command(
@@ -3149,15 +3317,17 @@ async fn launch_background(
     let fds = fds.fork();
     let parent_scope = context.scope.clone();
     let join = context.core.executor.spawn(async move {
-        let mut processes = ProcessGroup::new(child_context.core.host.clone(), group)
-            .with_signal(child_context.signal.clone());
+        let mut processes = child_context.process_group();
         let owned = syntax_alloc.is_none();
         let _syntax = syntax_alloc;
+        trap_action::trace_inherited(&child);
+        trap_action::arm_exit(&command, &child, &fds, &child_context);
         let result = if owned {
-            execute_owned_item(command, child, fds, child_context.clone()).await
+            execute_owned_item(command, child.clone(), fds, child_context.clone()).await
         } else {
-            execute(&command, child, fds, child_context.clone()).await
+            execute(&command, child.clone(), fds, child_context.clone()).await
         };
+        let result = trap_action::finish_child(result, child, child_context.clone()).await;
         child_context.finish_scope(parent_scope).await;
         child_context.finish_group(&mut processes, result).await
     });
@@ -3356,10 +3526,10 @@ impl Substitutions {
         let captured = capture_complete.clone();
         let (complete, completion) = futures::channel::oneshot::channel();
         let join = self.context.core.executor.spawn(async move {
-            let mut processes = ProcessGroup::new(context.core.host.clone(), group)
-                .with_signal(context.signal.clone());
+            let mut processes = context.process_group();
             let body = async {
-                let result = sequence_owned(commands, child, fds, context.clone()).await;
+                let result =
+                    run_isolated_sequence(commands, true, child, fds, context.clone()).await;
                 // Capturing waits for actual stdout EOF, not every background
                 // job: redirected descendants may keep running after EOF.
                 if context.cancel.run(captured.cancelled()).await.is_err() {
@@ -3496,10 +3666,10 @@ impl Substitutions {
         let link = cancel.clone();
         let link_signal = signal.clone();
         let join = core.executor.spawn(async move {
-            let mut processes = ProcessGroup::new(context.core.host.clone(), group)
-                .with_signal(context.signal.clone());
+            let mut processes = context.process_group();
             let body = async {
-                let result = sequence(&commands, child, fds, context.clone()).await;
+                let result =
+                    run_isolated_sequence(commands, false, child, fds, context.clone()).await;
                 let _ = context.wait_jobs(None, true).await;
                 context.finish_scope(parent_scope).await;
                 context.finish_group(&mut processes, result).await
@@ -3668,6 +3838,11 @@ async fn simple_command(
     let mut prepared = None;
     if let Err(error) = prepare_simple_command(simple, &state, fds, &context, &mut prepared).await {
         return expansion_failure(error.at_line(line), &original_fds, &context).await;
+    }
+    if let Ok(execution) = &prepared.as_ref().unwrap().execution
+        && let Some(fds) = &execution.fds
+    {
+        trap_action::effective_exit_descriptors(fds, &context);
     }
     let parent_stderr = match original_fds.borrow().get(2) {
         Some(stderr) => WeakStderr::Open(stderr.downgrade()),
@@ -4345,7 +4520,9 @@ async fn dispatch_arguments(
             async move {
                 let _frame = frame;
                 let _allocation = allocation;
-                execute(&body.body, state, fds, context).await
+                let _bindings = trap_action::FunctionBindings::enter(&state);
+                let result = execute(&body.body, state.clone(), fds.clone(), context.clone()).await;
+                trap_action::returning(result, state, fds, context).await
             },
             Outcome::status,
         );

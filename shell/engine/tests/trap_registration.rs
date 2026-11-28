@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::process::Command;
+use std::{collections::BTreeSet, process::Command};
 
 #[derive(Deserialize)]
 struct Fixture {
@@ -14,11 +14,20 @@ struct Case {
     stdout: String,
     stderr: String,
 }
+#[derive(Deserialize)]
+struct Rejections {
+    diagnostic: String,
+    cases: BTreeSet<String>,
+}
 
 #[test]
 fn pinned_bash_trap_registration() {
     let fixture: Fixture = serde_json::from_str(include_str!(
         "../../../scripts/fixtures/shell-trap-registration.json"
+    ))
+    .unwrap();
+    let mut rejected: Rejections = serde_json::from_str(include_str!(
+        "../../../scripts/owned-fixtures/trap-registration-rejections.json"
     ))
     .unwrap();
     assert!(fixture.version.starts_with("GNU bash, version 5.3.15("));
@@ -27,6 +36,16 @@ fn pinned_bash_trap_registration() {
             .args(["-c", &case.code])
             .output()
             .unwrap();
+        if rejected.cases.remove(&case.id) {
+            assert!(output.status.code().is_some(), "{} status", case.id);
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains(&rejected.diagnostic),
+                "{} diagnostic: {:?}",
+                case.id,
+                output.stderr
+            );
+            continue;
+        }
         assert_eq!(
             output.status.code(),
             Some(case.status),
@@ -43,4 +62,9 @@ fn pinned_bash_trap_registration() {
             );
         }
     }
+    assert!(
+        rejected.cases.is_empty(),
+        "unknown cases: {:?}",
+        rejected.cases
+    );
 }

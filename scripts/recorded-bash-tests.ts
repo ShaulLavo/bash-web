@@ -11,10 +11,14 @@ type RecordedCase = {
   stderr: string;
 };
 type Fixture = { version: string; cases: RecordedCase[] };
+type Rejections = { diagnostic: string; cases: readonly string[] };
 
-export async function recordedBashTests(family: string, fixtureUrl: URL) {
+export async function recordedBashTests(family: string, fixtureUrl: URL, rejections?: Rejections) {
   const fixture: Fixture = JSON.parse(readFileSync(fixtureUrl, "utf8"));
   assert.match(fixture.version, /^GNU bash, version 5\.3\.15\(/u);
+  const rejected = new Set(rejections?.cases);
+  const ids = new Set(fixture.cases.map((entry) => entry.id));
+  for (const id of rejected) assert.ok(ids.has(id), `unknown registration case: ${id}`);
   const run = await releaseShellRunner({
     PATH: "/usr/bin:/bin",
     HOME: "/home/user",
@@ -24,6 +28,12 @@ export async function recordedBashTests(family: string, fixtureUrl: URL) {
   for (const entry of fixture.cases) {
     test(`recorded Bash ${family}: ${entry.id}`, async () => {
       const actual = await run(entry.code);
+      if (rejections && rejected.has(entry.id)) {
+        assert.equal(actual.crash, undefined);
+        assert.equal(actual.outputLimit, undefined);
+        assert.ok(actual.stderr.toString().includes(rejections.diagnostic));
+        return;
+      }
       assert.deepEqual(
         [actual.crash, actual.outputLimit, actual.status, actual.stdout.toString()],
         [undefined, undefined, entry.status, entry.stdout],

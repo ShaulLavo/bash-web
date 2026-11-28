@@ -43,6 +43,7 @@ struct Fake {
     reads: RefCell<Vec<(u32, usize)>>,
     read_limit: Cell<usize>,
     signals: RefCell<Vec<(bool, u32, i32)>>,
+    caught_signals: Cell<u64>,
     held_jobs: RefCell<BTreeSet<u32>>,
     reaped_jobs: RefCell<Vec<u32>>,
     kill_job_errors: RefCell<BTreeMap<u32, i32>>,
@@ -98,6 +99,7 @@ impl Fake {
             reads: RefCell::new(Vec::new()),
             read_limit: Cell::new(usize::MAX),
             signals: RefCell::new(Vec::new()),
+            caught_signals: Cell::new(0),
             held_jobs: RefCell::new(BTreeSet::new()),
             reaped_jobs: RefCell::new(Vec::new()),
             kill_job_errors: RefCell::new(BTreeMap::new()),
@@ -387,6 +389,20 @@ impl Abi for Fake {
     }
     fn signal_self(&self, signal: i32) -> Result<(), i32> {
         self.signals.borrow_mut().push((false, 1, signal));
+        if signal_bit(signal).is_some_and(|bit| self.caught_signals.get() & bit != 0) {
+            self.interrupt.set(signal);
+        }
+        Ok(())
+    }
+    fn signal_disposition(&self, signal: i32, mode: i32) -> Result<(), i32> {
+        let bit = signal_bit(signal).ok_or(28)?;
+        let caught = self.caught_signals.get() & !bit;
+        self.caught_signals
+            .set(if mode == SIGNAL_DISPOSITION_HANDLE {
+                caught | bit
+            } else {
+                caught
+            });
         Ok(())
     }
     fn root_preopen(&self) -> Option<u32> {
@@ -796,19 +812,19 @@ fn shell_pid_expansion_and_signal_targets_do_not_alias_async_jobs() {
 }
 
 #[test]
-fn self_signals_use_root_traps_and_reject_unsupported_caught_actions() {
+fn self_signals_use_root_traps_and_dispatch_caught_actions() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
-    let source = r#"trap '' INT; kill -INT $$; printf 'ignored:%s\n' $?; trap 'echo unsupported' INT; kill -INT $$; printf 'caught:%s\n' $?; trap '' TERM; (trap - TERM; kill -TERM $$; printf 'root:%s\n' $?); BASHPID=42; printf 'pid:%s\n' "$BASHPID"; unset BASHPID; printf 'unset:<%s>\n' "$BASHPID""#;
+    let source = r#"trap '' INT; kill -INT $$; printf 'ignored:%s\n' $?; trap 'echo handled:$?' INT; kill -INT $$; printf 'caught:%s\n' $?; trap '' TERM; (trap - TERM; kill -TERM $$; printf 'root:%s\n' $?); BASHPID=42; printf 'pid:%s\n' "$BASHPID"; unset BASHPID; printf 'unset:<%s>\n' "$BASHPID""#;
     assert_eq!(
         finish(&executor, &runtime, session.start(source).unwrap()),
         0
     );
     assert_eq!(
         fake.output.bytes(),
-        b"ignored:0\ncaught:2\nroot:0\npid:1\nunset:<>\n"
+        b"ignored:0\nhandled:0\ncaught:0\nroot:0\npid:1\nunset:<>\n"
     );
-    assert!(fake.signals.borrow().is_empty());
+    assert_eq!(*fake.signals.borrow(), [(false, 1, 2)]);
     shutdown_session(&executor, &runtime, &fake, session);
 }
 fn wait_status_now(runtime: &Runtime, pid: u64) -> Option<Result<i32, ProcessError>> {

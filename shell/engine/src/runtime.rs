@@ -33,7 +33,6 @@ pub use wasi::WasiAbi;
 const AGAIN: i32 = 6;
 // runtime/proc/signals.ts: DEFAULT=0, IGNORE=1, HANDLE=2. This is a
 // disposition, not the signal number or the self-signal operation (mode 3).
-#[cfg(any(target_os = "wasi", test))]
 const SIGNAL_DISPOSITION_HANDLE: i32 = 2;
 #[cfg(any(target_os = "wasi", test))]
 fn register_interrupt_handler(signal: impl FnOnce(i32, i32) -> i32) -> Result<(), i32> {
@@ -49,6 +48,10 @@ fn register_handler(number: i32, signal: impl FnOnce(i32, i32) -> i32) -> Result
 const SIGINT: i32 = 2;
 /// Handled only by a shell whose prompt the page redraws; it wakes the prompt reader.
 pub const SIGWINCH: i32 = 28;
+
+fn signal_bit(signal: i32) -> Option<u64> {
+    (1..=64).contains(&signal).then(|| 1 << (signal - 1))
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Binding {
@@ -99,6 +102,9 @@ pub trait Abi: support::Abi {
         None
     }
     fn signal_self(&self, _signal: i32) -> Result<(), i32> {
+        Err(58)
+    }
+    fn signal_disposition(&self, _signal: i32, _mode: i32) -> Result<(), i32> {
         Err(58)
     }
     /// Unwinds the guest once the runtime has selected a fatal outcome for this
@@ -266,6 +272,10 @@ struct State {
     inputs: RefCell<Vec<InputPump>>,
     job_control: Cell<bool>,
     window_changed: Cell<bool>,
+    shell_interrupt: Cell<bool>,
+    trapped_signals: Cell<u64>,
+    pending_traps: Cell<u64>,
+    trap_signal_ready: RefCell<Cancel>,
 }
 #[derive(Clone)]
 pub struct Runtime(Rc<State>);
@@ -283,6 +293,10 @@ impl Runtime {
             inputs: RefCell::new(Vec::new()),
             job_control: Cell::new(true),
             window_changed: Cell::new(false),
+            shell_interrupt: Cell::new(false),
+            trapped_signals: Cell::new(0),
+            pending_traps: Cell::new(0),
+            trap_signal_ready: RefCell::new(Cancel::new()),
         }))
     }
     fn spawn_diagnostic(&self, pid: u32) -> Result<String, i32> {
@@ -394,11 +408,31 @@ impl Runtime {
     /// Dequeues handled signals until an interrupt or none is left. A SIGWINCH taken
     /// here, including at a budget checkpoint, is kept for `take_window_change`.
     pub fn take_interrupt(&self) -> bool {
+        self.collect_signals();
+        self.0.shell_interrupt.replace(false)
+    }
+    pub fn has_pending_traps(&self) -> bool {
+        self.0.pending_traps.get() != 0
+    }
+    fn collect_signals(&self) {
         loop {
-            match self.0.abi.interrupted() {
-                SIGWINCH => self.0.window_changed.set(true),
-                signal => return signal == SIGINT,
+            let signal = self.0.abi.interrupted();
+            let Some(bit) = signal_bit(signal) else { break };
+            if self.0.trapped_signals.get() & bit != 0 {
+                self.0.pending_traps.set(self.0.pending_traps.get() | bit);
+                self.0.trap_signal_ready.borrow().cancel();
+            } else if signal == SIGINT {
+                self.0.shell_interrupt.set(true);
             }
+            if signal == SIGWINCH {
+                self.0.window_changed.set(true);
+            }
+        }
+    }
+    fn replace_pending_traps(&self, pending: u64) {
+        let previous = self.0.pending_traps.replace(pending);
+        if previous != 0 && pending == 0 {
+            self.0.trap_signal_ready.replace(Cancel::new());
         }
     }
     pub fn take_window_change(&self) -> bool {
@@ -624,7 +658,49 @@ impl ProcessHost for Runtime {
         self.0
             .abi
             .signal_self(signal)
-            .map_err(ProcessError::Runtime)
+            .map_err(ProcessError::Runtime)?;
+        self.collect_signals();
+        Ok(())
+    }
+    fn signal_disposition(
+        &self,
+        signal: i32,
+        mode: crate::process::SignalDisposition,
+    ) -> Result<(), ProcessError> {
+        use crate::process::SignalDisposition::*;
+        let bit = signal_bit(signal).ok_or(ProcessError::Runtime(28))?;
+        let abi_mode = match mode {
+            Default => 0,
+            Ignore => 1,
+            Handle => SIGNAL_DISPOSITION_HANDLE,
+        };
+        self.0
+            .abi
+            .signal_disposition(signal, abi_mode)
+            .map_err(ProcessError::Runtime)?;
+        let trapped = self.0.trapped_signals.get() & !bit;
+        self.0.trapped_signals.set(if matches!(mode, Handle) {
+            trapped | bit
+        } else {
+            trapped
+        });
+        if !matches!(mode, Handle) {
+            self.replace_pending_traps(self.0.pending_traps.get() & !bit);
+        }
+        Ok(())
+    }
+    fn take_trap_signal(&self) -> Option<i32> {
+        let signal = self.pending_trap_signal()?;
+        let bit = signal_bit(signal).expect("pending trap has a valid number");
+        self.replace_pending_traps(self.0.pending_traps.get() & !bit);
+        Some(signal)
+    }
+    fn trap_signal_ready(&self) -> Option<Cancel> {
+        Some(self.0.trap_signal_ready.borrow().clone())
+    }
+    fn pending_trap_signal(&self) -> Option<i32> {
+        let pending = self.0.pending_traps.get();
+        (pending != 0).then(|| pending.trailing_zeros() as i32 + 1)
     }
     fn exec_ready(&self) -> bool {
         self.0.children.borrow().is_empty()

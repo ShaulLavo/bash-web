@@ -1,6 +1,6 @@
 # 006: Engine boundaries, one core shell and command add-ons
 
-Status: Approved (owner, 2026-10-18)
+Status: Done (approved by owner, 2026-10-18; completed in PR #26)
 
 ## Goal
 

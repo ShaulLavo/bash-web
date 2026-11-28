@@ -1,4 +1,4 @@
-use super::{Context, Descriptors, Flow, Outcome, eval, reader};
+use super::{Context, Descriptors, Flow, Outcome, eval, reader, trap_action};
 use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     io::{self, Endpoint, IoError, OpenOptions},
@@ -84,16 +84,20 @@ async fn run_body(
         source,
         evaluation,
         Some(&filename),
-        state,
+        state.clone(),
         fds.clone(),
-        reader_context,
+        reader_context.clone(),
     )
     .await;
-    frame.finish();
-    let mut result = match result {
+    let result = match result {
         Ok(result) => result,
-        Err(message) => return diagnostic.failure(&[name, &filename], &message, 2).await,
+        Err(message) => {
+            frame.finish();
+            return diagnostic.failure(&[name, &filename], &message, 2).await;
+        }
     };
+    let mut result = trap_action::returning(result, state, fds, reader_context).await;
+    frame.finish();
     if result.flow == Flow::Return {
         result.flow = Flow::Normal;
     }

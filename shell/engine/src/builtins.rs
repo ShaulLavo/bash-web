@@ -200,7 +200,14 @@ pub(crate) fn run<'a>(
             async move { output_outcome(printf::run(args, state, fds, context, work).await) },
             context,
         ),
-        Builtin::Read => admitted(read::run(args, state, fds, context, work), context),
+        Builtin::Read => admitted(
+            async move {
+                context
+                    .run_until_trap(read::run(args, state, fds, context, work))
+                    .await?
+            },
+            context,
+        ),
         Builtin::Mapfile => admitted(
             async move {
                 mapfile::run((name, args), state, fds, context, work)
@@ -217,14 +224,7 @@ pub(crate) fn run<'a>(
         Builtin::Pushd => admitted(directories::pushd(args, state, fds, context, work), context),
         Builtin::Popd => admitted(directories::popd(args, state, fds, context, work), context),
         Builtin::Dirs => admitted(directories::dirs(args, state, fds, context, work), context),
-        Builtin::Pwd => admitted(
-            async move {
-                let cwd = state.borrow().cwd.clone();
-                write(fds, format!("{cwd}\n").as_bytes(), context).await?;
-                Ok(Outcome::status(0))
-            },
-            context,
-        ),
+        Builtin::Pwd => admitted(directories::pwd(args, state, fds, context, work), context),
         Builtin::Set => unreachable!("set consumes its arguments"),
         Builtin::Shift => shift(name, args, state, fds, context),
         Builtin::Jobs => {
@@ -298,6 +298,10 @@ fn exit_return<'a>(
             Ok(code) => code.rem_euclid(256) as i32,
             Err(_) => return Either::Left(ready(Ok(Outcome { code: 2, flow }))),
         },
+        None if flow == Flow::Exit => {
+            let shell = state.borrow();
+            shell.traps.exit_status().unwrap_or_else(|| shell.status())
+        }
         None => state.borrow().status(),
     };
     if args.len() > 1 {

@@ -269,6 +269,13 @@ macro_rules! forward_process_waits {
 }
 pub use forward_process_waits;
 
+#[derive(Clone, Copy)]
+pub enum SignalDisposition {
+    Default,
+    Ignore,
+    Handle,
+}
+
 pub trait ProcessHost {
     /// The embedding's shell process, distinct from synthetic async job handles.
     fn shell_pid(&self) -> Option<ProcessId> {
@@ -277,6 +284,22 @@ pub trait ProcessHost {
     /// Publish a real signal to this shell process, preserving the host outcome tag.
     fn signal_self(&self, _signal: i32) -> Result<(), ProcessError> {
         Err(ProcessError::Runtime(58))
+    }
+    fn signal_disposition(
+        &self,
+        _signal: i32,
+        _mode: SignalDisposition,
+    ) -> Result<(), ProcessError> {
+        Ok(())
+    }
+    fn take_trap_signal(&self) -> Option<i32> {
+        None
+    }
+    fn trap_signal_ready(&self) -> Option<Cancel> {
+        None
+    }
+    fn pending_trap_signal(&self) -> Option<i32> {
+        None
     }
     /// Allocate a group ID synchronously, without running command work. IDs are
     /// unique for the lifetime of this host, including through shared handles and

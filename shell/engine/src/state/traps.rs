@@ -1,9 +1,11 @@
 //! Original retained trap bindings. Inherited handlers are query-only until mutation.
-//! Bindings are registration state only: no event runs a stored action.
 use crate::exec::StorageAllocation;
 use std::rc::Rc;
 
 pub(crate) const SLOTS: usize = 68;
+pub(crate) const EXIT: usize = 0;
+pub(crate) const ERR: usize = 66;
+pub(crate) const RETURN: usize = 67;
 const SIGNAL_SLOTS: usize = 65;
 #[derive(Debug)]
 pub(crate) struct Action {
@@ -21,6 +23,11 @@ pub(crate) struct Traps {
     inherited: bool,
     exit_inherited: bool,
     implicit_ignores: [bool; 2],
+    special_versions: [u64; 3],
+    traced: [bool; 3],
+    inactive: u128,
+    running: u128,
+    exit_status: Option<i32>,
 }
 impl Default for Traps {
     fn default() -> Self {
@@ -29,6 +36,11 @@ impl Default for Traps {
             inherited: false,
             exit_inherited: false,
             implicit_ignores: [false; 2],
+            special_versions: [0; 3],
+            traced: [false; 3],
+            inactive: 0,
+            running: 0,
+            exit_status: None,
         }
     }
 }
@@ -38,10 +50,75 @@ impl Traps {
         traps.inherited = true;
         traps.exit_inherited = traps.bindings[0].is_some();
         traps.implicit_ignores = [false; 2];
+        traps.traced = [false; 3];
+        traps.inactive = u128::MAX;
+        traps.running &= !(1 << EXIT);
+        traps.exit_status = None;
         traps
     }
     pub(crate) fn get(&self, signal: usize) -> Option<&Binding> {
         self.bindings[signal].as_ref()
+    }
+    pub(crate) fn executable(&self, event: usize) -> Option<&Rc<Action>> {
+        if (self.inactive | self.running) & (1 << event) != 0 {
+            return None;
+        }
+        match self.get(event) {
+            Some(Binding::Handler(action)) => Some(action),
+            _ => None,
+        }
+    }
+    pub(crate) fn enter(&mut self, event: usize, status: i32) {
+        self.running |= 1 << event;
+        if event == EXIT {
+            self.exit_status = Some(status);
+        }
+    }
+    pub(crate) fn leave(&mut self, event: usize) {
+        self.running &= !(1 << event);
+        if event == EXIT {
+            self.exit_status = None;
+        }
+    }
+    pub(crate) fn dispatching(&self) -> bool {
+        self.running != 0
+    }
+    pub(crate) fn exit_status(&self) -> Option<i32> {
+        self.exit_status
+    }
+    pub(crate) fn trace_inherited(&mut self, err: bool, functions: bool) {
+        self.traced = [functions, err, functions];
+        for (index, traced) in self.traced.into_iter().enumerate() {
+            if traced {
+                self.inactive &= !(1 << (SIGNAL_SLOTS + index));
+            }
+        }
+    }
+
+    pub(crate) fn hide_untraced(
+        &mut self,
+        err: bool,
+        functions: bool,
+    ) -> [Option<(u64, Binding)>; 3] {
+        let traced = [functions, err, functions];
+        std::array::from_fn(|index| {
+            if traced[index] {
+                return None;
+            }
+            let binding = self.bindings[SIGNAL_SLOTS + index].take()?;
+            Some((self.special_versions[index], binding))
+        })
+    }
+
+    pub(crate) fn restore_untraced(&mut self, saved: [Option<(u64, Binding)>; 3]) {
+        for (index, entry) in saved.into_iter().enumerate() {
+            let Some((version, binding)) = entry else {
+                continue;
+            };
+            if version == self.special_versions[index] {
+                self.bindings[SIGNAL_SLOTS + index] = Some(binding);
+            }
+        }
     }
     pub(crate) fn prepare_mutation(&mut self) {
         if self.inherited {
@@ -59,10 +136,17 @@ impl Traps {
             *implicit = false;
         }
         self.exit_inherited &= signal != 0;
+        self.inactive &= !(1 << signal);
+        if signal >= SIGNAL_SLOTS {
+            self.special_versions[signal - SIGNAL_SLOTS] += 1;
+        }
         self.bindings[signal] = binding;
     }
     pub(crate) fn process_substitution(&self) -> Self {
         let mut traps = self.clone();
+        traps.inactive = u128::MAX;
+        traps.running &= !(1 << EXIT);
+        traps.exit_status = None;
         for (signal, binding) in traps
             .bindings
             .iter_mut()
@@ -89,7 +173,11 @@ impl Traps {
     }
     fn clear_handlers(&mut self) {
         self.clear_signal_handlers();
-        self.bindings[SIGNAL_SLOTS..].fill(None);
+        for (index, binding) in self.bindings[SIGNAL_SLOTS..].iter_mut().enumerate() {
+            if !self.traced[index] {
+                *binding = None;
+            }
+        }
     }
     fn clear_signal_handlers(&mut self) {
         for binding in &mut self.bindings[..SIGNAL_SLOTS] {
