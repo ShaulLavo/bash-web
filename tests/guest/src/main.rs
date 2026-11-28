@@ -2,6 +2,7 @@
 //! The only non-WASI imports are thin declarations of Waffle's runtime_proc ABI.
 
 use std::env;
+use std::ffi::{c_char, CString};
 use std::fs;
 use std::io::{self, IsTerminal, Read};
 use std::path::PathBuf;
@@ -40,6 +41,19 @@ extern "C" {
     fn proc_wait(pid: u32, output: *mut u8) -> i32;
     #[link_name = "kill"]
     fn proc_kill(pid: u32, signal: u32) -> i32;
+}
+
+extern "C" {
+    fn symlink(target: *const c_char, link: *const c_char) -> i32;
+}
+
+fn create_symlink(target: &str, link: &str) -> io::Result<()> {
+    let target = CString::new(target)?;
+    let link = CString::new(path(link).into_os_string().into_encoded_bytes())?;
+    if unsafe { symlink(target.as_ptr(), link.as_ptr()) } == 0 {
+        return Ok(());
+    }
+    Err(io::Error::last_os_error())
 }
 
 #[link(wasm_import_module = "wasi_snapshot_preview1")]
@@ -555,6 +569,7 @@ fn run(args: &[String]) -> Result<i32> {
             return status(args, 3);
         }
         "unlink" => fs::remove_file(path(arg(args, 1)?))?,
+        "symlink" => create_symlink(arg(args, 1)?, arg(args, 2)?)?,
         "exists" => {
             let exists = match fs::metadata(path(arg(args, 1)?)) {
                 Ok(_) => true,

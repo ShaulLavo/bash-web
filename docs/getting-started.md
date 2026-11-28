@@ -72,25 +72,27 @@ seq exited 127
 /usr/bin/bash: seq: command not found
 ```
 
-Status 127 is what any shell reports for a command it cannot find. In a page, you install `cat`, `grep`, `mkdir`, `seq`, and `tail` as separate programs when you need them. This binary has no way to install them, so the next step builds a second binary that links them in.
+Status 127 is what any shell reports for a command it cannot find. In a web page, you install `cat`, `grep`, `mkdir`, `seq`, and `tail` as separate programs when you need them. `shell-engine` cannot install external programs, so the next step builds `shell-cli`, which links four of them in.
 
 ## Run a pipeline
 
-Build `shell-cli`. It is the engine composed with the five utilities, the harness the repository's fuzzers use.
+Build `shell-cli`. This fuzzer harness links the engine with `cat`, `mkdir`, `seq`, and `tail`, and registers them in `/bin`. `grep` stays an external program in the browser.
 
 ```sh
 cargo build --release --locked --manifest-path shell/Cargo.toml -p shell-compat-fixtures --bin shell-cli
-shell/target/release/shell-cli -c 'seq 1 100000 | grep -c 9999'
+PATH=/bin shell/target/release/shell-cli -c 'seq 1 100000 | tail -n 3'
 ```
 
 ```text
-19
+99998
+99999
+100000
 ```
 
-Each pipeline stage is a task on the engine's single thread. The pipe between them holds a bounded amount of data, so a fast `seq` waits for `grep` instead of filling memory. Files go to an in-memory filesystem that exists for one run:
+If your host `PATH` omits `/bin`, `PATH=/bin` lets `shell-cli` find the four utilities. Each pipeline stage is a task on the engine's single thread. The pipe between stages holds a bounded amount of data, so a fast `seq` waits for `tail` instead of filling memory. Files go to an in-memory filesystem that exists for one run:
 
 ```sh
-shell/target/release/shell-cli -c 'mkdir -p /tmp/demo/a; echo hi > /tmp/demo/a/f; cat /tmp/demo/a/f'
+PATH=/bin shell/target/release/shell-cli -c 'mkdir -p /tmp/demo/a; echo hi > /tmp/demo/a/f; cat /tmp/demo/a/f'
 ls /tmp/demo
 ```
 

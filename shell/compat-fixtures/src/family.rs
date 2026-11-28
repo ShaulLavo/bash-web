@@ -16,20 +16,18 @@ use waffle_program_support::{executor::Cancel as FamilyCancel, io as family};
 #[derive(Clone, Copy)]
 enum Utility {
     Cat,
-    Grep,
     Mkdir,
     Seq,
     Tail,
 }
 
-const PROGRAMS: [(&str, Utility); 5] = [
+const PROGRAMS: [(&str, Utility); 4] = [
     ("cat", Utility::Cat),
-    ("grep", Utility::Grep),
     ("mkdir", Utility::Mkdir),
     ("seq", Utility::Seq),
     ("tail", Utility::Tail),
 ];
-pub const PROGRAM_NAMES: [&str; 5] = ["cat", "grep", "mkdir", "seq", "tail"];
+pub const PROGRAM_NAMES: [&str; 4] = ["cat", "mkdir", "seq", "tail"];
 
 /// Register the moved families as external programs of the native test host.
 pub fn register_in_process(
@@ -70,26 +68,11 @@ impl Parts {
             },
         }
     }
-    fn grep(self) -> waffle_grep::Invocation {
-        let invocation = self.core();
-        waffle_grep::Invocation {
-            args: invocation.args,
-            env: invocation.env,
-            cwd: invocation.cwd,
-            fds: invocation.fds,
-            context: waffle_grep::Context {
-                cancel: invocation.context.cancel,
-                filesystem: invocation.context.filesystem,
-                line_bytes: invocation.context.line_bytes,
-            },
-        }
-    }
 }
 
 fn start(utility: Utility, parts: Parts) -> LocalBoxFuture<'static, i32> {
     match utility {
         Utility::Cat => waffle_coreutils::cat(parts.core()).boxed_local(),
-        Utility::Grep => waffle_grep::grep(parts.grep()).boxed_local(),
         Utility::Mkdir => waffle_coreutils::mkdir(parts.core()).boxed_local(),
         Utility::Seq => waffle_coreutils::seq(parts.core()).boxed_local(),
         Utility::Tail => waffle_coreutils::tail(parts.core()).boxed_local(),

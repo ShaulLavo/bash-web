@@ -4,8 +4,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { partitionTypecheckRoots, readTypecheckProject } from "./typecheck-projects.ts";
+import { nativeArtifactFiles } from "./ci-artifacts.ts";
+import { discoverScoreboardTests } from "../scoreboard/scoreboard-tests.ts";
 
 test("the existing shell check stays red if any producer or moved check fails or skips", () => {
   const workflow: unknown = parse(
@@ -209,6 +212,7 @@ test("each moved current-main gate has one owner", () => {
       "build:node-harness",
       "build:shell",
       "build:test-guest",
+      "build:test-grep",
       "prepare:wasi-tests",
       "check:capabilities",
     ],
@@ -271,6 +275,17 @@ test("each moved current-main gate has one owner", () => {
   assert.doesNotMatch(fuzz, /--shell \.build\/shell\/release\/shell-engine/);
   const browser = commands(workflowJobs.browser);
   assert.doesNotMatch(browser, /--workers|--grep|--project|--retries|--timeout/);
+});
+
+test("FreeBSD grep coverage runs in the WASI scoreboard", () => {
+  const scripts = fileURLToPath(new URL("../", import.meta.url));
+  const suite = resolve(scripts, "replay/test-own-shell-freebsd-grep.ts");
+  assert.equal(discoverScoreboardTests(scripts).filter((file) => file === suite).length, 1);
+  assert.ok(nativeArtifactFiles.includes("freebsd-grep.wasm"));
+  assert.doesNotMatch(
+    readFileSync(new URL("../../shell/Cargo.lock", import.meta.url), "utf8"),
+    /^name = "waffle-grep"$/m,
+  );
 });
 
 test("quality package recipes preserve complete current selections", () => {

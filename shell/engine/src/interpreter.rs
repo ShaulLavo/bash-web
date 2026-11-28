@@ -8,7 +8,7 @@ use crate::{
     io::{self, Endpoint, FdTable, FileSystem, OpenOptions},
     parse::{self, ParseFailure},
     process::{ChildExit, GroupId, ProcessError, ProcessGroup, ProcessHost, SpawnRequest},
-    state::{FunctionFrame, PrefixFrame, SharedState, State, StoredFunction, absolute},
+    state::{FunctionFrame, PrefixFrame, SharedState, State, StoredFunction, filesystem_path},
 };
 use futures::{FutureExt, future::join_all};
 use shell_parser::parser::*;
@@ -5243,7 +5243,7 @@ async fn redirects(
             | RedirectKind::Append
             | RedirectKind::OutputBoth
             | RedirectKind::ReadWrite => {
-                let path = absolute(&state.borrow().cwd, &target);
+                let path = filesystem_path(&state.borrow().cwd, &target);
                 let read_write = redirect.kind == RedirectKind::ReadWrite;
                 let options = OpenOptions {
                     read: input,
@@ -5869,12 +5869,9 @@ mod residual_review_tests {
                     }
                     .boxed_local()
                 });
-            let session = Session::new(
-                executor.clone(),
-                host.clone(),
-                Rc::new(MemoryFs::new(65536)),
-                limits,
-            );
+            let fs = MemoryFs::new(65536);
+            fs.mkdir("/dev", true).unwrap();
+            let session = Session::new(executor.clone(), host.clone(), Rc::new(fs), limits);
             let (out, output) = io::capture(65536);
             let mut fds = FdTable::default();
             fds.insert(0, Endpoint::null());

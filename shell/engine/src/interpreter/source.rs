@@ -3,7 +3,7 @@ use crate::{
     exec::{JoinedSource, Scope, StorageAllocation},
     io::{self, Endpoint, IoError, OpenOptions},
     parse,
-    state::{SharedState, SourceFrame, absolute},
+    state::{SharedState, SourceFrame, filesystem_path},
 };
 
 pub(super) fn run<'a>(
@@ -258,7 +258,7 @@ async fn candidate(
     } else {
         format!("{directory}/{name}")
     };
-    let endpoint = open(&absolute(cwd, &path), fds, context).await?;
+    let endpoint = open(&filesystem_path(cwd, &path), fds, context).await?;
     Ok(OpenedSource {
         endpoint,
         name: path,

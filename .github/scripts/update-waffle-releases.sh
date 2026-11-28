@@ -118,12 +118,11 @@ update_native_waffle() {
   previous_revision=$(sed -nE '/^[[:space:]]*waffle-program-support[[:space:]]*=/{s/.*rev = "([0-9a-f]{40})".*/\1/p;}' shell/engine/Cargo.toml | sed -n '1p')
   [[ "$previous_revision" =~ ^[0-9a-f]{40}$ ]] || return 1
   for manifest in shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; do
-    sed -E -i "/^[[:space:]]*waffle-(program-support|coreutils|grep)[[:space:]]*=/{s|(rev = \")[0-9a-f]{40}(\".*)|\\1${runtime_source_revision}\\2|;}" "$manifest"
+    sed -E -i "/^[[:space:]]*waffle-(program-support|coreutils)[[:space:]]*=/{s|(rev = \")[0-9a-f]{40}(\".*)|\\1${runtime_source_revision}\\2|;}" "$manifest"
   done
   if ! git diff --quiet -- shell/engine/Cargo.toml shell/compat-fixtures/Cargo.toml; then
     cargo update --manifest-path shell/Cargo.toml -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-program-support" \
-      -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-coreutils" \
-      -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-grep"
+      -p "git+https://github.com/ShaulLavo/waffle?rev=${previous_revision}#waffle-coreutils"
   fi
 }
 

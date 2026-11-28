@@ -34,19 +34,25 @@ impl ReadOnlyMount {
         self.denied_directories = paths;
         self
     }
+    fn resolve(&self, path: &str) -> Result<String, IoError> {
+        self.resolve_visiting(path, |_| Ok(()))
+    }
+
     // MemoryFs has no symlinks. Resolve the same components as stat, retaining
     // fixture traversal denial before simplifying `.` or `..`. The bounded
     // manifest supplies this policy to both metadata and executable access.
-    fn resolve(&self, path: &str) -> Result<String, IoError> {
+    fn resolve_visiting(
+        &self,
+        path: &str,
+        mut visit_parent: impl FnMut(&str) -> Result<(), IoError>,
+    ) -> Result<String, IoError> {
         if !path.starts_with('/') || path.len() > 4096 || path.contains('\0') {
             return Err(IoError::InvalidPath);
         }
         let mut resolved = String::with_capacity(path.len());
         resolved.push('/');
-        for component in path.split('/').skip(1) {
-            if component.is_empty() {
-                continue;
-            }
+        let mut components = path.split('/').filter(|part| !part.is_empty()).peekable();
+        while let Some(component) = components.next() {
             if self.denied_directories.contains(&resolved) {
                 return Err(IoError::Runtime(2)); // WASI EACCES
             }
@@ -63,8 +69,20 @@ impl ReadOnlyMount {
                     resolved.push_str(component);
                 }
             }
+            if components.peek().is_some() {
+                visit_parent(&resolved)?;
+            }
         }
         Ok(resolved)
+    }
+
+    fn check_mkdir_parent(&self, path: &str) -> Result<(), IoError> {
+        match self.inner.stat(path, true) {
+            Ok(metadata) if metadata.kind != FileKind::Directory => Err(IoError::NotDirectory),
+            Err(IoError::NotFound) if self.contains(path) => Err(IoError::Runtime(69)), // WASI EROFS
+            Ok(_) | Err(IoError::NotFound) => Ok(()),
+            Err(error) => Err(error),
+        }
     }
     fn contains(&self, path: &str) -> bool {
         path == self.root
@@ -80,7 +98,12 @@ impl FileSystem for ReadOnlyMount {
         parents: bool,
     ) -> LocalBoxFuture<'a, Result<(), IoError>> {
         async move {
-            let resolved = self.resolve(path)?;
+            // Preflight every mkdir -p destination before MemoryFs creates any.
+            let resolved = if parents {
+                self.resolve_visiting(path, |parent| self.check_mkdir_parent(parent))?
+            } else {
+                self.resolve(path)?
+            };
             if self.contains(&resolved) {
                 match self.inner.stat(path, true) {
                     Ok(metadata) if metadata.kind == FileKind::Directory && parents => Ok(()),
@@ -490,6 +513,7 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
     let executor = Executor::new();
     let host = InProcessHost::new(executor.clone());
     let fs = MemoryFs::new(16 * 1024 * 1024);
+    fs.mkdir("/dev", true).expect("fixture device directory");
     register(&host, &fs);
     let cwd = std::env::var("PWD").ok();
     let fixture = std::env::var_os("BASH_WEB_PATH_FIXTURE");
@@ -695,6 +719,39 @@ mod tests {
                 "{path}"
             );
         }
+    }
+
+    #[test]
+    fn mkdir_parents_respects_read_only_prefixes_before_parent_components() {
+        let fs = MemoryFs::new(4096);
+        fs.mkdir("/usr/bin", true).unwrap();
+        fs.write_file("/tmp/file", b"contents").unwrap();
+        let mounted = ReadOnlyMount::new(fs.clone(), "/usr");
+
+        assert_eq!(
+            mounted
+                .mkdir("/usr/new/../../tmp/never", true)
+                .now_or_never(),
+            Some(Err(IoError::Runtime(69)))
+        );
+        assert_eq!(fs.stat("/usr/new", true), Err(IoError::NotFound));
+        assert_eq!(fs.stat("/tmp/never", true), Err(IoError::NotFound));
+        assert_eq!(
+            mounted
+                .mkdir("/tmp/file/../../usr/new", true)
+                .now_or_never(),
+            Some(Err(IoError::NotDirectory))
+        );
+        assert_eq!(
+            mounted
+                .mkdir("/usr/bin/../../tmp/created", true)
+                .now_or_never(),
+            Some(Ok(()))
+        );
+        assert_eq!(
+            fs.stat("/tmp/created", true).unwrap().kind,
+            FileKind::Directory
+        );
     }
 
     #[test]

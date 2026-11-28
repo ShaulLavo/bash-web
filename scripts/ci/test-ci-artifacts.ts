@@ -69,7 +69,7 @@ test("the complete exact-source artifact stages both CLIs and every shell guest"
     stageCiArtifacts(consumer, directory);
     for (const name of ["shell-engine", "shell-cli"])
       assert.ok(statSync(resolve(consumer, ".build/shell/release", name)).mode & 0o111);
-    for (const name of ["shell-engine", "shell-runtime", "argv-py", "printenv-py"])
+    for (const name of ["shell-engine", "shell-runtime", "argv-py", "printenv-py", "freebsd-grep"])
       assert.deepEqual(
         readFileSync(resolve(consumer, `.build/shell/wasm32-wasip1/release/${name}.wasm`)),
         Buffer.from(wasm),

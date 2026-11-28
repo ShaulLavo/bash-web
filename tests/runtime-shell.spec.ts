@@ -70,6 +70,43 @@ test("descriptor paths reopen actual shared terminals without owning their lifet
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
+test("repeated separators preserve logical descriptor reopening", async ({ page }) => {
+  await open(page);
+  await file(page, "fd-input", "echo FD_SOURCE\n");
+  await command(
+    page,
+    'exec 4<fd-input; read -r line </dev//fd/4; echo "FD_READ:$line"; exec 4<fd-input; . /dev//fd/4; exec 4<fd-input; value=$(</dev//fd/4); echo "FD_SUB:$value"; exec 4<&-',
+  );
+  for (const line of ["FD_READ:echo FD_SOURCE", "FD_SOURCE", "FD_SUB:echo FD_SOURCE"])
+    await output(page, line);
+  await ready(page);
+});
+
+test("file opens follow symlinks before traversing dot dot and preserve trailing slashes", async ({
+  page,
+}) => {
+  await open(page);
+  await command(page, "mkdir -p real/sub && test-guest symlink real/sub link");
+  await ready(page);
+  await command(
+    page,
+    "printf '%s\\n' 'echo WRONG' >answer; printf '%s\\n' 'echo RIGHT' >real/answer",
+  );
+  await ready(page);
+  await command(
+    page,
+    'read -r line <link/../answer; echo "READ:$line"; source link/../answer; x=$(<link/../answer); echo "SUB:$x"',
+  );
+  for (const line of ["READ:echo RIGHT", "RIGHT", "SUB:echo RIGHT"]) await output(page, line);
+  await ready(page);
+  await command(
+    page,
+    'read -r line <answer/; echo "READ_STATUS:$?"; . answer/; echo "SOURCE_STATUS:$?"; x=$(<answer/); echo "SUB_STATUS:$?"',
+  );
+  for (const line of ["READ_STATUS:1", "SOURCE_STATUS:1", "SUB_STATUS:1"]) await output(page, line);
+  await ready(page);
+});
+
 test("the runtime provides /dev/null without creating a filesystem node", async ({ page }) => {
   const baseline = await open(page);
   await command(
