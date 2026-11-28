@@ -1774,16 +1774,12 @@ fn execute_command<'a>(
             if !context.command_checkpoint().await {
                 return Outcome::status(130);
             }
-            let mut result = command_body(command, state.clone(), fds, context).await;
-            result.flow = settle_reported_error(result.flow, &state);
+            let result = command_body(command, state.clone(), fds, context).await;
+            let mut result = checks.command_result(result, &state);
             if checks.failure.matches(result) {
                 result = apply_errexit(result, &state);
             }
-            finish_command(
-                &state,
-                result,
-                checks.pipeline_status == PipelineStatus::Preserve,
-            )
+            checks.complete(result, &state)
         },
         Outcome::status,
     )
@@ -1795,11 +1791,37 @@ struct CommandChecks {
     failure: FailureBoundary,
 }
 
+impl CommandChecks {
+    fn command_result(self, mut result: Outcome, state: &SharedState) -> Outcome {
+        result.flow = settle_reported_error(result.flow, state);
+        let publish_pipeline = self.pipeline_status == PipelineStatus::BeforeTraps
+            && !matches!(
+                result.flow,
+                Flow::Exit | Flow::Return | Flow::Break(_) | Flow::Continue(_)
+            );
+        publish_command_status(state, result, publish_pipeline)
+    }
+
+    fn complete(self, result: Outcome, state: &SharedState) -> Outcome {
+        if self.pipeline_status == PipelineStatus::OnCompletion
+            && matches!(
+                result.flow,
+                Flow::Normal | Flow::Resource | Flow::SpawnFailed
+            )
+        {
+            state
+                .borrow_mut()
+                .publish_single_pipeline_status(result.code);
+        }
+        result
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PipelineStatus {
-    Replace,
+    BeforeTraps,
     Preserve,
-    ReplaceAfterErr,
+    OnCompletion,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1830,9 +1852,9 @@ fn command_checks(
             _,
         )) => PipelineStatus::Preserve,
         Some(Command::Compound(CompoundCommand::Arithmetic(_) | CompoundCommand::Test(_), _)) => {
-            PipelineStatus::ReplaceAfterErr
+            PipelineStatus::OnCompletion
         }
-        _ => PipelineStatus::Replace,
+        _ => PipelineStatus::BeforeTraps,
     };
     CommandChecks {
         pipeline_status,
@@ -1892,10 +1914,10 @@ fn settle_reported_error(flow: Flow, state: &SharedState) -> Flow {
     }
 }
 
-fn finish_command(state: &SharedState, result: Outcome, preserve_pipeline: bool) -> Outcome {
+fn publish_command_status(state: &SharedState, result: Outcome, publish_pipeline: bool) -> Outcome {
     let mut state = state.borrow_mut();
     state.publish_status(result.code);
-    if !preserve_pipeline {
+    if publish_pipeline {
         state.publish_single_pipeline_status(result.code);
     }
     result
@@ -2124,12 +2146,12 @@ async fn pipeline_command(
     drop(parked);
     let last = *results.last().expect("pipeline has a stage");
     if share_last
-        && last.flow == Flow::Abort
+        && last.flow != Flow::Normal
         && !results
             .iter()
             .any(|result| matches!(result.flow, Flow::Resource | Flow::SpawnFailed))
     {
-        // A shared stage that aborts the reader supplies the status seen by EXIT.
+        // The shared stage transferred control before the pipeline returned.
         return last;
     }
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
@@ -2138,9 +2160,7 @@ async fn pipeline_command(
     } else {
         *codes.last().unwrap()
     };
-    // Every joined stage has a public status, even when a resource failure or
-    // shared last-stage control flow aborts the submitted reader. Publish the
-    // complete ordered result before taking any of those early exits.
+    // Engine resource and spawn failures still report every joined stage.
     state.borrow_mut().publish_pipeline_status(codes);
     if let Some(result) = results
         .iter()
@@ -2645,7 +2665,7 @@ fn loop_arithmetic<'a>(
                 }
                 None => arithmetic_command(source, state, &fds, &context, &mut work).await,
             };
-            let mut result = finish_command(state, result, false);
+            let mut result = publish_command_status(state, result, true);
             if result.flow == Flow::Normal
                 && result.code != 0
                 && state.borrow().errexit

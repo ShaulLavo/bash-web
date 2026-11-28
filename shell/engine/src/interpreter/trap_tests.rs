@@ -213,14 +213,32 @@ fn exit_uses_the_active_trap_status_from_nested_functions() {
 }
 
 #[test]
-fn lastpipe_errexit_keeps_the_shared_stage_status_for_exit() {
-    let (shell, executor, output) = session();
-    shell.state().borrow_mut().command_string = true;
-    let job = shell
-        .start("shopt -s lastpipe; set -e; trap 'echo err:$?:${PIPESTATUS[*]}' ERR; trap 'echo exit:$?:${PIPESTATUS[*]}' EXIT; true | false")
-        .unwrap();
-    assert_eq!(complete(&executor, job), 1);
-    assert_eq!(output.bytes(), b"err:1:1\nexit:1:1\n");
+fn lastpipe_transfers_keep_the_shared_stage_status_for_exit() {
+    for (setup, command, status, expected) in [
+        (
+            "trap 'echo err:$?:${PIPESTATUS[*]}' ERR",
+            "true | false",
+            1,
+            "err:1:1\nexit:1:1\n",
+        ),
+        (":", "true | ((0))", 1, "exit:1:0\n"),
+        (":", "true | [[ x == y ]]", 1, "exit:1:0\n"),
+        ("trap 'exit 7' ERR", "true | false", 7, "exit:7:1\n"),
+        (":", "true | exit 7", 7, "exit:7:0\n"),
+        (":", "((0))", 1, "exit:1:0\n"),
+    ] {
+        let (shell, executor, output) = session();
+        shell.state().borrow_mut().command_string = true;
+        let source = format!(
+            "shopt -s lastpipe; set -e; trap 'echo exit:$?:${{PIPESTATUS[*]}}' EXIT; {setup}; {command}"
+        );
+        assert_eq!(
+            complete(&executor, shell.start(&source).unwrap()),
+            status,
+            "{source}"
+        );
+        assert_eq!(output.bytes(), expected.as_bytes(), "{source}");
+    }
 }
 
 #[test]

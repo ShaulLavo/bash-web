@@ -127,24 +127,15 @@ async fn command_outcome(
         return Outcome::status(130);
     }
     let err_at_start = state.borrow().traps.executable(ERR).is_some();
-    let mut result = command_body(command, state.clone(), fds.clone(), context.clone()).await;
-    result.flow = settle_reported_error(result.flow, &state);
-    let failed = checks.failure.matches(result);
-    let delayed_status =
-        failed && err_at_start && checks.pipeline_status == PipelineStatus::ReplaceAfterErr;
-    let preserve = delayed_status || checks.pipeline_status == PipelineStatus::Preserve;
-    finish_command(&state, result, preserve);
+    let result = command_body(command, state.clone(), fds.clone(), context.clone()).await;
+    let result = checks.command_result(result, &state);
     let mut outcome = signals(result, state.clone(), fds.clone(), context.clone()).await;
-    if failed && outcome.flow == result.flow && outcome.code == result.code {
+    if checks.failure.matches(result) && outcome.flow == result.flow && outcome.code == result.code
+    {
         outcome =
             dispatch_failure(checks.failure, err_at_start, result, &state, &fds, &context).await;
     }
-    if delayed_status && outcome.flow == Flow::Normal {
-        state
-            .borrow_mut()
-            .publish_single_pipeline_status(result.code);
-    }
-    outcome
+    checks.complete(outcome, &state)
 }
 
 async fn dispatch_failure(
