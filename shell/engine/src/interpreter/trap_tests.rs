@@ -242,6 +242,36 @@ fn lastpipe_transfers_keep_the_shared_stage_status_for_exit() {
 }
 
 #[test]
+fn continue_publishes_status_before_the_loop_consumes_it() {
+    for (setup, transfer, expected) in [
+        (":", "false; continue", "a:0:0\nb:0:0\n"),
+        ("shopt -s lastpipe", "false | continue", "a:0:0\nb:0:1 0\n"),
+    ] {
+        let (shell, executor, output) = session();
+        let source = format!(
+            "{setup}; for i in a b; do echo \"$i:$?:${{PIPESTATUS[*]}}\"; {transfer}; done"
+        );
+        assert_eq!(
+            complete(&executor, shell.start(&source).unwrap()),
+            0,
+            "{source}"
+        );
+        assert_eq!(output.bytes(), expected.as_bytes(), "{source}");
+    }
+}
+
+#[test]
+fn an_unwound_function_keeps_its_last_published_status_for_exit() {
+    let (shell, executor, output) = session();
+    shell.state().borrow_mut().command_string = true;
+    let job = shell
+        .start("trap 'echo exit:$?:${PIPESTATUS[*]}' EXIT; f() { ((0)); }; set -e; f; exit")
+        .unwrap();
+    assert_eq!(complete(&executor, job), 1);
+    assert_eq!(output.bytes(), b"exit:1:0\n");
+}
+
+#[test]
 fn a_child_can_install_its_own_err_handler_inside_a_parent_handler() {
     let (shell, executor, output) = session();
     let job = shell

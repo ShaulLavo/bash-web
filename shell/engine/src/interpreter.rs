@@ -100,6 +100,29 @@ pub(crate) enum Flow {
     ReportedError,
     Resource,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommandCompletion {
+    Returned,
+    Unwound,
+    EngineFailure,
+}
+
+impl Flow {
+    fn completion(self) -> CommandCompletion {
+        match self {
+            // Loop builtins return a status before the loop consumes their action.
+            Self::Normal | Self::Break(_) | Self::Continue(_) => CommandCompletion::Returned,
+            Self::Exit
+            | Self::Abort
+            | Self::Return
+            | Self::DiscardReadUnit
+            | Self::ReportedError => CommandCompletion::Unwound,
+            Self::SpawnFailed | Self::Resource => CommandCompletion::EngineFailure,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Outcome {
     pub code: i32,
@@ -1795,19 +1818,13 @@ impl CommandChecks {
     fn command_result(self, mut result: Outcome, state: &SharedState) -> Outcome {
         result.flow = settle_reported_error(result.flow, state);
         let publish_pipeline = self.pipeline_status == PipelineStatus::BeforeTraps
-            && !matches!(
-                result.flow,
-                Flow::Exit | Flow::Return | Flow::Break(_) | Flow::Continue(_)
-            );
+            && result.flow.completion() != CommandCompletion::Unwound;
         publish_command_status(state, result, publish_pipeline)
     }
 
     fn complete(self, result: Outcome, state: &SharedState) -> Outcome {
         if self.pipeline_status == PipelineStatus::OnCompletion
-            && matches!(
-                result.flow,
-                Flow::Normal | Flow::Resource | Flow::SpawnFailed
-            )
+            && result.flow.completion() != CommandCompletion::Unwound
         {
             state
                 .borrow_mut()
@@ -2146,10 +2163,10 @@ async fn pipeline_command(
     drop(parked);
     let last = *results.last().expect("pipeline has a stage");
     if share_last
-        && last.flow != Flow::Normal
+        && last.flow.completion() == CommandCompletion::Unwound
         && !results
             .iter()
-            .any(|result| matches!(result.flow, Flow::Resource | Flow::SpawnFailed))
+            .any(|result| result.flow.completion() == CommandCompletion::EngineFailure)
     {
         // The shared stage transferred control before the pipeline returned.
         return last;
