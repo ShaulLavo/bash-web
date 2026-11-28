@@ -27,7 +27,7 @@ impl Rig {
         let host = InProcessHost::new(executor.clone());
         // /dev/null is an ordinary file here; leave room for large listings.
         let fs = MemoryFs::new(8 * 1024 * 1024);
-        for directory in ["/tmp/a", "/tmp/b"] {
+        for directory in ["/dev", "/tmp/a", "/tmp/b"] {
             fs.mkdir(directory, true).unwrap();
         }
         let (stdout, output) = capture(65536);

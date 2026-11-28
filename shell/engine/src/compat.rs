@@ -513,6 +513,7 @@ pub fn standalone(install: impl FnOnce(&InProcessHost, &MemoryFs, Rc<dyn FileSys
     let executor = Executor::new();
     let host = InProcessHost::new(executor.clone());
     let fs = MemoryFs::new(16 * 1024 * 1024);
+    fs.mkdir("/dev", true).expect("fixture device directory");
     register(&host, &fs);
     let cwd = std::env::var("PWD").ok();
     let fixture = std::env::var_os("BASH_WEB_PATH_FIXTURE");

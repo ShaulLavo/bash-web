@@ -74,6 +74,8 @@ struct Fake {
 impl Fake {
     fn new(executor: Executor) -> Rc<Self> {
         let (stdout, output) = io::capture(4 * 1024 * 1024);
+        let fs = MemoryFs::new(4 * 1024 * 1024);
+        fs.mkdir("/dev", true).unwrap();
         Rc::new(Self {
             executor,
             fds: RefCell::new(BTreeMap::from([
@@ -123,7 +125,7 @@ impl Fake {
             parse_gate: Cancel::new(),
             eof_ack: Cancel::new(),
             descendant_gate: Cancel::new(),
-            fs: MemoryFs::new(4 * 1024 * 1024),
+            fs,
             output,
         })
     }

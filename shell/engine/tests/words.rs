@@ -35,6 +35,7 @@ impl Rig {
             .boxed_local()
         });
         let fs = MemoryFs::new(64 * 1024);
+        fs.mkdir("/dev", true).unwrap();
         let shell = Session::new(
             ex.clone(),
             Rc::new(host.clone()),

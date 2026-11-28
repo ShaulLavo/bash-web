@@ -5869,12 +5869,9 @@ mod residual_review_tests {
                     }
                     .boxed_local()
                 });
-            let session = Session::new(
-                executor.clone(),
-                host.clone(),
-                Rc::new(MemoryFs::new(65536)),
-                limits,
-            );
+            let fs = MemoryFs::new(65536);
+            fs.mkdir("/dev", true).unwrap();
+            let session = Session::new(executor.clone(), host.clone(), Rc::new(fs), limits);
             let (out, output) = io::capture(65536);
             let mut fds = FdTable::default();
             fds.insert(0, Endpoint::null());
