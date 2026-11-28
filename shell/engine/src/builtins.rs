@@ -287,17 +287,20 @@ fn exit_return<'a>(
     } else {
         Flow::Exit
     };
-    if flow == Flow::Return
-        && state.borrow().function_calls == 0
-        && state.borrow().source_calls == 0
-    {
-        return Either::Left(ready(Err(2)));
-    }
+    let inherited_status = {
+        let shell = state.borrow();
+        let depth = shell.function_calls + shell.source_calls;
+        if flow == Flow::Return && depth == 0 {
+            return Either::Left(ready(Err(2)));
+        }
+        shell
+            .traps
+            .status_at_depth(depth)
+            .unwrap_or_else(|| shell.status())
+    };
     let transfer = |code| {
         if flow == Flow::Return {
-            let mut shell = state.borrow_mut();
-            let status = shell.status();
-            shell.traps.defer_return(status);
+            state.borrow_mut().traps.defer_return(inherited_status);
         }
         Either::Left(ready(Ok(Outcome { code, flow })))
     };
@@ -306,11 +309,7 @@ fn exit_return<'a>(
             Ok(code) => code.rem_euclid(256) as i32,
             Err(_) => return transfer(2),
         },
-        None if flow == Flow::Exit => {
-            let shell = state.borrow();
-            shell.traps.exit_status().unwrap_or_else(|| shell.status())
-        }
-        None => state.borrow().status(),
+        None => inherited_status,
     };
     if args.len() > 1 {
         return admitted(too_many_arguments(name, state, fds, context), context);

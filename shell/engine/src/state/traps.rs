@@ -17,6 +17,12 @@ pub(crate) enum Binding {
     Ignored,
     Handler(Rc<Action>),
 }
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TrapStatus {
+    depth: usize,
+    status: i32,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Traps {
     bindings: [Option<Binding>; SLOTS],
@@ -27,7 +33,7 @@ pub(crate) struct Traps {
     traced: [bool; 3],
     inactive: u128,
     running: u128,
-    exit_status: Option<i32>,
+    trap_status: Option<TrapStatus>,
     return_status: Option<i32>,
 }
 impl Default for Traps {
@@ -41,7 +47,7 @@ impl Default for Traps {
             traced: [false; 3],
             inactive: 0,
             running: 0,
-            exit_status: None,
+            trap_status: None,
             return_status: None,
         }
     }
@@ -55,7 +61,7 @@ impl Traps {
         traps.traced = [false; 3];
         traps.inactive = u128::MAX;
         traps.running = 0;
-        traps.exit_status = None;
+        traps.trap_status = None;
         traps.return_status = None;
         traps
     }
@@ -71,23 +77,21 @@ impl Traps {
             _ => None,
         }
     }
-    pub(crate) fn enter(&mut self, event: usize, status: i32) {
+    pub(crate) fn enter(&mut self, event: usize, status: i32, depth: usize) -> Option<TrapStatus> {
         self.running |= 1 << event;
-        if event == EXIT {
-            self.exit_status = Some(status);
-        }
+        self.trap_status.replace(TrapStatus { depth, status })
     }
-    pub(crate) fn leave(&mut self, event: usize) {
+    pub(crate) fn leave(&mut self, event: usize, previous: Option<TrapStatus>) {
         self.running &= !(1 << event);
-        if event == EXIT {
-            self.exit_status = None;
-        }
+        self.trap_status = previous;
     }
     pub(crate) fn dispatching(&self) -> bool {
         self.running != 0
     }
-    pub(crate) fn exit_status(&self) -> Option<i32> {
-        self.exit_status
+    pub(crate) fn status_at_depth(&self, depth: usize) -> Option<i32> {
+        self.trap_status
+            .filter(|trap| trap.depth == depth)
+            .map(|trap| trap.status)
     }
     pub(crate) fn defer_return(&mut self, status: i32) {
         self.return_status = Some(status);
@@ -155,7 +159,7 @@ impl Traps {
         let mut traps = self.clone();
         traps.inactive = u128::MAX;
         traps.running = 0;
-        traps.exit_status = None;
+        traps.trap_status = None;
         traps.return_status = None;
         for (signal, binding) in traps
             .bindings

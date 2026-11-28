@@ -139,6 +139,38 @@ fn errtrace_handles_the_pipeline_once_and_traces_commands_within_it() {
 }
 
 #[test]
+fn pipeline_errors_keep_command_and_aggregate_statuses() {
+    for (mode, command, status, expected) in [
+        ("set -E", "true | false", 1, "err:1:0 1\n"),
+        (
+            "shopt -s lastpipe",
+            "true | false",
+            1,
+            "err:1:1\nerr:1:0 1\n",
+        ),
+        ("set -E", "true | ((0))", 1, "err:1:0\nerr:1:0 1\n"),
+        ("set -E", "[[ x == y ]] | true", 0, "err:1:0\n"),
+        (":", "true | (exit 3)", 3, "err:3:0 3\nerr:3:0 3\n"),
+        ("set -e", "true | (exit 3)", 3, "err:3:0 3\n"),
+    ] {
+        let (shell, executor, output) = session();
+        let source = format!("{mode}; trap 'echo err:$?:${{PIPESTATUS[*]}} >&2' ERR; {command}");
+        assert_eq!(complete(&executor, shell.start(&source).unwrap()), status);
+        assert_eq!(output.bytes(), expected.as_bytes(), "{source}");
+    }
+}
+
+#[test]
+fn err_handler_can_change_errexit_before_execution_resumes() {
+    let (shell, executor, output) = session();
+    let job = shell
+        .start("set -e; trap 'echo err; set +e' ERR; false; echo continued")
+        .unwrap();
+    assert_eq!(complete(&executor, job), 0);
+    assert_eq!(output.bytes(), b"err\ncontinued\n");
+}
+
+#[test]
 fn return_exposes_the_preceding_status_for_functions_and_source() {
     let (shell, executor, output) = session();
     let job = shell
@@ -149,6 +181,21 @@ fn return_exposes_the_preceding_status_for_functions_and_source() {
         output.bytes(),
         b"return:1\nfunction:7\nreturn:1\nsource:8\n"
     );
+}
+
+#[test]
+fn returns_inside_err_handlers_use_the_status_at_the_trap_boundary() {
+    for (operand, code) in [("", 1), (" 8", 8)] {
+        let (shell, executor, output) = session();
+        let source = format!(
+            "set -T; trap 'echo return:$?' RETURN; f() {{ trap 'trap - ERR; :; return{operand}' ERR; false; }}; f; echo function:$?"
+        );
+        assert_eq!(complete(&executor, shell.start(&source).unwrap()), 0);
+        assert_eq!(
+            output.bytes(),
+            format!("return:1\nfunction:{code}\n").as_bytes()
+        );
+    }
 }
 
 #[test]

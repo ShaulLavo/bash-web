@@ -1,5 +1,5 @@
 use super::*;
-use crate::state::traps::{Action, Binding, ERR, EXIT, RETURN};
+use crate::state::traps::{Action, Binding, ERR, EXIT, RETURN, TrapStatus};
 use futures::future::{Either, ready};
 
 struct Invocation {
@@ -126,13 +126,55 @@ async fn command_outcome(
     if !context.command_checkpoint().await {
         return Outcome::status(130);
     }
-    let result = command_body(command, state.clone(), fds.clone(), context.clone()).await;
-    let (result, failed) = settle_command(result, &state, checks);
-    let after_signals = signals(result, state.clone(), fds.clone(), context.clone()).await;
-    if failed && after_signals.flow == result.flow && after_signals.code == result.code {
-        return at_boundary(ERR, after_signals, state, fds, context).await;
+    let err_at_start = state.borrow().traps.executable(ERR).is_some();
+    let mut result = command_body(command, state.clone(), fds.clone(), context.clone()).await;
+    result.flow = settle_reported_error(result.flow, &state);
+    let failed = checks.failure.matches(result);
+    let delayed_status =
+        failed && err_at_start && checks.pipeline_status == PipelineStatus::ReplaceAfterErr;
+    let preserve = delayed_status || checks.pipeline_status == PipelineStatus::Preserve;
+    finish_command(&state, result, preserve);
+    let mut outcome = signals(result, state.clone(), fds.clone(), context.clone()).await;
+    if failed && outcome.flow == result.flow && outcome.code == result.code {
+        outcome =
+            dispatch_failure(checks.failure, err_at_start, result, &state, &fds, &context).await;
     }
-    after_signals
+    if delayed_status && outcome.flow == Flow::Normal {
+        state
+            .borrow_mut()
+            .publish_single_pipeline_status(result.code);
+    }
+    outcome
+}
+
+async fn dispatch_failure(
+    boundary: FailureBoundary,
+    err_at_start: bool,
+    result: Outcome,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+) -> Outcome {
+    if !err_at_start {
+        return apply_errexit(result, state);
+    }
+    let outcome = run_failure_trap(result, state, fds, context).await;
+    // An isolated final subshell reports its failure at the wait boundary
+    // before the shell evaluates the enclosing pipeline's status.
+    if boundary == FailureBoundary::SubshellThenPipeline && outcome.flow == Flow::Normal {
+        return run_failure_trap(outcome, state, fds, context).await;
+    }
+    outcome
+}
+
+async fn run_failure_trap(
+    result: Outcome,
+    state: &SharedState,
+    fds: &Descriptors,
+    context: &Context,
+) -> Outcome {
+    let outcome = at_boundary(ERR, result, state.clone(), fds.clone(), context.clone()).await;
+    apply_errexit(outcome, state)
 }
 
 pub(super) fn returning(
@@ -260,6 +302,7 @@ struct SavedStatus {
     state: SharedState,
     event: usize,
     code: i32,
+    previous_status: Option<TrapStatus>,
     pipeline: Vec<i32>,
     _storage: crate::exec::Allocation,
 }
@@ -279,12 +322,16 @@ impl SavedStatus {
             .try_reserve_exact(statuses.len())
             .map_err(|_| crate::exec::RESOURCE_STATUS)?;
         pipeline.extend_from_slice(statuses);
-        shell.traps.enter(invocation.event, invocation.status);
+        let depth = shell.function_calls + shell.source_calls;
+        let previous_status = shell
+            .traps
+            .enter(invocation.event, invocation.status, depth);
         shell.publish_status(invocation.status);
         Ok(Self {
             state: state.clone(),
             event: invocation.event,
             code: invocation.outcome.code,
+            previous_status,
             pipeline,
             _storage: storage,
         })
@@ -294,7 +341,7 @@ impl SavedStatus {
 impl Drop for SavedStatus {
     fn drop(&mut self) {
         let mut shell = self.state.borrow_mut();
-        shell.traps.leave(self.event);
+        shell.traps.leave(self.event, self.previous_status);
         shell.publish_status(self.code);
         shell.publish_pipeline_status(std::mem::take(&mut self.pipeline));
     }

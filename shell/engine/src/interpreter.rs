@@ -1761,8 +1761,12 @@ fn execute_command<'a>(
         }
     };
     let evaluation = context.evaluation.clone();
-    let checks = command_checks(&command, &context);
-    if trap_action::needs_command_boundary(&state, &context, checks.errexit) {
+    let checks = command_checks(&command, &state, &context);
+    if trap_action::needs_command_boundary(
+        &state,
+        &context,
+        checks.failure != FailureBoundary::None,
+    ) {
         return trap_action::execute_command(command, state, fds, context, checks);
     }
     evaluation.frame(
@@ -1770,8 +1774,16 @@ fn execute_command<'a>(
             if !context.command_checkpoint().await {
                 return Outcome::status(130);
             }
-            let result = command_body(command, state.clone(), fds, context).await;
-            settle_command(result, &state, checks).0
+            let mut result = command_body(command, state.clone(), fds, context).await;
+            result.flow = settle_reported_error(result.flow, &state);
+            if checks.failure.matches(result) {
+                result = apply_errexit(result, &state);
+            }
+            finish_command(
+                &state,
+                result,
+                checks.pipeline_status == PipelineStatus::Preserve,
+            )
         },
         Outcome::status,
     )
@@ -1779,60 +1791,95 @@ fn execute_command<'a>(
 
 #[derive(Clone, Copy)]
 struct CommandChecks {
-    preserve_pipeline: bool,
-    errexit: bool,
+    pipeline_status: PipelineStatus,
+    failure: FailureBoundary,
 }
 
-fn command_checks(command: &CommandView<'_>, context: &Context) -> CommandChecks {
-    let target = view_target(command);
-    let failure_boundary = !context.ignore_errexit
-        && matches!(
-            target,
-            Some(
-                Command::Simple(_)
-                    | Command::Pipeline(Pipeline { negated: false, .. })
-                    | Command::Compound(
-                        CompoundCommand::Arithmetic(_)
-                            | CompoundCommand::Test(_)
-                            | CompoundCommand::Subshell(_),
-                        _
-                    )
-            )
-        );
-    let pipeline_stage = matches!(command, CommandView::PipelineStage(_));
-    CommandChecks {
-        preserve_pipeline: target.is_none_or(|command| {
-            matches!(
-                command,
-                Command::Pipeline(_)
-                    | Command::List(_)
-                    | Command::Function(_)
-                    | Command::Compound(
-                        CompoundCommand::Time(_)
-                            | CompoundCommand::BraceGroup(_)
-                            | CompoundCommand::Case(_),
-                        _
-                    )
-            )
-        }),
-        errexit: failure_boundary && !pipeline_stage,
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PipelineStatus {
+    Replace,
+    Preserve,
+    ReplaceAfterErr,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FailureBoundary {
+    None,
+    Command,
+    SubshellThenPipeline,
+}
+
+impl FailureBoundary {
+    fn matches(self, result: Outcome) -> bool {
+        self != Self::None && result.flow == Flow::Normal && result.code != 0
     }
 }
 
-fn settle_command(
-    mut result: Outcome,
+fn command_checks(
+    command: &CommandView<'_>,
     state: &SharedState,
-    checks: CommandChecks,
-) -> (Outcome, bool) {
-    result.flow = settle_reported_error(result.flow, state);
-    let failed = checks.errexit && result.flow == Flow::Normal && result.code != 0;
-    if failed && state.borrow().errexit {
+    context: &Context,
+) -> CommandChecks {
+    let target = view_target(command);
+    let isolated_stage = matches!(command, CommandView::PipelineStage(_));
+    let pipeline_status = match target {
+        None
+        | Some(Command::Pipeline(_) | Command::List(_) | Command::Function(_))
+        | Some(Command::Compound(
+            CompoundCommand::Time(_) | CompoundCommand::BraceGroup(_) | CompoundCommand::Case(_),
+            _,
+        )) => PipelineStatus::Preserve,
+        Some(Command::Compound(CompoundCommand::Arithmetic(_) | CompoundCommand::Test(_), _)) => {
+            PipelineStatus::ReplaceAfterErr
+        }
+        _ => PipelineStatus::Replace,
+    };
+    CommandChecks {
+        pipeline_status,
+        failure: failure_boundary(target, state, context.ignore_errexit, isolated_stage),
+    }
+}
+
+fn failure_boundary(
+    command: Option<&Command>,
+    state: &SharedState,
+    ignored: bool,
+    isolated_stage: bool,
+) -> FailureBoundary {
+    if ignored {
+        return FailureBoundary::None;
+    }
+    match command {
+        Some(Command::Pipeline(pipeline)) if !pipeline.negated => {
+            let state = state.borrow();
+            if pipeline.commands.len() > 1
+                && (!state.lastpipe || state.monitor)
+                && matches!(
+                    pipeline.commands.last(),
+                    Some(Command::Compound(CompoundCommand::Subshell(_), _))
+                )
+            {
+                return FailureBoundary::SubshellThenPipeline;
+            }
+            FailureBoundary::Command
+        }
+        Some(Command::Simple(_) | Command::Compound(CompoundCommand::Subshell(_), _))
+            if !isolated_stage =>
+        {
+            FailureBoundary::Command
+        }
+        Some(Command::Compound(CompoundCommand::Arithmetic(_) | CompoundCommand::Test(_), _)) => {
+            FailureBoundary::Command
+        }
+        _ => FailureBoundary::None,
+    }
+}
+
+fn apply_errexit(mut result: Outcome, state: &SharedState) -> Outcome {
+    if result.flow == Flow::Normal && state.borrow().errexit {
         result.flow = Flow::Abort;
     }
-    (
-        finish_command(state, result, checks.preserve_pipeline),
-        failed,
-    )
+    result
 }
 
 /// Bash's report_error ends the script under errexit and otherwise discards
@@ -2178,8 +2225,8 @@ async fn pipeline_stage(
         CommandRef::Borrowed(&command)
     };
     let view = match boundary {
-        StageBoundary::Single => CommandView::Syntax(command_ref),
-        _ => CommandView::PipelineStage(command_ref),
+        StageBoundary::Isolated => CommandView::PipelineStage(command_ref),
+        StageBoundary::Single | StageBoundary::Shared => CommandView::Syntax(command_ref),
     };
     let result = execute_command(view, state.clone(), fds, context.clone()).await;
     if matches!(boundary, StageBoundary::Isolated) {
