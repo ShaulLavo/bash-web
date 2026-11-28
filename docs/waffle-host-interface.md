@@ -20,7 +20,7 @@ Installed acceptance checks every admitted artifact, including derivation receip
 
 A runtime update with the same host integer does not require a family release or a change to the
 family's historical runtime record. The updater validates candidate metadata before selecting it
-and moves `waffle-program-support`, `waffle-coreutils`, and `waffle-grep` together to the runtime
+and moves `waffle-program-support` and `waffle-coreutils` together to the runtime
 source. Their native composition needs one support-crate identity. Other Cargo pins stay unchanged.
 There is no version-derived compatibility, legacy metadata fallback, or interface negotiation.
 

@@ -12,6 +12,16 @@ fn register_utilities(
 }
 include!("support/streaming.rs");
 impl Rig {
+    fn until(&self, text: &str) {
+        for _ in 0..10000 {
+            if self.text().contains(text) {
+                return;
+            }
+            self.ex.drive(64);
+        }
+        panic!("missing {text}: {}", self.text());
+    }
+
     fn with_retained_prefix_capacity(limits: Limits) -> Self {
         let setup = Self::with_limits(Limits {
             expansion_bytes: Limits::default().expansion_bytes,

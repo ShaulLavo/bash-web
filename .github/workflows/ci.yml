@@ -201,9 +201,10 @@ jobs:
           npm run build:shell & p_shell=$!
           CARGO_TARGET_DIR=.build/shell-wasi-tests npm run prepare:wasi-tests & p_tests=$!
           npm run build:test-guest & p_guest=$!
+          npm run build:test-grep & p_grep=$!
           CARGO_TARGET_DIR=.build/shell-cli cargo build --locked --release --manifest-path shell/Cargo.toml -p shell-engine -p shell-compat-fixtures & p_cli=$!
           status=0
-          for pid in "$p_shell" "$p_tests" "$p_guest" "$p_cli"; do
+          for pid in "$p_shell" "$p_tests" "$p_guest" "$p_grep" "$p_cli"; do
             if ! wait "$pid"; then status=1; fi
           done
           exit "$status"

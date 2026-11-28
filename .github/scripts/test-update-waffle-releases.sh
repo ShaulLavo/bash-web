@@ -85,7 +85,6 @@ EOF_ENGINE
 [dependencies]
 waffle-program-support = { git = "https://github.com/ShaulLavo/waffle", rev = "${old_revision}" }
 waffle-coreutils = { git = "https://github.com/ShaulLavo/waffle", rev = "${old_revision}" }
-waffle-grep = { git = "https://github.com/ShaulLavo/waffle", rev = "${old_revision}" }
 EOF_COMPAT
   cat > "$root/shell/Cargo.lock" <<EOF_LOCK
 [[package]]
@@ -177,7 +176,7 @@ CURL
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$TEST_ROOT/cargo-calls"
-if [[ "$*" == *'update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev='*'#waffle-grep' ]]; then
+if [[ "$*" == *'update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev='*'#waffle-coreutils' ]]; then
   cat >> shell/Cargo.lock <<EOF
 
 [[package]]
@@ -228,13 +227,12 @@ assert_support_revision() {
   grep -Eq "waffle-program-support.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   grep -Eq "name = \"waffle-program-support\"" "$root/shell/Cargo.lock"
   grep -Eq "waffle-coreutils.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
-  grep -Eq "waffle-grep.*rev = \"${revision}\"" "$root/shell/compat-fixtures/Cargo.toml"
   grep -Eq "rev=${revision}#${revision}" "$root/shell/Cargo.lock"
 }
 
 assert_common_calls() {
   local root=$1
-  grep -Fxq "update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-program-support -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-coreutils -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-grep" "$root/cargo-calls"
+  grep -Fxq "update --manifest-path shell/Cargo.toml -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-program-support -p git+https://github.com/ShaulLavo/waffle?rev=${old_revision}#waffle-coreutils" "$root/cargo-calls"
   grep -Fxq -- 'install --package-lock-only --ignore-scripts --force' "$root/npm-calls"
   grep -Fxq -- 'install --lockfile-only --ignore-scripts' "$root/bun-calls"
 }

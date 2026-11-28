@@ -308,15 +308,6 @@ impl Rig {
     fn text(&self) -> String {
         String::from_utf8_lossy(&self.output.bytes()).into_owned()
     }
-    fn until(&self, text: &str) {
-        for _ in 0..10000 {
-            if self.text().contains(text) {
-                return;
-            }
-            self.ex.drive(64);
-        }
-        panic!("missing {text}: {}", self.text());
-    }
 }
 
 impl Drop for Rig {

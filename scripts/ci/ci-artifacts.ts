@@ -22,7 +22,7 @@ import { ciInputs } from "./ci-inputs.ts";
 import { wasiTestFiles } from "../build/prepare-wasi-tests.ts";
 import { stripNames } from "../build/wasm-name-sections.ts";
 
-const guests = ["shell-engine", "shell-runtime", "argv-py", "printenv-py", "env"];
+const guests = ["shell-engine", "shell-runtime", "argv-py", "printenv-py", "env", "freebsd-grep"];
 const programs = guests.map((name) => `${name}.wasm`).concat(["test-guest.wasm", "test-spin.wasm"]);
 const cliFiles = ["shell-engine", "shell-cli", "cli-sha256.txt", "cli-source.txt"];
 export const nativeArtifactFiles = cliFiles.concat(
