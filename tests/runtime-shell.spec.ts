@@ -110,10 +110,12 @@ test("pwd uses the last mode option and rejects unavailable physical resolution"
   await ready(page);
   await command(
     page,
-    '{ while [[ ! -e pwd-pipe-closed ]]; do :; done; pwd -Z 2>&1; } | { exec 0<&-; : >pwd-pipe-closed; }; echo "BROKEN_PIPE:${PIPESTATUS[*]}"',
+    '{ while [[ ! -e pwd-pipe-closed ]]; do :; done; pwd -Z 2>&1; echo "AFTER_PWD:$?" >&2; } | { exec 0<&-; : >pwd-pipe-closed; }; echo "BROKEN_PIPE:${PIPESTATUS[*]}"',
   );
   await output(page, "BROKEN_PIPE:141 0");
   await ready(page);
+  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  expect(lines?.some((line) => line.startsWith("AFTER_PWD:"))).toBe(false);
 });
 
 test("an always-ready background shell loop cannot starve a foreground command", async ({

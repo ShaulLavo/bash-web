@@ -7,7 +7,7 @@
 use super::{diagnose, error_status, write};
 use crate::{
     expand::Work,
-    interpreter::{Context, Outcome},
+    interpreter::{Context, Flow, Outcome},
     io::{FdTable, FileKind, FileMetadata, IoError, MAX_PATH_BYTES},
     state::{SharedState, State},
 };
@@ -60,10 +60,14 @@ fn pwd_options(options: &str, mut physical: bool) -> Result<bool, char> {
 }
 
 async fn pwd_refusal(message: &str, fds: &FdTable, context: &Context) -> Result<Outcome, i32> {
-    Err(match diagnose(fds, message, context).await {
-        Err(status @ (130 | 141)) => status,
-        _ => 2,
-    })
+    match diagnose(fds, message, context).await {
+        Err(141) => Ok(Outcome {
+            code: 141,
+            flow: Flow::Abort,
+        }),
+        Err(130) => Err(130),
+        _ => Err(2),
+    }
 }
 
 async fn pwd_invalid_option(
