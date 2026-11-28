@@ -796,19 +796,19 @@ fn shell_pid_expansion_and_signal_targets_do_not_alias_async_jobs() {
 }
 
 #[test]
-fn self_signals_use_root_traps_and_reject_unsupported_caught_actions() {
+fn self_signals_survive_rejected_registrations() {
     let (executor, fake, runtime) = setup();
     let session = runtime_session(&executor, &runtime);
-    let source = r#"trap '' INT; kill -INT $$; printf 'ignored:%s\n' $?; trap 'echo unsupported' INT; kill -INT $$; printf 'caught:%s\n' $?; trap '' TERM; (trap - TERM; kill -TERM $$; printf 'root:%s\n' $?); BASHPID=42; printf 'pid:%s\n' "$BASHPID"; unset BASHPID; printf 'unset:<%s>\n' "$BASHPID""#;
+    let source = r#"trap '' INT; printf 'ignore:%s\n' $?; trap 'echo unsupported' INT; printf 'handler:%s\n' $?; kill -INT $$; BASHPID=42; printf 'pid:%s\n' "$BASHPID"; unset BASHPID; printf 'unset:<%s>\n' "$BASHPID""#;
     assert_eq!(
         finish(&executor, &runtime, session.start(source).unwrap()),
         0
     );
     assert_eq!(
         fake.output.bytes(),
-        b"ignored:0\ncaught:2\nroot:0\npid:1\nunset:<>\n"
+        b"ignore:1\nhandler:1\npid:1\nunset:<>\n"
     );
-    assert!(fake.signals.borrow().is_empty());
+    assert_eq!(*fake.signals.borrow(), [(false, 1, 2)]);
     shutdown_session(&executor, &runtime, &fake, session);
 }
 fn wait_status_now(runtime: &Runtime, pid: u64) -> Option<Result<i32, ProcessError>> {

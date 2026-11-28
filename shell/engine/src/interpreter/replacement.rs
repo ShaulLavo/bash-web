@@ -38,8 +38,7 @@ impl Mode {
                 state.command_string
                     && !state.interactive
                     && state.function_calls == 0
-                    && (0..crate::state::traps::SLOTS)
-                        .all(|signal| state.traps.get(signal).is_none())
+                    && state.traps.is_empty()
                     && context.core.jobs.borrow().is_empty()
                     && context.core.residuals.borrow().is_empty()
                     && context.core.host.exec_ready()

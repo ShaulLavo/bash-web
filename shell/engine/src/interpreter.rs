@@ -280,7 +280,6 @@ struct Core {
     executor: Executor,
     host: Rc<dyn ProcessHost>,
     shell_pid: Option<crate::process::ProcessId>,
-    shell_state: std::rc::Weak<RefCell<State>>,
     fs: Rc<dyn FileSystem>,
     limits: Limits,
     eval_storage: crate::exec::StorageBudget,
@@ -757,19 +756,9 @@ impl Context {
         if self.core.shell_pid != Some(pid) {
             return None;
         }
-        Some(signal.map_or(Ok(()), |signal| self.signal_shell_process(signal)))
-    }
-    fn signal_shell_process(&self, signal: i32) -> Result<(), i32> {
-        let state = self.core.shell_state.upgrade().ok_or(1)?;
-        let state = state.borrow();
-        if signal != 9 {
-            match state.traps.get(signal as usize) {
-                Some(crate::state::traps::Binding::Ignored) => return Ok(()),
-                Some(crate::state::traps::Binding::Handler(_)) => return Err(2),
-                None => {}
-            }
-        }
-        self.core.host.signal_self(signal).map_err(|_| 1)
+        Some(signal.map_or(Ok(()), |signal| {
+            self.core.host.signal_self(signal).map_err(|_| 1)
+        }))
     }
     pub(crate) fn kill_job(&self, selector: JobSelector, signal: i32) -> Result<(), i32> {
         let jobs = self.core.jobs.borrow();
@@ -854,7 +843,6 @@ impl Session {
                 executor,
                 host,
                 shell_pid,
-                shell_state: Rc::downgrade(&state),
                 fs,
                 eval_storage: crate::exec::StorageBudget::new(limits.expansion_bytes),
                 execution_storage: memory,

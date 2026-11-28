@@ -668,6 +668,7 @@ function putCompatibilityEntrypoint(put: FixtureContext["put"]): void {
     "scripts/compat/bash-compat-runner.ts",
     "scripts/scoreboard/shell-scoreboard.ts",
     "scripts/scoreboard/shell-scoreboard-base.ts",
+    "scripts/scoreboard/shell-scoreboard-floor.ts",
     "scripts/scoreboard/shell-scoreboard-migration.ts",
     "scripts/shell-process-group.ts",
   ];

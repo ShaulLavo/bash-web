@@ -1,4 +1,4 @@
-//! Original Bash-compatible registration and query. No event or signal runs an action.
+//! Bash-compatible queries and uncatchable signal registration.
 use super::{diagnose, error_status, scan_bytes, write};
 use crate::{
     expand::Work,
@@ -6,12 +6,12 @@ use crate::{
     io::FdTable,
     state::{
         SharedState,
-        traps::{Action, Binding, SLOTS},
+        traps::{Action, Binding, UncatchableSignal},
     },
 };
 use std::{mem::size_of, rc::Rc};
 const USAGE: &str = "trap: usage: trap [-Plp] [[action] signal_spec ...]\n";
-pub(super) const NAMES: [&str; SLOTS] = [
+pub(super) const NAMES: [&str; 68] = [
     "EXIT",
     "SIGHUP",
     "SIGINT",
@@ -188,43 +188,65 @@ pub(super) async fn run(
         diagnose(fds, USAGE, context).await?;
         return Err(2);
     }
-    let binding = binding(&args[0], reset, state)?;
-    state.borrow_mut().traps.prepare_mutation();
+    let mut binding = None;
     let mut code = 0;
     for operand in operands {
         let Some(signal) = signal(operand) else {
-            invalid_signal(operand, fds, context).await?;
+            state.borrow_mut().traps.prepare_mutation();
+            signal_diagnostic(operand, ": invalid signal specification\n", fds, context).await?;
             code = 1;
             continue;
         };
+        let signal = UncatchableSignal::from_number(signal);
+        if !reset && signal.is_none() {
+            signal_diagnostic(operand, ": trap execution is unsupported\n", fds, context).await?;
+            code = 1;
+            continue;
+        }
         work.checkpoint(&context.cancel)
             .await
             .map_err(error_status)?;
-        state.borrow_mut().traps.set(signal, binding.clone());
+        if !reset && binding.is_none() {
+            binding = Some(retain_binding(&args[0], state)?);
+        }
+        let mut state = state.borrow_mut();
+        match signal {
+            Some(signal) => state.traps.set(signal, binding.clone()),
+            None => state.traps.prepare_mutation(),
+        }
     }
     Ok(Outcome::status(code))
 }
-fn binding(text: &str, reset: bool, state: &SharedState) -> Result<Option<Binding>, i32> {
-    if reset {
-        return Ok(None);
-    }
+fn retain_binding(text: &str, state: &SharedState) -> Result<Binding, i32> {
     if text.is_empty() {
-        return Ok(Some(Binding::Ignored));
+        return Ok(Binding::Ignored);
     }
     let bytes = text
         .len()
         .checked_add(size_of::<Action>() + size_of::<usize>() * 2)
         .ok_or(2)?;
     let storage = state.borrow().admit_temporary(bytes)?;
-    Ok(Some(Binding::Handler(Rc::new(Action {
+    Ok(Binding::Handler(Rc::new(Action {
         text: text.to_owned(),
         _storage: storage,
-    }))))
+    })))
 }
-async fn invalid_signal(name: &str, fds: &FdTable, context: &Context) -> Result<(), i32> {
-    diagnose(fds, "trap: ", context).await?;
-    diagnose(fds, name, context).await?;
-    diagnose(fds, ": invalid signal specification\n", context).await
+async fn signal_diagnostic(
+    name: &str,
+    message: &str,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<(), i32> {
+    let delivery = async {
+        diagnose(fds, "trap: ", context).await?;
+        diagnose(fds, name, context).await?;
+        diagnose(fds, message, context).await
+    }
+    .await;
+    match delivery {
+        Err(status @ (130 | 141)) => Err(status),
+        _ => Ok(()),
+    }
 }
 async fn query(
     args: &[String],
@@ -235,7 +257,7 @@ async fn query(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     if args.is_empty() {
-        for signal in 0..SLOTS {
+        for signal in UncatchableSignal::ALL {
             print(signal, action_only, state, fds, context, work).await?;
         }
         return Ok(Outcome::status(0));
@@ -243,8 +265,11 @@ async fn query(
     let mut code = 0;
     for name in args {
         let Some(signal) = signal(name) else {
-            invalid_signal(name, fds, context).await?;
+            signal_diagnostic(name, ": invalid signal specification\n", fds, context).await?;
             code = 1;
+            continue;
+        };
+        let Some(signal) = UncatchableSignal::from_number(signal) else {
             continue;
         };
         print(signal, action_only, state, fds, context, work).await?;
@@ -252,7 +277,7 @@ async fn query(
     Ok(Outcome::status(code))
 }
 async fn print(
-    signal: usize,
+    signal: UncatchableSignal,
     action_only: bool,
     state: &SharedState,
     fds: &FdTable,
@@ -281,12 +306,12 @@ async fn print(
     let output = if action_only {
         format!("{text}\n")
     } else if text == "'" {
-        format!("trap -- \\' {}\n", NAMES[signal])
+        format!("trap -- \\' {}\n", NAMES[signal.number()])
     } else {
         format!(
             "trap -- '{}' {}\n",
             text.replace('\'', "'\\''"),
-            NAMES[signal]
+            NAMES[signal.number()]
         )
     };
     write(fds, output.as_bytes(), context).await
@@ -319,22 +344,25 @@ mod tests {
     fn rejected_action_admission_preserves_binding_and_reset_refunds_storage() {
         let budget = StorageBudget::new(256);
         let state = State::with_memory(budget.clone()).shared();
-        let original = binding("echo original", false, &state).unwrap();
-        state.borrow_mut().traps.set(0, original);
+        let original = retain_binding("echo original", &state).unwrap();
+        state
+            .borrow_mut()
+            .traps
+            .set(UncatchableSignal::Kill, Some(original));
         let held = budget.observation().0;
-        assert!(binding(&"x".repeat(256), false, &state).is_err());
+        assert!(retain_binding(&"x".repeat(256), &state).is_err());
         assert_eq!(budget.observation().0, held);
         let snapshot = state.borrow().traps.inherited();
-        let Some(Binding::Handler(action)) = snapshot.get(0).cloned() else {
+        let Some(Binding::Handler(action)) = snapshot.get(UncatchableSignal::Kill).cloned() else {
             panic!("snapshot lost the inherited handler");
         };
         assert_eq!(action.text, "echo original");
         drop(action);
-        state.borrow_mut().traps.set(0, None);
+        state.borrow_mut().traps.set(UncatchableSignal::Kill, None);
         assert_eq!(budget.observation().0, held);
         drop(snapshot);
         assert_eq!(budget.observation().0, 0);
-        assert!(binding("echo recovered", false, &state).is_ok());
+        assert!(retain_binding("echo recovered", &state).is_ok());
         assert_eq!(budget.observation().0, 0);
     }
 }
