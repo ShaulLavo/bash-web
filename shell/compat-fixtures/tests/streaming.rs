@@ -52,6 +52,24 @@ fn mkdir_parents_existing_files_and_failures() {
 }
 
 #[test]
+fn standalone_mkdir_checks_read_only_components_before_parent_traversal() {
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_shell-cli"))
+        .env_clear()
+        .env("PATH", "/bin")
+        .env("PWD", "/home/guest")
+        .args([
+            "-c",
+            "mkdir -p /usr/new/../../tmp/blocked; echo status:$?; \
+             test ! -e /tmp/blocked && test ! -e /usr/new && \
+             mkdir -p /usr/bin/../../tmp/allowed && test -d /tmp/allowed",
+        ])
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{result:?}");
+    assert_eq!(result.stdout, b"status:1\n");
+}
+
+#[test]
 fn utility_cat_retains_original_dash_and_device_semantics() {
     let rig = Rig::new();
     rig.fs.write_file("/home/guest/-", b"literal dash").unwrap();

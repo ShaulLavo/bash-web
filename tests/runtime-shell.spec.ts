@@ -70,6 +70,18 @@ test("descriptor paths reopen actual shared terminals without owning their lifet
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
+test("repeated separators preserve logical descriptor reopening", async ({ page }) => {
+  await open(page);
+  await file(page, "fd-input", "echo FD_SOURCE\n");
+  await command(
+    page,
+    'exec 4<fd-input; read -r line </dev//fd/4; echo "FD_READ:$line"; exec 4<fd-input; . /dev//fd/4; exec 4<fd-input; value=$(</dev//fd/4); echo "FD_SUB:$value"; exec 4<&-',
+  );
+  for (const line of ["FD_READ:echo FD_SOURCE", "FD_SOURCE", "FD_SUB:echo FD_SOURCE"])
+    await output(page, line);
+  await ready(page);
+});
+
 test("the runtime provides /dev/null without creating a filesystem node", async ({ page }) => {
   const baseline = await open(page);
   await command(
