@@ -2122,6 +2122,16 @@ async fn pipeline_command(
     let parked = (count > 1).then(|| context.strand.park());
     let results = join_all(tasks).await;
     drop(parked);
+    let last = *results.last().expect("pipeline has a stage");
+    if share_last
+        && last.flow == Flow::Abort
+        && !results
+            .iter()
+            .any(|result| matches!(result.flow, Flow::Resource | Flow::SpawnFailed))
+    {
+        // A shared stage that aborts the reader supplies the status seen by EXIT.
+        return last;
+    }
     let codes: Vec<_> = results.iter().map(|r| r.code).collect();
     let mut code = if pipefail {
         codes.iter().rev().copied().find(|&n| n != 0).unwrap_or(0)
@@ -2138,8 +2148,8 @@ async fn pipeline_command(
     {
         return *result;
     }
-    if (count == 1 || share_last) && results.last().unwrap().flow != Flow::Normal {
-        return *results.last().unwrap();
+    if (count == 1 || share_last) && last.flow != Flow::Normal {
+        return last;
     }
     if results.iter().any(|result| result.flow == Flow::Resource) {
         return Outcome::status(crate::exec::RESOURCE_STATUS);

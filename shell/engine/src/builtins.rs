@@ -295,7 +295,7 @@ fn exit_return<'a>(
         }
         shell
             .traps
-            .status_at_depth(depth)
+            .status_for_transfer(depth, flow == Flow::Exit)
             .unwrap_or_else(|| shell.status())
     };
     let transfer = |code| {

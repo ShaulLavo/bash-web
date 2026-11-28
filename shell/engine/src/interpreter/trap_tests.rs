@@ -199,6 +199,31 @@ fn returns_inside_err_handlers_use_the_status_at_the_trap_boundary() {
 }
 
 #[test]
+fn exit_uses_the_active_trap_status_from_nested_functions() {
+    for (body, status) in [("false; exit", 7), ("trap ':; exit' ERR; false", 1)] {
+        let (shell, executor, output) = session();
+        let source = format!("f() {{ {body}; }}; trap f EXIT; exit 7");
+        assert_eq!(
+            complete(&executor, shell.start(&source).unwrap()),
+            status,
+            "{source}"
+        );
+        assert!(output.bytes().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn lastpipe_errexit_keeps_the_shared_stage_status_for_exit() {
+    let (shell, executor, output) = session();
+    shell.state().borrow_mut().command_string = true;
+    let job = shell
+        .start("shopt -s lastpipe; set -e; trap 'echo err:$?:${PIPESTATUS[*]}' ERR; trap 'echo exit:$?:${PIPESTATUS[*]}' EXIT; true | false")
+        .unwrap();
+    assert_eq!(complete(&executor, job), 1);
+    assert_eq!(output.bytes(), b"err:1:1\nexit:1:1\n");
+}
+
+#[test]
 fn a_child_can_install_its_own_err_handler_inside_a_parent_handler() {
     let (shell, executor, output) = session();
     let job = shell

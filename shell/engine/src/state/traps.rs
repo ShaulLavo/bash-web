@@ -19,6 +19,7 @@ pub(crate) enum Binding {
 }
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TrapStatus {
+    event: usize,
     depth: usize,
     status: i32,
 }
@@ -79,7 +80,11 @@ impl Traps {
     }
     pub(crate) fn enter(&mut self, event: usize, status: i32, depth: usize) -> Option<TrapStatus> {
         self.running |= 1 << event;
-        self.trap_status.replace(TrapStatus { depth, status })
+        self.trap_status.replace(TrapStatus {
+            event,
+            depth,
+            status,
+        })
     }
     pub(crate) fn leave(&mut self, event: usize, previous: Option<TrapStatus>) {
         self.running &= !(1 << event);
@@ -88,9 +93,9 @@ impl Traps {
     pub(crate) fn dispatching(&self) -> bool {
         self.running != 0
     }
-    pub(crate) fn status_at_depth(&self, depth: usize) -> Option<i32> {
+    pub(crate) fn status_for_transfer(&self, depth: usize, exiting: bool) -> Option<i32> {
         self.trap_status
-            .filter(|trap| trap.depth == depth)
+            .filter(|trap| trap.depth == depth || exiting && trap.event == EXIT)
             .map(|trap| trap.status)
     }
     pub(crate) fn defer_return(&mut self, status: i32) {
