@@ -7,7 +7,7 @@
 use super::{diagnose, error_status, write};
 use crate::{
     expand::Work,
-    interpreter::{Context, Outcome},
+    interpreter::{Context, Flow, Outcome},
     io::{FdTable, FileKind, FileMetadata, IoError, MAX_PATH_BYTES},
     state::{SharedState, State},
 };
@@ -16,6 +16,68 @@ const CD_USAGE: &str = "cd: usage: cd [-L|[-P [-e]]] [-@] [dir]\n";
 const PUSHD_USAGE: &str = "pushd: usage: pushd [-n] [+N | -N | dir]\n";
 const POPD_USAGE: &str = "popd: usage: popd [-n] [+N | -N]\n";
 const DIRS_USAGE: &str = "dirs: usage: dirs [-clpv] [+N] [-N]\n";
+
+pub(super) async fn pwd(
+    args: &[String],
+    state: &SharedState,
+    fds: &FdTable,
+    context: &Context,
+    work: &mut Work,
+) -> Result<Outcome, i32> {
+    let mut physical = false;
+    for arg in args {
+        if arg == "--" || arg == "-" || !arg.starts_with('-') {
+            break;
+        }
+        super::scan_bytes(arg.len(), context, work).await?;
+        match pwd_options(&arg[1..], physical) {
+            Ok(mode) => physical = mode,
+            Err(option) => return pwd_invalid_option(option, fds, context).await,
+        }
+    }
+    if physical {
+        return pwd_refusal(
+            "pwd: physical directory resolution unsupported\n",
+            fds,
+            context,
+        )
+        .await;
+    }
+    let cwd = state.borrow().cwd.clone();
+    write(fds, format!("{cwd}\n").as_bytes(), context).await?;
+    Ok(Outcome::status(0))
+}
+
+fn pwd_options(options: &str, mut physical: bool) -> Result<bool, char> {
+    for option in options.chars() {
+        physical = match option {
+            'L' => false,
+            'P' => true,
+            _ => return Err(option),
+        };
+    }
+    Ok(physical)
+}
+
+async fn pwd_refusal(message: &str, fds: &FdTable, context: &Context) -> Result<Outcome, i32> {
+    match diagnose(fds, message, context).await {
+        Err(141) => Ok(Outcome {
+            code: 141,
+            flow: Flow::Abort,
+        }),
+        Err(130) => Err(130),
+        _ => Err(2),
+    }
+}
+
+async fn pwd_invalid_option(
+    option: char,
+    fds: &FdTable,
+    context: &Context,
+) -> Result<Outcome, i32> {
+    let message = format!("pwd: -{option}: invalid option\npwd: usage: pwd [-LP]\n");
+    pwd_refusal(&message, fds, context).await
+}
 
 /// Why a directory change was refused: a host failure, or a local path-length
 /// or capability refusal. Successful opens are never used as metadata.

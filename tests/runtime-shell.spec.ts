@@ -84,6 +84,40 @@ test("the runtime provides /dev/null without creating a filesystem node", async 
   await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
+test("pwd uses the last mode option and rejects unavailable physical resolution", async ({
+  page,
+}) => {
+  await open(page);
+  await command(
+    page,
+    '[[ $(pwd -PL) == "$PWD" ]] && echo LOGICAL_OK; pwd -LP; echo "PHYSICAL:$?"; pwd -Z; echo "OPTION:$?"',
+  );
+  for (const line of [
+    "LOGICAL_OK",
+    "pwd: physical directory resolution unsupported",
+    "PHYSICAL:2",
+    "pwd: -Z: invalid option",
+    "OPTION:2",
+  ])
+    await output(page, line);
+  await ready(page);
+  await command(
+    page,
+    ': >pwd-stderr; pwd -Z 2<pwd-stderr; echo "UNWRITABLE_OPTION:$?"; pwd -P 2<pwd-stderr; echo "UNWRITABLE_PHYSICAL:$?"',
+  );
+  await output(page, "UNWRITABLE_OPTION:2");
+  await output(page, "UNWRITABLE_PHYSICAL:2");
+  await ready(page);
+  await command(
+    page,
+    '{ while [[ ! -e pwd-pipe-closed ]]; do :; done; pwd -Z 2>&1; echo "AFTER_PWD:$?" >&2; } | { exec 0<&-; : >pwd-pipe-closed; }; echo "BROKEN_PIPE:${PIPESTATUS[*]}"',
+  );
+  await output(page, "BROKEN_PIPE:141 0");
+  await ready(page);
+  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  expect(lines?.some((line) => line.startsWith("AFTER_PWD:"))).toBe(false);
+});
+
 test("an always-ready background shell loop cannot starve a foreground command", async ({
   page,
 }) => {
