@@ -5,9 +5,10 @@ import {
   bootstrap,
   bootstrapFloor,
   compareFloor,
-  correctFalsePasses,
+  applyFloorCorrections,
   falsePassCorrections,
   qualification,
+  trapRegistrationRetirements,
   validateFloor,
 } from "./shell-scoreboard-floor.ts";
 import { digest, summarize, validateScore } from "./shell-scoreboard.ts";
@@ -101,7 +102,7 @@ test("only the three approved false passes are removed, with durable reasons", (
   const { oracle, floor, score } = correctedFixture;
   const original = floor(["real"].concat(correctedIds));
   assert.equal(compareFloor(oracle, original, score(["real"])).ok, false);
-  const corrected = correctFalsePasses(oracle, original);
+  const corrected = applyFloorCorrections(oracle, original);
   assert.deepEqual(corrected.floorIds, ["real"]);
   assert.deepEqual(corrected.corrections, falsePassCorrections);
   assert.deepEqual(original.floorIds, ["real"].concat(correctedIds).sort());
@@ -122,7 +123,7 @@ test("only the three approved false passes are removed, with durable reasons", (
 test("a corrected case can be re-earned and then cannot be lost", () => {
   const { oracle, floor, score } = correctedFixture;
   const historical = floor(["real"].concat(correctedIds));
-  const corrected = correctFalsePasses(oracle, historical);
+  const corrected = applyFloorCorrections(oracle, historical);
   const earned = accumulateFloor({
     oracle,
     sourceSha: "b".repeat(40),
@@ -131,13 +132,13 @@ test("a corrected case can be re-earned and then cannot be lost", () => {
   });
   assert.deepEqual(earned.floorIds, ["real", correctedIds[0]].sort());
   assert.deepEqual(earned.corrections, falsePassCorrections);
-  assert.equal(correctFalsePasses(oracle, earned), earned);
+  assert.equal(applyFloorCorrections(oracle, earned), earned);
   assert.equal(compareFloor(oracle, earned, score(["real"])).ok, false);
 });
 
 test("unknown, duplicate or changed correction reasons are rejected", () => {
   const { oracle, floor } = correctedFixture;
-  const corrected = correctFalsePasses(oracle, floor(correctedIds));
+  const corrected = applyFloorCorrections(oracle, floor(correctedIds));
   assert.throws(
     () =>
       validateFloor(oracle, {
@@ -162,4 +163,30 @@ test("unknown, duplicate or changed correction reasons are rejected", () => {
       }),
     /approved/,
   );
+});
+
+test("trap retirement releases only listed cases and allows them to be re-earned", () => {
+  const invalidTrapControl = "oils:builtin-trap:75";
+  const { oracle, floor, score } = scoreboardFixture(
+    "oils",
+    trapRegistrationRetirements.concat([invalidTrapControl]),
+  );
+  const original = floor(trapRegistrationRetirements.concat([invalidTrapControl]));
+  const corrected = applyFloorCorrections(oracle, original);
+  assert.deepEqual(corrected.floorIds, [invalidTrapControl]);
+  assert.deepEqual(
+    corrected.corrections?.map(({ id }) => id).sort(),
+    trapRegistrationRetirements.toSorted(),
+  );
+  assert.equal(compareFloor(oracle, corrected, score([invalidTrapControl])).ok, true);
+  assert.equal(compareFloor(oracle, corrected, score([])).ok, false);
+  const restored = score(original.floorIds);
+  const earned = accumulateFloor({
+    oracle,
+    sourceSha: "b".repeat(40),
+    predecessors: [corrected],
+    scores: [restored],
+  });
+  assert.deepEqual(earned.floorIds, original.floorIds);
+  assert.equal(compareFloor(oracle, earned, score([invalidTrapControl])).ok, false);
 });

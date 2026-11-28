@@ -32,6 +32,7 @@ import {
   compareScores,
   validateScore,
 } from "../scoreboard/shell-scoreboard.ts";
+import { trapRegistrationRetirements } from "../scoreboard/shell-scoreboard-floor.ts";
 import type { ActiveChildren, BufferedResult, ShellResult } from "./bash-compat-runner.ts";
 import type { Oracle as CoreOracle, Score as CoreScore } from "../scoreboard/shell-scoreboard.ts";
 
@@ -1586,11 +1587,15 @@ async function runFrozen() {
   if (process.env.BASH_COMPAT_OUT) await writeRows(output, score);
   let passed = true;
   for (const baseline of validatedBaselines) {
-    const delta: unknown = compareScores(baseline.score, score);
-    if (!isRecord(delta) || typeof delta.ok !== "boolean")
-      throw new Error("Invalid score comparison");
-    console.log(JSON.stringify({ baseline: baseline.label, ...delta }, null, 2));
-    passed &&= delta.ok;
+    const delta = compareScores(baseline.score, score);
+    const failures = Object.values(delta.corpora).flatMap((row) => row.newlyFailing);
+    const approvedRetirements = failures
+      .filter(({ id, outcome }) => outcome === "fail" && trapRegistrationRetirements.includes(id))
+      .map(({ id }) => id);
+    console.log(
+      JSON.stringify({ baseline: baseline.label, ...delta, approvedRetirements }, null, 2),
+    );
+    passed &&= approvedRetirements.length === failures.length;
   }
   if (!passed)
     throw new Error("own-shell corpus regression; see gained/lost/newlyFailing cases above");

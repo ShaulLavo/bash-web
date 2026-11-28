@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import {
   accumulateFloor,
   bootstrap,
-  correctFalsePasses,
+  applyFloorCorrections,
   qualification,
 } from "./shell-scoreboard-floor.ts";
 import {
@@ -79,7 +79,7 @@ export async function prepareMainDispatch({
     observedMainSha,
     capturedAt: new Date().toISOString(),
     inputsSha256: digest(scoringInputs(root, sourceSha)),
-    floor: correctFalsePasses(oracle, previous.floor),
+    floor: applyFloorCorrections(oracle, previous.floor),
   };
 }
 export function sealMainDispatch({
@@ -125,7 +125,7 @@ export async function foldMainDispatch({ root, client, raw: input }: Context & {
   const floor = accumulateFloor({
     oracle,
     sourceSha: selected.sourceSha,
-    predecessors: [correctFalsePasses(oracle, previous.floor), raw.floor].concat(current.floors),
+    predecessors: [applyFloorCorrections(oracle, previous.floor), raw.floor].concat(current.floors),
     scores: current.scores.concat([raw.score]),
     evidence: previous.floor.evidence.concat(current.evidence),
   });

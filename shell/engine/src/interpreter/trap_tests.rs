@@ -1,4 +1,4 @@
-//! Session-level trap registration storage. No event runs a registered action.
+//! Session-level trap containment and uncatchable registration.
 use super::{Limits, Session};
 use crate::{
     executor::{Executor, JoinHandle},
@@ -35,15 +35,23 @@ fn complete(executor: &Executor, job: JoinHandle<i32>) -> i32 {
     panic!("trap test exceeded executor turn limit");
 }
 #[test]
-fn persistent_submissions_retain_registration_without_running_actions() {
+fn rejected_registrations_leave_no_action_in_the_session() {
     let (shell, executor, output) = session();
-    let job = shell.start("trap 'echo BAD' EXIT; false").unwrap();
-    assert_eq!(complete(&executor, job), 1);
-    assert!(output.bytes().is_empty());
+    let before = shell.core.execution_storage.observation().0;
+    for event in ["EXIT", "ERR", "RETURN", "DEBUG", "INT", "TERM"] {
+        let before_output = output.bytes().len();
+        let job = shell
+            .start(&format!("trap 'echo forbidden' {event}"))
+            .unwrap();
+        assert_eq!(complete(&executor, job), 1, "{event}");
+        let diagnostic = format!("trap: {event}: trap execution is unsupported\n");
+        assert_eq!(&output.bytes()[before_output..], diagnostic.as_bytes());
+    }
+    let after = output.bytes();
     assert_eq!(complete(&executor, shell.start("trap -p").unwrap()), 0);
-    assert_eq!(output.bytes(), b"trap -- 'echo BAD' EXIT\n");
     assert_eq!(complete(&executor, shell.start("exit 4").unwrap()), 4);
-    assert_eq!(output.bytes(), b"trap -- 'echo BAD' EXIT\n");
+    assert_eq!(output.bytes(), after);
+    assert_eq!(shell.core.execution_storage.observation().0, before);
     assert!(shell.exit_requested());
 }
 #[test]
@@ -51,14 +59,14 @@ fn interrupted_submission_keeps_retained_action_until_reset_refunds_it() {
     let (shell, executor, output) = session();
     let before = shell.core.execution_storage.observation().0;
     let job = shell
-        .start("trap 'echo BAD_EXIT' EXIT; while :; do :; done")
+        .start("trap 'echo forbidden' KILL; while :; do :; done")
         .unwrap();
     executor.drive(32);
     shell.interrupt();
     assert_eq!(complete(&executor, job), 130);
     assert!(output.bytes().is_empty());
     assert!(shell.core.execution_storage.observation().0 > before);
-    assert_eq!(complete(&executor, shell.start("trap - EXIT").unwrap()), 0);
+    assert_eq!(complete(&executor, shell.start("trap - KILL").unwrap()), 0);
     executor.drive(256);
     assert_eq!(shell.core.execution_storage.observation().0, before);
     assert_eq!(

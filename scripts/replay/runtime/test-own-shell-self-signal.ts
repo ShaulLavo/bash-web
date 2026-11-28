@@ -47,15 +47,19 @@ for (const code of [2, 130, 143]) {
 }
 
 test(
-  "self targets honor root ignores and reject unsupported caught actions",
+  "rejected registrations leave the default self-signal disposition in effect",
   { timeout: 60000 },
   async (context) => {
     const f = await fixture(context);
     const child = await f.spawn(
-      `trap '' INT; kill -INT $$; printf 'ignored:%s\\n' $?; trap 'printf forbidden' INT; kill -INT $$; printf 'caught:%s\\n' $?; trap '' TERM; (trap - TERM; kill -TERM $$; printf 'root:%s\\n' $?); [ "$BASHPID" = "$$" ] && printf pid-matches`,
+      `trap '' INT; printf 'ignore:%s\\n' $?; trap 'printf forbidden' INT; printf 'handler:%s\\n' $?; [ "$BASHPID" = "$$" ] && printf 'pid-matches\\n'; kill -INT $$; printf forbidden`,
     );
-    assert.deepEqual(await child.exit, { kind: "exited", code: 0, status: 0 });
-    assert.equal(f.parent.output.join(""), "ignored:0\ncaught:2\nroot:0\npid-matches");
+    assert.deepEqual(await child.exit, { kind: "signaled", code: 2, status: 130 });
+    const output = await outputIncluding(f.parent.output, "pid-matches\n");
+    assert.match(output, /ignore:1\n/);
+    assert.match(output, /handler:1\n/);
+    assert.match(output, /pid-matches\n/);
+    assert.doesNotMatch(output, /forbidden/);
   },
 );
 

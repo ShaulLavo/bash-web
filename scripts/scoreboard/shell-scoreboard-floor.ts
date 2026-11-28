@@ -30,6 +30,55 @@ export const falsePassCorrections: readonly FloorCorrection[] = [
     reason: `false pass: earlier redirection failure masked unsupported read -t; real support tracked in ${builtinFollowUp}`,
   },
 ];
+// These observed passes depended on accepting an unsupported trap registration.
+export const trapRegistrationRetirements: readonly string[] = [
+  "bashkit-suite:bashbox-interpreter-core:731",
+  "bashkit-suite:bashbox-syntax-error:40",
+  "bashkit-suite:variables:736",
+  "brush-suite:builtins/trap:2",
+  "brush-suite:builtins/trap:25",
+  "brush-suite:builtins/trap:26",
+  "brush-suite:builtins/trap:32",
+  "brush-suite:builtins/trap:33",
+  "brush-suite:builtins/trap:34",
+  "brush-suite:builtins/trap:37",
+  "brush-suite:builtins/trap:45",
+  "brush-suite:builtins/trap:46",
+  "brush-suite:builtins/trap:48",
+  "brush-suite:builtins/trap:64",
+  "brush-suite:builtins/trap:65",
+  "brush-suite:builtins/trap:66",
+  "brush-suite:builtins/trap:68",
+  "brush-suite:builtins/trap:69",
+  "brush-suite:builtins/trap:7",
+  "brush-suite:builtins/trap:71",
+  "brush-suite:builtins/trap:72",
+  "brush-suite:builtins/trap:73",
+  "brush-suite:builtins/trap:74",
+  "brush-suite:builtins/trap:75",
+  "brush-suite:builtins/trap:88",
+  "brush-suite:builtins/trap:89",
+  "brush-suite:options/errtrace:7",
+  "brush-suite:options/errtrace:9",
+  "oils:builtin-trap:114",
+  "oils:builtin-trap:186",
+  "oils:builtin-trap:222",
+  "oils:builtin-trap:242",
+  "oils:builtin-trap:265",
+  "oils:builtin-trap:286",
+  // The case also expects TERM registration to succeed. The replay checks KILL and STOP separately.
+  "oils:builtin-trap:314",
+  "oils:builtin-trap:340",
+  "oils:builtin-trap:565",
+  "oils:builtin-trap:582",
+];
+const approvedCorrections = falsePassCorrections.concat(
+  trapRegistrationRetirements.map((id) => ({
+    id,
+    reason:
+      "explicit trap containment rejects unsupported registrations pending GNU Bash on Waffle fork()",
+  })),
+);
 function assertFloorCorrections(value: unknown): asserts value is FloorCorrection[] {
   assert.ok(Array.isArray(value), "invalid floor corrections");
   const ids = new Set<string>();
@@ -38,7 +87,7 @@ function assertFloorCorrections(value: unknown): asserts value is FloorCorrectio
     assert.ok(typeof correction.id === "string", "invalid correction ID");
     assert.ok(!ids.has(correction.id), "duplicate floor correction");
     ids.add(correction.id);
-    const approved = falsePassCorrections.find(({ id }) => id === correction.id);
+    const approved = approvedCorrections.find(({ id }) => id === correction.id);
     assert.ok(approved, "unapproved floor correction");
     assert.deepEqual(correction, approved, "floor correction differs from approved reason");
   }
@@ -176,10 +225,10 @@ export function validateFloor(oracle: Oracle, floor: MainFloor): MainFloor {
   assert.equal(floor.floorSha256, digest(floor.floorIds), "floor membership digest");
   return floor;
 }
-export function correctFalsePasses(oracle: Oracle, floor: MainFloor): MainFloor {
+export function applyFloorCorrections(oracle: Oracle, floor: MainFloor): MainFloor {
   validateFloor(oracle, floor);
   const recorded = floor.corrections ?? [];
-  const pending = falsePassCorrections.filter(
+  const pending = approvedCorrections.filter(
     ({ id }) => floor.floorIds.includes(id) && !recorded.some((item) => item.id === id),
   );
   if (!pending.length) return floor;
