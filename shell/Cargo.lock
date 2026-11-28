@@ -1664,7 +1664,7 @@ dependencies = [
 [[package]]
 name = "uu_env"
 version = "0.13.0"
-source = "git+https://github.com/ShaulLavo/waffle?rev=5d3cf915016d9c51160ef63e47d7d2853c4e5a7c#5d3cf915016d9c51160ef63e47d7d2853c4e5a7c"
+source = "git+https://github.com/ShaulLavo/waffle?rev=12d06724d5b4eb3bd7bad3d8ed5a3859388150b4#12d06724d5b4eb3bd7bad3d8ed5a3859388150b4"
 dependencies = [
  "clap",
  "fluent",
@@ -1898,7 +1898,7 @@ dependencies = [
 [[package]]
 name = "waffle-coreutils"
 version = "0.0.2"
-source = "git+https://github.com/ShaulLavo/waffle?rev=5d3cf915016d9c51160ef63e47d7d2853c4e5a7c#5d3cf915016d9c51160ef63e47d7d2853c4e5a7c"
+source = "git+https://github.com/ShaulLavo/waffle?rev=12d06724d5b4eb3bd7bad3d8ed5a3859388150b4#12d06724d5b4eb3bd7bad3d8ed5a3859388150b4"
 dependencies = [
  "clap",
  "futures",
@@ -1921,7 +1921,7 @@ dependencies = [
 [[package]]
 name = "waffle-process-consumer"
 version = "0.0.1"
-source = "git+https://github.com/ShaulLavo/waffle?rev=5d3cf915016d9c51160ef63e47d7d2853c4e5a7c#5d3cf915016d9c51160ef63e47d7d2853c4e5a7c"
+source = "git+https://github.com/ShaulLavo/waffle?rev=12d06724d5b4eb3bd7bad3d8ed5a3859388150b4#12d06724d5b4eb3bd7bad3d8ed5a3859388150b4"
 dependencies = [
  "serde",
  "serde_json",
@@ -1930,7 +1930,7 @@ dependencies = [
 [[package]]
 name = "waffle-program-support"
 version = "0.0.0"
-source = "git+https://github.com/ShaulLavo/waffle?rev=5d3cf915016d9c51160ef63e47d7d2853c4e5a7c#5d3cf915016d9c51160ef63e47d7d2853c4e5a7c"
+source = "git+https://github.com/ShaulLavo/waffle?rev=12d06724d5b4eb3bd7bad3d8ed5a3859388150b4#12d06724d5b4eb3bd7bad3d8ed5a3859388150b4"
 dependencies = [
  "futures",
 ]
