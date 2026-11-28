@@ -32,17 +32,19 @@ pub(super) async fn pwd(
         super::scan_bytes(arg.len(), context, work).await?;
         match pwd_options(&arg[1..], physical) {
             Ok(mode) => physical = mode,
-            Err(option) => return invalid_pwd_option(option, fds, context).await,
+            Err(option) => {
+                let message = format!("pwd: -{option}: invalid option\npwd: usage: pwd [-LP]\n");
+                return pwd_refusal(&message, fds, context).await;
+            }
         }
     }
     if physical {
-        diagnose(
-            fds,
+        return pwd_refusal(
             "pwd: physical directory resolution unsupported\n",
+            fds,
             context,
         )
-        .await?;
-        return Err(2);
+        .await;
     }
     let cwd = state.borrow().cwd.clone();
     write(fds, format!("{cwd}\n").as_bytes(), context).await?;
@@ -60,13 +62,10 @@ fn pwd_options(options: &str, mut physical: bool) -> Result<bool, char> {
     Ok(physical)
 }
 
-async fn invalid_pwd_option(
-    option: char,
-    fds: &FdTable,
-    context: &Context,
-) -> Result<Outcome, i32> {
-    let message = format!("pwd: -{option}: invalid option\npwd: usage: pwd [-LP]\n");
-    diagnose(fds, &message, context).await?;
+async fn pwd_refusal(message: &str, fds: &FdTable, context: &Context) -> Result<Outcome, i32> {
+    if diagnose(fds, message, context).await == Err(130) {
+        return Err(130);
+    }
     Err(2)
 }
 

@@ -101,6 +101,13 @@ test("pwd uses the last mode option and rejects unavailable physical resolution"
   ])
     await output(page, line);
   await ready(page);
+  await command(
+    page,
+    ': >pwd-stderr; pwd -Z 2<pwd-stderr; echo "UNWRITABLE_OPTION:$?"; pwd -P 2<pwd-stderr; echo "UNWRITABLE_PHYSICAL:$?"',
+  );
+  await output(page, "UNWRITABLE_OPTION:2");
+  await output(page, "UNWRITABLE_PHYSICAL:2");
+  await ready(page);
 });
 
 test("an always-ready background shell loop cannot starve a foreground command", async ({
