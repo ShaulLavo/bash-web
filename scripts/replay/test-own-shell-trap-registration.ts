@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { releaseShellRunner } from "../build/release-shell-runner.ts";
+import { recordedBashTests } from "./recorded-bash-tests.ts";
 
 const run = await releaseShellRunner();
 
@@ -68,3 +69,57 @@ for (const action of ["-", ":"]) {
     );
   });
 }
+
+for (const operand of ["TERM", "BAD"]) {
+  test(`trap still registers KILL when the ${operand} diagnostic cannot be written`, async () => {
+    const result = await run(`
+      printf x >/tmp/unwritable-stderr
+      trap : ${operand} KILL 2</tmp/unwritable-stderr
+      code=$?
+      trap -p KILL
+      exit "$code"
+    `);
+    assert.deepEqual(
+      [result.status, result.stdout.toString(), result.stderr.toString()],
+      [1, "trap -- ':' SIGKILL\n", ""],
+    );
+  });
+}
+
+// These frozen observations cover queries, resets, invalid arguments, and uncatchable bindings.
+await recordedBashTests(
+  "trap",
+  new URL("../fixtures/shell-trap-registration.json", import.meta.url),
+  new Set([
+    "empty",
+    "one-operand",
+    "options",
+    "list",
+    "kill-stop",
+    "invalid-prefixed-event",
+    "r1:rtmax-offset",
+    "r1:numeric-one-action",
+    "r1:query-mutually-exclusive-noargs",
+    "r1:query-mutually-exclusive-list",
+    "r1:list-option-priority",
+    "r1:root-no-trap-errexit",
+    "r1:root-no-trap-eval",
+    "r1:rtmin-alias-31",
+    "r1:rtmax-alias-0",
+    "r1:rtmax-alias-15",
+    "r1:rtmax-alias-16",
+    "r1:rtmax-alias-20",
+    "r1:rtmax-alias-29",
+    "r1:rtmax-alias-30",
+    "r1:rtmax-alias-31",
+    "r1:numeric-alias--2",
+    "r1:no-trap-explicit-exit",
+    "unrecorded-aliases",
+    "unrecorded-prefixed-aliases",
+    "numeric-placeholder-registration-rejected",
+    "number-'\\xa02'",
+    "number-'2\\xa0'",
+    "nested-parent-deferred-handler-9",
+    "nested-parent-deferred-handler-19",
+  ]),
+);

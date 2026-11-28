@@ -6,12 +6,12 @@ use crate::{
     io::FdTable,
     state::{
         SharedState,
-        traps::{Action, Binding, SLOTS},
+        traps::{Action, Binding, UncatchableSignal},
     },
 };
 use std::{mem::size_of, rc::Rc};
 const USAGE: &str = "trap: usage: trap [-Plp] [[action] signal_spec ...]\n";
-pub(super) const NAMES: [&str; SLOTS] = [
+pub(super) const NAMES: [&str; 68] = [
     "EXIT",
     "SIGHUP",
     "SIGINT",
@@ -197,7 +197,8 @@ pub(super) async fn run(
             code = 1;
             continue;
         };
-        if !reset && !matches!(signal, 9 | 19) {
+        let signal = UncatchableSignal::from_number(signal);
+        if !reset && signal.is_none() {
             signal_diagnostic(operand, ": trap execution is unsupported\n", fds, context).await?;
             code = 1;
             continue;
@@ -208,7 +209,11 @@ pub(super) async fn run(
         if !reset && binding.is_none() {
             binding = Some(retain_binding(&args[0], state)?);
         }
-        state.borrow_mut().traps.set(signal, binding.clone());
+        let mut state = state.borrow_mut();
+        match signal {
+            Some(signal) => state.traps.set(signal, binding.clone()),
+            None => state.traps.prepare_mutation(),
+        }
     }
     Ok(Outcome::status(code))
 }
@@ -232,9 +237,16 @@ async fn signal_diagnostic(
     fds: &FdTable,
     context: &Context,
 ) -> Result<(), i32> {
-    diagnose(fds, "trap: ", context).await?;
-    diagnose(fds, name, context).await?;
-    diagnose(fds, message, context).await
+    let delivery = async {
+        diagnose(fds, "trap: ", context).await?;
+        diagnose(fds, name, context).await?;
+        diagnose(fds, message, context).await
+    }
+    .await;
+    match delivery {
+        Err(status @ (130 | 141)) => Err(status),
+        _ => Ok(()),
+    }
 }
 async fn query(
     args: &[String],
@@ -245,7 +257,7 @@ async fn query(
     work: &mut Work,
 ) -> Result<Outcome, i32> {
     if args.is_empty() {
-        for signal in 0..SLOTS {
+        for signal in UncatchableSignal::ALL {
             print(signal, action_only, state, fds, context, work).await?;
         }
         return Ok(Outcome::status(0));
@@ -257,12 +269,15 @@ async fn query(
             code = 1;
             continue;
         };
+        let Some(signal) = UncatchableSignal::from_number(signal) else {
+            continue;
+        };
         print(signal, action_only, state, fds, context, work).await?;
     }
     Ok(Outcome::status(code))
 }
 async fn print(
-    signal: usize,
+    signal: UncatchableSignal,
     action_only: bool,
     state: &SharedState,
     fds: &FdTable,
@@ -291,12 +306,12 @@ async fn print(
     let output = if action_only {
         format!("{text}\n")
     } else if text == "'" {
-        format!("trap -- \\' {}\n", NAMES[signal])
+        format!("trap -- \\' {}\n", NAMES[signal.number()])
     } else {
         format!(
             "trap -- '{}' {}\n",
             text.replace('\'', "'\\''"),
-            NAMES[signal]
+            NAMES[signal.number()]
         )
     };
     write(fds, output.as_bytes(), context).await
@@ -330,17 +345,20 @@ mod tests {
         let budget = StorageBudget::new(256);
         let state = State::with_memory(budget.clone()).shared();
         let original = retain_binding("echo original", &state).unwrap();
-        state.borrow_mut().traps.set(9, Some(original));
+        state
+            .borrow_mut()
+            .traps
+            .set(UncatchableSignal::Kill, Some(original));
         let held = budget.observation().0;
         assert!(retain_binding(&"x".repeat(256), &state).is_err());
         assert_eq!(budget.observation().0, held);
         let snapshot = state.borrow().traps.inherited();
-        let Some(Binding::Handler(action)) = snapshot.get(9).cloned() else {
+        let Some(Binding::Handler(action)) = snapshot.get(UncatchableSignal::Kill).cloned() else {
             panic!("snapshot lost the inherited handler");
         };
         assert_eq!(action.text, "echo original");
         drop(action);
-        state.borrow_mut().traps.set(9, None);
+        state.borrow_mut().traps.set(UncatchableSignal::Kill, None);
         assert_eq!(budget.observation().0, held);
         drop(snapshot);
         assert_eq!(budget.observation().0, 0);

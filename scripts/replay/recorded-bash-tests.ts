@@ -12,16 +12,23 @@ type RecordedCase = {
 };
 type Fixture = { version: string; cases: RecordedCase[] };
 
-export async function recordedBashTests(family: string, fixtureUrl: URL) {
+export async function recordedBashTests(
+  family: string,
+  fixtureUrl: URL,
+  caseIds?: ReadonlySet<string>,
+) {
   const fixture: Fixture = JSON.parse(readFileSync(fixtureUrl, "utf8"));
   assert.match(fixture.version, /^GNU bash, version 5\.3\.15\(/u);
+  const cases = caseIds ? fixture.cases.filter((entry) => caseIds.has(entry.id)) : fixture.cases;
+  if (caseIds)
+    assert.deepEqual(new Set(cases.map((entry) => entry.id)), caseIds, "unknown recorded case ID");
   const run = await releaseShellRunner({
     PATH: "/usr/bin:/bin",
     HOME: "/home/user",
     TMP: "/tmp/spec",
     LC_ALL: "C.UTF-8",
   });
-  for (const entry of fixture.cases) {
+  for (const entry of cases) {
     test(`recorded Bash ${family}: ${entry.id}`, async () => {
       const actual = await run(entry.code);
       assert.deepEqual(
