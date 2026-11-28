@@ -17,7 +17,7 @@ Inside a loop, `--help` prints a brief usage message and returns status 2 withou
 leaving the loop. After `--`, the same word is a numeric operand, not an option.
 
 The frozen operand case and nearby loop controls run through production Waffle
-in `scripts/test-own-shell-loop-control.ts`. Their observations are copied from
+in `scripts/replay/test-own-shell-loop-control.ts`. Their observations are copied from
 the immutable Bash 5.3.15 oracle, not captured from the machine running the tests.
 This change does not cover enclosing-loop control in substitutions or `continue`
 in an `until` condition.

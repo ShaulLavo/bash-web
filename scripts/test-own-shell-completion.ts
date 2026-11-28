@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { recordedBash } from "./recorded-bash.ts";
-import { createShellFixtureRunner } from "./shell-fixture-runner.ts";
+import { recordedBash } from "./compat/recorded-bash.ts";
+import { createShellFixtureRunner } from "./replay/shell-fixture-runner.ts";
 
 const suffix = process.env.BASH_COMPLETION_PENDING ? "-pending" : "";
 const fixturePath = new URL(`fixtures/shell-completion${suffix}.json`, import.meta.url);

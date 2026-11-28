@@ -4,8 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { after, test } from "node:test";
-import { liveNodeWorkers } from "./node-worker-host.ts";
-import { runRecordingBash } from "./recorded-bash.ts";
+import { liveNodeWorkers } from "./build/node-worker-host.ts";
+import { runRecordingBash } from "./compat/recorded-bash.ts";
 import { createWaffleRunner } from "./waffle-compat.ts";
 
 const env = {

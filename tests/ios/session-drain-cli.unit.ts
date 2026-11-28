@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
-const entry = resolve(root, "scripts/test-session-drain-ios.ts");
+const entry = resolve(root, "scripts/browser/test-session-drain-ios.ts");
 
 function invoke(args: readonly string[]) {
   return spawnSync(process.execPath, [entry].concat(args), {

@@ -30,6 +30,6 @@ account. Username lookup is not supported. The engine does not invent a user
 database or a home directory. This feature does not change arithmetic
 attributes, shell identity, the process broker, or Waffle.
 
-The additive replay in `scripts/test-own-shell-home-tilde.ts` uses unchanged
+The additive replay in `scripts/replay/test-own-shell-home-tilde.ts` uses unchanged
 GNU Bash 5.3.15 recordings copied from the frozen oracle. It includes the selected
 parameter row, the basic HOME rows, and nearby passing quote and assignment rows.

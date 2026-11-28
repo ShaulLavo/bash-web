@@ -4,8 +4,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { after, test } from "node:test";
-import { liveNodeWorkers } from "./node-worker-host.ts";
-import { releaseShellRunner } from "./release-shell-runner.ts";
+import { liveNodeWorkers } from "./build/node-worker-host.ts";
+import { releaseShellRunner } from "./build/release-shell-runner.ts";
 
 // Expectations replay recorded GNU Bash 5.3.15 observations, the frozen scoreboard's oracle;
 // CI never runs the host's Bash. BASH_PATHNAME_RECORD=<fixture> re-records from

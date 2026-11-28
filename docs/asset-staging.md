@@ -5,8 +5,8 @@ A source install does not contain guest binaries. Use an owner-accepted Bash pro
 The `stage-shell` command reuses the normal native producer's unchanged `cli-source.txt`, `inputs`, and `SHA256SUMS` receipts. Supply their accepted source, native input digest, and checksum-receipt SHA-256 independently. It verifies those anchors and both guest and notice hashes, then preflights every output before writing. Destination symlinks, parent-directory escapes, and path or inode overlaps with accepted inputs, receipts, other outputs or native caller notices are rejected. Output files are replaced atomically from the validated bytes, preserving unrelated hardlinks to an old output. It does not run Cargo or build a runtime, worker, or guest.
 
 ```sh
-node scripts/ci-artifacts.ts stage-shell ACCEPTED_DIRECTORY CONSUMER_ROOT SOURCE_SHA NATIVE_INPUT_SHA CHECKSUM_RECEIPT_SHA browser
-node scripts/ci-artifacts.ts stage-shell ACCEPTED_DIRECTORY CONSUMER_ROOT SOURCE_SHA NATIVE_INPUT_SHA CHECKSUM_RECEIPT_SHA native
+node scripts/ci/ci-artifacts.ts stage-shell ACCEPTED_DIRECTORY CONSUMER_ROOT SOURCE_SHA NATIVE_INPUT_SHA CHECKSUM_RECEIPT_SHA browser
+node scripts/ci/ci-artifacts.ts stage-shell ACCEPTED_DIRECTORY CONSUMER_ROOT SOURCE_SHA NATIVE_INPUT_SHA CHECKSUM_RECEIPT_SHA native
 ```
 
 Browser staging writes `public/programs/shell-engine.wasm`, `dist/env.wasm`, and `dist/THIRD_PARTY_NOTICES.txt`. Serve the shell guest at the caller's program URL and pass it through the public shell options. `installEnv` reads the package's `dist/env.wasm` by default or accepts the public `wasmUrl` option. Build the typed worker with the normal package build; guest staging supplies no worker implementation.

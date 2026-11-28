@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import type { Runtime } from "waffle";
-import { familyWasmPath } from "./family-assets.ts";
+import { familyWasmPath } from "./build/family-assets.ts";
 import type { RuntimeWorkerMessage, RuntimeWorkerRequest } from "waffle/browser/worker";
 import type { ProgramPackage } from "waffle/programs";
-import { installNodeWorkers, stopNodeWorkers } from "./node-worker-host.ts";
-import type * as Api from "./waffle-node-api.ts";
+import { installNodeWorkers, stopNodeWorkers } from "./build/node-worker-host.ts";
+import type * as Api from "./build/waffle-node-api.ts";
 import type { compileShellModule } from "../src/runtime/shell-memory.ts";
 
 export interface WaffleCaseOptions {

@@ -24,11 +24,11 @@ All eight original document/module/worker/WASM/manifest roots and all 2,650 payl
 With the prepared public dependency graph:
 
 ```sh
-bun scripts/test-python-local.ts /absolute/python-result.json chromium
-bun scripts/test-python-local.ts /absolute/python-result.json firefox
+bun scripts/browser/test-python-local.ts /absolute/python-result.json chromium
+bun scripts/browser/test-python-local.ts /absolute/python-result.json firefox
 ```
 
-The native entry is `scripts/test-python-ios.ts`. It uses the existing native session owner. Exact Simulator selection, a fresh qualified Inspector-helper receipt and native admission belong to the native lane. No additional driver or native helper is created by Bash.
+The native entry is `scripts/browser/test-python-ios.ts`. It uses the existing native session owner. Exact Simulator selection, a fresh qualified Inspector-helper receipt and native admission belong to the native lane. No additional driver or native helper is created by Bash.
 
 Both original cases retain a 60-second body and the original five-second polling policy. Readiness checks use immediate evaluation followed by animation frames, without adding the bare browser library's 30-second action timeout. Soft assertions continue through all 12 examples and fail after the original body and finally complete.
 

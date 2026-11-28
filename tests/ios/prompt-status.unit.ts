@@ -16,7 +16,10 @@ import {
   promptStatusModuleTask,
 } from "./prompt-status-adapter.ts";
 import { checkPromptStatusReceipts } from "../helpers/prompt-status-receipts.ts";
-import { partitionTypecheckRoots, readTypecheckProject } from "../../scripts/typecheck-projects.ts";
+import {
+  partitionTypecheckRoots,
+  readTypecheckProject,
+} from "../../scripts/ci/typecheck-projects.ts";
 import { promptStatusCase } from "./prompt-status-contract.ts";
 import { promptStatusDiagnostics } from "./prompt-status-diagnostics.ts";
 
@@ -350,7 +353,7 @@ test("empty IOS_UDID stops the actual public CLI before native allocation", asyn
     const command = spawnSync(
       "bun",
       [
-        fileURLToPath(new URL("../../scripts/test-prompt-status-ios.ts", import.meta.url)),
+        fileURLToPath(new URL("../../scripts/browser/test-prompt-status-ios.ts", import.meta.url)),
         "--result",
         path,
       ],

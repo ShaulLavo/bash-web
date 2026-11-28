@@ -51,7 +51,7 @@ and fd 10 with inherited fds 3–9; a sparse high binding does not push it highe
 Guest-visible inherited numbers and shared open descriptions are preserved.
 No shell adapter relocates preopens after instantiation.
 
-`scripts/waffle-release-inputs.ts` always stages the builder and patch from that
+`scripts/build/waffle-release-inputs.ts` always stages the builder and patch from that
 exact source into `.build/waffle-inputs/<revision>/packages/waffle/`, verifying
 both hashes and the installed runtime's version and builder identity. It does
 not write into `node_modules` or fall back between archive layouts. The builder
@@ -97,7 +97,7 @@ and supplies `--target=wasm32-wasip1` and `--sysroot=<patched-sysroot>` to the
 **final link**, as well as C compilation. Merely compiling against patched
 headers while linking stock SDK or Rust-bundled libc is not sufficient.
 
-`scripts/verify-wasi-guests.ts` supplies the shell's filesystem-adapter policy to
+`scripts/build/verify-wasi-guests.ts` supplies the shell's filesystem-adapter policy to
 Waffle's public verifier, which inspects final Wasm artifacts. The function-name
 reader used to capture released-family provenance also comes from Waffle.
 When `__wasilibc_populate_preopens` is retained, it must call both

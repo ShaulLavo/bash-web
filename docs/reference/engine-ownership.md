@@ -190,10 +190,10 @@ the runtime and discard the output tail after an external utility. Signals still
 settle without an ordinary acknowledgement through Waffle's supervisor.
 
 This is an original local adapter correction, not copied upstream code.
-`scripts/test-own-shell-root.ts` holds real root-worker messages until its outcome
+`scripts/replay/runtime/test-own-shell-root.ts` holds real root-worker messages until its outcome
 is published, observes it through the real supervisor, then delivers those messages
 in order. It pins raw output, status and the acknowledgement boundary, and separately
-pins a killed root that never starts. `scripts/own-shell-runner-fixture.ts` only
+pins a killed root that never starts. `scripts/replay/own-shell-runner-fixture.ts` only
 relocates the unchanged original tiny WASI fixture from the existing runner tests.
 No oracle, baseline, migration receipt, stdio kind, case deadline or output bound
 changes.

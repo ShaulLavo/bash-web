@@ -37,7 +37,7 @@ Unix access algorithm is copied. The owning files are `shell/engine/src/io.rs`,
 `runtime.rs`, `runtime/wasi.rs` and `builtins/test.rs` beneath that engine directory.
 The dependency revision and classification are recorded in `sources.lock.json`.
 
-`npm run test:shell:scoreboard` includes `scripts/test-own-shell-permissions.ts`.
+`npm run test:shell:scoreboard` includes `scripts/replay/runtime/test-own-shell-permissions.ts`.
 It runs the production shell guest through the real runtime, filesystem worker,
 forked connection and process worker. It tests denied actual I/O alongside
 metadata-only queries, directory search, supported false/true answers and unknown
