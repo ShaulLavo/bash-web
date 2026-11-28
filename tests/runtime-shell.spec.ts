@@ -82,20 +82,6 @@ test("repeated separators preserve logical descriptor reopening", async ({ page 
   await ready(page);
 });
 
-test("the runtime provides /dev/null without creating a filesystem node", async ({ page }) => {
-  const baseline = await open(page);
-  await command(
-    page,
-    `printf secret >/dev/null; printf 'NULL_WRITE_STATUS:%s\\n' "$?"; cat /dev/null; printf 'NULL_READ_STATUS:%s\\n' "$?"`,
-  );
-  await output(page, "NULL_WRITE_STATUS:0");
-  await output(page, "NULL_READ_STATUS:0");
-  await ready(page);
-  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
-  expect(lines).not.toContain("secret");
-  await expect.poll(() => page.workers().length).toBe(baseline);
-});
-
 test("file opens follow symlinks before traversing dot dot and preserve trailing slashes", async ({
   page,
 }) => {
@@ -119,6 +105,20 @@ test("file opens follow symlinks before traversing dot dot and preserve trailing
   );
   for (const line of ["READ_STATUS:1", "SOURCE_STATUS:1", "SUB_STATUS:1"]) await output(page, line);
   await ready(page);
+});
+
+test("the runtime provides /dev/null without creating a filesystem node", async ({ page }) => {
+  const baseline = await open(page);
+  await command(
+    page,
+    `printf secret >/dev/null; printf 'NULL_WRITE_STATUS:%s\\n' "$?"; cat /dev/null; printf 'NULL_READ_STATUS:%s\\n' "$?"`,
+  );
+  await output(page, "NULL_WRITE_STATUS:0");
+  await output(page, "NULL_READ_STATUS:0");
+  await ready(page);
+  const lines = await page.evaluate(() => window.bashWeb?.readLines().map((line) => line.trim()));
+  expect(lines).not.toContain("secret");
+  await expect.poll(() => page.workers().length).toBe(baseline);
 });
 
 test("an always-ready background shell loop cannot starve a foreground command", async ({
